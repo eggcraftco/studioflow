@@ -7,6 +7,7 @@ import { arrayUnion, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "fi
 import { auth, db } from "@/lib/firebase/client";
 import { studioLanguageForLocaleTag } from "@/lib/studioflow/language";
 import { accessWatchStep, mayReloadForAccess, memberAccessFingerprint } from "@/lib/studioflow/accessWatch";
+import { bootMark } from "@/lib/studioflow/bootTrace";
 
 const ACCESS_RELOADS_KEY = "nv_access_reloads";
 
@@ -87,6 +88,13 @@ async function ensurePersonalWorkspace(currentUser: User) {
   const [userSnapshot, companySnapshot] = await Promise.all([getDoc(userRef), getDoc(companyRef)]);
   const userData = userSnapshot.exists() ? userSnapshot.data() : {};
 
+  // A write only waits for the server when the screens cannot work without it (15 Oct 2026). A write resolves on
+  // the server's acknowledgement; a first sign-in on a browser — every private window — waited on a profile refresh
+  // of documents that already worked, for as long as the write path was slow and for ever when it was down.
+  const inBackground = (write: Promise<void>) => {
+    void write.catch(error => console.warn("Background workspace profile update failed.", error));
+  };
+
   // Only write when something actually changed — this runs on every app open,
   // so unconditional writes would add latency and Firestore write costs.
   const userNeedsWrite =
@@ -115,7 +123,10 @@ async function ensurePersonalWorkspace(currentUser: User) {
       const isPhone = /iPhone|iPod|Android.*Mobile|Windows Phone/i.test(ua);
       userPayload.signupPlatform = isPhone ? "mobile" : "desktop";
     }
-    await setDoc(userRef, userPayload, { merge: true });
+    const userWrite = setDoc(userRef, userPayload, { merge: true });
+    // No user document or no workspace pointer yet: the workspace read needs it. Otherwise it is a profile refresh.
+    if (!userSnapshot.exists() || !cleanText(userData.activeCompanyId)) await userWrite;
+    else inBackground(userWrite);
   }
 
   const ownerMember = {
@@ -158,7 +169,8 @@ async function ensurePersonalWorkspace(currentUser: User) {
     if (!cleanText(data.ownerDisplayName)) companyPayload.ownerDisplayName = displayName;
     if (!cleanText(data.ownerPhotoURL)) companyPayload.ownerPhotoURL = photoURL;
     if (!members[uid]) companyPayload.members = { [uid]: ownerMember };
-    await setDoc(companyRef, companyPayload, { merge: true });
+    // The workspace document exists, so its screens can already be read; filling in missing fields can finish later.
+    inBackground(setDoc(companyRef, companyPayload, { merge: true }));
     return;
   }
 
@@ -234,6 +246,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           doc(db, "companies", companyId),
           { includeMetadataChanges: true },
           companySnap => {
+            if (accessBaseline === null) bootMark("ws:access-watch", companySnap.metadata.fromCache ? "cache" : "server");
             const step = accessWatchStep(accessBaseline, {
               kind: "snapshot",
               fromCache: companySnap.metadata.fromCache,
@@ -278,8 +291,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     let authRun = 0;
+    bootMark("auth:wait");
     const unsubscribe = onAuthStateChanged(auth, currentUser => {
       const run = ++authRun;
+      bootMark("auth:state", currentUser ? "user" : "none");
       if (!currentUser) {
         setUser(null);
         setLoading(false);
@@ -299,6 +314,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (alreadyReady) {
+        bootMark("auth:ready", "device-known");
         setUser(currentUser);
         setLoading(false);
         void ensurePersonalWorkspace(currentUser).catch(error => {
@@ -308,6 +324,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setLoading(true);
+      bootMark("auth:bootstrap-start");
       ensurePersonalWorkspace(currentUser)
         .then(() => {
           try {
@@ -320,7 +337,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.warn("Could not ensure NivaDesk workspace for signed-in user.", error);
         })
         .finally(() => {
+          bootMark("auth:bootstrap-end");
           if (!cancelled && run === authRun) {
+            bootMark("auth:ready", "first-on-device");
             setUser(currentUser);
             setLoading(false);
           }

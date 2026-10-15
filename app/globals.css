@@ -33354,6 +33354,31 @@ body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
   margin: 0;
 }
 
+/* Login/loading hang (15 Oct 2026): what a loading screen offers once it has waited BOOT_STALL_MS. */
+.boot-stall {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  max-width: 420px;
+  margin: 16px auto 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text, inherit);
+}
+
+.boot-stall span {
+  color: var(--muted);
+}
+
+.boot-stall-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 @keyframes app-content-loading-in {
   to {
     opacity: 1;

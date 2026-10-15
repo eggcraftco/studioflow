@@ -16,6 +16,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { bootMark } from "@/lib/studioflow/bootTrace";
 import { useQuickActionEvent, type QuickActionPayload } from "@/lib/studioflow/quickActions";
 import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
 import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
@@ -1237,6 +1238,19 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const { hideNumbers, toggleHideNumbers } = usePricePrivacy();
   const pathname = usePathname();
   const router = useRouter();
+  // Timings only (bootTrace): when a menu link is clicked and when its route is on screen.
+  useEffect(() => {
+    bootMark("nav:path", pathname);
+  }, [pathname]);
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      const link = (event.target as Element | null)?.closest?.("a[href]");
+      const href = link?.getAttribute("href") ?? "";
+      if (href.startsWith("/")) bootMark("nav:click", href);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
   const wideWorkspace =
     pathname === "/orders" ||
     pathname.startsWith("/orders/") ||

@@ -1,3 +1,4 @@
+import { bootMark } from "./bootTrace";
 import {
   collection,
   doc,
@@ -1107,7 +1108,21 @@ async function readActiveWorkspaceAccess(companyId: string): Promise<{ kind: Wor
   }
 }
 
+let workspaceLoadSeq = 0;
 export async function loadWorkspaceContext(uid: string): Promise<WorkspaceContext> {
+  const seq = ++workspaceLoadSeq;
+  bootMark("ws:start", String(seq));
+  try {
+    const context = await loadWorkspaceContextFromServer(uid);
+    bootMark("ws:end", `${seq} ok`);
+    return context;
+  } catch (error) {
+    bootMark("ws:end", `${seq} ${error instanceof Error ? error.name : "error"}`);
+    throw error;
+  }
+}
+
+async function loadWorkspaceContextFromServer(uid: string): Promise<WorkspaceContext> {
   // Speed: read the user doc and the (most likely) own workspace doc in
   // parallel. Most accounts have activeCompanyId === uid, so this saves a full
   // network round trip; members of someone else's workspace take one extra
