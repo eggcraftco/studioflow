@@ -11,6 +11,16 @@ import { functions } from "@/lib/firebase/client";
 import { CardTitle } from "@/components/CardTitle";
 import { isAnalyticsExcluded, setAnalyticsExclusion } from "@/lib/landingTracking";
 import { AdminFeedbackInbox } from "@/components/AdminFeedbackInbox";
+import {
+  countryShares,
+  pageRowLabels,
+  exclusionLine,
+  unknownOr,
+  activationEvidenceLine,
+  BILLING_STATE_LABELS,
+  type ExclusionSummary,
+  type ActivationEvidence
+} from "@/lib/studioflow/adminInsightsMetrics";
 
 export const NIVADESK_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com", "contact@eggcraft.co.uk"]);
 
@@ -1261,13 +1271,14 @@ function AdminSearchConsoleSection() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pages.map((p, index) => {
-                      let label = p.page;
-                      try { label = new URL(p.page).pathname || "/"; } catch { /* keep raw */ }
+                    {pageRowLabels(pages).map((p, index) => {
                       return (
                         <tr key={p.page} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
                           <td style={{ padding: "8px 6px", color: "var(--muted)", fontWeight: 800 }}>{index + 1}</td>
-                          <td style={{ padding: "8px 6px", fontWeight: 650, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><span title={p.page}>{label === "/" ? "Home page" : label}</span></td>
+                          <td style={{ padding: "8px 6px", fontWeight: 650, maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <span title={p.page}>{p.label}</span>
+                            {p.samePathElsewhere ? <span title="The same path also appears under another host / slash / protocol — listed separately, not merged" style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 800, color: "#b36b00" }}>same path, other URL</span> : null}
+                          </td>
                           <td style={{ padding: "8px 6px", textAlign: "right" }}>{p.impressions.toLocaleString()}</td>
                           <td style={{ padding: "8px 6px", textAlign: "right" }}>{p.clicks.toLocaleString()}</td>
                           <td style={{ padding: "8px 6px", textAlign: "right" }}>{(p.ctr * 100).toFixed(1)}%</td>
@@ -1279,6 +1290,7 @@ function AdminSearchConsoleSection() {
                 </table>
               </div>
             )}
+            <p style={{ fontSize: 11, color: "var(--muted)", margin: "10px 0 0" }}>Full URL per row (host and trailing slash included); Search Console reports them as different pages. Page totals need not equal the property totals above.</p>
           </section>
 
           <div className="site-stats-panels">
@@ -1288,18 +1300,33 @@ function AdminSearchConsoleSection() {
                 <p className="muted-copy">No data yet.</p>
               ) : (
                 <div style={{ display: "grid" }}>
-                  {countries.slice(0, 8).map((c, index) => {
-                    const { flag, name } = searchCountryLabel(c.country);
-                    const max = Math.max(...countries.map(x => x.impressions), 1);
+                  {(() => {
+                    const shares = countryShares(countries);
                     return (
-                      <div key={c.country} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
-                        <span aria-hidden="true">{flag}</span>
-                        <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
-                        <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--muted)" }}>{((c.impressions / max) * 100).toFixed(0)}%</span>
-                        <strong style={{ fontSize: 13, minWidth: 44, textAlign: "right" }}>{c.impressions.toLocaleString()}</strong>
-                      </div>
+                      <>
+                        {shares.rows.slice(0, 8).map((c, index) => {
+                          const { flag, name } = searchCountryLabel(c.country);
+                          return (
+                            <div key={c.country} style={{ display: "grid", gap: 3, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <span aria-hidden="true">{flag}</span>
+                                <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                                <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--muted)" }} title="Share of all impressions in the listed countries">{c.sharePct.toFixed(1)}%</span>
+                                <strong style={{ fontSize: 13, minWidth: 44, textAlign: "right" }}>{c.impressions.toLocaleString()}</strong>
+                              </div>
+                              <div aria-hidden="true" style={{ height: 4, borderRadius: 999, background: "rgba(17,24,39,0.06)", overflow: "hidden" }}>
+                                <span style={{ display: "block", height: "100%", width: `${c.relativePct}%`, background: "#0a84ff", borderRadius: 999 }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <p style={{ fontSize: 11, color: "var(--muted)", margin: "8px 0 0" }}>
+                          % = share of {shares.total.toLocaleString()} impressions across {shares.truncated ? `the top ${countries.length} countries returned` : "all listed countries"}; the bar is scaled to the largest country.
+                          {countries.length > 8 ? ` Showing 8 of ${countries.length}.` : ""}
+                        </p>
+                      </>
                     );
-                  })}
+                  })()}
                 </div>
               )}
             </section>
@@ -1323,6 +1350,61 @@ function AdminSearchConsoleSection() {
 
 const NIVADESK_DOMAIN_LABEL = "nivadesk.app";
 
+/* The two ways to read the workspace numbers (N33, 15 Oct 2026). "business" leaves out workspaces an
+   admin flagged internal / QA / pilot (Lookup → Analytics flag) and says how many; "qa" counts
+   everything. Nothing is ever left out because of its name. */
+type AdminView = "business" | "qa";
+
+function AdminViewToggle({ view, onChange }: { view: AdminView; onChange: (view: AdminView) => void }) {
+  const option = (value: AdminView, label: string, hint: string) => (
+    <button
+      key={value}
+      type="button"
+      className="button"
+      title={hint}
+      aria-pressed={view === value}
+      onClick={() => onChange(value)}
+      style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, background: view === value ? "#0a84ff" : "rgba(17,24,39,0.06)", color: view === value ? "#fff" : "var(--text)" }}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, marginBottom: 12 }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>Workspace numbers:</span>
+      {option("business", "Business view", "Leaves out workspaces an admin flagged internal / QA / pilot")}
+      {option("qa", "Measurement / QA view", "Counts every workspace, flagged ones included")}
+    </div>
+  );
+}
+
+function ExclusionNote({ exclusion }: { exclusion?: ExclusionSummary | null }) {
+  const line = exclusionLine(exclusion);
+  if (!line) return null;
+  return <p style={{ fontSize: 11.5, color: exclusion?.readable === false ? "var(--danger)" : "var(--muted)", margin: "6px 0 0" }}>{line}</p>;
+}
+
+type AdminBilling = {
+  byState: Record<string, number>;
+  byProvider: Record<string, number>;
+  byTrialKind?: Record<string, number>;
+  planAssigned: number;
+  planAssignedByPlan?: Record<string, number>;
+  listPricePotential: number;
+  listPricePotentialByState: Record<string, number>;
+  providerBilledListPrice: number;
+  collectedRevenue: null;
+  collectedRevenueReason: string;
+};
+
+const ADMIN_PROVIDER_LABELS: Record<string, string> = { stripe: "Stripe", apple: "Apple", google: "Google Play", shopify: "Shopify" };
+
+function providerHint(billing: AdminBilling): string {
+  const parts = Object.entries(billing.byProvider || {}).map(([provider, count]) => `${ADMIN_PROVIDER_LABELS[provider] || provider} ${count}`);
+  const pastDue = billing.byState.past_due || 0;
+  return `${parts.length ? parts.join(" · ") : "Stripe / Apple / Google / Shopify: none"}${pastDue ? ` · ${pastDue} payment failed` : ""}`;
+}
+
 type AdminInsights = {
   generatedAtMs: number;
   users: { total: number; new30d: number };
@@ -1332,14 +1414,18 @@ type AdminInsights = {
     active30d: number;
     paid: number;
     planCounts: Record<string, number>;
+    assignedPlanCounts?: Record<string, number>;
     newest: { id: string; name: string; plan: string; createdAtMs: number }[];
   };
   revenue: { estimated: boolean; currency: string; mrr: number; arr: number; note: string };
+  billing?: AdminBilling;
+  exclusion?: ExclusionSummary;
   usage: {
     ordersTotal: number | null;
     ordersThisMonth: number | null;
     customersTotal: number | null;
     notesTotal: number | null;
+    notesSharedCopies?: number | null;
     remindersTotal: number | null;
     messagesTotal: number | null;
     workspaceTicketsTotal: number | null;
@@ -1379,9 +1465,10 @@ type AdminUsersDetail = {
   generatedAtMs: number;
   users: { total: number; new7d: number; new30d: number; active7d: number; active30d: number; neverLoggedIn: number };
   growth: { date: string; signups: number; cumulative: number }[];
-  workspaces: { total: number; active30d: number; inactive: number; planCounts: Record<string, number> };
+  workspaces: { total: number; active30d: number; inactive: number; planCounts: Record<string, number>; ordersOnUnknownWorkspaces30d?: number };
   quick: { avgWorkspacesPerUser: number; usersWithMultipleWorkspaces: number };
-  topWorkspaces: { id: string; name: string; ownerEmail: string; plan: string; members: number | null; orders30d: number; ordersTotal: number | null; lastOrderAtMs: number }[];
+  topWorkspaces: { id: string; name: string; ownerEmail: string; plan: string; members: number | null; membersSuspended?: number | null; membersSource?: string; orders30d: number; ordersTotal: number | null; lastOrderAtMs: number }[];
+  exclusion?: ExclusionSummary;
   recentUsers: { uid: string; email: string; displayName: string; createdAtMs: number; lastSignInMs: number; plan: string }[];
   heatmap: number[][];
 };
@@ -1414,7 +1501,7 @@ function GrowthChart({ growth }: { growth: { date: string; cumulative: number }[
 
 const HEATMAP_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function ActivityHeatmap({ heatmap }: { heatmap: number[][] }) {
+function ActivityHeatmap({ heatmap, caption }: { heatmap: number[][]; caption: string }) {
   const max = Math.max(...heatmap.flat(), 1);
   return (
     <div style={{ overflowX: "auto" }}>
@@ -1440,20 +1527,22 @@ function ActivityHeatmap({ heatmap }: { heatmap: number[][] }) {
           </Fragment>
         ))}
       </div>
-      <p className="muted-copy" style={{ marginTop: 8 }}>Order creation activity by weekday and hour (last 30 days, UK time).</p>
+      <p className="muted-copy" style={{ marginTop: 8 }}>{caption}</p>
     </div>
   );
 }
 
-function AdminUsersWorkspacesDetail({ onBack }: { onBack: () => void }) {
+function AdminUsersWorkspacesDetail({ onBack, view }: { onBack: () => void; view: AdminView }) {
   const [data, setData] = useState<AdminUsersDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    const callable = httpsCallable<Record<string, never>, AdminUsersDetail>(functions, "getAdminUsersWorkspacesDetail");
-    callable({})
+    setLoading(true);
+    setError("");
+    const callable = httpsCallable<{ view: AdminView }, AdminUsersDetail>(functions, "getAdminUsersWorkspacesDetail");
+    callable({ view })
       .then(result => {
         if (!cancelled) setData(result.data);
       })
@@ -1466,7 +1555,7 @@ function AdminUsersWorkspacesDetail({ onBack }: { onBack: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
@@ -1496,7 +1585,9 @@ function AdminUsersWorkspacesDetail({ onBack }: { onBack: () => void }) {
       <section className="card app-card">
         {crumb}
         <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Users & Workspaces" />
-        <p className="muted-copy">Track user growth, activity and workspace statistics across NivaDesk.</p>
+        <p className="muted-copy">Track user growth, activity and workspace statistics across NivaDesk. Members are read from each workspace&apos;s own record: the owner plus everyone on its members list (suspended members shown apart).</p>
+        <ExclusionNote exclusion={data.exclusion} />
+        {data.workspaces.ordersOnUnknownWorkspaces30d ? <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 0" }}>{data.workspaces.ordersOnUnknownWorkspaces30d} order(s) in the last 30 days belong to a deleted / unknown workspace and are not counted as activity.</p> : null}
       </section>
 
       <div className="site-stats-grid">
@@ -1543,7 +1634,7 @@ function AdminUsersWorkspacesDetail({ onBack }: { onBack: () => void }) {
                   <th style={{ padding: "6px 8px" }}>Workspace</th>
                   <th style={{ padding: "6px 8px" }}>Owner</th>
                   <th style={{ padding: "6px 8px" }}>Plan</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Users</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }} title="Owner + members on the workspace record">Members</th>
                   <th style={{ padding: "6px 8px", textAlign: "right" }}>Orders (30d)</th>
                   <th style={{ padding: "6px 8px", textAlign: "right" }}>Orders (total)</th>
                   <th style={{ padding: "6px 8px", textAlign: "right" }}>Last Active</th>
@@ -1556,7 +1647,10 @@ function AdminUsersWorkspacesDetail({ onBack }: { onBack: () => void }) {
                     <td style={{ padding: "7px 8px", fontWeight: 700 }}>{workspace.name}</td>
                     <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{workspace.ownerEmail || "—"}</td>
                     <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
-                    <td style={{ padding: "7px 8px", textAlign: "right" }}>{workspace.members ?? "—"}</td>
+                    <td style={{ padding: "7px 8px", textAlign: "right" }} title={workspace.membersSource || ""}>
+                      {unknownOr(workspace.members, "not_available")}
+                      {workspace.membersSuspended ? <span style={{ color: "var(--muted)" }}> ({workspace.membersSuspended} suspended)</span> : null}
+                    </td>
                     <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700 }}>{workspace.orders30d}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }}>{workspace.ordersTotal ?? "—"}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right", color: "var(--muted)" }}>{workspace.lastOrderAtMs ? new Date(workspace.lastOrderAtMs).toLocaleDateString() : "—"}</td>
@@ -1606,8 +1700,8 @@ function AdminUsersWorkspacesDetail({ onBack }: { onBack: () => void }) {
       </section>
 
       <section className="card app-card">
-        <CardTitle icon="dashboard" eyebrow="Activity" title="User Activity Overview" />
-        <ActivityHeatmap heatmap={data.heatmap} />
+        <CardTitle icon="dashboard" eyebrow="Activity" title="Order Creation by Time of Day" />
+        <ActivityHeatmap heatmap={data.heatmap} caption="Orders created, by weekday and hour (last 30 days, UK time; orders carrying a server creation stamp)." />
       </section>
     </div>
   );
@@ -1619,10 +1713,17 @@ type AdminSubsDetail = {
   subscriptions: { paidTotal: number; paidNew30d: number; planCounts: Record<string, number>; freeDemo: number };
   revenue: { currency: string; mrr: number; arr: number; arpu: number; mrrByPlan: Record<string, number> };
   sources: { source: string; count: number }[];
-  recent: { id: string; name: string; ownerEmail: string; plan: string; monthlyGbp: number; createdAtMs: number }[];
+  recent: { id: string; name: string; ownerEmail: string; plan: string; monthlyGbp: number; createdAtMs: number; state?: string; provider?: string; trialKind?: string; trialEndsAtMs?: number | null; listPriceGbp?: number }[];
+  billing?: AdminBilling;
+  exclusion?: ExclusionSummary;
 };
 
 const ADMIN_SOURCE_LABELS: Record<string, string> = {
+  signup_trial: "Sign-up trial (no card)",
+  manual_workspace: "Set by hand (manual)",
+  entitlement_resolver: "Entitlement resolver",
+  stripe: "Stripe",
+  shopify: "Shopify",
   signup_free_demo: "Sign-up default",
   new_workspace_default: "New workspace default",
   workspace: "Set in workspace (manual)",
@@ -1631,15 +1732,17 @@ const ADMIN_SOURCE_LABELS: Record<string, string> = {
   secure_default: "Secure default"
 };
 
-function AdminSubscriptionsDetail({ onBack }: { onBack: () => void }) {
+function AdminSubscriptionsDetail({ onBack, view }: { onBack: () => void; view: AdminView }) {
   const [data, setData] = useState<AdminSubsDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    const callable = httpsCallable<Record<string, never>, AdminSubsDetail>(functions, "getAdminSubscriptionsDetail");
-    callable({})
+    setLoading(true);
+    setError("");
+    const callable = httpsCallable<{ view: AdminView }, AdminSubsDetail>(functions, "getAdminSubscriptionsDetail");
+    callable({ view })
       .then(result => {
         if (!cancelled) setData(result.data);
       })
@@ -1652,7 +1755,7 @@ function AdminSubscriptionsDetail({ onBack }: { onBack: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
@@ -1689,37 +1792,61 @@ function AdminSubscriptionsDetail({ onBack }: { onBack: () => void }) {
         {crumb}
         <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Subscriptions" />
         <p className="muted-copy">Monitor plan assignments and estimated billing performance. {data.note}</p>
+        <ExclusionNote exclusion={data.exclusion} />
       </section>
 
-      <div className="site-stats-grid">
-        {adminKpiTile("Active Subscriptions", data.subscriptions.paidTotal.toLocaleString(), "paid plan assigned")}
-        {adminKpiTile("New Subscriptions (30d)", data.subscriptions.paidNew30d.toLocaleString(), "paid workspaces created")}
-        {adminKpiTile("Free Workspaces", data.subscriptions.freeDemo.toLocaleString())}
-        {adminKpiTile("Est. MRR", `£${data.revenue.mrr.toLocaleString()}`, "estimate — billing not live")}
-        {adminKpiTile("Est. ARR", `£${data.revenue.arr.toLocaleString()}`, "estimate — billing not live")}
-        {adminKpiTile("Est. ARPU", `£${data.revenue.arpu.toLocaleString()}`, "per paid workspace / month")}
-      </div>
+      {data.billing ? (
+        <div className="site-stats-grid">
+          {adminKpiTile("Plan assigned", data.billing.planAssigned.toLocaleString(), "any source, any state")}
+          {adminKpiTile("Active trials", (data.billing.byState.trial_active || 0).toLocaleString(), "running; no card for the sign-up trial")}
+          {adminKpiTile("Trials ended", (data.billing.byState.trial_expired || 0).toLocaleString(), "now Free — not paid, not in MRR")}
+          {adminKpiTile("Paid by provider", (data.billing.byState.paid_provider || 0).toLocaleString(), providerHint(data.billing))}
+          {adminKpiTile("Payment failed", (data.billing.byState.past_due || 0).toLocaleString(), "provider reports past due")}
+          {adminKpiTile("Manual / complimentary", (data.billing.byState.manual_comp || 0).toLocaleString(), "plan assigned, no till behind it")}
+          {adminKpiTile("Free", (data.billing.byState.free || 0).toLocaleString())}
+          {adminKpiTile("List-price potential", `£${data.billing.listPricePotential.toLocaleString()}/mo`, "trials running + manual + provider, at list price")}
+          {adminKpiTile("Provider-billed (list price)", `£${data.billing.providerBilledListPrice.toLocaleString()}/mo`, "what tills report active — list price, not collected")}
+          {adminKpiTile("Collected revenue", "Not measured", unknownOr(null, data.billing.collectedRevenueReason))}
+        </div>
+      ) : (
+        <div className="site-stats-grid">
+          {adminKpiTile("Active Subscriptions", data.subscriptions.paidTotal.toLocaleString(), "paid plan assigned")}
+          {adminKpiTile("New Subscriptions (30d)", data.subscriptions.paidNew30d.toLocaleString(), "paid workspaces created")}
+          {adminKpiTile("Free Workspaces", data.subscriptions.freeDemo.toLocaleString())}
+          {adminKpiTile("Est. MRR", `£${data.revenue.mrr.toLocaleString()}`, "estimate — billing not live")}
+          {adminKpiTile("Est. ARR", `£${data.revenue.arr.toLocaleString()}`, "estimate — billing not live")}
+          {adminKpiTile("Est. ARPU", `£${data.revenue.arpu.toLocaleString()}`, "per paid workspace / month")}
+        </div>
+      )}
 
       <div className="site-stats-panels">
+        {data.billing ? (
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Billing" title="Workspaces by billing state" />
+            <StatsRankedList entries={Object.entries(data.billing.byState).filter(([, value]) => value > 0).map(([state, value]) => [BILLING_STATE_LABELS[state] || state, value] as [string, number])} />
+            <p className="muted-copy" style={{ marginTop: 8 }}>One state per workspace, read from its billing fields. A sign-up trial that has ended keeps &quot;trialing&quot; on the record; it is counted here as ended, as the app already treats it.</p>
+          </section>
+        ) : (
+          <section className="card app-card">
+            <CardTitle icon="dashboard" eyebrow="Plans" title="Subscriptions by Plan" />
+            {paidSlices.length ? <StatsDonut slices={paidSlices} centerLabel="Paid" /> : <p className="muted-copy">No paid subscriptions yet.</p>}
+          </section>
+        )}
         <section className="card app-card">
-          <CardTitle icon="dashboard" eyebrow="Plans" title="Subscriptions by Plan" />
-          {paidSlices.length ? <StatsDonut slices={paidSlices} centerLabel="Paid" /> : <p className="muted-copy">No paid subscriptions yet.</p>}
-        </section>
-        <section className="card app-card">
-          <CardTitle icon="dashboard" eyebrow="Revenue" title="Est. MRR by Plan" />
+          <CardTitle icon="dashboard" eyebrow="Revenue" title={data.billing ? "List-price potential by plan" : "Est. MRR by Plan"} />
           <StatsRankedList entries={mrrEntries.map(([label, value]) => [`${label}`, value])} />
-          <p className="muted-copy" style={{ marginTop: 8 }}>Values in GBP/month, from plan list prices.</p>
+          <p className="muted-copy" style={{ marginTop: 8 }}>GBP/month at list prices{data.billing ? " — plans in force only (ended trials left out); not money collected" : ""}.</p>
         </section>
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Source" title="Plan Source Distribution" />
           {sourceEntries.length ? <StatsRankedList entries={sourceEntries} /> : <p className="muted-copy">No paid subscriptions yet.</p>}
-          <p className="muted-copy" style={{ marginTop: 8 }}>How each paid plan was assigned. Stripe / Apple / Google payment methods will appear here once live billing is connected.</p>
+          <p className="muted-copy" style={{ marginTop: 8 }}>How each paid plan was assigned. This is the route the plan came by, not how the person found NivaDesk.</p>
         </section>
         <section className="card app-card">
-          <CardTitle icon="dashboard" eyebrow="Billing" title="Not Connected Yet" />
+          <CardTitle icon="dashboard" eyebrow="Billing" title="Not measured here" />
           <p className="muted-copy" style={{ margin: 0 }}>
-            Trials, cancellations, expirations, failed payments, billing cycles and plan-change history require live billing.
-            When Stripe / App Store / Play billing is enabled, those cards will activate here automatically.
+            Live billing is not connected to Insights: no payment ledger (Stripe, App Store, Google Play, Shopify) is read. Money collected,
+            refunds, billing cycles, trial-to-paid conversion and plan-change history are therefore not measured on this page.
           </p>
         </section>
       </div>
@@ -1736,7 +1863,8 @@ function AdminSubscriptionsDetail({ onBack }: { onBack: () => void }) {
                   <th style={{ padding: "6px 8px" }}>Workspace</th>
                   <th style={{ padding: "6px 8px" }}>Owner</th>
                   <th style={{ padding: "6px 8px" }}>Plan</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Est. £/mo</th>
+                  <th style={{ padding: "6px 8px" }}>State</th>
+                  <th style={{ padding: "6px 8px", textAlign: "right" }}>List £/mo</th>
                   <th style={{ padding: "6px 8px", textAlign: "right" }}>Created</th>
                 </tr>
               </thead>
@@ -1746,7 +1874,12 @@ function AdminSubscriptionsDetail({ onBack }: { onBack: () => void }) {
                     <td style={{ padding: "7px 8px", fontWeight: 700 }}>{item.name}</td>
                     <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{item.ownerEmail || "—"}</td>
                     <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[item.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[item.plan] || item.plan}</td>
-                    <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700 }}>£{item.monthlyGbp}</td>
+                    <td style={{ padding: "7px 8px", color: "var(--muted)" }}>
+                      {item.state ? BILLING_STATE_LABELS[item.state] || item.state : "—"}
+                      {item.provider ? ` · ${ADMIN_PROVIDER_LABELS[item.provider] || item.provider}` : ""}
+                      {item.trialEndsAtMs ? ` · ${item.state === "trial_expired" ? "ended" : "ends"} ${new Date(item.trialEndsAtMs).toLocaleDateString()}` : ""}
+                    </td>
+                    <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700 }}>{item.state === "trial_expired" || item.state === "cancelled" ? <span title={`list price £${item.listPriceGbp ?? 0} — not counted`}>£0</span> : `£${item.monthlyGbp}`}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right", color: "var(--muted)" }}>{item.createdAtMs ? new Date(item.createdAtMs).toLocaleDateString() : "—"}</td>
                   </tr>
                 ))}
@@ -1775,7 +1908,9 @@ type AdminRevenueDetail = {
     seatCount: number;
     storageAddonCount: number;
   };
-  topPaying: { id: string; name: string; ownerEmail: string; plan: string; baseGbp: number; seatGbp: number; storageGbp: number; totalGbp: number }[];
+  topPaying: { id: string; name: string; ownerEmail: string; plan: string; state?: string; provider?: string; baseGbp: number; seatGbp: number; storageGbp: number; totalGbp: number }[];
+  potential?: { baseByState: Record<string, number>; providerBilledListPrice: number; expiredTrialCount: number; expiredTrialListPriceExcluded: number; collectedRevenue: null; collectedRevenueReason: string };
+  exclusion?: ExclusionSummary;
   addons: {
     seatWorkspaces: { id: string; name: string; ownerEmail: string; seats: number; monthlyGbp: number }[];
     storageWorkspaces: { id: string; name: string; ownerEmail: string; addonGB: number; monthlyGbp: number }[];
@@ -1784,15 +1919,17 @@ type AdminRevenueDetail = {
   };
 };
 
-function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
+function AdminRevenueDetail({ onBack, view }: { onBack: () => void; view: AdminView }) {
   const [data, setData] = useState<AdminRevenueDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    const callable = httpsCallable<Record<string, never>, AdminRevenueDetail>(functions, "getAdminRevenueDetail");
-    callable({})
+    setLoading(true);
+    setError("");
+    const callable = httpsCallable<{ view: AdminView }, AdminRevenueDetail>(functions, "getAdminRevenueDetail");
+    callable({ view })
       .then(result => {
         if (!cancelled) setData(result.data);
       })
@@ -1805,7 +1942,7 @@ function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
@@ -1842,11 +1979,15 @@ function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
         {crumb}
         <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Revenue" />
         <p className="muted-copy">Track estimated financial performance across NivaDesk. {data.note}</p>
+        <ExclusionNote exclusion={data.exclusion} />
       </section>
 
       <div className="site-stats-grid">
-        {adminKpiTile("Est. MRR", `£${data.revenue.mrr.toLocaleString()}`, "plans + seats + storage")}
-        {adminKpiTile("Est. ARR", `£${data.revenue.arr.toLocaleString()}`)}
+        {adminKpiTile(data.potential ? "List-price potential" : "Est. MRR", `£${data.revenue.mrr.toLocaleString()}`, data.potential ? "plans in force + seats + storage, at list price — not revenue" : "plans + seats + storage")}
+        {data.potential ? adminKpiTile("Provider-billed (list price)", `£${data.potential.providerBilledListPrice.toLocaleString()}/mo`, "base plans a till reports active") : null}
+        {data.potential ? adminKpiTile("Ended trials left out", data.potential.expiredTrialCount.toLocaleString(), `£${data.potential.expiredTrialListPriceExcluded}/mo of list price not counted`) : null}
+        {data.potential ? adminKpiTile("Collected revenue", "Not measured", unknownOr(null, data.potential.collectedRevenueReason)) : null}
+        {adminKpiTile(data.potential ? "Potential × 12" : "Est. ARR", `£${data.revenue.arr.toLocaleString()}`)}
         {adminKpiTile("Est. ARPU", `£${data.revenue.arpu.toLocaleString()}`, "per paid workspace / month")}
         {adminKpiTile("Paid Workspaces", data.revenue.paidTotal.toLocaleString())}
         {adminKpiTile("Extra Seats", data.revenue.seatCount.toLocaleString(), `£${data.revenue.seatsMrr}/mo`)}
@@ -1864,10 +2005,10 @@ function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
           <p className="muted-copy" style={{ marginTop: 8 }}>Monthly GBP at list prices.</p>
         </section>
         <section className="card app-card">
-          <CardTitle icon="dashboard" eyebrow="Billing" title="Not Connected Yet" />
+          <CardTitle icon="dashboard" eyebrow="Billing" title="Not measured here" />
           <p className="muted-copy" style={{ margin: 0 }}>
-            Revenue over time, billing sources (Stripe / Apple / Google), currencies, countries, transactions and refunds
-            require live billing. These cards will activate here automatically once payments are enabled.
+            Live billing is not connected to Insights: revenue over time, currencies, countries, transactions and refunds would need
+            the payment ledgers (Stripe / Apple / Google / Shopify), which this page does not read. Every £ here is a list price.
           </p>
         </section>
       </div>
@@ -1916,7 +2057,7 @@ function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
       </div>
 
       <section className="card app-card">
-        <CardTitle icon="dashboard" eyebrow="Workspaces" title="Top Paying Workspaces (Est.)" />
+        <CardTitle icon="dashboard" eyebrow="Workspaces" title={data.potential ? "Highest list-price workspaces" : "Top Paying Workspaces (Est.)"} />
         {data.topPaying.length === 0 ? (
           <p className="muted-copy">No paid workspaces yet.</p>
         ) : (
@@ -1928,6 +2069,7 @@ function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
                   <th style={{ padding: "6px 8px" }}>Workspace</th>
                   <th style={{ padding: "6px 8px" }}>Owner</th>
                   <th style={{ padding: "6px 8px" }}>Plan</th>
+                  <th style={{ padding: "6px 8px" }}>State</th>
                   <th style={{ padding: "6px 8px", textAlign: "right" }}>Base</th>
                   <th style={{ padding: "6px 8px", textAlign: "right" }}>Seats</th>
                   <th style={{ padding: "6px 8px", textAlign: "right" }}>Storage</th>
@@ -1941,6 +2083,7 @@ function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
                     <td style={{ padding: "7px 8px", fontWeight: 700 }}>{workspace.name}</td>
                     <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{workspace.ownerEmail || "—"}</td>
                     <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
+                    <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{workspace.state ? `${BILLING_STATE_LABELS[workspace.state] || workspace.state}${workspace.provider ? ` · ${ADMIN_PROVIDER_LABELS[workspace.provider] || workspace.provider}` : ""}` : "—"}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }}>£{workspace.baseGbp}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }}>{workspace.seatGbp ? `£${workspace.seatGbp}` : "—"}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }}>{workspace.storageGbp ? `£${workspace.storageGbp}` : "—"}</td>
@@ -1959,7 +2102,8 @@ function AdminRevenueDetail({ onBack }: { onBack: () => void }) {
 type AdminPlansDetail = {
   generatedAtMs: number;
   totalWorkspaces: number;
-  stats: Record<string, { workspaces: number; newThisMonth: number; active30d: number; orders30d: number }>;
+  stats: Record<string, { workspaces: number; newThisMonth: number; active30d: number; orders30d: number; trialActive?: number; trialExpiredAssigned?: number }>;
+  exclusion?: ExclusionSummary;
   comparison: { plan: string; label: string; orders: string; customers: string; storage: string; seats: string; monthly: number; yearly: number }[];
   note: string;
 };
@@ -1970,6 +2114,8 @@ type AdminOnboardingDetail = {
   ok: boolean;
   generatedAtMs: number;
   settingsDocs: number;
+  settingsWithoutWorkspace?: number;
+  exclusion?: ExclusionSummary;
   completed: number;
   answeredAnything: number;
   counts: Record<string, Record<string, number>>;
@@ -2015,20 +2161,22 @@ const ONBOARDING_SECTIONS: { key: string; title: string; blurb: string }[] = [
   { key: "completedAction", title: "How setup finished", blurb: "" },
 ];
 
-function AdminOnboardingDetail({ onBack }: { onBack: () => void }) {
+function AdminOnboardingDetail({ onBack, view }: { onBack: () => void; view: AdminView }) {
   const [data, setData] = useState<AdminOnboardingDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    const callable = httpsCallable<Record<string, never>, AdminOnboardingDetail>(functions, "getAdminOnboardingDetail");
-    callable({})
+    setLoading(true);
+    setError("");
+    const callable = httpsCallable<{ view: AdminView }, AdminOnboardingDetail>(functions, "getAdminOnboardingDetail");
+    callable({ view })
       .then(result => { if (!cancelled) setData(result.data); })
       .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not load details."); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [view]);
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
@@ -2067,6 +2215,8 @@ function AdminOnboardingDetail({ onBack }: { onBack: () => void }) {
         {crumb}
         <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Setup Answers" />
         <p className="muted-copy">{data.note}</p>
+        {data.settingsWithoutWorkspace ? <p style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 0" }}>{data.settingsWithoutWorkspace} of these settings belong to a workspace that no longer exists.</p> : null}
+        <ExclusionNote exclusion={data.exclusion} />
         <div className="site-stats-grid">
           {[
             ["Workspaces with settings", data.settingsDocs],
@@ -2120,15 +2270,17 @@ function AdminOnboardingDetail({ onBack }: { onBack: () => void }) {
   );
 }
 
-function AdminPlansDetail({ onBack }: { onBack: () => void }) {
+function AdminPlansDetail({ onBack, view }: { onBack: () => void; view: AdminView }) {
   const [data, setData] = useState<AdminPlansDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    const callable = httpsCallable<Record<string, never>, AdminPlansDetail>(functions, "getAdminPlansDetail");
-    callable({})
+    setLoading(true);
+    setError("");
+    const callable = httpsCallable<{ view: AdminView }, AdminPlansDetail>(functions, "getAdminPlansDetail");
+    callable({ view })
       .then(result => {
         if (!cancelled) setData(result.data);
       })
@@ -2141,7 +2293,7 @@ function AdminPlansDetail({ onBack }: { onBack: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
@@ -2172,7 +2324,8 @@ function AdminPlansDetail({ onBack }: { onBack: () => void }) {
       <section className="card app-card">
         {crumb}
         <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Plans" />
-        <p className="muted-copy">Analyze plan performance, features and limits. {data.note}</p>
+        <p className="muted-copy">Analyze plan performance, features and limits. Each workspace is counted under the plan it has now: a trial that has ended counts as Free. {data.note}</p>
+        <ExclusionNote exclusion={data.exclusion} />
       </section>
 
       <div className="site-stats-grid">
@@ -2183,6 +2336,9 @@ function AdminPlansDetail({ onBack }: { onBack: () => void }) {
               <span style={{ fontSize: 12, fontWeight: 800, color: ADMIN_PLAN_COLORS[key] || "var(--muted)" }}>{ADMIN_PLAN_LABELS[key] || key}</span>
               <strong style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.05 }}>{bucket.workspaces.toLocaleString()}</strong>
               <span style={{ fontSize: 11, color: "var(--muted)" }}>{((bucket.workspaces / total) * 100).toFixed(1)}% of total · {bucket.active30d} active 30d · +{bucket.newThisMonth} this month</span>
+              {key !== "demo" && (typeof bucket.trialActive === "number" || typeof bucket.trialExpiredAssigned === "number") ? (
+                <span style={{ fontSize: 11, color: "var(--muted)" }}>{bucket.trialActive ?? 0} on a running trial · {bucket.trialExpiredAssigned ?? 0} trials ended (counted as Free)</span>
+              ) : null}
             </section>
           );
         })}
@@ -2271,24 +2427,27 @@ function AdminPlansDetail({ onBack }: { onBack: () => void }) {
 type AdminFeatureUsageDetail = {
   generatedAtMs: number;
   totalWorkspaces: number;
-  features: { key: string; label: string; total: number | null; count30d: number; activeWorkspaces: number; byPlan: Record<string, number> }[];
+  features: { key: string; label: string; total: number | null; count30d: number | null; unattributed30d?: number; activeWorkspaces: number | null; byPlan: Record<string, number>; scope?: string; error?: string }[];
   heatmap: number[][];
-  funnel: { workspaces: number; withCustomer: number | null; withOrder: number | null; chatgptConnected: number };
+  funnel: { workspaces: number; withCustomer: number | null; withOrder: number | null; chatgptConnected: number; unknownWorkspaceIdsWithOrders?: number | null; unknownWorkspaceIdsWithCustomers?: number | null; independentCounters?: boolean };
+  exclusion?: ExclusionSummary;
   topWorkspaces: { id: string; name: string; plan: string; actions: number; topFeature: string }[];
   note: string;
 };
 
 const ADMIN_FEATURE_COLORS = ["#8a5cf6", "#0a84ff", "#30d158", "#ff9f0a"];
 
-function AdminFeatureUsageDetail({ onBack }: { onBack: () => void }) {
+function AdminFeatureUsageDetail({ onBack, view }: { onBack: () => void; view: AdminView }) {
   const [data, setData] = useState<AdminFeatureUsageDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    const callable = httpsCallable<Record<string, never>, AdminFeatureUsageDetail>(functions, "getAdminFeatureUsageDetail");
-    callable({})
+    setLoading(true);
+    setError("");
+    const callable = httpsCallable<{ view: AdminView }, AdminFeatureUsageDetail>(functions, "getAdminFeatureUsageDetail");
+    callable({ view })
       .then(result => {
         if (!cancelled) setData(result.data);
       })
@@ -2301,7 +2460,7 @@ function AdminFeatureUsageDetail({ onBack }: { onBack: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
@@ -2322,9 +2481,9 @@ function AdminFeatureUsageDetail({ onBack }: { onBack: () => void }) {
     );
   }
 
-  const totalActions30d = data.features.reduce((acc, feature) => acc + feature.count30d, 0);
+  const totalActions30d = data.features.reduce((acc, feature) => acc + (feature.count30d ?? 0), 0);
   const distributionSlices = data.features
-    .map((feature, index) => ({ label: feature.label, value: feature.count30d, color: ADMIN_FEATURE_COLORS[index % ADMIN_FEATURE_COLORS.length] }))
+    .map((feature, index) => ({ label: feature.label, value: feature.count30d ?? 0, color: ADMIN_FEATURE_COLORS[index % ADMIN_FEATURE_COLORS.length] }))
     .filter(slice => slice.value > 0);
 
   const funnelSteps: [string, number | null][] = [
@@ -2341,14 +2500,17 @@ function AdminFeatureUsageDetail({ onBack }: { onBack: () => void }) {
         {crumb}
         <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Feature Usage" />
         <p className="muted-copy">Track how features are used across all workspaces (last 30 days). {data.note}</p>
+        <ExclusionNote exclusion={data.exclusion} />
       </section>
 
       <div className="site-stats-grid">
         {data.features.map(feature => (
           <section key={feature.key} className="card app-card" style={{ display: "grid", gap: 4 }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{feature.label}</span>
-            <strong style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.05 }}>{feature.count30d.toLocaleString()}</strong>
+            <strong style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.05 }}>{unknownOr(feature.count30d, feature.error)}</strong>
             <span style={{ fontSize: 11, color: "var(--muted)" }}>30 days · {feature.total !== null ? `${feature.total.toLocaleString()} all-time` : "all-time —"}</span>
+            {feature.unattributed30d ? <span style={{ fontSize: 11, color: "var(--muted)" }}>+{feature.unattributed30d} not tied to an existing workspace</span> : null}
+            {feature.scope ? <span style={{ fontSize: 11, color: "var(--muted)" }}>{feature.scope}</span> : null}
           </section>
         ))}
       </div>
@@ -2360,7 +2522,8 @@ function AdminFeatureUsageDetail({ onBack }: { onBack: () => void }) {
         </section>
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Adoption" title="Active Workspaces by Feature (30d)" />
-          <StatsRankedList entries={data.features.map(feature => [`${feature.label} — ${((feature.activeWorkspaces / Math.max(data.totalWorkspaces, 1)) * 100).toFixed(1)}%`, feature.activeWorkspaces] as [string, number])} />
+          <StatsRankedList entries={data.features.map(feature => [`${feature.label} — ${(((feature.activeWorkspaces ?? 0) / Math.max(data.totalWorkspaces, 1)) * 100).toFixed(1)}% of ${data.totalWorkspaces} workspaces`, feature.activeWorkspaces ?? 0] as [string, number])} />
+          <p className="muted-copy" style={{ marginTop: 8 }}>A workspace can use several features, so these do not add up to 100%.</p>
         </section>
       </div>
 
@@ -2384,7 +2547,7 @@ function AdminFeatureUsageDetail({ onBack }: { onBack: () => void }) {
                   {["demo", "lifetime_lite", "pro_monthly", "team_monthly"].map(plan => (
                     <td key={plan} style={{ padding: "7px 8px", textAlign: "right" }}>{(feature.byPlan[plan] || 0).toLocaleString()}</td>
                   ))}
-                  <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 800 }}>{feature.count30d.toLocaleString()}</td>
+                  <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 800 }}>{unknownOr(feature.count30d, feature.error)}</td>
                 </tr>
               ))}
             </tbody>
@@ -2410,13 +2573,16 @@ function AdminFeatureUsageDetail({ onBack }: { onBack: () => void }) {
               </div>
             ))}
           </div>
-          <p className="muted-copy" style={{ marginTop: 10 }}>All-time adoption: how far workspaces get after signing up.</p>
+          <p className="muted-copy" style={{ marginTop: 10 }}>
+            All-time, independent counters — not a sequence: a workspace can have an order without a customer. Only workspaces that still exist are counted
+            {data.funnel.unknownWorkspaceIdsWithOrders ? `; ${data.funnel.unknownWorkspaceIdsWithOrders} deleted / unknown workspace id(s) with orders left out` : ""}.
+          </p>
         </section>
       </div>
 
       <section className="card app-card">
         <CardTitle icon="dashboard" eyebrow="Activity" title="Feature Usage by Time of Day" />
-        <ActivityHeatmap heatmap={data.heatmap} />
+        <ActivityHeatmap heatmap={data.heatmap} caption="Orders, customers, notes and messages created, by weekday and hour (last 30 days, UK time)." />
       </section>
     </div>
   );
@@ -2427,7 +2593,11 @@ type AdminStorageDetail = {
   totals: { totalBytes: number; fileCount: number; avgFileBytes: number; uploaded30dBytes: number; uploaded30dCount: number; nearLimitCount: number };
   typeBytes: Record<string, number>;
   planBytes: Record<string, number>;
-  topWorkspaces: { id: string; name: string; plan: string; bytes: number; files: number; limitMB: number; percent: number }[];
+  unknownWorkspace?: { bytes: number; files: number; workspaces: number };
+  deletedOrders?: { bytes: number; files: number };
+  exclusion?: ExclusionSummary;
+  heatmapCaption?: string;
+  topWorkspaces: { id: string; name: string; plan: string; bytes: number; files: number; limitMB: number | null; percent: number | null; unknownWorkspace?: boolean }[];
   nearLimit: { id: string; name: string; plan: string; bytes: number; limitMB: number; percent: number }[];
   recentUploads: { fileName: string; companyName: string; sizeBytes: number; type: string; uploadedAtMs: number }[];
   heatmap: number[][];
@@ -2449,15 +2619,17 @@ const ADMIN_TYPE_COLORS: Record<string, string> = {
   Other: "#9ca3af"
 };
 
-function AdminStorageDetail({ onBack }: { onBack: () => void }) {
+function AdminStorageDetail({ onBack, view }: { onBack: () => void; view: AdminView }) {
   const [data, setData] = useState<AdminStorageDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    const callable = httpsCallable<Record<string, never>, AdminStorageDetail>(functions, "getAdminStorageDetail");
-    callable({})
+    setLoading(true);
+    setError("");
+    const callable = httpsCallable<{ view: AdminView }, AdminStorageDetail>(functions, "getAdminStorageDetail");
+    callable({ view })
       .then(result => {
         if (!cancelled) setData(result.data);
       })
@@ -2470,7 +2642,7 @@ function AdminStorageDetail({ onBack }: { onBack: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
@@ -2496,8 +2668,10 @@ function AdminStorageDetail({ onBack }: { onBack: () => void }) {
     .sort((a, b) => b[1] - a[1])
     .map(([key, value]) => ({ label: key, value, color: ADMIN_TYPE_COLORS[key] || "#9ca3af" }));
 
-  const planSlices = ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
-    .map(key => ({ label: ADMIN_PLAN_LABELS[key] || key, value: data.planBytes[key] || 0, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }))
+  // The deleted / unknown workspace group belongs in the chart, or the plans do not add up to the
+  // total (11.2 MB on 15 Oct had no plan to land in).
+  const planSlices = ["demo", "lifetime_lite", "pro_monthly", "team_monthly", "unknown"]
+    .map(key => ({ label: key === "unknown" ? "Deleted / unknown workspace" : ADMIN_PLAN_LABELS[key] || key, value: data.planBytes[key] || 0, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }))
     .filter(slice => slice.value > 0);
 
   return (
@@ -2506,6 +2680,7 @@ function AdminStorageDetail({ onBack }: { onBack: () => void }) {
         {crumb}
         <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Storage" />
         <p className="muted-copy">Client Files usage across all workspaces. {data.note}</p>
+        <ExclusionNote exclusion={data.exclusion} />
       </section>
 
       <div className="site-stats-grid">
@@ -2528,7 +2703,11 @@ function AdminStorageDetail({ onBack }: { onBack: () => void }) {
           {planSlices.length ? (
             <StatsRankedList entries={planSlices.map(slice => [slice.label, Math.round(slice.value / 1024 / 1024)] as [string, number])} />
           ) : <p className="muted-copy">No files yet.</p>}
-          <p className="muted-copy" style={{ marginTop: 8 }}>Values in MB.</p>
+          <p className="muted-copy" style={{ marginTop: 8 }}>
+            Values in MB; % = share of the {formatBytes(data.totals.totalBytes)} total. Plan = the plan each workspace has now.
+            {data.unknownWorkspace?.files ? ` ${data.unknownWorkspace.files} file(s) sit on orders of ${data.unknownWorkspace.workspaces} workspace(s) that no longer exist — no plan or limit is guessed for them.` : ""}
+            {data.deletedOrders?.files ? ` ${data.deletedOrders.files} file(s) (${formatBytes(data.deletedOrders.bytes)}) belong to deleted orders and stay counted until purged.` : ""}
+          </p>
         </section>
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Attention" title="Storage Warnings" />
@@ -2571,16 +2750,18 @@ function AdminStorageDetail({ onBack }: { onBack: () => void }) {
                   <tr key={workspace.id} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
                     <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
                     <td style={{ padding: "7px 8px", fontWeight: 700 }}>{workspace.name}</td>
-                    <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
+                    <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--text)" }}>{workspace.plan === "unknown" ? "Unknown" : ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }}>{workspace.files}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700 }}>{formatBytes(workspace.bytes)}</td>
                     <td style={{ padding: "7px 8px" }}>
+                      {workspace.percent === null ? <span style={{ fontSize: 11.5, color: "var(--muted)" }}>— (workspace no longer exists)</span> : (
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <div style={{ flex: 1, height: 7, borderRadius: 999, background: "rgba(17,24,39,0.08)", overflow: "hidden" }}>
                           <span style={{ display: "block", height: "100%", borderRadius: 999, width: `${Math.min(workspace.percent, 100)}%`, background: workspace.percent >= 95 ? "#d92d20" : workspace.percent >= 80 ? "#ff9f0a" : "#0a84ff" }} />
                         </div>
                         <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", minWidth: 42, textAlign: "right" }}>{workspace.percent}%</span>
                       </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -2613,7 +2794,7 @@ function AdminStorageDetail({ onBack }: { onBack: () => void }) {
         </section>
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Activity" title="Uploads by Time of Day (30d)" />
-          <ActivityHeatmap heatmap={data.heatmap} />
+          <ActivityHeatmap heatmap={data.heatmap} caption={data.heatmapCaption || "Client-file uploads by weekday and hour (last 30 days, UK time)."} />
         </section>
       </div>
     </div>
@@ -2678,9 +2859,26 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
 
   const dateText = (ms: unknown) => (typeof ms === "number" && ms > 0 ? new Date(ms).toLocaleString() : "—");
 
+  const [flagKind, setFlagKind] = useState("qa");
+  const [flagNote, setFlagNote] = useState("");
+  const [flagBusy, setFlagBusy] = useState(false);
+  const setFlag = (companyId: string, kind: string | null) => {
+    setFlagBusy(true);
+    setError("");
+    const callable = httpsCallable<{ companyId: string; kind: string | null; note: string }, { analyticsExclusion: { kind: string; note: string; setAtMs: number } | null }>(functions, "setAnalyticsExclusion");
+    callable({ companyId, kind, note: flagNote })
+      .then(result => {
+        setDetail(previous => previous ? { ...previous, workspace: { ...(previous.workspace as Record<string, unknown>), analyticsExclusion: result.data?.analyticsExclusion ?? null } } : previous);
+        setFlagNote("");
+      })
+      .catch(err => setError(err instanceof Error ? err.message : "Could not change the analytics flag."))
+      .finally(() => setFlagBusy(false));
+  };
+
   const renderUserDetail = () => {
     const user = (detail?.user ?? {}) as Record<string, unknown>;
-    const memberships = (detail?.memberships ?? []) as { companyId: string; name: string; plan: string; role: string }[];
+    const memberships = (detail?.memberships ?? []) as { companyId: string; name: string; plan: string; role: string; sources?: string[]; workspaceExists?: boolean }[];
+    const membershipsError = String(detail?.membershipsError || "");
     return (
       <>
         <div className="settings-mini-grid">
@@ -2689,11 +2887,14 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
           <InfoTile label="Signed up" value={dateText(user.createdAtMs)} />
           <InfoTile label="Last sign-in" value={dateText(user.lastSignInMs)} />
           <InfoTile label="Support tickets" value={String(user.ticketsCreated ?? "—")} />
+          <InfoTile label="Notes written" value={unknownOr(typeof user.notesOwned === "number" ? user.notesOwned : null, membershipsError || "not_available")} />
           <InfoTile label="Status" value={user.disabled ? "Disabled" : "Active"} />
         </div>
         <p className="muted-copy" style={{ margin: "12px 0 6px", fontWeight: 700 }}>Workspaces</p>
-        {memberships.length === 0 ? (
-          <p className="muted-copy">No workspace memberships found.</p>
+        {membershipsError ? (
+          <p style={{ color: "var(--danger)", margin: 0 }}>{unknownOr(null, membershipsError)}</p>
+        ) : memberships.length === 0 ? (
+          <p className="muted-copy">No workspace owned or joined (checked: workspace records and access records).</p>
         ) : (
           <div style={{ display: "grid" }}>
             {memberships.map((membership, index) => (
@@ -2701,7 +2902,8 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
                 <span style={{ fontSize: 13, fontWeight: 650, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{membership.name}</span>
                 <span style={{ fontSize: 11.5, fontWeight: 800, color: ADMIN_PLAN_COLORS[membership.plan] || "var(--muted)" }}>{ADMIN_PLAN_LABELS[membership.plan] || membership.plan}</span>
                 <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{membership.role}</span>
-                <button type="button" onClick={() => openDetail("workspace", membership.companyId)} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>
+                {membership.sources?.length ? <span style={{ fontSize: 10.5, color: "var(--muted)" }} title="Where this membership was found">{membership.sources.join(" · ")}</span> : null}
+                <button type="button" disabled={membership.workspaceExists === false} onClick={() => openDetail("workspace", membership.companyId)} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>
                   Stats →
                 </button>
               </div>
@@ -2715,17 +2917,24 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
   const renderWorkspaceDetail = () => {
     const workspace = (detail?.workspace ?? {}) as Record<string, unknown>;
     const percent = Number(workspace.storagePercent || 0);
+    const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+    const members = num(workspace.members);
+    const suspended = num(workspace.membersSuspended) || 0;
+    const flag = (workspace.analyticsExclusion ?? null) as { kind: string; note?: string; setAtMs?: number } | null;
+    const billingState = String(workspace.billingState || "");
+    const lastOrder = num(workspace.lastOrderAtMs);
     return (
       <>
         <div className="settings-mini-grid">
           <InfoTile label="Workspace" value={String(workspace.name || "—")} />
           <InfoTile label="Owner" value={String(workspace.ownerEmail || "—")} />
-          <InfoTile label="Plan" value={ADMIN_PLAN_LABELS[String(workspace.plan)] || String(workspace.plan || "—")} />
-          <InfoTile label="Members" value={String(workspace.members ?? "—")} />
+          <InfoTile label="Plan" value={`${ADMIN_PLAN_LABELS[String(workspace.plan)] || String(workspace.plan || "—")}${billingState ? ` · ${BILLING_STATE_LABELS[billingState] || billingState}` : ""}`} />
+          <InfoTile label="Members" value={members === null ? unknownOr(null, "not_available") : `${members} (owner${members > 1 ? ` + ${members - 1}` : " only"})${suspended ? ` · ${suspended} suspended` : ""}`} />
           <InfoTile label="Created" value={dateText(workspace.createdAtMs)} />
-          <InfoTile label="Last order" value={dateText(workspace.lastOrderAtMs)} />
+          <InfoTile label="Last order" value={lastOrder ? dateText(lastOrder) : unknownOr(null, String(workspace.lastOrderReason || "not_available"))} />
           <InfoTile label="Orders (total)" value={String(workspace.ordersTotal ?? "—")} />
-          <InfoTile label="Orders (30d)" value={String(workspace.orders30d ?? "—")} />
+          <InfoTile label="Orders (30d)" value={unknownOr(num(workspace.orders30d), String(workspace.orders30dReason || "not_available"))} />
+          <InfoTile label="Notes" value={unknownOr(num(workspace.notesTotal), String(workspace.notesReason || "not_available"))} />
           <InfoTile label="Customers" value={String(workspace.customersTotal ?? "—")} />
           <InfoTile label="Messages" value={String(workspace.messagesTotal ?? "—")} />
           <InfoTile label="Support tickets" value={String(workspace.supportTotal ?? "—")} />
@@ -2739,6 +2948,25 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
           <span style={{ fontSize: 12.5, fontWeight: 700 }}>
             {formatBytes(Number(workspace.storageBytes || 0))} / {Number(workspace.storageLimitMB || 0) >= 1024 ? `${Number(workspace.storageLimitMB) / 1024} GB` : `${workspace.storageLimitMB} MB`} ({percent}%)
           </span>
+        </div>
+        <p className="muted-copy" style={{ margin: "10px 0 0", fontSize: 11.5 }}>
+          Members: owner + members list on the workspace record. Orders (30d) / last order: creation stamp, or the order date for older orders without one
+          {num(workspace.ordersUndated) ? ` (${workspace.ordersUndated} order(s) carry no date)` : ""}{num(workspace.ordersDeleted) ? `; ${workspace.ordersDeleted} deleted order(s) not counted` : ""}.
+        </p>
+        <p className="muted-copy" style={{ margin: "12px 0 6px", fontWeight: 700 }}>Analytics flag</p>
+        <p className="muted-copy" style={{ margin: "0 0 6px", fontSize: 12 }}>
+          {flag ? `Flagged ${flag.kind}${flag.note ? ` — “${flag.note}”` : ""}${flag.setAtMs ? ` (${new Date(flag.setAtMs).toLocaleDateString()})` : ""}: left out of the business view, counted in the QA view.` : "Not flagged: counted in every view."}
+          {" "}Set by hand only — a workspace is never flagged because of its name.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <select value={flagKind} onChange={event => setFlagKind(event.target.value)} disabled={flagBusy} style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }}>
+            <option value="internal">Internal</option>
+            <option value="qa">QA / test</option>
+            <option value="pilot">Pilot</option>
+          </select>
+          <input type="text" value={flagNote} maxLength={200} onChange={event => setFlagNote(event.target.value)} placeholder="Note (optional)" disabled={flagBusy} style={{ flex: "1 1 160px", padding: "6px 10px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)" }} />
+          <button type="button" className="button" disabled={flagBusy} onClick={() => setFlag(String(workspace.id || ""), flagKind)} style={{ padding: "6px 12px", borderRadius: 10, fontWeight: 700 }}>{flag ? "Change flag" : "Flag"}</button>
+          {flag ? <button type="button" className="button secondary" disabled={flagBusy} onClick={() => setFlag(String(workspace.id || ""), null)} style={{ padding: "6px 12px", borderRadius: 10, fontWeight: 700 }}>Clear flag</button> : null}
         </div>
       </>
     );
@@ -2833,15 +3061,17 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
   );
 }
 
-function AdminOverviewPanel() {
+function AdminOverviewPanel({ view }: { view: AdminView }) {
   const [data, setData] = useState<AdminInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
-    const callable = httpsCallable<Record<string, never>, AdminInsights>(functions, "getAdminInsights");
-    callable({})
+    setLoading(true);
+    setError("");
+    const callable = httpsCallable<{ view: AdminView }, AdminInsights>(functions, "getAdminInsights");
+    callable({ view })
       .then(result => {
         if (!cancelled) setData(result.data);
       })
@@ -2854,7 +3084,7 @@ function AdminOverviewPanel() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [view]);
 
   if (loading) {
     return (
@@ -2886,7 +3116,7 @@ function AdminOverviewPanel() {
     ["Orders (total)", data.usage.ordersTotal ?? 0],
     ["Orders this month", data.usage.ordersThisMonth ?? 0],
     ["Customers", data.usage.customersTotal ?? 0],
-    ["Notes", data.usage.notesTotal ?? 0],
+    ["Notes (originals)", data.usage.notesTotal ?? 0],
     ["Notes with reminders", data.usage.remindersTotal ?? 0],
     ["Messages", data.usage.messagesTotal ?? 0],
     ["Workspace tickets", data.usage.workspaceTicketsTotal ?? 0]
@@ -2901,15 +3131,28 @@ function AdminOverviewPanel() {
         <p className="muted-copy">
           Live overview across all NivaDesk users and workspaces. Generated {new Date(data.generatedAtMs).toLocaleString()}.
         </p>
+        <ExclusionNote exclusion={data.exclusion} />
       </section>
 
       <div className="site-stats-grid">
         {adminKpiTile("Total Users", data.users.total.toLocaleString(), `+${data.users.new30d} in last 30 days`)}
         {adminKpiTile("Workspaces", data.workspaces.total.toLocaleString(), `+${data.workspaces.new30d} in last 30 days`)}
         {adminKpiTile("Active Workspaces", data.workspaces.active30d.toLocaleString(), "created an order in last 30 days")}
-        {adminKpiTile("Paid Subscriptions", data.workspaces.paid.toLocaleString())}
-        {adminKpiTile("Est. MRR", `£${data.revenue.mrr.toLocaleString()}`, "estimate — billing not live")}
-        {adminKpiTile("Est. ARR", `£${data.revenue.arr.toLocaleString()}`, "estimate — billing not live")}
+        {data.billing ? (
+          <>
+            {adminKpiTile("Paid by provider", (data.billing.byState.paid_provider || 0).toLocaleString(), providerHint(data.billing))}
+            {adminKpiTile("Active trials", (data.billing.byState.trial_active || 0).toLocaleString(), `${data.billing.byState.trial_expired || 0} ended — now Free, not counted`)}
+            {adminKpiTile("Manual / complimentary", (data.billing.byState.manual_comp || 0).toLocaleString(), "plan assigned, no till behind it")}
+            {adminKpiTile("List-price potential", `£${data.billing.listPricePotential.toLocaleString()}/mo`, "plans in force at list price — not revenue")}
+            {adminKpiTile("Collected revenue", "Not measured", "live billing is not connected to Insights")}
+          </>
+        ) : (
+          <>
+            {adminKpiTile("Paid Subscriptions", data.workspaces.paid.toLocaleString())}
+            {adminKpiTile("Est. MRR", `£${data.revenue.mrr.toLocaleString()}`, "estimate — billing not live")}
+            {adminKpiTile("Est. ARR", `£${data.revenue.arr.toLocaleString()}`, "estimate — billing not live")}
+          </>
+        )}
         {adminKpiTile("On Site Now", data.site.liveVisitors.toLocaleString(), `${data.site.today.sessions} visitors today`)}
         {adminKpiTile("In App Now", (data.site.appNow ?? 0).toLocaleString(), Object.entries(data.site.appPlatforms ?? {}).map(([key, value]) => `${key} ${value}`).join(" · ") || "web / mac / ios / android")}
       </div>
@@ -2922,6 +3165,7 @@ function AdminOverviewPanel() {
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Usage" title="Feature Usage" />
           <StatsRankedList entries={usageEntries} />
+          <p className="muted-copy" style={{ marginTop: 8 }}>Record counts of different kinds, some subsets of others — not shares of adoption. Notes count each note once (a note shared with a colleague is not counted again{typeof data.usage.notesSharedCopies === "number" ? `; ${data.usage.notesSharedCopies} shared copies` : ""}).</p>
         </section>
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="ChatGPT App" title="ChatGPT App Usage" />
@@ -3021,6 +3265,7 @@ type FunnelWorkspace = {
   riskScore: number;
   riskLevel: string;
   riskReasons: string[];
+  evidence?: ActivationEvidence;
   underivable: string[];
 };
 
@@ -3037,6 +3282,9 @@ type FunnelResult = {
     byPath: Record<string, number>;
   };
   derivedFrom: string;
+  inferred?: boolean;
+  definitions?: { engaged?: string; team?: string; finance?: string };
+  exclusion?: ExclusionSummary;
   underivable: string[];
 };
 
@@ -3059,7 +3307,7 @@ function funnelDate(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
-function AdminActivationFunnelSection() {
+function AdminActivationFunnelSection({ view }: { view: AdminView }) {
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
   const [data, setData] = useState<FunnelResult | null>(null);
@@ -3071,13 +3319,13 @@ function AdminActivationFunnelSection() {
     let cancelled = false;
     setLoading(true);
     setError("");
-    const callable = httpsCallable<{ limit?: number }, FunnelResult>(functions, "getActivationFunnel");
-    callable({ limit: 500 })
+    const callable = httpsCallable<{ limit?: number; view: AdminView }, FunnelResult>(functions, "getActivationFunnel");
+    callable({ limit: 500, view })
       .then(result => { if (!cancelled) setData(result.data); })
       .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not load the activation funnel."); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, []);
+  }, [view]);
 
   const totals = data?.totals;
   const workspaces = data?.workspaces ?? [];
@@ -3093,6 +3341,10 @@ function AdminActivationFunnelSection() {
         <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 8, lineHeight: 1.5 }}>
           {t("Every figure here is worked out from what each workspace already has — its orders, customers, connections and bank matches. Nothing new is recorded to produce it, which is why it covers workspaces that signed up long before this page existed.")}
         </p>
+        <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 6, lineHeight: 1.5 }}>
+          Every label is inferred, not observed: it is read from documents, not from recorded visits. “Using it regularly” means real work on at least two different UK calendar days in the last week (setup answers do not count); a team goal is met by a job or task assigned to someone; a finance goal by a bank transaction matched to an order. The “Why” column lists the evidence behind each label.
+        </p>
+        <ExclusionNote exclusion={data?.exclusion} />
         {loading ? <p style={{ fontSize: 13, color: "var(--muted)" }}>{t("Working it out…")}</p> : null}
         {error ? <p style={{ fontSize: 13, color: "var(--danger, #b91c1c)", fontWeight: 700 }}>{error}</p> : null}
 
@@ -3109,6 +3361,7 @@ function AdminActivationFunnelSection() {
       {totals ? (
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Funnel" title="Where they stopped" />
+          <p className="muted-copy" style={{ margin: "6px 0 0", fontSize: 12 }}>Each workspace sits in one state today (inferred). This is a distribution of current states, not a step-by-step funnel.</p>
           <div style={{ overflowX: "auto", marginTop: 10 }}>
             <table className="admin-search-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead><tr style={head}><th style={cell}>{t("Stage")}</th><th style={{ ...cell, textAlign: "right" }}>{t("Workspaces")}</th></tr></thead>
@@ -3137,6 +3390,7 @@ function AdminActivationFunnelSection() {
                   <th style={{ ...cell, textAlign: "right" }}>{t("Customers")}</th>
                   <th style={cell}>{t("Signed up")}</th><th style={cell}>{t("Last activity")}</th>
                   <th style={{ ...cell, textAlign: "right" }}>{t("Risk")}</th>
+                  <th style={cell}>{t("Why")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -3153,6 +3407,9 @@ function AdminActivationFunnelSection() {
                     <td style={cell}>{funnelDate(row.lastMeaningfulAtMs)}</td>
                     <td style={{ ...cell, textAlign: "right", fontWeight: 800 }} title={row.riskReasons.map(reason => reason.replace(/_/g, " ")).join(", ")}>
                       {row.riskScore} · {row.riskLevel}
+                    </td>
+                    <td style={{ ...cell, fontSize: 11.5, color: "var(--muted)", minWidth: 260, maxWidth: 420 }}>
+                      {activationEvidenceLine(row.evidence) || "—"}
                     </td>
                   </tr>
                 ))}
@@ -3221,7 +3478,10 @@ const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
 
 export function AdminInsightsHub() {
   const [page, setPage] = useState<AdminHubPage>("overview");
+  const [view, setView] = useState<AdminView>("business");
   const goOverview = () => setPage("overview");
+  // The toggle only means something on the pages that count workspaces.
+  const viewPages: AdminHubPage[] = ["overview", "users", "subscriptions", "revenue", "plans", "features", "storage", "onboarding", "activation"];
 
   return (
     <div className="admin-hub-grid">
@@ -3238,19 +3498,20 @@ export function AdminInsightsHub() {
         ))}
       </aside>
       <div className="admin-hub-content">
-        {page === "overview" ? <AdminOverviewPanel /> : null}
-        {page === "users" ? <AdminUsersWorkspacesDetail onBack={goOverview} /> : null}
-        {page === "subscriptions" ? <AdminSubscriptionsDetail onBack={goOverview} /> : null}
-        {page === "revenue" ? <AdminRevenueDetail onBack={goOverview} /> : null}
-        {page === "plans" ? <AdminPlansDetail onBack={goOverview} /> : null}
-        {page === "features" ? <AdminFeatureUsageDetail onBack={goOverview} /> : null}
-        {page === "storage" ? <AdminStorageDetail onBack={goOverview} /> : null}
+        {viewPages.includes(page) ? <AdminViewToggle view={view} onChange={setView} /> : null}
+        {page === "overview" ? <AdminOverviewPanel view={view} /> : null}
+        {page === "users" ? <AdminUsersWorkspacesDetail onBack={goOverview} view={view} /> : null}
+        {page === "subscriptions" ? <AdminSubscriptionsDetail onBack={goOverview} view={view} /> : null}
+        {page === "revenue" ? <AdminRevenueDetail onBack={goOverview} view={view} /> : null}
+        {page === "plans" ? <AdminPlansDetail onBack={goOverview} view={view} /> : null}
+        {page === "features" ? <AdminFeatureUsageDetail onBack={goOverview} view={view} /> : null}
+        {page === "storage" ? <AdminStorageDetail onBack={goOverview} view={view} /> : null}
         {page === "lookup" ? <AdminUserLookupDetail onBack={goOverview} /> : null}
         {page === "sitestats" ? <AdminSiteStatsSection /> : null}
         {page === "searchconsole" ? <AdminSearchConsoleSection /> : null}
         {page === "customorderlanding" ? <AdminCustomOrderLandingSection /> : null}
-        {page === "onboarding" ? <AdminOnboardingDetail onBack={goOverview} /> : null}
-        {page === "activation" ? <AdminActivationFunnelSection /> : null}
+        {page === "onboarding" ? <AdminOnboardingDetail onBack={goOverview} view={view} /> : null}
+        {page === "activation" ? <AdminActivationFunnelSection view={view} /> : null}
         {page === "feedback" ? <AdminFeedbackInbox /> : null}
       </div>
     </div>
