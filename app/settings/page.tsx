@@ -339,7 +339,7 @@ function planCustomerLimitText(plan: { customerLimit: number | null }) {
 
 function planTeamLimitText(plan: { plan?: string; teamMemberLimit: number }) {
   // "add up to 10" read as "10 more". TEAM_INCLUDED_SEATS 5, TEAM_SELF_SERVICE_MAX_SEATS 10.
-  if (plan.plan === "team_monthly") return "5 seats included · 10 in total";
+  if (plan.plan === "team_monthly") return "5 seats included · up to 10 with extra seats";
   return plan.teamMemberLimit <= 1 ? "1 user" : `Up to ${plan.teamMemberLimit} users`;
 }
 
