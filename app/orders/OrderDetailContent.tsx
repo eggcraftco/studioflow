@@ -3199,7 +3199,8 @@ export function OrderDetailContent({
       .catch(() => { /* the defaults already render a correct board */ });
     async function refreshBlockHeadings() {
       try {
-        const loaded = await loadWorkspaceBlockHeadings(workspace);
+        // Runs again on every companySettings change, so it reads the server's current headings.
+        const loaded = await loadWorkspaceBlockHeadings(workspace, { fresh: true });
         if (!cancelled) {
           setBlockHeadingSettings(loaded);
           onBlockHeadingSettingsChange?.(loaded);
@@ -10148,7 +10149,8 @@ function BlockHeadingsModal({
     async function run() {
       setLoading(true);
       try {
-        const loaded = await loadWorkspaceBlockHeadings(workspace);
+        // The heading editor: always the server's current headings.
+        const loaded = await loadWorkspaceBlockHeadings(workspace, { fresh: true });
         if (!cancelled) {
           let prepared = prepareBlockHeadingSettings(activeCardId, loaded);
           if (activeCardId === "notes" && perOrderExtraNoteSections && perOrderExtraNoteSections.length > 0) {

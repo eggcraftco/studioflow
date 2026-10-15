@@ -2197,7 +2197,8 @@ function WorkflowSettingsSection({ workspace, language }: { workspace: Workspace
     setLoading(true);
     setError("");
 
-    loadWorkspaceBlockHeadings(workspace)
+    // An editor: always the server's current headings (no session copy).
+    loadWorkspaceBlockHeadings(workspace, { fresh: true })
       .then(settings => {
         if (!cancelled) setBlockSettings(workflowSettingsWithMaterialDefaults(settings));
       })
