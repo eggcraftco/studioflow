@@ -21,7 +21,7 @@ import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
-import { detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, rankOrdersForTransaction, suggestCategory, suggestOrderLink, vendorKeyMap, type BankVendor, type RecurringSpend } from "@/lib/studioflow/bankInsights";
+import { bankAttentionSummary, bankRowMissingReceipt, detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, rankOrdersForTransaction, suggestCategory, suggestOrderLink, vendorKeyMap, type BankAttentionKind, type BankVendor, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { listLibraryFiles } from "@/lib/studioflow/filesLibrary";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
@@ -45,6 +45,18 @@ type BankConnection = {
 };
 /** Spending is money out that stayed out. A refund or chargeback went back to a customer and lives on the order instead. */
 function isSpend(item: { amount: number; outgoingKind: string }): boolean { return item.amount < 0 && !item.outgoingKind; }
+
+// The words the "Needs attention" tile lists each counted kind under. Every key
+// already exists in the translation table.
+const ATTENTION_LINE_LABELS: Record<BankAttentionKind, string> = {
+  uncategorised: "uncategorised",
+  missingReceipts: "missing receipts",
+  waitingReceipts: "receipts waiting for the bank",
+  brokenConnections: "bank connection needs reconnecting",
+  duplicates: "possible duplicates",
+  priceChanged: "price changed",
+  possiblyCancelled: "possibly cancelled",
+};
 
 type BankTransaction = {
   id: string;
@@ -1197,8 +1209,9 @@ function BankPageContent() {
   const attention = useMemo(() => {
     const spending = visibleTransactions.filter(item => isSpend(item));
     const uncategorised = spending.filter(item => !effectiveCategory(item));
-    // "Marked no receipt needed" is a resolved state, not an open action.
-    const noReceipt = spending.filter(item => !item.receiptPath && !item.receiptNotNeeded);
+    // "Marked no receipt needed" is a resolved state, not an open action. The
+    // same predicate drives Home's "Missing receipts" (review N22).
+    const noReceipt = spending.filter(bankRowMissingReceipt);
     const priceChanged = recurring.filter(item => item.active && item.priceChange);
     const cancelled = recurring.filter(item => !item.active);
     return {
@@ -1277,8 +1290,11 @@ function BankPageContent() {
     const spending = visibleTransactions.filter(item => isSpend(item));
     const matched = spending.filter(item => item.receiptPath).length;
     const notNeeded = spending.filter(item => !item.receiptPath && item.receiptNotNeeded).length;
-    const missing = spending.length - matched - notNeeded;
-    return { total: spending.length, matched, missing, notNeeded, incoming: visibleTransactions.length - spending.length };
+    const missing = spending.filter(bankRowMissingReceipt).length;
+    // Money in. A refund or chargeback row is neither spending nor incoming, and
+    // counting it here made the tile call it "incoming" (review N22).
+    const incoming = visibleTransactions.filter(item => item.amount > 0).length;
+    return { total: spending.length, matched, missing, notNeeded, incoming };
   }, [visibleTransactions]);
   // Next 30 days of expected recurring charges.
   const upcomingRenewals = useMemo(() => {
@@ -1322,6 +1338,20 @@ function BankPageContent() {
     return Array.from(byKey.values()).filter(item => item.count >= 2).sort((a, b) => b.count - a.count).slice(0, 8);
   }, [transactions, rules]);
   const autoAppliedCount = useMemo(() => visibleTransactions.filter(item => isSpend(item) && !item.category && item.categoryAuto).length, [visibleTransactions]);
+  // The tile's number and its lines come from one list (review N22): every
+  // kind that is counted is named, and rule suggestions — optional — are shown
+  // apart and said not to be in the total.
+  const attentionSummary = useMemo(() => bankAttentionSummary({
+    uncategorised: attention.uncategorised,
+    missingReceipts: attention.noReceipt,
+    waitingReceipts: attention.waitingReceipts,
+    brokenConnections: attention.brokenConnections,
+    duplicates: attention.duplicates,
+    priceChanged: attention.priceChanged,
+    possiblyCancelled: attention.cancelled,
+    ruleSuggestions: suggestedRules.length,
+  }), [attention, suggestedRules.length]);
+
 
   // ---- Transaction drawer ---------------------------------------------------
   const drawerTx = drawerTxId ? transactions.find(item => item.id === drawerTxId) ?? null : null;
@@ -2002,25 +2032,31 @@ function BankPageContent() {
                     <TileIcon bg="rgba(234,119,11,0.12)">📅</TileIcon>
                   </div>
                   <div style={statTile}>
-                    <p style={{ ...tileLabel, color: attention.total ? "#b45309" : "#16a34a" }}>{t("Needs attention")}</p>
-                    <strong style={tileValue}>{attention.total} <span style={tileUnit}>{t("items")}</span></strong>
-                    {attention.total === 0 ? (
+                    <p style={{ ...tileLabel, color: attentionSummary.total ? "#b45309" : "#16a34a" }}>{t("Needs attention")}</p>
+                    <strong style={tileValue}>{attentionSummary.total} <span style={tileUnit}>{t("items")}</span></strong>
+                    {attentionSummary.total === 0 ? (
                       <span style={{ fontSize: 11.5, opacity: 0.65 }}>✓ {t("All clear for this period")}</span>
                     ) : (
                       <div style={{ display: "flex", flexDirection: "column", gap: 1, fontSize: 11.5, opacity: 0.85 }}>
-                        {attention.uncategorised ? <span>• {attention.uncategorised} {t("uncategorised")}</span> : null}
-                        {attention.noReceipt ? <span>• {attention.noReceipt} {t("missing receipts")}</span> : null}
-                        {attention.brokenConnections ? <span style={{ color: "#dc2626", fontWeight: 700 }}>• {attention.brokenConnections} {t("bank connection needs reconnecting")}</span> : null}
-                        {attention.waitingReceipts ? <button type="button" onClick={() => setTab("receipts")} style={{ ...attentionLink, fontSize: 12 }}>• {attention.waitingReceipts} {t("receipts waiting for the bank")} →</button> : null}
-                        {attention.duplicates ? <span>• {attention.duplicates} {t("possible duplicates")}</span> : null}
-                        {suggestedRules.length ? <span>• {suggestedRules.length} {t("rule suggestions")}</span> : null}
+                        {attentionSummary.lines.map(line => {
+                          const label = ATTENTION_LINE_LABELS[line.kind];
+                          if (line.kind === "waitingReceipts") return <button key={line.kind} type="button" onClick={() => setTab("receipts")} style={{ ...attentionLink, fontSize: 12 }}>• {line.count} {t(label)} →</button>;
+                          if (line.kind === "priceChanged" || line.kind === "possiblyCancelled") return <button key={line.kind} type="button" onClick={() => setTab("recurring")} style={{ ...attentionLink, fontSize: 12 }}>• {line.count} {t(label)} →</button>;
+                          if (line.kind === "brokenConnections") return <span key={line.kind} style={{ color: "#dc2626", fontWeight: 700 }}>• {line.count} {t(label)}</span>;
+                          return <span key={line.kind}>• {line.count} {t(label)}</span>;
+                        })}
                       </div>
                     )}
-                    {attention.total ? (
+                    {attentionSummary.notCounted.ruleSuggestions ? (
+                      <button type="button" onClick={() => setTab("rules")} style={{ ...attentionLink, fontSize: 11.5, marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(120,120,140,0.16)", textAlign: "left", opacity: 0.8 }}>
+                        ✦ {attentionSummary.notCounted.ruleSuggestions} {t("rule suggestions")} · {t("not in the total")} →
+                      </button>
+                    ) : null}
+                    {attentionSummary.total ? (
                       <button type="button" onClick={() => showAttention(attention.uncategorised ? "uncategorised" : "noReceipt")}
                         style={{ ...attentionLink, marginTop: "auto", paddingTop: 10, fontSize: 12, color: "#dc2626" }}>{t("Review now")} →</button>
                     ) : null}
-                    <TileIcon bg={attention.total ? "rgba(245,158,11,0.14)" : "rgba(22,163,74,0.12)"}>{attention.total ? "⚠" : "✓"}</TileIcon>
+                    <TileIcon bg={attentionSummary.total ? "rgba(245,158,11,0.14)" : "rgba(22,163,74,0.12)"}>{attentionSummary.total ? "⚠" : "✓"}</TileIcon>
                   </div>
                 </div>
 
@@ -2122,8 +2158,11 @@ function BankPageContent() {
                         <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>{t("Missing receipts")}</div>
                       </div>
                       <div style={{ flex: 1 }}>
-                        <strong style={{ fontSize: 26, fontWeight: 800, opacity: 0.7, display: "block" }}>{receiptStats.notNeeded}</strong>
+                        {/* Same number and same breakdown as the Receipts tab: one label,
+                            one scope (review N22 — Overview said 0 where Receipts said 3). */}
+                        <strong style={{ fontSize: 26, fontWeight: 800, opacity: 0.7, display: "block" }}>{receiptStats.notNeeded + receiptStats.incoming}</strong>
                         <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>{t("No receipt needed")}</div>
+                        <div style={{ fontSize: 10.5, opacity: 0.55, marginTop: 1 }}>{receiptStats.incoming} {t("incoming")} · {receiptStats.notNeeded} {t("marked")}</div>
                       </div>
                     </div>
                     {waitingReceipts.length ? (
@@ -3131,7 +3170,7 @@ function BankPageContent() {
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                           <div style={{ flex: 1, minWidth: 220 }}>
                             <strong style={{ fontSize: 14.5 }}>{t("Categories")}</strong>
-                            <div style={{ fontSize: 11.5, opacity: 0.65, marginTop: 2 }}>{t("Your own category records — renameable, with a default VAT treatment and a mapping per accounting provider. Nothing is hard-coded to Pandle, QuickBooks or Xero.")}</div>
+                            <div style={{ fontSize: 11.5, opacity: 0.65, marginTop: 2 }}>{t("Your own categories: rename them, give each one a default VAT treatment and choose what it maps to in each accounting app you connect.")}</div>
                           </div>
                           {isOwner ? <button type="button" style={bankBtnSm} onClick={() => openCategoryForm(null)}>＋ {t("New category")}</button> : null}
                         </div>

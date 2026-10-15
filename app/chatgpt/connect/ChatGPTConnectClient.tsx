@@ -96,7 +96,7 @@ function workspaceRole(data: Record<string, unknown>, uid: string) {
 async function loadWorkspaces(user: NonNullable<ReturnType<typeof useAuth>["user"]>): Promise<WorkspaceOption[]> {
   const token = await user.getIdToken();
   const baseUrl = functionBaseUrl();
-  if (!baseUrl) throw new Error("Firebase Functions base URL is not configured.");
+  if (!baseUrl) throw new Error("ChatGPT connection is not available right now. Please try again later.");
 
   const response = await fetch(`${baseUrl}/chatgptOAuthWorkspaces`, {
     method: "GET",
@@ -167,7 +167,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
         setSelectedCompanyId(current => current || items[0]?.id || "");
       } catch (loadError) {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "Could not load workspaces.");
+          setError(loadError instanceof Error ? t(loadError.message) : t("Could not load workspaces."));
         }
       } finally {
         if (!cancelled) setLoadingWorkspaces(false);
@@ -213,7 +213,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
     try {
       const token = await user.getIdToken();
       const baseUrl = functionBaseUrl();
-      if (!baseUrl) throw new Error("Firebase Functions base URL is not configured.");
+      if (!baseUrl) throw new Error("ChatGPT connection is not available right now. Please try again later.");
 
       const response = await fetch(`${baseUrl}/chatgptOAuthApprove`, {
         method: "POST",
@@ -234,7 +234,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
 
       window.location.assign(data.redirect_uri);
     } catch (approveError) {
-      setError(approveError instanceof Error ? approveError.message : "Could not approve ChatGPT connection.");
+      setError(approveError instanceof Error ? t(approveError.message) : t("Could not approve ChatGPT connection."));
     } finally {
       setSubmitting(false);
     }

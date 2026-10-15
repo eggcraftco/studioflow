@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ONBOARDING_GOALS,
   ONBOARDING_GOAL_TASKS,
+  onboardingWorkspaceHref,
   ONBOARDING_INTEGRATIONS,
   ONBOARDING_STARTS,
   ONBOARDING_TEAM_SIZES,
@@ -752,7 +753,7 @@ export function OnboardingReady({
             <button
               type="button"
               className="onboard-btn onboard-btn-primary"
-              onClick={() => onOpen(tasks[0]?.href)}
+              onClick={() => onOpen(onboardingWorkspaceHref(tasks[0]?.href))}
             >
               {t("Open my workspace")}
             </button>

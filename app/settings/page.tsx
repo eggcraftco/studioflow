@@ -4638,7 +4638,7 @@ function AccountSection({
           <strong>{t("Face ID / device passcode")}</strong>
           <p className="muted-copy">{t("The Mac and iPhone app can require Face ID, Touch ID or device passcode on launch. Browser Face ID is not enabled on web yet, so use Sign Out on shared computers.")}</p>
         </div>
-        <p className="muted-copy">{t("Password changes are handled securely by Firebase. Web sends a reset link to your account email instead of storing or editing your password here.")}</p>
+        <p className="muted-copy">{t("To change your password, we email you a secure reset link. Your password is never shown or stored here.")}</p>
         <div className="settings-action-row settings-action-row-split">
           {/* The button sent a link without ever naming the address it was
               going to, which matters on an account whose email was changed. */}
@@ -6992,7 +6992,7 @@ function PlanAccessSection({
     { title: planOrderLimitText(currentPlan), enabled: true },
     { title: planCustomerLimitText(currentPlan), enabled: true },
     { title: `${t("Storage")}: ${effectiveStorageLabel}`, enabled: currentPlan.features.client_files },
-    { title: planTeamLimitText(currentPlan), enabled: currentPlan.features.team_access },
+    { title: t(planTeamLimitText(currentPlan)), enabled: currentPlan.features.team_access },
     { title: t("Client Files"), enabled: currentPlan.features.client_files },
     { title: t("Export Data"), enabled: currentPlan.features.export_data },
     { title: t("Card Customise"), enabled: currentPlan.features.card_customization },
@@ -8150,7 +8150,7 @@ function SupportTicketsSection({
         ...previous,
         [ticket.id]: previous[ticket.id] && previous[ticket.id].length > 0 ? previous[ticket.id] : [ticketStarterMessage(ticket)]
       }));
-      setStatus(t("Conversation will sync when the support functions finish updating."));
+      setStatus(t("Could not load the whole conversation yet. Open it again in a moment."));
     } finally {
       setLoadingMessages(previous => ({ ...previous, [ticket.id]: false }));
     }
@@ -8188,7 +8188,7 @@ function SupportTicketsSection({
           setMessagesByTicketId(previous => ({ ...previous, [ticket.id]: remoteMessages }));
         }
       } catch {
-        setStatus(t("Reply sent. Conversation will refresh automatically after the support functions update."));
+        setStatus(t("Reply sent. The conversation will update in a moment."));
       }
 
       await loadTickets();
@@ -8729,7 +8729,7 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
           </div>
           <div className="settings-kv">
             <span>{t("Sync")}</span>
-            <strong>{t("Web, Mac and iPhone")}</strong>
+            <strong>{t("Web, Mac, iPhone and Android")}</strong>
             <span className={online ? "settings-dot-status" : "settings-dot-status is-offline"}>{online ? t("Online") : t("Offline")}</span>
           </div>
         </div>

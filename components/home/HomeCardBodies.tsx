@@ -5,6 +5,7 @@ import Link from "next/link";
 import { resolveProductionStage } from "@/lib/studioflow/production";
 import { HomeActionIcon, HomeActivityIcon, HomeTileIcon, type HomeActionIconName, type HomeActivityIconName, type HomeTileIconName } from "@/components/home/HomeActionIcons";
 import { homePeriodRange, type HomeCardPeriod, type HomeCardSize } from "@/lib/studioflow/homeCards";
+import { bankRowMissingReceipt } from "@/lib/studioflow/bankInsights";
 import {
   adjustedDashboardNetProfit,
   baseCostTotal,
@@ -395,10 +396,13 @@ export function BankingCardBody({ size, period, data, t, moneySettings, hideNumb
   const incoming = inRange.filter((tx) => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
   const spent = inRange.filter((tx) => tx.amount < 0).reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
   const toReview = transactions.filter((tx) => !tx.reviewed).length;
-  // Not scoped to the range, and deliberately: this is a queue, not a
-  // statistic. A receipt you still owe from March does not stop being owed
-  // because the card is showing April, and the label never claims a period.
-  const missingReceipts = transactions.filter((tx) => tx.amount < 0 && !tx.hasReceipt).length;
+  // The same question Banking asks (bankRowMissingReceipt: spending with no
+  // receipt attached, not marked "no receipt needed", not a refund), over the
+  // same window the header names. Review N22: Home read a receipt field the
+  // server never writes and counted every outgoing row it held, all time, so
+  // it said 64 beside Banking's 31 for the month the card was showing. Banking
+  // opens on the month too, so the two now agree on the screen you land on.
+  const missingReceipts = inRange.filter(bankRowMissingReceipt).length;
   // "Incoming this month" beside a header reading "This year" is just wrong,
   // and at All time there is no window to name at all.
   const incomingLabel = period === "month" ? "Incoming this month"

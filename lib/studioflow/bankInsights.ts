@@ -305,10 +305,96 @@ export function suggestCategory(
   }
   const haystack = `${tx.counterparty} ${tx.description}`.toLowerCase();
   for (const group of CATEGORY_KEYWORDS) {
-    const hit = group.words.find(word => haystack.includes(word));
+    const hit = group.words.find(word => categoryKeywordMatches(haystack, word));
     if (hit) return { category: group.category, confidence: 0.7, source: "keyword", keyword: hit.trim() };
   }
   return null;
+}
+
+function isWordChar(ch: string | undefined): boolean {
+  return ch !== undefined && /[a-z0-9]/.test(ch);
+}
+
+/**
+ * Whether a library keyword appears in a bank line as a word, not inside one.
+ * Plain `includes` matched "bp " inside "APPLEADS-GBP " and suggested Apple Ads
+ * as Travel (review N24, 11 Oct 2026); "rent" inside "current", "edf" inside
+ * "Bedford" and "esso" inside "espresso" were the same mistake. The keyword has
+ * to start a word. It may run on into the rest of that word — "amzn" in
+ * "AMZNMKTPLACE", "membership" in "memberships" — unless it is short (three
+ * letters or fewer, like "ups" or "eon") or written with a trailing space
+ * ("bp ", "sky "), and then it has to be the whole word.
+ *
+ * Only the built-in library goes through this. A rule the owner typed keeps
+ * matching exactly as the server applies it (contains), so it is not here.
+ */
+export function categoryKeywordMatches(haystack: string, keyword: string): boolean {
+  const text = haystack.toLowerCase();
+  const word = keyword.trim().toLowerCase();
+  if (!word) return false;
+  const wholeWord = keyword !== keyword.trimEnd() || word.replace(/[^a-z0-9]/g, "").length <= 3;
+  for (let at = text.indexOf(word); at >= 0; at = text.indexOf(word, at + 1)) {
+    if (isWordChar(text[at - 1])) continue;
+    if (wholeWord && isWordChar(text[at + word.length])) continue;
+    return true;
+  }
+  return false;
+}
+
+// ---- Receipts and the attention queue (review N22) --------------------------
+
+/**
+ * The one definition of "this payment still owes a receipt", used by Banking
+ * and by Home. Spending only — money in never needs one, and a row marked as a
+ * customer refund or chargeback (`outgoingKind`) has left the spending totals —
+ * with no receipt attached (`receiptPath`, the only field the server writes)
+ * and not marked "no receipt needed".
+ */
+export function bankRowMissingReceipt(tx: {
+  amount: number;
+  outgoingKind?: string;
+  receiptPath?: string;
+  receiptNotNeeded?: boolean;
+}): boolean {
+  return tx.amount < 0 && !tx.outgoingKind && !tx.receiptPath && tx.receiptNotNeeded !== true;
+}
+
+export type BankAttentionKind =
+  | "uncategorised"
+  | "missingReceipts"
+  | "waitingReceipts"
+  | "brokenConnections"
+  | "duplicates"
+  | "priceChanged"
+  | "possiblyCancelled";
+
+export type BankAttentionInput = Record<BankAttentionKind, number> & { ruleSuggestions: number };
+
+/**
+ * "Needs attention" as one list: every kind that is counted is listed, and
+ * nothing listed is left out of the count. The tile used to count price
+ * changes and possible cancellations without naming them, and name rule
+ * suggestions without counting them, so 18 + 31 + 5 + 4 read as 58 beside a
+ * total of 61. Rule suggestions are optional, so they stay out of the total and
+ * come back separately, to be shown as such.
+ */
+export function bankAttentionSummary(input: BankAttentionInput): {
+  total: number;
+  lines: Array<{ kind: BankAttentionKind; count: number }>;
+  notCounted: { ruleSuggestions: number };
+} {
+  const order: BankAttentionKind[] = [
+    "uncategorised", "missingReceipts", "waitingReceipts", "brokenConnections",
+    "duplicates", "priceChanged", "possiblyCancelled",
+  ];
+  const lines = order
+    .map(kind => ({ kind, count: Math.max(0, Math.floor(input[kind] || 0)) }))
+    .filter(line => line.count > 0);
+  return {
+    total: lines.reduce((sum, line) => sum + line.count, 0),
+    lines,
+    notCounted: { ruleSuggestions: Math.max(0, Math.floor(input.ruleSuggestions || 0)) },
+  };
 }
 
 // ---- Order link suggestions -------------------------------------------------

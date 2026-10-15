@@ -201,6 +201,22 @@ export default function OrdersPage() {
     if (source && ORDER_SOURCE_FILTERS.some(item => item.id === source)) setOrderSource(source as OrderSourceId);
   }, [searchParams]);
 
+  // "/orders?new=1" opens Quick Create on arrival (review N08): the onboarding
+  // "Create your first order" task, the Getting started "add an order" step and
+  // Production's "New project" all link here, and used to land on the list and
+  // wait for a second press. Read from searchParams, not once on mount, so a
+  // link followed while already on /orders works too; the parameter is dropped
+  // first so a reload does not reopen a form that was dismissed. AppShell owns
+  // the form and holds the request until its own workspace has loaded.
+  const wantsNewOrder = searchParams.get("new") === "1";
+  useEffect(() => {
+    if (!wantsNewOrder || !workspace) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("new");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search);
+    dispatchQuickAction("order", { origin: "orders" });
+  }, [wantsNewOrder, workspace]);
+
   useEffect(() => {
     setFirstProjectGuide(getFirstProjectGuideState());
     return subscribeFirstProjectGuideState(setFirstProjectGuide);
@@ -933,6 +949,28 @@ export default function OrdersPage() {
     dispatchQuickAction("order");
   }
 
+  // Shown in the sidebar list on wide screens and in the phone list below
+  // 980 px, where the sidebar is hidden — the card used to live only in the
+  // sidebar, so a brand-new workspace on a phone opened on a blank page
+  // (review N08).
+  const firstRunCard = (
+    <div className="orders-first-run">
+      <h2 className="orders-first-run-title">{t("Create your first order")}</h2>
+      <p className="orders-first-run-copy">
+        {t("An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.")}
+      </p>
+      {canCreateFirstOrder ? (
+        <button
+          type="button"
+          className="button orders-first-run-button"
+          onClick={handleCreateFirstOrder}
+        >
+          {t("Create your first order")}
+        </button>
+      ) : null}
+    </div>
+  );
+
   if (loading || !user) return <LoadingScreen />;
 
   return (
@@ -1065,21 +1103,7 @@ export default function OrdersPage() {
           {orderActionError ? <p className="orders-sidebar-error">{t(orderActionError)}</p> : null}
 
           {workspaceHasNoOrders ? (
-            <div className="orders-first-run">
-              <h2 className="orders-first-run-title">{t("Create your first order")}</h2>
-              <p className="orders-first-run-copy">
-                {t("An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.")}
-              </p>
-              {canCreateFirstOrder ? (
-                <button
-                  type="button"
-                  className="button orders-first-run-button"
-                  onClick={handleCreateFirstOrder}
-                >
-                  {t("Create your first order")}
-                </button>
-              ) : null}
-            </div>
+            firstRunCard
           ) : filteredOrders.length === 0 && !loadingOrders ? (
             <p className="muted-copy" style={{ padding: "0 14px 14px" }}>{t("No orders found for this workspace yet.")}</p>
           ) : null}
@@ -1503,6 +1527,7 @@ export default function OrdersPage() {
           {orderFilter === "trash" ? (
             <div className="orders-trash-banner">⚠ {t("Items in Trash are permanently deleted after 30 days.")}</div>
           ) : null}
+          {workspaceHasNoOrders ? <div className="orders-mobile-first-run">{firstRunCard}</div> : null}
           <div className="orders-list">
             {filteredOrders.map(order => (
               <OrderListCard

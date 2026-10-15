@@ -47,8 +47,10 @@ export type SetupChecklist = {
  */
 export const SETUP_STEP_HREFS: Record<string, string> = {
   integrations: "/settings?section=integrations&category=commerce&intent=connect-shop",
-  new_order: "/orders",
-  new_customer: "/customers",
+  // Opens the create form on arrival (review N08): the step says "add", so the
+  // page should not open on an empty list and wait for a second press.
+  new_order: "/orders?new=1",
+  new_customer: "/customers?new=1",
   bank: "/bank",
   inventory: "/inventory",
   assistant: "/chatgpt",
