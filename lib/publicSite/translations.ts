@@ -1102,6 +1102,7 @@ export const PUBLIC_SITE_EN = {
   "integrations.action.amazonPage": "Details for Amazon sellers",
   "integrations.note.shopify": "Install it from the Shopify App Store. A workspace connected through Shopify is billed by Shopify, in US dollars.",
   "integrations.action.shopifyAppStore": "Install from the Shopify App Store",
+  "integrations.action.shopifyPage": "Setup guide, plans and FAQ",
   "integrations.note.etsy": "Available on request while the app's commercial access with Etsy is arranged.",
   "integrations.note.quickbooks": "Available on request while production access with Intuit is arranged.",
   "integrations.note.twilio": "Available on request while the NivaDesk sender ID registration with the carrier completes.",
@@ -11355,6 +11356,22 @@ const FILL_TRANSLATIONS_20: Partial<Record<StudioLanguage, Partial<Record<Public
   "हिन्दी (Hindi)": { "integrations.action.amazonPage": "Amazon विक्रेताओं के लिए विवरण" }
 };
 
+// The Shopify card's link to /integrations/shopify (15 October 2026). Every
+// language in one table, keyed by language — never split across tables.
+const FILL_TRANSLATIONS_21: Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>> = {
+  Türkçe: { "integrations.action.shopifyPage": "Kurulum rehberi, planlar ve SSS" },
+  Deutsch: { "integrations.action.shopifyPage": "Einrichtung, Tarife und FAQ" },
+  "Français": { "integrations.action.shopifyPage": "Guide d'installation, forfaits et FAQ" },
+  Italiano: { "integrations.action.shopifyPage": "Guida alla configurazione, piani e FAQ" },
+  "Español (Spanish)": { "integrations.action.shopifyPage": "Guía de configuración, planes y preguntas frecuentes" },
+  "Português": { "integrations.action.shopifyPage": "Guia de configuração, planos e perguntas frequentes" },
+  "Русский (Russian)": { "integrations.action.shopifyPage": "Настройка, тарифы и вопросы" },
+  "日本語 (Japanese)": { "integrations.action.shopifyPage": "設定ガイド、プラン、よくある質問" },
+  "中文 (Chinese)": { "integrations.action.shopifyPage": "设置指南、套餐和常见问题" },
+  "العربية (Arabic)": { "integrations.action.shopifyPage": "دليل الإعداد والخطط والأسئلة الشائعة" },
+  "हिन्दी (Hindi)": { "integrations.action.shopifyPage": "सेटअप गाइड, प्लान और सवाल-जवाब" }
+};
+
 const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>>> = [
   FILL_TRANSLATIONS,
   FILL_TRANSLATIONS_2,
@@ -11375,7 +11392,8 @@ const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSi
   FILL_TRANSLATIONS_17,
   FILL_TRANSLATIONS_18,
   FILL_TRANSLATIONS_19,
-  FILL_TRANSLATIONS_20
+  FILL_TRANSLATIONS_20,
+  FILL_TRANSLATIONS_21
 ];
 
 function mergeFill(

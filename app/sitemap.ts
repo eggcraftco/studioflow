@@ -9,6 +9,7 @@ const PUBLIC_PAGES: { path: string; priority: number; changeFrequency: MetadataR
   { path: "/", priority: 1, changeFrequency: "weekly" },
   { path: "/integrations", priority: 0.8, changeFrequency: "monthly" },
   { path: "/integrations/amazon", priority: 0.7, changeFrequency: "monthly" },
+  { path: "/integrations/shopify", priority: 0.7, changeFrequency: "monthly" },
   { path: "/features", priority: 0.9, changeFrequency: "weekly" },
   { path: "/pricing", priority: 0.9, changeFrequency: "weekly" },
   { path: "/chatgpt", priority: 0.9, changeFrequency: "weekly" },

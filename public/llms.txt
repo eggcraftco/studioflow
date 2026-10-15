@@ -19,7 +19,7 @@ Key facts:
 - Files library: one central library for designs, photos and documents — the same file links to orders, purchases or inventory and is shared with clients only on purpose.
 - Notes: personal, order, customer and team notes with reminders, tags, home-screen widgets (iOS/Android) and workspace sharing.
 - Team: roles (Member, View Only, Workflow Only, custom roles), a permission matrix, per-area access control and workspace messaging.
-- Store integrations: WooCommerce (with optional webhook signature verification), the official NivaDesk Order Management app on the Shopify App Store (https://apps.shopify.com/nivadesk-order-management; read-only store access, HMAC-verified webhooks, plans billed through Shopify), and a generic order webhook for Wix, Squarespace, Etsy, BigCommerce, Zapier or Make.
+- Store integrations: WooCommerce (with optional webhook signature verification), the official NivaDesk Order Management app on the Shopify App Store (https://apps.shopify.com/nivadesk-order-management; read-only store access, HMAC-verified webhooks, plans billed through Shopify; setup guide, plans and FAQ: https://nivadesk.app/integrations/shopify), and a generic order webhook for Wix, Squarespace, Etsy, BigCommerce, Zapier or Make.
 - Exports: orders CSV, customers CSV and JSON backup remain available on every plan, including after downgrade. The workspace data backup restores settings, orders and customers (uploaded files are not included).
 - Support: an in-app AI assistant answers how-to questions from the product guide on paid plans; the website chat ("Ask NivaDesk") answers product questions and can hand over to the team.
 
