@@ -6,6 +6,7 @@ import { CardIconGlyph } from "@/components/CardTitle";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import type { BlockHeadingSettings, HeadingItem } from "@/lib/studioflow/blockHeadings";
 import { studioT } from "@/lib/studioflow/language";
+import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
 
 export type OrderListCardItem = {
@@ -202,14 +203,6 @@ function localizedCardStatus(value: string, language: string | null | undefined)
   return displayValue;
 }
 
-function displayOrderCustomerName(value: string) {
-  const cleaned = value.trim();
-  if (!cleaned || ["new order", "new project", "yeni sipariş", "yeni proje"].includes(cleaned.toLowerCase())) {
-    return "New Project";
-  }
-  return cleaned;
-}
-
 function initialsForName(value: string) {
   const cleaned = displayNameFromEmail(value) || value.replace(/[._-]+/g, " ").trim();
   const initials = cleaned
@@ -297,7 +290,6 @@ export function OrderListCard({
   const { hideNumbers } = usePricePrivacy();
   const firstBadgeStep = resolveBadgeStep(blockHeadingSettings, 1);
   const secondBadgeStep = resolveBadgeStep(blockHeadingSettings, 2);
-  const customerName = displayOrderCustomerName(order.customerName);
   const customerHref = order.customerName.trim()
     ? `/customers?customerName=${encodeURIComponent(order.customerName.trim())}`
     : "";
@@ -305,6 +297,7 @@ export function OrderListCard({
   const scheduleItem = nextScheduleItem(order);
   const assignmentLabel = assigneeName.trim() || displayNameFromEmail(order.assignedToEmail ?? "");
   const displayLanguage = (moneySettings as { selectedLanguage?: string } | null | undefined)?.selectedLanguage;
+  const customerName = displayOrderTitle(order.customerName, text => studioT(text, displayLanguage));
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [guideBubblePosition, setGuideBubblePosition] = useState<{ left: number; top: number } | null>(null);
 

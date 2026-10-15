@@ -56,6 +56,7 @@
     "test:workspace-lists-warm": "node scripts/check-workspace-lists-warm.mjs",
     "test:work-days": "node scripts/check-work-days.mjs",
     "test:review-n01-n05": "npx tsx scripts/check-review-n01-n05.mts",
+    "test:review-n09-n25": "npx tsx scripts/check-review-n09-n25.mts",
     "test:admin-insights": "node scripts/check-admin-insights-metrics.mts"
   },
   "dependencies": {

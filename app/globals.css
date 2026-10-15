@@ -8830,6 +8830,22 @@ body[data-studio-theme="dark"] .order-filter-menu-divider {
   color: #ffffff;
 }
 
+/* Review N10: what "Create estimate" needs, and the way to it, before the click. */
+.estimate-card-prereq {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px dashed rgba(37, 99, 235, 0.45);
+  border-radius: 10px;
+  background: rgba(37, 99, 235, 0.05);
+}
+
+.estimate-card-actions .estimate-card-primary {
+  border-color: transparent;
+  background: #171923;
+  color: #ffffff;
+}
+
 /* The customer's estimate page. Standalone: it is wrapped in .public-site so
    the --public-* tokens resolve (they are scoped there, not on :root), but it
    borrows nothing else from the marketing shell. */
@@ -34476,5 +34492,93 @@ body[data-studio-theme="dark"] .upload-queue-track {
      tablets; the label returns from 361 px. */
   .app-toolbar-native .native-add-order-label {
     display: none;
+  }
+}
+
+/* Review N25: the bank lists at phone width. The transactions table is 700px
+   wide (the Receipts tab 640px) with the amount and the receipt at the far
+   right, so on a phone they sat off-screen behind a sideways scroll. Below
+   640px each row stacks instead: who/what and the amount first, then the date
+   and what is missing, then category and method (or the row's actions). The
+   cells carry inline styles, which is why the overrides need !important. */
+@media (max-width: 640px) {
+  .bank-tx-table {
+    display: block;
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: auto !important;
+  }
+
+  .bank-tx-table thead {
+    display: none;
+  }
+
+  .bank-tx-table tbody {
+    display: block;
+  }
+
+  .bank-tx-table tr.bank-tx-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "merchant amount"
+      "date receipt"
+      "category method";
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 5px;
+    padding: 10px 14px;
+  }
+
+  .bank-tx-table.is-selecting tr.bank-tx-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "select merchant amount"
+      "select date receipt"
+      "select category method";
+  }
+
+  .bank-tx-table tr.bank-tx-row > td {
+    display: block;
+    min-width: 0;
+    padding: 0 !important;
+    border: 0 !important;
+  }
+
+  .bank-tx-table .bank-tx-select { grid-area: select; align-self: start; }
+  .bank-tx-table .bank-tx-merchant { grid-area: merchant; overflow-wrap: anywhere; }
+  .bank-tx-table .bank-tx-amount { grid-area: amount; align-self: start; font-size: 13.5px; text-align: right !important; }
+  .bank-tx-table .bank-tx-date { grid-area: date; }
+  .bank-tx-table .bank-tx-receipt { grid-area: receipt; justify-self: end; }
+  .bank-tx-table .bank-tx-category { grid-area: category; }
+
+  .bank-tx-table .bank-tx-method,
+  .bank-tx-table .bank-tx-actions {
+    grid-area: method;
+    justify-self: end;
+  }
+
+  .bank-tx-table .bank-tx-actions,
+  .bank-tx-table .bank-tx-actions > span {
+    white-space: normal !important;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .bank-tx-table .bank-tx-avatar {
+    display: none !important;
+  }
+
+  .bank-tx-table .bank-tx-name {
+    display: -webkit-box !important;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+  }
+
+  .bank-tx-table tr.bank-tx-expand,
+  .bank-tx-table tr.bank-tx-expand > td {
+    display: block;
   }
 }

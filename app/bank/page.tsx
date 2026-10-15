@@ -27,6 +27,7 @@ import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
 import { BankReceiptViewer, type BankReceiptViewerRequest } from "@/components/BankReceiptViewer";
+import { documentAmountText, foreignAmountInBankText, waitingReceiptLookalikes } from "@/lib/studioflow/bankWaitingReceipts";
 
 type BankAccountInfo = { id: string; name: string; currency: string };
 type BankConnection = {
@@ -1699,6 +1700,9 @@ function BankPageContent() {
     const symbol = formatter.formatToParts(0).find(part => part.type === "currency")?.value ?? "";
     return hiddenMoneyLabel(symbol);
   };
+  // Review N23: a receipt's amount is read without its currency (the reader
+  // takes digits only), so it is never dressed in the bank's currency.
+  const documentAmount = (value: number) => hideNumbers ? hiddenMoneyLabel("") : documentAmountText(value);
 
   if (loading || workspaceLoading) return <LoadingScreen />;
   if (!user) return null;
@@ -1778,8 +1782,9 @@ function BankPageContent() {
               <strong style={{ fontSize: 13 }}>📷 {ocrFileName}</strong>
               {ocrParsed && ocrParsed.amount > 0 ? (
                 <span style={{ fontSize: 12, opacity: 0.75 }}>
-                  {t("Detected")}: <strong>{money(ocrParsed.amount, currency0)}</strong>
+                  {t("Detected")}: <strong>{documentAmount(ocrParsed.amount)}</strong>
                   {ocrParsed.date ? ` · ${ocrParsed.date}` : ""}
+                  {" · "}{t("currency not read from the document")}
                 </span>
               ) : <span style={{ fontSize: 12, opacity: 0.75 }}>{t("No amount detected on the receipt.")}</span>}
               <span style={{ flex: 1 }} />
@@ -2371,8 +2376,12 @@ function BankPageContent() {
                       <button type="button" style={{ ...bankBtnSm, opacity: 0.7 }} onClick={() => setSelectedIds(new Set())}>{t("Clear selection")}</button>
                     </div>
                   ) : null}
+                  {/* Review N25: below 640px the rows stack (globals.css .bank-tx-table) —
+                      who/what and the amount first, then the date and what is
+                      missing, then category and method — instead of a 700px
+                      table that hid the amount and receipt off to the right. */}
                   <div style={{ overflowX: "auto" }}>
-                    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: drawerTx ? 640 : 700, fontSize: 12.5, tableLayout: "fixed" }}>
+                    <table className={`bank-tx-table${isOwner && selectMode ? " is-selecting" : ""}`} style={{ borderCollapse: "collapse", width: "100%", minWidth: drawerTx ? 640 : 700, fontSize: 12.5, tableLayout: "fixed" }}>
                       <thead>
                         <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
                           {isOwner && selectMode ? (
@@ -2397,19 +2406,19 @@ function BankPageContent() {
                           const meta = TX_TYPE_META[transaction.txType];
                           return (
                             <React.Fragment key={transaction.id}>
-                              <tr style={{ borderBottom: "1px solid rgba(120,120,140,0.1)", background: drawerTxId === transaction.id ? "rgba(37,99,235,0.1)" : selectedIds.has(transaction.id) ? "rgba(37,99,235,0.06)" : undefined, boxShadow: drawerTxId === transaction.id ? "inset 3px 0 0 #2563eb" : undefined }}>
+                              <tr className="bank-tx-row" style={{ borderBottom: "1px solid rgba(120,120,140,0.1)", background: drawerTxId === transaction.id ? "rgba(37,99,235,0.1)" : selectedIds.has(transaction.id) ? "rgba(37,99,235,0.06)" : undefined, boxShadow: drawerTxId === transaction.id ? "inset 3px 0 0 #2563eb" : undefined }}>
                                 {isOwner && selectMode ? (
-                                  <td style={{ ...tdStyle, paddingRight: 0 }}>
+                                  <td className="bank-tx-select" style={{ ...tdStyle, paddingRight: 0 }}>
                                     {transaction.amount < 0 ? <input type="checkbox" aria-label={t("Select")} checked={selectedIds.has(transaction.id)} onChange={() => toggleSelected(transaction.id)} /> : null}
                                   </td>
                                 ) : null}
-                                <td style={{ ...tdStyle, cursor: "pointer" }} onClick={() => openDrawer(transaction)} title={t("Open details")}>
+                                <td className="bank-tx-merchant" style={{ ...tdStyle, cursor: "pointer" }} onClick={() => openDrawer(transaction)} title={t("Open details")}>
                                   <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-                                    <span aria-hidden="true" style={{ ...avatarStyle, background: `${avatarColor(transaction.counterparty || transaction.description || "x")}22`, color: avatarColor(transaction.counterparty || transaction.description || "x"), flexShrink: 0 }}>
+                                    <span aria-hidden="true" className="bank-tx-avatar" style={{ ...avatarStyle, background: `${avatarColor(transaction.counterparty || transaction.description || "x")}22`, color: avatarColor(transaction.counterparty || transaction.description || "x"), flexShrink: 0 }}>
                                       {initials(transaction.counterparty || transaction.description)}
                                     </span>
                                     <span style={{ minWidth: 0 }}>
-                                      <span style={{ display: "block", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                      <span className="bank-tx-name" style={{ display: "block", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                         {(() => {
                                           const rs = effectiveReviewStatus(transaction);
                                           if (rs === "unreviewed") return null;
@@ -2441,11 +2450,11 @@ function BankPageContent() {
                                     </span>
                                   </span>
                                 </td>
-                                <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75, cursor: "pointer" }} onClick={() => openDrawer(transaction)}>
+                                <td className="bank-tx-date" style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75, cursor: "pointer" }} onClick={() => openDrawer(transaction)}>
                                   {new Date(transaction.bookingDate).toLocaleDateString(undefined, drawerTx ? { day: "2-digit", month: "short" } : { day: "2-digit", month: "short", year: "numeric" })}
                                   {transaction.status === "pending" ? <span style={{ marginLeft: 5, fontSize: 10, opacity: 0.6 }}>· {t("pending")}</span> : null}
                                 </td>
-                                <td style={tdStyle}>
+                                <td className="bank-tx-category" style={tdStyle}>
                                   {transaction.amount < 0 && transaction.splits.length ? (
                                     <span title={transaction.splits.map(row => `${row.category}: ${row.amount.toFixed(2)}`).join(" · ")}
                                       style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "rgba(37,99,235,0.12)", color: "#2563eb", cursor: "pointer" }}
@@ -2502,14 +2511,14 @@ function BankPageContent() {
                                     <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: "rgba(120,120,140,0.1)", opacity: 0.55 }}>—</span>
                                   ) : null}
                                 </td>
-                                <td style={tdStyle}>
+                                <td className="bank-tx-method" style={tdStyle}>
                                   {meta ? (
                                     <span title={transaction.txType} style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.4, textTransform: "uppercase", padding: "3px 8px", borderRadius: 6, background: `${meta.color}1a`, color: meta.color }}>
                                       {meta.translate ? t(meta.label) : meta.label}
                                     </span>
                                   ) : null}
                                 </td>
-                                <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
+                                <td className="bank-tx-receipt" style={{ ...tdStyle, whiteSpace: "nowrap" }}>
                                   {transaction.amount >= 0 ? (
                                     <span style={{ opacity: 0.4 }}>—</span>
                                   ) : transaction.receiptPath ? (
@@ -2530,12 +2539,12 @@ function BankPageContent() {
                                     <span style={{ color: "#dc2626", fontSize: 12, fontWeight: 700, display: "inline-flex", alignItems: "center", gap: 6 }}><AttachIcon size={14} color="#dc2626" /> {t("Missing")}</span>
                                   )}
                                 </td>
-                                <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", color: transaction.amount < 0 ? "#dc2626" : "#16a34a" }}>
+                                <td className="bank-tx-amount" style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", color: transaction.amount < 0 ? "#dc2626" : "#16a34a" }}>
                                   {transaction.amount < 0 ? "−" : "+"}{money(Math.abs(transaction.amount), transaction.currency)}
                                 </td>
                               </tr>
                               {categoryPickerTxId === transaction.id ? (
-                                <tr>
+                                <tr className="bank-tx-expand">
                                   <td colSpan={isOwner && selectMode ? 7 : 6} style={{ padding: "0 18px 12px" }}>
                                     {categoryPickerTxId === transaction.id ? (
                                       <div style={{ padding: 10, border: "1px solid rgba(120,120,140,0.25)", borderRadius: 10 }}>
@@ -2797,6 +2806,11 @@ function BankPageContent() {
                       <span style={{ fontSize: 11.5, opacity: 0.65 }}>{t("Attached automatically when the payment arrives in the feed.")}</span>
                       {isOwner ? <button type="button" style={bankBtnSm} disabled={busy === "waiting-match"} onClick={() => void matchWaitingNow()}>⟳ {busy === "waiting-match" ? t("Matching…") : t("Match now")}</button> : null}
                     </div>
+                    {waitingReceipts.length > 0 ? (
+                      <p className="bank-waiting-rule" style={{ margin: "0 0 8px", fontSize: 11.5, opacity: 0.75 }}>
+                        {t("Amounts are as written on the document; the currency is not read. “Assign to a transaction” closes the waiting item. Attaching a file straight to a transaction does not — if it is the same document, remove the waiting copy here.")}
+                      </p>
+                    ) : null}
                     {waitingReceipts.length === 0 ? (
                       <p style={{ margin: 0, fontSize: 12.5, opacity: 0.7 }}>
                         {t("Nothing waiting. Receipts sent before their payment reaches the bank feed are held here until it does.")}
@@ -2807,6 +2821,7 @@ function BankPageContent() {
                         const ageDays = item.createdAt ? Math.floor((Date.now() - item.createdAt.getTime()) / 86400000) : 0;
                         const stale = ageDays >= 14;
                         const picking = assignWaitingId === item.id;
+                        const lookalike = waitingReceiptLookalikes(item, transactions)[0] ?? null;
                         return (
                           <div key={item.id} style={{ border: `1px solid ${stale ? "rgba(220,38,38,0.35)" : "rgba(120,120,140,0.18)"}`, borderRadius: 10, padding: "8px 12px", background: "var(--surface, #fff)" }}>
                             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -2817,9 +2832,26 @@ function BankPageContent() {
                                 <button type="button" onClick={() => openWaitingReceipt(item)} title={t("View receipt")}
                                   style={{ ...attentionLink, fontSize: 12.5, fontWeight: 700, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textAlign: "left" }}>{item.fileName}</button>
                                 <div style={{ fontSize: 11, opacity: 0.65 }}>
-                                  {item.amount ? money(item.amount, currency0) : t("Amount unknown")}{item.date ? ` · ${item.date}` : ""} · {item.source === "chatgpt" ? "ChatGPT" : t("Web")} · {ageDays === 0 ? t("today") : `${ageDays} ${t("days waiting")}`}
-                                  {stale ? <span style={{ color: "#dc2626", fontWeight: 700 }}> · {t("Still no payment — check the amount or assign it by hand")}</span> : null}
+                                  {item.amount ? <span title={t("currency not read from the document")}>{documentAmount(item.amount)} <span style={{ opacity: 0.8 }}>({t("currency not read")})</span></span> : t("Amount unknown")}{item.date ? ` · ${item.date}` : ""} · {item.source === "chatgpt" ? "ChatGPT" : t("Web")} · {ageDays === 0 ? t("today") : `${ageDays} ${t("days waiting")}`}
+                                  {stale && !lookalike ? <span style={{ color: "#dc2626", fontWeight: 700 }}> · {t("Still no payment — check the amount or assign it by hand")}</span> : null}
                                 </div>
+                                {lookalike ? (
+                                  // Review N23: the matcher skips rows that already have a
+                                  // receipt, so this item cannot clear itself. Say what is
+                                  // there; deciding is the person's (two purchases can cost the same).
+                                  <div className="bank-waiting-lookalike" style={{ marginTop: 4, fontSize: 11.5, color: "#b45309", lineHeight: 1.45 }}>
+                                    <strong>{t("Possibly already matched")}</strong>
+                                    {" · "}{lookalike.transaction.counterparty || lookalike.transaction.description}
+                                    {" · "}{new Date(lookalike.transaction.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}
+                                    {" · "}<span style={{ whiteSpace: "nowrap" }}>−{money(Math.abs(lookalike.transaction.amount), lookalike.transaction.currency)}</span>
+                                    {lookalike.foreign ? <>{" · "}{t("Bank text")}: {lookalike.foreign.currency} {documentAmount(lookalike.foreign.amount)}</> : null}
+                                    {lookalike.transaction.receiptName ? <>{" · "}<span style={{ overflowWrap: "anywhere" }}>{lookalike.transaction.receiptName}</span></> : null}
+                                    <div>
+                                      {t("That transaction already has a receipt. If it is the same document, remove this waiting copy — assigning it there would replace that receipt.")}{" "}
+                                      <button type="button" onClick={() => void openReceipt(lookalike.transaction)} style={{ ...attentionLink, fontSize: 11.5, color: "inherit", textDecoration: "underline" }}>{t("View that receipt")}</button>
+                                    </div>
+                                  </div>
+                                ) : null}
                               </div>
                               <span style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
                                 <button type="button" style={{ ...bankBtnSm, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => openWaitingReceipt(item)} aria-label={t("View receipt")}><ReceiptGlyph size={14} /> {t("View")}</button>
@@ -2838,8 +2870,12 @@ function BankPageContent() {
                                     style={{ textAlign: "left", border: 0, background: "transparent", color: "inherit", cursor: "pointer", padding: "6px 4px", borderRadius: 6, fontSize: 12.5, display: "flex", gap: 10, alignItems: "center" }}>
                                     <span style={{ opacity: 0.6, minWidth: 62 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
                                     <strong style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.provider === "paypal" ? <span title="PayPal" style={{ display: "inline-block", width: 14, height: 14, lineHeight: "14px", borderRadius: 999, fontSize: 9, fontWeight: 800, textAlign: "center" as const, color: "#fff", background: "#003087", marginRight: 6, verticalAlign: "middle" }}>P</span> : null}{tx.counterparty || tx.description}</strong>
+                                    {(() => {
+                                      const foreign = foreignAmountInBankText(`${tx.description} ${tx.counterparty}`, item.amount, tx.currency);
+                                      return foreign ? <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 700, whiteSpace: "nowrap" }} title={t("Bank text")}>{foreign.currency} {documentAmount(foreign.amount)}</span> : null;
+                                    })()}
                                     <span style={{ fontVariantNumeric: "tabular-nums", color: Math.abs(Math.abs(tx.amount) - item.amount) < 0.015 ? "#16a34a" : "inherit", fontWeight: 700 }}>−{money(Math.abs(tx.amount), tx.currency)}</span>
-                                    {tx.receiptPath ? <FileBadge name={tx.receiptName} size={16} /> : null}
+                                    {tx.receiptPath ? <span title={t("Already has a receipt — assigning replaces it.")} style={{ display: "inline-flex" }}><FileBadge name={tx.receiptName} size={16} /></span> : null}
                                   </button>
                                 ))}
                               </div>
@@ -2863,7 +2899,7 @@ function BankPageContent() {
                     </span>
                   </div>
                   <div style={{ overflowX: "auto" }}>
-                    <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 640, fontSize: 12.5 }}>
+                    <table className="bank-tx-table bank-receipts-table" style={{ borderCollapse: "collapse", width: "100%", minWidth: 640, fontSize: 12.5 }}>
                       <thead>
                         <tr style={{ borderTop: "1px solid rgba(120,120,140,0.14)", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
                           <th style={thStyle}>{t("Merchant")}</th>
@@ -2878,12 +2914,12 @@ function BankPageContent() {
                         {visibleTransactions.filter(isSpend).filter(tx => receiptFilter === "all" ? true : receiptFilter === "matched" ? Boolean(tx.receiptPath) : !tx.receiptPath && !tx.receiptNotNeeded).map(tx => {
                           const category = effectiveCategory(tx);
                           return (
-                            <tr key={tx.id} style={{ borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
-                              <td style={{ ...tdStyle, fontWeight: 700, cursor: "pointer" }} onClick={() => openDrawer(tx)}>{tx.provider === "paypal" ? <span title="PayPal" style={{ display: "inline-block", width: 14, height: 14, lineHeight: "14px", borderRadius: 999, fontSize: 9, fontWeight: 800, textAlign: "center" as const, color: "#fff", background: "#003087", marginRight: 6, verticalAlign: "middle" }}>P</span> : null}{tx.counterparty || tx.description}</td>
-                              <td style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</td>
-                              <td style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#dc2626" }}>−{money(Math.abs(tx.amount), tx.currency)}</td>
-                              <td style={tdStyle}>{category ? <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${categoryColor(category)}1a`, color: categoryColor(category) }}>{t(category)}</span> : <span style={{ opacity: 0.5 }}>{t("Uncategorised")}</span>}</td>
-                              <td style={tdStyle}>
+                            <tr key={tx.id} className="bank-tx-row" style={{ borderBottom: "1px solid rgba(120,120,140,0.1)" }}>
+                              <td className="bank-tx-merchant" style={{ ...tdStyle, fontWeight: 700, cursor: "pointer" }} onClick={() => openDrawer(tx)}>{tx.provider === "paypal" ? <span title="PayPal" style={{ display: "inline-block", width: 14, height: 14, lineHeight: "14px", borderRadius: 999, fontSize: 9, fontWeight: 800, textAlign: "center" as const, color: "#fff", background: "#003087", marginRight: 6, verticalAlign: "middle" }}>P</span> : null}{tx.counterparty || tx.description}</td>
+                              <td className="bank-tx-date" style={{ ...tdStyle, whiteSpace: "nowrap", opacity: 0.75 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</td>
+                              <td className="bank-tx-amount" style={{ ...tdStyle, textAlign: "right", fontWeight: 800, fontVariantNumeric: "tabular-nums", color: "#dc2626" }}>−{money(Math.abs(tx.amount), tx.currency)}</td>
+                              <td className="bank-tx-category" style={tdStyle}>{category ? <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 999, padding: "3px 10px", background: `${categoryColor(category)}1a`, color: categoryColor(category) }}>{t(category)}</span> : <span style={{ opacity: 0.5 }}>{t("Uncategorised")}</span>}</td>
+                              <td className="bank-tx-receipt" style={tdStyle}>
                                 {tx.receiptPath ? (
                                   <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                                     <FileBadge name={tx.receiptName} size={28} />
@@ -2893,7 +2929,7 @@ function BankPageContent() {
                                   : tx.receiptNotNeeded ? <span style={{ opacity: 0.6 }}>{t("No receipt needed")}</span>
                                   : <span style={{ color: "#dc2626", fontWeight: 700 }}>! {t("Missing receipt")}</span>}
                               </td>
-                              <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
+                              <td className="bank-tx-actions" style={{ ...tdStyle, whiteSpace: "nowrap" }}>
                                 {tx.receiptPath ? (
                                   <button type="button" style={{ ...bankBtnSm, display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => void openReceipt(tx)} aria-label={t("View invoice")}><ReceiptGlyph size={14} /> {t("View")} ↗</button>
                                 ) : isOwner ? (
