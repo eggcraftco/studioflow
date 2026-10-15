@@ -22,6 +22,7 @@ import {
 import { loadWorkspaceBlockHeadings, type HeadingItem } from "@/lib/studioflow/blockHeadings";
 import { orderIsCancelled } from "@/lib/studioflow/orderFilters";
 import { detectRecurringSpends, monthlyFixedTotal, type BankVendor } from "@/lib/studioflow/bankInsights";
+import { homeBankTxFromDoc, type HomeBankTx } from "@/lib/studioflow/homeBankRows";
 import { listenToKeepNotes, type StudioKeepNote } from "@/lib/studioflow/notes";
 import {
   loadDashboardCounts,
@@ -59,22 +60,9 @@ export type HomeDomain = "orders" | "customers" | "inventory" | "files" | "bank"
 
 export type HomeDomainStatus = "loading" | "ready" | "error" | "denied";
 
-export type HomeBankTx = {
-  id: string;
-  /** Who the money moved to or from, as the feed named it. */
-  name: string;
-  /** The raw pair the recurring detector groups on. */
-  counterparty: string;
-  description: string;
-  currency: string;
-  /** "YYYY-MM-DD", the shape the shared bank helpers read. */
-  bookingDay: string;
-  amount: number;
-  bookingDate: Date | null;
-  categoryId: string;
-  hasReceipt: boolean;
-  reviewed: boolean;
-};
+// The row shape and its mapper live in homeBankRows.ts (pure, so they can be
+// checked without Firebase); re-exported here for the cards that import it.
+export type { HomeBankTx } from "./homeBankRows";
 
 export type HomeData = {
   status: Record<HomeDomain, HomeDomainStatus>;
@@ -312,29 +300,7 @@ export function useHomeData(
       query(collection(db, "companies", workspaceId, "bankTransactions"), orderBy("bookingDate", "desc")),
       (snap) => {
         setBankTransactions(
-          snap.docs.slice(0, 400).map((txDoc) => {
-            const data = txDoc.data() as Record<string, unknown>;
-            const raw = data.bookingDate;
-            const bookingDate =
-              raw && typeof (raw as { toDate?: () => Date }).toDate === "function"
-                ? (raw as { toDate: () => Date }).toDate()
-                : typeof raw === "string" && raw
-                  ? new Date(raw)
-                  : null;
-            return {
-              id: txDoc.id,
-              name: String(data.counterparty || data.description || ""),
-              counterparty: String(data.counterparty || ""),
-              description: String(data.description || ""),
-              currency: String(data.currency || ""),
-              bookingDay: typeof raw === "string" ? raw : (bookingDate ? bookingDate.toISOString().slice(0, 10) : ""),
-              amount: Number(data.amount ?? 0),
-              bookingDate,
-              categoryId: String(data.categoryId ?? ""),
-              hasReceipt: Boolean(data.receiptUrl || data.receiptFileId),
-              reviewed: data.reviewed === true || Boolean(data.categoryId),
-            };
-          }),
+          snap.docs.slice(0, 400).map((txDoc) => homeBankTxFromDoc(txDoc.id, txDoc.data() as Record<string, unknown>)),
         );
         setDomain("bank", "ready");
       },

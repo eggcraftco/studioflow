@@ -862,8 +862,13 @@ function PublicLanguageSelector() {
 export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean } = {}) {
   const { user } = useAuth();
   const { t } = usePublicSiteLanguage();
+  const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
+  // On the sign-up page itself "Start Free" linked to /signup, i.e. back to the
+  // top of the page it was on, while the form sat below the pitch (the email
+  // field at y≈1241 on a 390 px phone). There it goes to the form (review N07).
+  const onSignupForm = pathname === "/signup" && !user;
   return (
     <header className="public-header">
       <div className="public-shell public-header-inner">
@@ -885,9 +890,15 @@ export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean 
           <Link href={user ? "/dashboard" : "/login"} className="public-button ghost public-header-login-desktop">
             {user ? t("cta.openPortal") : t("cta.login")}
           </Link>
-          <Link href="/signup" className="public-button">
-            {t("cta.startFree")}
-          </Link>
+          {onSignupForm ? (
+            <a href="#signup-form" className="public-button">
+              {t("cta.startFree")}
+            </a>
+          ) : (
+            <Link href="/signup" className="public-button">
+              {t("cta.startFree")}
+            </Link>
+          )}
           <button
             type="button"
             className="public-header-menu-btn"
@@ -3565,17 +3576,22 @@ function PublicSignupPageContent() {
           <span className="public-eyebrow">{t("signup.eyebrow")}</span>
           <h1>{t("signup.title")}</h1>
           <p>{t("signup.body")}</p>
-          <div className="public-signup-includes">
-            <h2>{t("signup.includes.title")}</h2>
-            <ul>
-              <li>{t("signup.includes.bullet1")}</li>
-              <li>{t("signup.includes.bullet2")}</li>
-              <li>{t("signup.includes.bullet3")}</li>
-            </ul>
-          </div>
         </div>
 
-        <form className="public-card public-signup-form" onSubmit={handleCreateWorkspace}>
+        {/* The list of what Free includes used to sit inside the copy column, so
+            on a phone the whole pitch came before any sign-up field. It is its
+            own grid item now: beside the form under the copy on desktop, after
+            the form on a phone (globals.css, review N07). Nothing was removed. */}
+        <div className="public-signup-includes">
+          <h2>{t("signup.includes.title")}</h2>
+          <ul>
+            <li>{t("signup.includes.bullet1")}</li>
+            <li>{t("signup.includes.bullet2")}</li>
+            <li>{t("signup.includes.bullet3")}</li>
+          </ul>
+        </div>
+
+        <form id="signup-form" className="public-card public-signup-form" onSubmit={handleCreateWorkspace}>
           {/* Honeypot: off-screen field hidden from real users. Bots that
               auto-fill every input trip it and are rejected. */}
           <div className="public-signup-hp" aria-hidden="true">

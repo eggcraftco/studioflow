@@ -18,6 +18,7 @@ import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { bootMark } from "@/lib/studioflow/bootTrace";
 import { useQuickActionEvent, type QuickActionPayload } from "@/lib/studioflow/quickActions";
+import { OPEN_ACTIVITY_CENTRE_EVENT } from "@/lib/studioflow/homeCards";
 import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
 import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
@@ -56,6 +57,7 @@ import { savePersonalInterfaceSettings } from "@/lib/studioflow/settingsActions"
 import {
   businessTypeForWorkKinds,
   saveOnboardingAnswers,
+  waitForWorkspacePlan,
   type OnboardingAnswers,
 } from "@/lib/studioflow/onboardingWizard";
 import { clearOnboardingProgress } from "@/lib/studioflow/onboardingProgress";
@@ -1906,7 +1908,33 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     : "NivaDesk";
   // Home's "New order" quick action lands here rather than navigating: this is
   // the same button the toolbar shows, so the action opens where the user is.
-  useQuickActionEvent("order", (payload) => handleAddOrder(payload));
+  // A request that arrives before this shell has its workspace (Orders opened
+  // at /orders?new=1 — review N08) is held and opened once it loads, instead of
+  // answering "Workspace is still loading".
+  const pendingQuickCreate = useRef<QuickActionPayload | null>(null);
+  useQuickActionEvent("order", (payload) => {
+    if (!workspace) {
+      pendingQuickCreate.current = payload;
+      return;
+    }
+    handleAddOrder(payload);
+  });
+  useEffect(() => {
+    if (!workspace || !pendingQuickCreate.current) return;
+    const payload = pendingQuickCreate.current;
+    pendingQuickCreate.current = null;
+    handleAddOrder(payload);
+    // Only the workspace arriving releases a held request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace]);
+
+  // Home's "View all activity" opens the same Activity centre as the sidebar
+  // item (review N17); it used to link to /orders.
+  useEffect(() => {
+    const open = () => setNotifDrawerOpen(true);
+    window.addEventListener(OPEN_ACTIVITY_CENTRE_EVENT, open);
+    return () => window.removeEventListener(OPEN_ACTIVITY_CENTRE_EVENT, open);
+  }, []);
 
   // canCreateOrders carries the role gate AND the assigned-projects-only
   // rule: a member who only works inside assigned projects never sees "+ Add
@@ -2582,6 +2610,18 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     }
   }
 
+  async function refreshWorkspaceAfterPlanChange(uid: string) {
+    try {
+      const fresh = await loadWorkspaceContext(uid);
+      setWorkspace(fresh);
+      rememberAppShellSnapshot(uid, { workspace: fresh });
+      // Settings listens for this too, so an open Plan & Access page follows.
+      window.dispatchEvent(new CustomEvent("studioflow-workspace-updated", { detail: { workspace: fresh } }));
+    } catch {
+      /* keep the workspace already on screen */
+    }
+  }
+
   async function completeOnboardingWizard(answers: OnboardingAnswers) {
     if (!workspace || !user) return;
     setOnboardingSaving(true);
@@ -2595,12 +2635,22 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         businessType,
         workspaceOnboardingPromptSeed(businessType, language),
       );
-      await saveOnboardingAnswers(workspace.id, user.uid, answers, preset);
+      const trialPlan = await saveOnboardingAnswers(workspace.id, user.uid, answers, preset);
       // The draft has been answered for real. Cleared here rather than on the
       // way out of the ready screen, because the answers are on the workspace
       // from this line on and a draft that outlives them is a second, staler
       // copy of the same setup waiting to be resumed.
       clearOnboardingProgress(workspace.id, user.uid);
+      // The last step may have moved the trial to another plan (setTrialPlan,
+      // inside saveOnboardingAnswers). This shell loaded the workspace before
+      // that, and "Open my workspace" usually stays on the same route, so the
+      // banner said "Pro trial" over a Team workspace until a full reload
+      // (review N28). Wait until the new plan has reached this tab, then read
+      // the workspace again; a failed read keeps what is on screen.
+      if (trialPlan?.changed) {
+        await waitForWorkspacePlan(workspace.id, trialPlan.plan);
+        await refreshWorkspaceAfterPlanChange(user.uid);
+      }
       setFinishedAnswers(answers);
     } catch (failure) {
       setOnboardingError(failure instanceof Error ? failure.message : t("Could not save your setup."));

@@ -79,7 +79,19 @@ export type HomeCardDefinition = {
   /** A second destination, for a card whose name covers two screens. */
   secondaryHref?: string;
   secondaryLinkLabel?: string;
+  /** Set when the footer link opens something in the shell rather than a
+   *  page: "activity" opens the Activity (notification) centre, the same panel
+   *  the sidebar's Activity item opens. `href` is then only the fallback. */
+  opens?: "activity";
 };
+
+/** Raised by Home's "View all activity"; AppShell opens the Activity centre. */
+export const OPEN_ACTIVITY_CENTRE_EVENT = "nivadesk:open-activity";
+
+export function openActivityCentre() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(OPEN_ACTIVITY_CENTRE_EVENT));
+}
 
 /**
  * Order here is the card gallery's order, not the layout's — the default
@@ -116,7 +128,11 @@ export const HOME_CARDS: HomeCardDefinition[] = [
     icon: "historyClock",
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "1x1",
+    // The card lists the Activity feed, so "View all" opens that feed — the
+    // Activity centre, as on Mac and iPhone. It pointed at /orders (review
+    // N17), which a member with Orders off cannot even open.
     href: "/orders",
+    opens: "activity",
     linkLabel: "View all activity",
   },
   {

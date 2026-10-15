@@ -10,6 +10,7 @@ import {
   HOME_PERIOD_LABELS,
   homeCardColumns,
   homeCardRows,
+  openActivityCentre,
   type HomeCardDefinition,
   type HomeCardPlacement,
   type HomeCardPeriod,
@@ -193,6 +194,7 @@ export function HomeCardShell({
         const target = event.target as HTMLElement;
         if (target.closest("a, button, input")) return;
         if (!window.matchMedia("(max-width: 640px)").matches) return;
+        if (definition.opens === "activity") { openActivityCentre(); return; }
         router.push(definition.href);
       }}
       /* Placed, not floated. The browser's own auto-placement put the cards in
@@ -409,9 +411,15 @@ export function HomeCardShell({
               {t(definition.secondaryLinkLabel)}<span aria-hidden="true"> →</span>
             </Link>
           ) : null}
-          <Link href={definition.href} className="home-card-link">
-            {t(definition.linkLabel)}<span aria-hidden="true"> →</span>
-          </Link>
+          {definition.opens === "activity" ? (
+            <button type="button" className="home-card-link" onClick={openActivityCentre}>
+              {t(definition.linkLabel)}<span aria-hidden="true"> →</span>
+            </button>
+          ) : (
+            <Link href={definition.href} className="home-card-link">
+              {t(definition.linkLabel)}<span aria-hidden="true"> →</span>
+            </Link>
+          )}
         </span>
       </footer>
     </section>

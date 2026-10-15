@@ -1,4 +1,4 @@
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
@@ -300,10 +300,28 @@ export type OnboardingGoalTask = { label: string; href: string };
  *  constant because the dashboard checklist uses the same deep link. */
 const CONNECT_STORE_HREF = "/settings?section=integrations&category=commerce&intent=connect-shop";
 
+/** A task that STARTS something opens its create form, not the empty list it
+ *  lives on: "Create your first order" used to land on /orders and wait for a
+ *  second press (review N08). /orders?new=1 opens Quick Create (AppShell),
+ *  /customers?new=1 the customer form; both drop the parameter once used. */
+const NEW_ORDER_HREF = "/orders?new=1";
+const NEW_CUSTOMER_HREF = "/customers?new=1";
+
+/** "Open my workspace" lands where the first task is done without opening its
+ *  form: the button names the workspace, not the task. */
+export function onboardingWorkspaceHref(href: string | undefined): string | undefined {
+  if (!href) return href;
+  const [path, query = ""] = href.split("?");
+  const params = new URLSearchParams(query);
+  params.delete("new");
+  const rest = params.toString();
+  return rest ? `${path}?${rest}` : path;
+}
+
 export const ONBOARDING_GOAL_TASKS: Record<OnboardingGoal, OnboardingGoalTask[]> = {
   orders_customers: [
-    { label: "Create your first order", href: "/orders" },
-    { label: "Add a customer", href: "/customers" },
+    { label: "Create your first order", href: NEW_ORDER_HREF },
+    { label: "Add a customer", href: NEW_CUSTOMER_HREF },
     // Order steps and custom fields — what the card shows and what it is called.
     { label: "Customise your order cards", href: "/settings?section=workflow" },
   ],
@@ -313,12 +331,13 @@ export const ONBOARDING_GOAL_TASKS: Record<OnboardingGoal, OnboardingGoalTask[]>
     { label: "Open Schedule", href: "/schedule" },
   ],
   repairs_service: [
-    { label: "Open a repair intake", href: "/orders" },
+    { label: "Open a repair intake", href: NEW_ORDER_HREF },
     { label: "Record what the customer brought in", href: "/orders" },
     { label: "Set a promised date", href: "/orders" },
   ],
   estimates: [
-    { label: "Send your first estimate", href: "/orders" },
+    // An estimate is made from an order, so the first step is the order.
+    { label: "Send your first estimate", href: NEW_ORDER_HREF },
     { label: "Turn an approval into an order", href: "/orders" },
     // The Estimate document preset lives in PDF Export Settings.
     { label: "Set your estimate wording", href: "/settings?section=pdf" },
@@ -350,8 +369,8 @@ export const ONBOARDING_GOAL_TASKS: Record<OnboardingGoal, OnboardingGoalTask[]>
     { label: "Assign the first task", href: "/orders" },
   ],
   other: [
-    { label: "Create your first order", href: "/orders" },
-    { label: "Add a customer", href: "/customers" },
+    { label: "Create your first order", href: NEW_ORDER_HREF },
+    { label: "Add a customer", href: NEW_CUSTOMER_HREF },
     { label: "Open your dashboard", href: "/dashboard" },
   ],
 };
@@ -505,14 +524,46 @@ export function currencySymbolForOnboardingChoice(value: string): string {
  * screens, while the team size goes on the COMPANY, because that is where the
  * trial engine reads it to decide whether the fortnight should be Pro or Team.
  */
+/** What setTrialPlan did with the plan the last step confirmed; null when the
+ *  call failed (the workspace then simply keeps trialling Pro). */
+export type TrialPlanOutcome = { changed: boolean; plan: string };
+
+/**
+ * Resolves once this browser sees the workspace on `plan`, or after
+ * `timeoutMs`. setTrialPlan answers as soon as its write commits, but a read in
+ * the same moment can still be served from the listener this tab already keeps
+ * on the company document (AuthProvider's access watch) before that write has
+ * streamed in — and then shows the old plan (review N28).
+ */
+export function waitForWorkspacePlan(companyId: string, plan: string, timeoutMs = 6000): Promise<void> {
+  return new Promise(resolve => {
+    let done = false;
+    let stop: (() => void) | null = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (stop) stop();
+      resolve();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    stop = onSnapshot(
+      doc(db, "companies", companyId),
+      snapshot => { if (snapshot.exists() && snapshot.get("billingPlan") === plan) finish(); },
+      () => finish()
+    );
+    if (done) stop();
+  });
+}
+
 export async function saveOnboardingAnswers(
   companyId: string,
   userId: string,
   answers: OnboardingAnswers,
   presetPayload: Record<string, unknown>
-) {
+): Promise<TrialPlanOutcome | null> {
   const goals = [answers.mainGoal, ...answers.extraGoals].filter(Boolean);
-  await withWebSyncStatus(async () => {
+  return withWebSyncStatus(async () => {
     await setDoc(doc(db, "companySettings", companyId), {
       ...presetPayload,
       selectedCountry: answers.country,
@@ -558,9 +609,12 @@ export async function saveOnboardingAnswers(
     // keeps trialling Pro.
     const chosenPlan = answers.plan || recommendedTrialPlan(answers);
     try {
-      await httpsCallable(functions, "setTrialPlan")({ plan: chosenPlan });
+      const result = await httpsCallable(functions, "setTrialPlan")({ plan: chosenPlan });
+      const data = (result.data ?? {}) as { changed?: unknown; plan?: unknown };
+      return { changed: data.changed === true, plan: typeof data.plan === "string" ? data.plan : chosenPlan };
     } catch (error) {
       console.warn("setTrialPlan failed", error);
+      return null;
     }
   }, "Saving your workspace setup.");
 }

@@ -1240,9 +1240,9 @@ export default function SchedulePage() {
             </label>
 
             <div className="schedule-range-control">
-              <button type="button" onClick={() => moveRange(-1)} aria-label={t("Previous range")}>{"<"}</button>
+              <button type="button" className="schedule-range-prev" onClick={() => moveRange(-1)} aria-label={t("Previous range")}>{"<"}</button>
               <strong>{rangeText}</strong>
-              <button type="button" onClick={() => moveRange(1)} aria-label={t("Next range")}>{">"}</button>
+              <button type="button" className="schedule-range-next" onClick={() => moveRange(1)} aria-label={t("Next range")}>{">"}</button>
               <button type="button" className="schedule-range-shortcut" onClick={() => setAnchorDate(new Date())} title={t("Today")}>{t("Today")}</button>
               {selectedOrder ? (
                 <button
@@ -1720,7 +1720,10 @@ export default function SchedulePage() {
             <span>{studioCountLabel(filteredOrders.length, "order", language)}</span>
             <span>{lateCount} {t("Late")}</span>
             <span>{readyCount} {t("Ready to Ship")}</span>
-            <span>{canEditSchedule ? t("Drag bars to move or resize. Double-click opens the order.") : t("Double-click a bar to open the order.")}</span>
+            {/* Team bars select and open; only the order Schedule's bars drag
+                (review N15). The phone shows a tap-to-open list instead of
+                bars, so the hint is hidden there (.schedule-summary-hint). */}
+            <span className="schedule-summary-hint">{canEditSchedule && !teamMode ? t("Drag bars to move or resize. Double-click opens the order.") : t("Double-click a bar to open the order.")}</span>
           </footer>
         </main>
       </section>

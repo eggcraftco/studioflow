@@ -419,7 +419,7 @@ export default function TeamPage() {
               {workspace?.name ?? t("Workspace team")}
             </h1>
             <p style={{ color: "var(--muted)", margin: 0 }}>
-              {t("Manage workspace members, roles and join requests from the web portal. Owner actions are protected by the Team plan and Firebase Functions checks.")}
+              {t("Manage workspace members, roles and join requests. Only the workspace owner can make changes, and only on the Team plan.")}
             </p>
           </div>
           <div className="card" style={{ padding: 16, background: "var(--panel)", boxShadow: "none" }}>
