@@ -1,10 +1,14 @@
-// Day entries on the Work Time card (docs/working-day-entry-contract-2026-10-14.md).
+// Day entries on the Work Time card (docs/working-day-entry-contract-2026-10-14.md, section 7 for 15 Oct).
 //
 // An order's `workDays` sit beside the timer's `workSessions`: one entry says one
 // member worked a full day (1) or a half day (0.5) on this order on one calendar
 // date. At most one entry per member per date (id `${memberUid}_${date}`); saving
 // again replaces it. Writes go through updateWebOrder's `workDay` patch only — the
 // server checks who may write; this file only reads, sums and formats.
+//
+// Days are DAYS: never turned into hours or money, never added to the timer's hours.
+// Who may change or delete an entry: its own member, and the workspace OWNER for anyone's.
+// `workDayHistory` (server-written, newest first) records every change since 15 Oct 2026.
 
 export type WorkDayKind = "full_day" | "half_day";
 
@@ -17,6 +21,25 @@ export type WorkDayDetail = {
   note: string;
   createdAt: Date | null;
   updatedAt: Date | null;
+  source: string;
+  /** Who made the last change — only on entries changed since 15 Oct 2026. */
+  updatedByUid?: string;
+  updatedByEmail?: string;
+};
+
+export type WorkDayHistoryAction = "logged" | "changed" | "deleted";
+
+export type WorkDayHistoryDetail = {
+  id: string;
+  at: Date | null;
+  action: WorkDayHistoryAction;
+  date: string;
+  memberUid: string;
+  memberEmail: string;
+  byUid: string;
+  byEmail: string;
+  before: { kind: WorkDayKind; note: string } | null;
+  after: { kind: WorkDayKind; note: string } | null;
   source: string;
 };
 
@@ -96,7 +119,7 @@ export function mapWorkDays(value: unknown): WorkDayDetail[] {
     const id = workDayId(memberUid, date);
     if (seen.has(id)) continue;
     seen.add(id);
-    output.push({
+    const entry: WorkDayDetail = {
       id,
       date,
       kind,
@@ -106,9 +129,73 @@ export function mapWorkDays(value: unknown): WorkDayDetail[] {
       createdAt: asDate(row.createdAt),
       updatedAt: asDate(row.updatedAt) ?? asDate(row.createdAt),
       source: asText(row.source, 40)
-    });
+    };
+    const updatedByUid = asText(row.updatedByUid, 160);
+    if (updatedByUid) {
+      entry.updatedByUid = updatedByUid;
+      entry.updatedByEmail = asText(row.updatedByEmail, 220);
+    }
+    output.push(entry);
   }
   return sortWorkDays(output);
+}
+
+function historySide(value: unknown): { kind: WorkDayKind; note: string } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Unknown;
+  const kind = asText(row.kind, 20).toLowerCase();
+  if (kind !== "full_day" && kind !== "half_day") return null;
+  return { kind, note: asText(row.note, 280) };
+}
+
+/** The server's change log for day entries, newest first; a malformed row is skipped. Nothing is made up for older entries. */
+export function mapWorkDayHistory(value: unknown): WorkDayHistoryDetail[] {
+  if (!Array.isArray(value)) return [];
+  const output: WorkDayHistoryDetail[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const row = item as Unknown;
+    const action = asText(row.action, 20).toLowerCase();
+    const memberUid = asText(row.memberUid, 160);
+    const date = asText(row.date, 10);
+    const byUid = asText(row.byUid, 160);
+    if ((action !== "logged" && action !== "changed" && action !== "deleted") || !memberUid || !DATE_PATTERN.test(date) || !byUid) continue;
+    output.push({
+      id: asText(row.id, 80) || `${action}_${memberUid}_${date}_${output.length}`,
+      at: asDate(row.at),
+      action,
+      date,
+      memberUid,
+      memberEmail: asText(row.memberEmail, 220),
+      byUid,
+      byEmail: asText(row.byEmail, 220),
+      before: historySide(row.before),
+      after: historySide(row.after),
+      source: asText(row.source, 40)
+    });
+  }
+  return output;
+}
+
+/** Change or delete an entry: its own member, or the workspace owner (any entry). Same gate as the timer first. */
+export function canManageWorkDay(entry: { memberUid: string }, myUid: string, isOwner: boolean, canEditWorkTime: boolean) {
+  if (!canEditWorkTime) return false;
+  return (Boolean(myUid) && entry.memberUid === myUid) || isOwner;
+}
+
+/**
+ * The timer's seconds the same member ran on the same calendar day (device-local), shown beside a day entry
+ * for information only. It is never added to the day count, and the day count is never added to it.
+ */
+export function timerSecondsOnDay<T extends { createdByUid: string; startedAt: Date | null }>(
+  sessions: T[],
+  memberUid: string,
+  date: string,
+  durationOf: (session: T) => number
+) {
+  return sessions
+    .filter(session => session.createdByUid === memberUid && session.startedAt && localDateKey(session.startedAt) === date)
+    .reduce((sum, session) => sum + Math.max(0, durationOf(session)), 0);
 }
 
 export function sortWorkDays<T extends { date: string; memberUid: string }>(entries: T[]) {
@@ -134,7 +221,8 @@ export function applyWorkDayPatchLocally(entries: WorkDayDetail[], patch: WorkDa
     note: (patch.note ?? "").trim().slice(0, 280),
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
-    source: patch.source ?? "web"
+    source: patch.source ?? "web",
+    ...(existing ? { updatedByUid: uid, updatedByEmail: email } : {})
   };
   return sortWorkDays([...entries.filter(entry => entry.id !== id), next]);
 }
