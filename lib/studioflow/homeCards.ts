@@ -107,7 +107,12 @@ export const HOME_CARDS: HomeCardDefinition[] = [
     ownerOnly: true,
     sizes: ["1x1", "2x1", "2x2"],
     defaultSize: "2x1",
-    href: "/settings",
+    // The full checklist (Settings ▸ Getting started), not Settings as a whole:
+    // "/settings" opened on Profile & Security, and the owner could not tell
+    // why "View checklist" had taken them there (16 Oct 2026). Spelled out
+    // rather than imported, because lib/studioflow/gettingStarted.ts imports
+    // this module (GETTING_STARTED_HREF there is the same string).
+    href: "/settings?section=getting-started",
     linkLabel: "View checklist",
   },
   {

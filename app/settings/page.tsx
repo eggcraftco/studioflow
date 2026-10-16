@@ -1,5 +1,6 @@
 "use client";
 
+import { GettingStartedChecklist } from "@/components/home/GettingStartedChecklist";
 import { CHANGELOG } from "@/lib/publicSite/changelog";
 import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
@@ -161,6 +162,7 @@ type SettingsSectionId =
   | "message-settings"
   | "sms-notifications"
   | "support-tickets"
+  | "getting-started"
   | "client-domain";
 
 type SettingsGroup =
@@ -242,7 +244,8 @@ const SETTINGS_ICON_PATHS = {
   team: ["M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM17 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z", "M3 21a6 6 0 0 1 12 0M14 20a5 5 0 0 1 7-4.5"],
   about: ["M12 17v-5", "M12 8h.01", "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"],
   brand: ["M3 11.5 11.5 3H19a2 2 0 0 1 2 2v6.5L12.5 20a2 2 0 0 1-2.8 0l-5.7-5.7a2 2 0 0 1 0-2.8Z", "M16 8h.01"],
-  sliders: ["M4 8h9", "M16 8h4", "M4 16h4", "M11 16h9", "M13 6v4", "M8 14v4"]
+  sliders: ["M4 8h9", "M16 8h4", "M4 16h4", "M11 16h9", "M13 6v4", "M8 14v4"],
+  checklist: ["M10 6h10M10 12h10M10 18h10", "m3.5 6 1.5 1.5L7.5 5", "m3.5 12 1.5 1.5L7.5 11", "m3.5 18 1.5 1.5L7.5 17"]
 };
 
 // The reviewer's point stands: personal preferences, tax rules, destructive
@@ -266,7 +269,11 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "data", title: "Data Management", appKey: "Data", description: "Import, export and backup.", icon: "data", group: "files" },
   { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan", group: "billing" },
   { id: "integrations", title: "Integrations", appKey: "Integrations", description: "Connect the tools you use to run your business.", icon: "cart", group: "integrations" },
-  { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply", group: "supportGroup" }
+  { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply", group: "supportGroup" },
+  // The full Getting started checklist (16 Oct 2026): where Home's "View
+  // checklist" goes, and the way back to it after "Skip for now" took the card
+  // off Home. The owner's, like the card.
+  { id: "getting-started", title: "Getting started", appKey: "Getting started", description: "Your setup checklist, step by step.", icon: "checklist", group: "supportGroup" }
 ];
 
 // Settings search (settings report): each section carries the terms a user
@@ -288,7 +295,8 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
   data: "backup export import csv restore delete archive audit history change log who changed",
   "plan-access": "billing plan storage subscription upgrade seat",
   integrations: "integration connect webhook woocommerce shopify etsy square ebay marketplace pos wix squarespace amazon zapier make stripe paypal quickbooks xero pandle dropbox google drive open banking store sync api whatsapp instagram channel number reconnect inbox customer messages meta",
-  "support-tickets": "ticket help support contact"
+  "support-tickets": "ticket help support contact",
+  "getting-started": "getting started checklist setup onboarding first order import shop skip home card"
 };
 
 const SETTINGS_GROUP_LABELS: Record<SettingsGroup, string> = {
@@ -486,6 +494,8 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   // everyone (owners included) otherwise, matching the Messages nav gate and Mac/Android.
   if (sectionId === "message-settings" && workspace.entitlements.features.messages !== true) return false;
   if (normalizeWorkspaceRole(workspace.role) === "owner") return true;
+  // Setting the workspace up is the owner's job; the Home card is the owner's too.
+  if (sectionId === "getting-started") return false;
 
   const allowed = (key: keyof NonNullable<WorkspaceContext["memberAccess"]>) => workspaceAccessAllows(workspace.memberAccess, key);
   const isWorkflowOnly = normalizeWorkspaceRole(workspace.role) === "workflow";
@@ -1228,6 +1238,8 @@ function renderSettingsSection({
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "about":
       return <AboutSection workspace={workspace} language={language} />;
+    case "getting-started":
+      return <GettingStartedChecklist workspace={workspace} language={language} />;
   }
 }
 

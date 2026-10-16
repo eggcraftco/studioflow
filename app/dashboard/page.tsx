@@ -40,6 +40,7 @@ import { saveDashboardWidgetVisibility } from "@/lib/studioflow/settingsActions"
 import { detectRecurringSpends, monthlyFixedTotal, reclaimableVatForTx } from "@/lib/studioflow/bankInsights";
 import { loadSetupChecklist, setupStepHref, type SetupChecklist } from "@/lib/studioflow/setupChecklist";
 import { canSeeGettingStarted } from "@/lib/studioflow/homeCards";
+import { serverStepDone, serverStepLabel } from "@/lib/studioflow/gettingStarted";
 
 type RangeKey = "week" | "month" | "year" | "all" | "custom";
 type BucketUnit = "day" | "month";
@@ -158,9 +159,12 @@ function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
   const steps = server
     ? server.steps.map(step => ({
         id: step.key,
-        labelKey: step.title,
-        href: setupStepHref(step.action, step.target),
-        done: step.done
+        // The same words, destination and doneness as Home ▸ Getting started
+        // (lib/studioflow/gettingStarted.ts): "Bring in your first order" opens
+        // the sheet that explains how, and any order ticks it.
+        labelKey: serverStepLabel(step.key, step.action, step.title),
+        href: setupStepHref(step.action, step.target, step.key),
+        done: serverStepDone(step.key, step.done, orderCount > 0)
       }))
     : GETTING_STARTED_STEPS.map(step => ({
         id: step.id,

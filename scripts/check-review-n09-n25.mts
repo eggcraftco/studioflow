@@ -59,7 +59,9 @@ expect("N09 Orders page no `|| t(\"New Project\")`", read("app/orders/page.tsx")
 expect("N09 detail header goes through the helper", read("app/orders/OrderDetailContent.tsx").includes("<h1>{displayOrderTitle(order.customerName, t)}</h1>"), true);
 
 // Getting started: every step the server or the fallback can show has a row.
-const checklist = read("components/home/HomeCardBodies.tsx");
+// The fallback list moved to lib/studioflow/gettingStarted.ts (16 Oct 2026), where
+// the Home card, the Settings checklist and the Dashboard card all read it.
+const checklist = read("lib/studioflow/gettingStarted.ts");
 const fallbackSteps = [...checklist.slice(checklist.indexOf("const SETUP_STEPS"), checklist.indexOf("] as const;")).matchAll(/(?:label|blurb|cta): "([^"]+)"/g)].map((m) => m[1]);
 expect("N09 fallback checklist found", fallbackSteps.length, 18);
 for (const text of fallbackSteps) expect(`N09 checklist translated: ${text}`, untranslated(text), []);

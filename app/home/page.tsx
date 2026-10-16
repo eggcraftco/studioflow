@@ -60,10 +60,13 @@ import {
   type HomeCardTone,
   type HomeLayout,
 } from "@/lib/studioflow/homeCards";
-import { saveHomeLayout, saveSetupSkipped, subscribeHomeLayout, subscribeSetupSkipped } from "@/lib/studioflow/homeLayout";
+import { saveHomeLayout, subscribeHomeLayout } from "@/lib/studioflow/homeLayout";
 import { useHomeData, type HomeDomain } from "@/lib/studioflow/useHomeData";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { loadSetupChecklist, type SetupChecklist } from "@/lib/studioflow/setupChecklist";
+import { skipGettingStarted } from "@/lib/studioflow/gettingStarted";
+import { BringInOrdersSheet } from "@/components/home/GettingStartedChecklist";
+import { dispatchStudioToast } from "@/components/StudioToastHost";
 
 /** Which shared domain each card reads, so a card shows its own domain's state. */
 const CARD_DOMAIN: Record<HomeCardId, HomeDomain> = {
@@ -89,9 +92,8 @@ function greeting(t: (text: string) => string) {
 
 export default function HomePage() {
   const { user, loading: authLoading, language } = useAuth();
-  // Which checklist steps this member has waved off, live like the layout so a
-  // skip on the phone reaches the desktop.
-  const [setupSkipped, setSetupSkipped] = useState<string[]>([]);
+  // The "Bring in your orders" sheet, opened by Getting started's first-order step.
+  const [bringInOpen, setBringInOpen] = useState(false);
   const router = useRouter();
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const { hideNumbers } = usePricePrivacy();
@@ -179,30 +181,6 @@ export default function HomePage() {
     });
   }, [workspace?.id]);
 
-  useEffect(() => {
-    if (!workspace?.id) return;
-    return subscribeSetupSkipped(workspace.id, setSetupSkipped);
-  }, [workspace?.id]);
-
-  // Shown at once, saved behind: a step you waved off should not sit there
-  // while a round trip finishes, and the listener above corrects us if it fails.
-  const handleSkipStep = useCallback((stepId: string) => {
-    if (!workspace?.id) return;
-    setSetupSkipped((current) => {
-      if (current.includes(stepId)) return current;
-      const next = [...current, stepId];
-      void saveSetupSkipped(workspace.id, next);
-      return next;
-    });
-  }, [workspace?.id]);
-
-  /** "Skip for now" is only true if a skipped step can come back. */
-  const handleRestoreSkipped = useCallback(() => {
-    if (!workspace?.id) return;
-    setSetupSkipped([]);
-    void saveSetupSkipped(workspace.id, []);
-  }, [workspace?.id]);
-
   // The 2x2 stock card is the only one that names individual items, and the
   // list behind it is a 500-row callable — so it is only fetched when that card
   // is actually on the layout at that size.
@@ -260,6 +238,24 @@ export default function HomePage() {
     },
     [layout, workspace?.id, t],
   );
+
+  /**
+   * Getting started's "Skip for now": the card leaves this member's Home in this
+   * workspace — the same synced layout a hidden card has always lived in, so the
+   * phone and the Mac drop it too — and Undo puts back exactly the layout it
+   * left, in its old place. The checklist itself stays in Settings ▸ Getting
+   * started, which the toast says.
+   */
+  const handleSkipGettingStarted = useCallback(() => {
+    const before = lastSaved.current ?? layout;
+    void commit(skipGettingStarted(before));
+    dispatchStudioToast({
+      message: `${t("Getting started is hidden from Home.")} ${t("Open it again any time from Settings → Getting started.")}`,
+      actionLabel: t("Undo"),
+      onAction: () => { void commit(before); },
+      durationMs: 9000,
+    });
+  }, [commit, layout, t]);
 
   const cards = useMemo(() => visibleHomeCards(layout, workspace), [layout, workspace]);
   // Where each card lands, and where the holes are. Same arithmetic as the Mac
@@ -389,9 +385,8 @@ export default function HomePage() {
         return (
           <GettingStartedCardBody
             {...props}
-            skipped={setupSkipped}
-            onSkip={handleSkipStep}
-            onRestoreSkipped={handleRestoreSkipped}
+            onSkipCard={handleSkipGettingStarted}
+            onOpenBringIn={() => setBringInOpen(true)}
             checklist={setupChecklist}
             // Strictly the boolean, so the fallback's first step does not tick
             // for somebody who pressed Skip. Only read when the call did not
@@ -719,6 +714,9 @@ export default function HomePage() {
           </section>
         ) : null}
       </div>
+      {bringInOpen && workspace ? (
+        <BringInOrdersSheet workspace={workspace} t={t} onClose={() => setBringInOpen(false)} />
+      ) : null}
     </AppShell>
   );
 }

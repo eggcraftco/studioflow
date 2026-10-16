@@ -19,7 +19,8 @@ import type { InventoryItem } from "@/lib/studioflow/inventory";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney, moneySymbol } from "@/lib/studioflow/money";
 import { studioCountLabel } from "@/lib/studioflow/countLabel";
-import { nextSetupStep, setupStepHref, type SetupChecklist } from "@/lib/studioflow/setupChecklist";
+import { type SetupChecklist } from "@/lib/studioflow/setupChecklist";
+import { nextGettingStartedStep, resolveGettingStartedSteps, type GettingStartedStep } from "@/lib/studioflow/gettingStarted";
 
 /**
  * The eleven card bodies.
@@ -2216,123 +2217,78 @@ export function QuickActionsCardBody({ size, t, onQuickAction, canCreateOrders }
 /* --------------------------------------------------------- Getting started */
 
 /**
- * The fallback list, for a checklist call that has not answered or could not.
+ * Home ▸ Getting started (16 Oct 2026). The steps, their words, their buttons
+ * and the places those buttons open come from lib/studioflow/gettingStarted.ts,
+ * which the Settings checklist and the Dashboard card read as well — so the
+ * three cannot describe the same step three ways.
  *
- * The same six steps for everybody, which is exactly why it is not the list the
- * card asks for: it tells a jeweller doing bespoke commissions to connect the
- * online shop they do not have. The workspace's own list comes from
- * getSetupChecklist (lib/studioflow/setupChecklist.ts), built from the goal
- * they picked and from the same requirements table activation is measured
- * against, so the checklist and the measurement cannot drift apart.
+ * "Skip for now" hides THIS CARD for this member in this workspace (the Home
+ * layout every platform syncs), with Undo; the full checklist stays in
+ * Settings ▸ Getting started. It used to wave off one step, and the server keeps
+ * skips only for the six fallback ids — so skipping any step the server named
+ * was dropped on save and the step came back with the next snapshot, which is
+ * what "Skip for now doesn't work" was.
  */
-const SETUP_STEPS = [
-  { id: "profile", label: "Set up business profile", blurb: "Name, currency and tax so every document reads right.", href: "/settings", cta: "Open settings" },
-  { id: "customer", label: "Add your first customer", blurb: "Orders, notes and files all hang off a customer.", href: "/customers?new=1", cta: "Add customer" },
-  { id: "order", label: "Create your first order", blurb: "The record everything else in NivaDesk attaches to.", href: "/orders", cta: "Create order" },
-  { id: "shop", label: "Connect your shop", blurb: "Import orders automatically from Shopify or WooCommerce.", href: "/settings?section=integrations&category=commerce&intent=connect-shop", cta: "Connect shop" },
-  { id: "inventory", label: "Add an inventory item", blurb: "Track what you own, what is reserved and what is low.", href: "/inventory?new=1", cta: "Add item" },
-  { id: "bank", label: "Connect your bank", blurb: "Read-only. Spending arrives and you categorise it.", href: "/bank", cta: "Connect bank" },
-] as const;
-
-type GettingStartedStep = {
-  id: string; label: string; blurb: string; href: string; cta: string; done: boolean;
-};
-
 export function GettingStartedCardBody({
-  size, data, t, skipped = [], onSkip, onRestoreSkipped, checklist, setupFinished = false,
+  size, data, t, checklist, setupFinished = false, onSkipCard, onOpenBringIn,
 }: CardBodyProps & {
-  skipped?: string[];
-  onSkip?: (stepId: string) => void;
-  onRestoreSkipped?: () => void;
   /** This workspace's own steps. Null while the call is in flight, and null for
-   *  good if it failed — the six below are then what the card draws. */
+   *  good if it failed — the six fallback steps are then what the card draws. */
   checklist?: SetupChecklist | null;
   /** Whether setup was FINISHED, for the fallback's first step. Strictly the
-   *  boolean the server tests, so a Skip does not tick it. */
+   *  boolean the server tests. */
   setupFinished?: boolean;
+  /** "Skip for now": take the card off Home (with Undo). */
+  onSkipCard?: () => void;
+  /** Opens the "Bring in your orders" sheet over Home. */
+  onOpenBringIn?: () => void;
 }) {
-  // The server's steps carry their own words; the CTA is a plain "Continue"
-  // because the panel's heading has already named the step. Their titles and
-  // blurbs are not in the translation tables yet, so they read in English until
-  // somebody adds them — the same gap the Android and Apple cards have.
-  const allSteps: GettingStartedStep[] = checklist
-    ? checklist.steps.map((step) => ({
-        id: step.key,
-        label: step.title,
-        blurb: step.detail,
-        href: setupStepHref(step.action, step.target),
-        cta: "Continue",
-        done: step.done,
-      }))
-    : SETUP_STEPS.map((step) => ({
-        ...step,
-        done:
-          // Was `true`, unconditionally: the card congratulated a workspace
-          // that had never opened Settings, and every list it drew was a step
-          // shorter than the work actually left. It reads the completion the
-          // rest of the app reads now, and reads it strictly, so somebody who
-          // pressed Skip is not told they finished.
-          step.id === "profile" ? setupFinished :
-          step.id === "customer" ? data.customers.length > 0 :
-          step.id === "order" ? data.orders.length > 0 :
-          // A store order carries the shop's own status field; that is the only
-          // signal on the order itself that it did not come from this app.
-          step.id === "shop" ? data.orders.some((order) =>
-            Boolean(order.customFields?.["Shopify Status"] || order.customFields?.["WooCommerce Status"])) :
-          step.id === "inventory" ? (data.inventory?.uniqueCount ?? 0) + (data.inventory?.quantityCount ?? 0) > 0 :
-          data.bankTransactions.length > 0,
-      }));
-  // Skips are recorded against step ids, and the server names its steps
-  // differently ("order_created", not "order"), so a step waved off under the
-  // local list is simply not one of these — nothing is hidden by accident.
-  const steps = allSteps.filter((step) => !skipped.includes(step.id));
+  const steps: GettingStartedStep[] = resolveGettingStartedSteps(checklist?.steps ?? null, {
+    setupFinished,
+    hasCustomer: data.customers.length > 0,
+    hasOrder: data.orders.length > 0,
+    // A store order carries the shop's own status field; that is the only
+    // signal on the order itself that it did not come from this app.
+    hasStoreOrder: data.orders.some((order) =>
+      Boolean(order.customFields?.["Shopify Status"] || order.customFields?.["WooCommerce Status"])),
+    hasInventory: (data.inventory?.uniqueCount ?? 0) + (data.inventory?.quantityCount ?? 0) > 0,
+    hasBankTransaction: data.bankTransactions.length > 0,
+  });
   const complete = steps.filter((step) => step.done).length;
-  const next = nextSetupStep(steps);
+  const next = nextGettingStartedStep(steps);
   const done = steps.filter((step) => step.done);
   const todo = steps.filter((step) => !step.done && step.id !== next?.id);
+  const skip = onSkipCard ? (
+    <button type="button" className="home-setup-skip"
+            onClick={(event) => { event.stopPropagation(); onSkipCard(); }}>
+      {t("Skip for now")}
+    </button>
+  ) : null;
 
   // 1x1 has no room for the completed list. The sheet spends the square on the
-  // one thing to do next and the way out of it, rather than on a list of what
-  // is still open — that list is the wall §15 says never to put here.
+  // one thing to do next and the way out of it.
   if (size === "1x1") {
     return (
       <div className="home-setup is-square">
         <HomeProgress complete={complete} total={steps.length} t={t} />
         {next ? (
           <>
-            <NextStepPanel step={next} t={t} compact />
-            {onSkip ? (
-              <button type="button" className="home-setup-skip"
-                      onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
-                {t("Skip for now")}
-              </button>
-            ) : null}
+            <NextStepPanel step={next} t={t} compact onOpenBringIn={onOpenBringIn} />
+            {skip}
           </>
         ) : (
-          <>
-            {/* Nothing left to do left 89px of the square empty. What was done
-                is the only true thing the card still has to say, and a jeweller
-                who wants to check one off against memory can now see it. The
-                square does not also carry "All set — nice work.": six ticks
-                under "6 of 6 complete" say it, and the sentence costs a step. */}
-            {skipped.length > 0 && onRestoreSkipped ? (
-              <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
-            ) : null}
-            <ul className="home-check-list is-ruled is-recap">
-              {done.map((step) => (
-                <li key={step.id}><span className="home-check is-done" aria-hidden="true" />{t(step.label)}</li>
-              ))}
-            </ul>
-          </>
+          <ul className="home-check-list is-ruled is-recap">
+            {done.map((step) => (
+              <li key={step.id}><span className="home-check is-done" aria-hidden="true" />{t(step.label)}</li>
+            ))}
+          </ul>
         )}
       </div>
     );
   }
 
   // 2x1: the one thing to do next on the left, what is left after it on the
-  // right (§15 — never a blocking wall, always one obvious continue). The
-  // Completed list that used to hold the left column is gone: a card whose job
-  // is to move you forward spent half itself on work already finished.
+  // right (§15 — never a blocking wall, always one obvious continue).
   if (size === "2x1") {
     return (
       <div className="home-setup is-split">
@@ -2340,13 +2296,8 @@ export function GettingStartedCardBody({
         {next ? (
           <div className="home-setup-columns">
             <div className="home-setup-next">
-              <NextStepPanel step={next} t={t} inline />
-              {onSkip ? (
-                <button type="button" className="home-setup-skip"
-                        onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
-                  {t("Skip for now")}
-                </button>
-              ) : null}
+              <NextStepPanel step={next} t={t} inline onOpenBringIn={onOpenBringIn} />
+              {skip}
             </div>
             <ul className="home-check-list is-ruled">
               {todo.slice(0, 3).map((step) => (
@@ -2355,12 +2306,8 @@ export function GettingStartedCardBody({
             </ul>
           </div>
         ) : (
-          // With nothing left to do the second column has nothing in it, and its
-          // rule was standing on its own beside a sentence with half the card
-          // empty. Done, the card is one column: the sentence and the work it
-          // is talking about.
           <>
-            <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
+            <AllSetNote t={t} />
             <ul className="home-check-list is-recap is-two-up">
               {done.map((step) => (
                 <li key={step.id}><span className="home-check is-done" aria-hidden="true" />{t(step.label)}</li>
@@ -2373,9 +2320,7 @@ export function GettingStartedCardBody({
   }
 
   // 2x2: the whole checklist down the card and the current step's panel under
-  // it. One column, not two: side by side the list had about half the width and
-  // every label was cut to "Set up business pro…" — a checklist you cannot read
-  // is not a checklist.
+  // it. One column: side by side every label was cut to "Set up business pro…".
   return (
     <div className="home-setup is-large">
       <HomeProgress complete={complete} total={steps.length} t={t} />
@@ -2393,17 +2338,12 @@ export function GettingStartedCardBody({
       </ul>
       {next ? (
         <div className="home-setup-next">
-          <NextStepPanel step={next} t={t} large />
-          {onSkip ? (
-            <button type="button" className="home-setup-skip"
-                    onClick={(event) => { event.stopPropagation(); onSkip(next.id); }}>
-              {t("Skip for now")}
-            </button>
-          ) : null}
+          <NextStepPanel step={next} t={t} large onOpenBringIn={onOpenBringIn} />
+          {skip}
         </div>
       ) : (
         <div className="home-next-panel">
-          <AllSetNote skipped={skipped} onRestore={onRestoreSkipped} t={t} />
+          <AllSetNote t={t} />
         </div>
       )}
     </div>
@@ -2419,47 +2359,32 @@ function HomeProgress({ complete, total, t, hideLabel }: { complete: number; tot
         </p>
       )}
       <div className="home-progress" role="progressbar" aria-valuenow={complete} aria-valuemin={0} aria-valuemax={total}>
-        {/* Every step skipped leaves no steps at all, and 0/0 is NaN, not 0. */}
+        {/* No steps at all is 0/0, which is NaN, not 0. */}
         <span style={{ width: `${total > 0 ? Math.min(100, (complete / total) * 100) : 0}%` }} />
       </div>
     </>
   );
 }
 
-/**
- * The end of the checklist, and the way back into it.
- *
- * "Skip for now" has to be true: without a way to bring a skipped step back,
- * the word "now" is a promise the card does not keep. There is nothing left to
- * do here, so this is where the offer belongs.
- */
-function AllSetNote({
-  skipped, onRestore, t,
-}: {
-  skipped: string[];
-  onRestore?: () => void;
-  t: (text: string) => string;
-}) {
+/** The end of the checklist. Skipping now hides the card, so there is no
+ *  "{count} skipped" to bring back here any more. */
+function AllSetNote({ t }: { t: (text: string) => string }) {
   return (
     <div className="home-setup-allset">
       <p className="home-card-note">{t("All set — nice work.")}</p>
-      {skipped.length > 0 && onRestore ? (
-        <button type="button" className="home-setup-skip"
-                onClick={(event) => { event.stopPropagation(); onRestore(); }}>
-          {t("{count} skipped").replace("{count}", String(skipped.length))}
-        </button>
-      ) : null}
     </div>
   );
 }
 
 function NextStepPanel({
-  step, t, compact, inline, large,
+  step, t, compact, inline, large, onOpenBringIn,
 }: {
-  step: { label: string; blurb: string; href: string; cta: string };
+  step: GettingStartedStep;
   t: (text: string) => string;
   compact?: boolean; inline?: boolean; large?: boolean;
+  onOpenBringIn?: () => void;
 }) {
+  const label = t(inline || compact ? "Continue" : step.cta);
   return (
     <div className={`home-next-panel${inline ? " is-inline" : ""}${large ? " is-large" : ""}${compact ? " is-stacked" : ""}`}>
       <div className="home-next-body">
@@ -2468,21 +2393,21 @@ function NextStepPanel({
               blue; the panel repeating it was the same words twice. */}
           {large ? null : <strong>{t(step.label)}</strong>}
           {/* The square keeps the step and the way past it and gives up the
-              line that explains why: measured, "Verbinde deinen Shop" plus its
-              own blurb runs 17px past the bottom of a 174px card. The page the
-              button opens explains itself. */}
+              line that explains why. */}
           {compact ? null : <p>{t(step.blurb)}</p>}
         </div>
-        {/* The square has no width for "Connect your shop" twice — the panel's
-            heading already named the step, so the button just moves.
-
-            No destination, no button: the server can name a step that is a
-            statement rather than somewhere to go ("Tell us what you'd like help
-            with"), and a capsule that says Continue and continues nowhere is
-            worse than a panel that simply reads as a line of text. */}
-        {step.href ? (
+        {/* "Bring in your first order" opens a sheet that says how, over Home;
+            every other step goes to the screen that completes it. No
+            destination, no button: a capsule that continues nowhere is worse
+            than a line of text. */}
+        {step.opensBringIn && onOpenBringIn ? (
+          <button type="button" className="home-next-button"
+                  onClick={(event) => { event.stopPropagation(); onOpenBringIn(); }}>
+            {label}
+          </button>
+        ) : step.href ? (
           <Link className="home-next-button" href={step.href}>
-            {t(inline || compact ? "Continue" : step.cta)}
+            {label}
           </Link>
         ) : null}
       </div>

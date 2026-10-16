@@ -34582,3 +34582,74 @@ body[data-studio-theme="dark"] .upload-queue-track {
     display: block;
   }
 }
+
+/* ---- Getting started: Settings ▸ Getting started and the "Bring in your
+   orders" sheet (16 Oct 2026). The checklist reuses the Home card's ticks and
+   bar so a step looks the same in both places. ---- */
+.gs-checklist { display: grid; gap: 14px; }
+.gs-progress { display: grid; gap: 6px; }
+.gs-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gs-steps li {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+}
+.gs-steps li.is-current { border-color: rgba(37, 99, 235, 0.45); background: rgba(37, 99, 235, 0.05); }
+.gs-steps li[data-done="true"] .gs-step-text strong { opacity: 0.7; }
+.gs-step-text { display: grid; gap: 2px; min-width: 0; }
+.gs-step-text strong { font-size: 14px; font-weight: 800; }
+.gs-step-text em { font-style: normal; font-size: 12.5px; opacity: 0.72; line-height: 1.4; }
+.gs-step-action { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.gs-step-action .button, .gs-store-action .button { white-space: nowrap; text-decoration: none; }
+.gs-tag {
+  display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 9px;
+  font-size: 11.5px; font-weight: 700; white-space: nowrap;
+}
+.gs-tag.is-done { background: rgba(22, 163, 74, 0.12); color: #15803d; }
+.gs-tag.is-warning { background: rgba(217, 119, 6, 0.14); color: #b45309; }
+body[data-studio-theme="dark"] .gs-tag.is-done { color: #4ade80; }
+body[data-studio-theme="dark"] .gs-tag.is-warning { color: #fbbf24; }
+.gs-home-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  border-top: 1px solid var(--border); padding-top: 12px;
+}
+.gs-home-row > span { display: grid; gap: 2px; }
+.gs-home-row em { font-style: normal; font-size: 12.5px; opacity: 0.72; }
+
+.gs-sheet {
+  width: min(560px, 100%); max-height: calc(100vh - 36px); overflow: auto;
+  display: grid; gap: 10px; padding: 18px 18px 16px; border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98); color: var(--text);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.25);
+}
+body[data-studio-theme="dark"] .gs-sheet { background: rgba(31, 31, 31, 0.98); border: 1px solid var(--border); }
+.gs-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.gs-sheet-head h2 { margin: 0; font-size: 18px; font-weight: 800; }
+.gs-sheet-close {
+  border: 0; background: transparent; color: inherit; cursor: pointer;
+  font-size: 22px; line-height: 1; padding: 2px 6px; opacity: 0.6;
+}
+.gs-sheet-close:hover { opacity: 1; }
+.gs-sheet-intro { margin: 0; font-size: 13.5px; line-height: 1.45; opacity: 0.85; }
+.gs-sheet-section { margin: 6px 0 0; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.6; }
+.gs-sheet-note { margin: 4px 0 0; font-size: 12px; opacity: 0.65; line-height: 1.4; }
+.gs-store-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.gs-store {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
+  border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px;
+}
+.gs-store.gs-hand { grid-template-columns: 1fr auto; }
+.gs-store-mark {
+  width: 34px; height: 34px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(120, 130, 150, 0.12); overflow: hidden;
+}
+.gs-store-mark img { width: 26px; height: 26px; object-fit: contain; }
+.gs-store-mark b { font-size: 15px; font-weight: 800; }
+.gs-store-text { display: grid; gap: 2px; min-width: 0; }
+.gs-store-text strong { font-size: 14px; font-weight: 800; }
+.gs-store-text em { font-style: normal; font-size: 12px; opacity: 0.72; line-height: 1.35; }
+.gs-store-action { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 640px) {
+  .gs-steps li, .gs-store { grid-template-columns: auto 1fr; }
+  .gs-step-action, .gs-store-action { grid-column: 1 / -1; justify-content: flex-start; }
+  .gs-store.gs-hand { grid-template-columns: 1fr; }
+}

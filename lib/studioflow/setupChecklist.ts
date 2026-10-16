@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
+import { serverStepHref } from "@/lib/studioflow/gettingStarted";
 
 // The steps between signing up and NivaDesk being useful, for THIS workspace.
 //
@@ -60,7 +61,11 @@ export const SETUP_STEP_HREFS: Record<string, string> = {
   open_order: "/orders",
 };
 
-export function setupStepHref(action: string, target?: { orderId?: string }) {
+export function setupStepHref(action: string, target?: { orderId?: string }, stepKey?: string) {
+  // By the step's own key when the caller has it (16 Oct 2026): the server says
+  // "integrations" for importing the first order too, and that step now opens
+  // the "Bring in your orders" sheet rather than the Integrations hub.
+  if (stepKey) return serverStepHref(stepKey, action, target);
   const key = String(action || "").trim();
   if (key === "open_order") {
     const orderId = String(target?.orderId || "").trim();
