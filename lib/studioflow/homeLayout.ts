@@ -80,7 +80,11 @@ export async function saveHomeLayout(companyId: string, layout: HomeLayout): Pro
   const userId = auth.currentUser?.uid ?? "";
   if (!companyId || !userId) return;
   const callable = httpsCallable(functions, "savePersonalInterfaceSettings");
-  await callable({ settings: { homeLayout: JSON.stringify(layout) } });
+  // The workspace is named (16 Oct 2026). Without it the server saves into the
+  // caller's "active" workspace (users/{uid}), which for somebody in more than
+  // one is not necessarily the Home on screen — a card hidden or moved here
+  // then landed on another workspace's layout and this one never changed.
+  await callable({ companyId, settings: { homeLayout: JSON.stringify(layout) } });
 }
 
 /**

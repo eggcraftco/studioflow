@@ -152,6 +152,10 @@ const facts = (hasOrder: boolean) => ({
     assert.ok(!/onSkip\(next\.id\)/.test(body), "the card no longer skips one step");
     assert.ok(body.includes("onSkipCard()"), "the card's Skip hides the card");
   });
+  await check("3c a layout save names its workspace (a hidden card lands on the Home on screen)", () => {
+    // Without companyId the server saved into the caller's "active" workspace (users/{uid}).
+    assert.ok(read("lib/studioflow/homeLayout.ts").includes("await callable({ companyId, settings: { homeLayout: JSON.stringify(layout) } });"));
+  });
   const functionsIndex = process.env.NIVADESK_FUNCTIONS_INDEX || "";
   if (functionsIndex && existsSync(functionsIndex)) {
     const source = readFileSync(functionsIndex, "utf8");
@@ -168,19 +172,19 @@ const facts = (hasOrder: boolean) => ({
     ].join("\n"), sandbox);
     const cleanSetupSkipped = sandbox.cleanSetupSkipped as (raw: unknown) => string[];
     const cleanHomeLayout = sandbox.cleanHomeLayout as (raw: unknown) => string;
-    await check("3c (server) why the old Skip came back: a server step id is dropped by cleanSetupSkipped", () => {
+    await check("3d (server) why the old Skip came back: a server step id is dropped by cleanSetupSkipped", () => {
       // JSON, because the array comes from another realm (node:vm).
       assert.equal(JSON.stringify(cleanSetupSkipped(["external_order_imported", "integration_connected"])), "[]");
       assert.equal(JSON.stringify(cleanSetupSkipped(["shop"])), '["shop"]', "only the six fallback ids survive");
     });
-    await check("3d (server) the hidden card survives the server's cleanHomeLayout", () => {
+    await check("3e (server) the hidden card survives the server's cleanHomeLayout", () => {
       const skipped = need().skipGettingStarted(homeCards.defaultHomeLayout());
       const stored = JSON.parse(cleanHomeLayout(JSON.stringify(skipped)));
       assert.ok(stored.hidden.includes("gettingStarted"), JSON.stringify(stored.hidden));
       assert.ok(!stored.cards.some((card: { id: string }) => card.id === "gettingStarted"));
     });
   } else {
-    console.log("skip 3c/3d (server): set NIVADESK_FUNCTIONS_INDEX to functions/index.js to run them");
+    console.log("skip 3d/3e (server): set NIVADESK_FUNCTIONS_INDEX to functions/index.js to run them");
   }
 
   // ------------------------------------------------ 4. Words, in all 12 languages
