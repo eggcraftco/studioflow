@@ -168,7 +168,9 @@ export function GettingStartedChecklist({ workspace, language = "English" }: { w
     if (new URLSearchParams(window.location.search).get("sheet") === "orders") setSheetOpen(true);
   }, []);
 
-  const steps = resolveGettingStartedSteps(checklist?.steps ?? null, {
+  // Nothing until the call has answered: drawing the six fallback steps first and then swapping in the server's
+  // list showed a different checklist for a few seconds. The fallback is for a call that failed.
+  const steps = !checklistLoaded ? [] : resolveGettingStartedSteps(checklist?.steps ?? null, {
     setupFinished: data.settings?.businessOnboardingFinished ?? false,
     hasCustomer: data.customers.length > 0,
     hasOrder: data.orders.length > 0,
