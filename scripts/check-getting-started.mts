@@ -57,6 +57,7 @@ const NEW_STRINGS = [
   "This step is done once your workspace has its first order, imported or added by hand.",
   "Getting started is hidden from Home.", "Open it again any time from Settings → Getting started.",
   "Show on Home", "Hide from Home", "Your setup checklist, step by step.", "Choose how",
+  "Connect the shop you sell on — its orders then come in on their own.",
 ];
 
 const server = (key: string, done = false, action = "x", target?: { orderId?: string }) =>
@@ -211,6 +212,31 @@ const facts = (hasOrder: boolean) => ({
       .filter((lang) => language.studioT(text, lang) === text && !(text === "Home" && lang === "Italiano"))
       .map((lang) => `${text} [${lang}]`));
     assert.deepEqual(missing, []);
+  });
+
+  // ------------------------------------------------ 5. NEW-7 (Mac final check on eea4d3ba) + the Undo notice
+  await check("5a the sales-channel step's line names no shop the sheet does not offer (the server's names Square)", () => {
+    const [step] = need().resolveGettingStartedSteps([{
+      key: "integration_connected", title: "Connect your first sales channel",
+      detail: "Shopify, Etsy, WooCommerce or Square.", action: "integrations", done: false,
+    }], facts(false));
+    assert.equal(step.label, "Connect your first sales channel");
+    assert.equal(step.blurb, "Connect the shop you sell on — its orders then come in on their own.");
+    assert.equal(step.cta, "Connect shop");
+  });
+  await check("5b the card's button says the step's own action at every size, never a generic Continue", () => {
+    const body = read("components/home/HomeCardBodies.tsx");
+    const panel = body.slice(body.indexOf("function NextStepPanel("), body.indexOf("/* ---------------------------------------------------------------- shared */"));
+    assert.ok(panel.includes("const label = t(step.cta);"), "label is the step's action");
+    assert.ok(!panel.includes('"Continue"'), "no Continue on the card");
+    const steps = need().resolveGettingStartedSteps(SERVER_KEYS.map((key) => server(key)), facts(false));
+    assert.deepEqual(steps.filter((step) => step.href && !step.cta).map((step) => step.id), [], "every step that goes somewhere has an action");
+    assert.ok(/\.home-next-button \{[^}]*max-width: 100%; overflow: hidden; text-overflow: ellipsis;/.test(read("app/globals.css")),
+      "a long translation stays inside the panel");
+  });
+  await check("5c the Undo notice after Skip is the app's toast, fixed at the bottom of the window (seen wherever Home is scrolled)", () => {
+    assert.ok(read("app/home/page.tsx").includes("dispatchStudioToast({"), "Home's Skip raises the toast");
+    assert.ok(/\.studio-toast-stack \{\s*position: fixed;\s*bottom: 22px;/.test(read("app/globals.css")), "the toast stack is fixed to the bottom");
   });
 
   console.log(`\ngetting-started: ${passed} passed, ${failed} failed`);

@@ -70,7 +70,15 @@ type StepCopy = { label?: string; blurb?: string; href: string; cta: string; ope
  */
 const SERVER_STEPS: Record<string, StepCopy> = {
   onboarding: { href: "", cta: "" },
-  integration_connected: { href: CONNECT_SHOP_HREF, cta: "Connect shop" },
+  // The server's line names "Shopify, Etsy, WooCommerce or Square", and the
+  // shops the app can bring orders in from are not that list (Square is a
+  // till; eBay and Amazon come and go by workspace): words that name none of
+  // them (NEW-7, Mac final check on eea4d3ba).
+  integration_connected: {
+    blurb: "Connect the shop you sell on — its orders then come in on their own.",
+    href: CONNECT_SHOP_HREF,
+    cta: "Connect shop",
+  },
   external_order_imported: {
     label: "Bring in your first order",
     blurb: "Connect your shop, or add an order by hand.",

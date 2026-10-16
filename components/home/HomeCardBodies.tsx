@@ -2384,7 +2384,10 @@ function NextStepPanel({
   compact?: boolean; inline?: boolean; large?: boolean;
   onOpenBringIn?: () => void;
 }) {
-  const label = t(inline || compact ? "Continue" : step.cta);
+  // The step's own action at every size ("Connect shop", "Choose how"), as
+  // the checklist says it: the same word for every step told nobody what the
+  // button would do (NEW-7, Mac final check on eea4d3ba).
+  const label = t(step.cta);
   return (
     <div className={`home-next-panel${inline ? " is-inline" : ""}${large ? " is-large" : ""}${compact ? " is-stacked" : ""}`}>
       <div className="home-next-body">
