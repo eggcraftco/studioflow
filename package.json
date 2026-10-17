@@ -59,7 +59,8 @@
     "test:review-n09-n25": "npx tsx scripts/check-review-n09-n25.mts",
     "test:admin-insights": "node scripts/check-admin-insights-metrics.mts",
     "test:order-delete-buttons": "node scripts/check-order-delete-buttons.mjs",
-    "test:getting-started": "npx tsx scripts/check-getting-started.mts"
+    "test:getting-started": "npx tsx scripts/check-getting-started.mts",
+    "test:web-small-fixes": "npx tsx scripts/check-web-small-fixes.mts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
