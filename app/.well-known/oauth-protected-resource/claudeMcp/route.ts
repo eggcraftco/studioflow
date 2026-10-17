@@ -1,0 +1,42 @@
+// RFC 9728 protected-resource metadata for https://nivadesk.app/claudeMcp.
+// `resource` must equal the URL a person adds in Claude, exactly; the
+// authorization server is the one nivadesk.app already runs for ChatGPT
+// (/.well-known/oauth-authorization-server: DCR, PKCE S256, public clients).
+const responseHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+  "Cache-Control": "no-store, no-cache, max-age=0, must-revalidate",
+  "Content-Type": "application/json; charset=utf-8"
+};
+
+const protectedResourceMetadata = {
+  resource: "https://nivadesk.app/claudeMcp",
+  authorization_servers: ["https://nivadesk.app"],
+  bearer_methods_supported: ["header"],
+  scopes_supported: [
+    "orders.read",
+    "orders.write",
+    "notes.read",
+    "notes.write",
+    "finance.read",
+    "tasks.write"
+  ],
+  resource_documentation: "https://nivadesk.app/privacy",
+  server: "NivaDesk"
+};
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export function GET() {
+  return Response.json(protectedResourceMetadata, { headers: responseHeaders });
+}
+
+export function HEAD() {
+  return new Response(null, { status: 200, headers: responseHeaders });
+}
+
+export function OPTIONS() {
+  return new Response(null, { status: 204, headers: responseHeaders });
+}

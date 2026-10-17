@@ -7,6 +7,7 @@ import { auth, db, googleProvider } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
+import { assistantNameForResource } from "@/lib/chatgpt/claudeMcp";
 
 type WorkspaceOption = {
   id: string;
@@ -253,6 +254,11 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
     window.location.assign(redirect.toString());
   }
 
+  // Which assistant asked: Claude when the request names the Claude endpoint
+  // (https://nivadesk.app/claudeMcp), ChatGPT otherwise — the same words as
+  // before for every ChatGPT connection. Wording only; the grant is the same.
+  const assistant = assistantNameForResource(oauthParams.resource);
+
   return (
     <main style={{
       minHeight: "100vh",
@@ -276,14 +282,14 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
           <img src="/brand/nivadesk-logo.png" alt="NivaDesk" style={{ width: 42, height: 42, objectFit: "contain" }} />
           <div>
             <div style={{ fontSize: 13, fontWeight: 800, color: "#6e6e73", letterSpacing: 0.5, textTransform: "uppercase" }}>
-              ChatGPT connection
+              {assistant} connection
             </div>
             <h1 style={{ margin: 0, fontSize: 30, lineHeight: 1.08 }}>Connect NivaDesk</h1>
           </div>
         </div>
 
         <p style={{ color: "#6e6e73", lineHeight: 1.55, marginTop: 0 }}>
-          Connect ChatGPT to the selected NivaDesk workspace. ChatGPT will only work inside the workspace you choose and access is still limited by your NivaDesk plan, role and permissions.
+          Connect {assistant} to the selected NivaDesk workspace. {assistant} will only work inside the workspace you choose and access is still limited by your NivaDesk plan, role and permissions.
         </p>
 
         {/* Where the authorization actually goes. This screen sits on the real
@@ -301,7 +307,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
 
         {!validRequest ? (
           <div style={{ background: "#fff2f2", color: "#a11", borderRadius: 16, padding: 16, fontWeight: 700 }}>
-            This ChatGPT connection request is missing required OAuth parameters. Please start the connection again from ChatGPT.
+            This {assistant} connection request is missing required OAuth parameters. Please start the connection again from {assistant}.
           </div>
         ) : loading ? (
           <div style={{ padding: 24, color: "#6e6e73" }}>Checking your session...</div>
@@ -368,7 +374,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
               padding: 16,
               color: "#3a3a3c"
             }}>
-              <strong>ChatGPT will be able to:</strong>
+              <strong>{assistant} will be able to:</strong>
               <span>• Search and summarise orders, tasks, timelines and dashboard information in the selected workspace.</span>
               <span>• View financial summaries only when your NivaDesk plan and role allow financial access.</span>
               <span>• Create new orders, add order notes, add personal notes and update order status after your request.</span>
@@ -379,7 +385,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button type="button" onClick={handleCancel} disabled={submitting} style={secondaryButtonStyle}>Cancel</button>
               <button type="button" onClick={handleAllow} disabled={submitting || !selectedCompanyId} style={primaryButtonStyle}>
-                {submitting ? "Connecting..." : "Allow ChatGPT"}
+                {submitting ? "Connecting..." : `Allow ${assistant}`}
               </button>
             </div>
           </div>
