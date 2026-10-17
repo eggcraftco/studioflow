@@ -34702,3 +34702,45 @@ body[data-studio-theme="dark"] .gs-sheet { background: rgba(31, 31, 31, 0.98); b
   .gs-step-action, .gs-store-action { grid-column: 1 / -1; justify-content: flex-start; }
   .gs-store.gs-hand { grid-template-columns: 1fr; }
 }
+
+/* ==== Order detail on phones: the sticky header condenses (review N14, 17 Oct 2026) ====
+   Full, it is the picture, names, facts, chips, assign/lock/Actions and the tab
+   bar — 286 px of an 844 px phone, stuck under the 66 px app bar. Once it has
+   scrolled past (useCondensedHeader) it is one line: the order's name and
+   Actions. Back at the top, or with keyboard focus inside, it is full again. */
+@media (max-width: 640px) {
+  .order-detail-head.is-condensed .order-detail-toolbar {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 10px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .order-detail-head.is-condensed .order-detail-toolbar > .order-detail-identity {
+    flex: 1 1 auto;
+    align-self: center;
+    min-width: 0;
+  }
+  .order-detail-head.is-condensed .order-detail-thumb,
+  .order-detail-head.is-condensed .order-detail-identity-text > :not(h1),
+  .order-detail-head.is-condensed .order-header-meta,
+  .order-detail-head.is-condensed .order-toolbar-pills > :not(:last-child),
+  .order-detail-head.is-condensed .order-detail-tabs {
+    display: none;
+  }
+  .order-detail-head.is-condensed .order-detail-identity-text h1 {
+    display: block;
+    unicode-bidi: plaintext;
+    margin: 0;
+    font-size: 17px;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .order-detail-head.is-condensed .order-toolbar-pills {
+    flex: 0 0 auto;
+    margin-left: 0;
+  }
+}

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCondensedHeader } from "@/lib/studioflow/useCondensedHeader";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import OrderPaymentLinks from "@/components/OrderPaymentLinks";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
@@ -2146,6 +2147,9 @@ export function OrderDetailContent({
   const [firstProjectGuide, setFirstProjectGuide] = useState<FirstProjectGuideState | null>(null);
   const [customerGuideStyle, setCustomerGuideStyle] = useState<CSSProperties | null>(null);
   const [orderActionsOpen, setOrderActionsOpen] = useState(false);
+  // Phone: the sticky header condenses to the name and Actions once scrolled past (review N14).
+  const orderHeadRef = useRef<HTMLDivElement | null>(null);
+  const orderHeadCondensed = useCondensedHeader(orderHeadRef);
   const [assignProjectMenuOpen, setAssignProjectMenuOpen] = useState(false);
   const [savingAssignment, setSavingAssignment] = useState(false);
   const [headerDetailsMenuPosition, setHeaderDetailsMenuPosition] = useState<{ x: number; y: number } | null>(null);
@@ -9246,7 +9250,7 @@ export function OrderDetailContent({
     <DetailLanguageContext.Provider value={detailLanguage}>
     <div className="order-detail-shell">
       {/* Header and tab bar stick together at the top of the scrolling pane. */}
-      <div className="order-detail-head">
+      <div ref={orderHeadRef} className={orderHeadCondensed ? "order-detail-head is-condensed" : "order-detail-head"} data-condensed={orderHeadCondensed ? "true" : undefined}>
       <section
         className="order-detail-toolbar"
         onContextMenu={event => {
