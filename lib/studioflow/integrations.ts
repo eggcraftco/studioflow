@@ -348,6 +348,10 @@ export type ChatGPTConnection = {
   scope: string;
   grantedByEmail: string;
   grantedByUid: string;
+  /** The connection the grant belongs to (renewals keep it); "" for a grant from before connections existed. */
+  connectionId?: string;
+  /** The connection can renew itself (a live refresh token). */
+  refreshable?: boolean;
   /** Which assistant the grant is for (server: listChatGPTConnections). Absent from an older server = ChatGPT. */
   assistant?: "chatgpt" | "claude";
   /** The client app's callback origin, e.g. https://claude.ai, or "loopback" (Claude Code). Never a token. */
@@ -356,12 +360,24 @@ export type ChatGPTConnection = {
   expiresAtMs: number;
 };
 
-/** Ends ChatGPT's access. No tokenHash means every grant this workspace has. */
-export async function revokeChatGPTConnection(companyId: string, tokenHash = ""): Promise<string> {
-  const call = httpsCallable<{ companyId: string; tokenHash?: string }, { message: string }>(
+/** Ends ONE connection: by its connectionId, or by tokenHash for a grant from before connections existed. */
+export async function revokeChatGPTConnection(companyId: string, target: { connectionId?: string; tokenHash?: string }): Promise<string> {
+  const call = httpsCallable<{ companyId: string; tokenHash?: string; connectionId?: string }, { message: string }>(
     functions, "revokeChatGPTConnection"
   );
-  const response = await call({ companyId, ...(tokenHash ? { tokenHash } : {}) });
+  const connectionId = String(target.connectionId || "");
+  const tokenHash = String(target.tokenHash || "");
+  if (!connectionId && !tokenHash) throw new Error("Choose the connection to end.");
+  // Both when both are known: a server from before connections (rolled back) reads tokenHash and would treat a
+  // request without one as "all"; the current server ends the whole connection either way.
+  const response = await call({ companyId, ...(connectionId ? { connectionId } : {}), ...(tokenHash ? { tokenHash } : {}) });
+  return response.data.message;
+}
+
+/** Ends EVERY assistant connection of the workspace. A separate action on purpose (all: true). */
+export async function revokeAllChatGPTConnections(companyId: string): Promise<string> {
+  const call = httpsCallable<{ companyId: string; all: true }, { message: string }>(functions, "revokeChatGPTConnection");
+  const response = await call({ companyId, all: true });
   return response.data.message;
 }
 

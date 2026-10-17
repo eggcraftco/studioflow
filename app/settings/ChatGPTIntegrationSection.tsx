@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { chatGPTConnectionAssistant } from "@/lib/chatgpt/claudeMcp";
 import {
   loadIntegrationSignals,
+  revokeAllChatGPTConnections,
   revokeChatGPTConnection,
   type ChatGPTConnection
 } from "@/lib/studioflow/integrations";
@@ -57,12 +58,15 @@ export function ChatGPTIntegrationSection({
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const disconnect = useCallback(async (tokenHash: string, assistant: string) => {
+  const disconnect = useCallback(async (target: { connectionId?: string; tokenHash?: string } | "all", assistant: string) => {
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      setMessage(brand(t(await revokeChatGPTConnection(workspace.id, tokenHash)), assistant));
+      const result = target === "all"
+        ? await revokeAllChatGPTConnections(workspace.id)
+        : await revokeChatGPTConnection(workspace.id, target);
+      setMessage(brand(t(result), assistant));
       await refresh();
     } catch (failure) {
       setError(failure instanceof Error ? t(failure.message) : brand(t("ChatGPT could not be disconnected."), assistant));
@@ -92,7 +96,7 @@ export function ChatGPTIntegrationSection({
         <div className="grid" style={{ gap: 10 }}>
           {connections.map(connection => (
             <article
-              key={connection.tokenHash}
+              key={connection.connectionId || connection.tokenHash}
               className="card"
               style={{ padding: 14, background: "rgba(255,255,255,0.58)", boxShadow: "none" }}
             >
@@ -111,7 +115,7 @@ export function ChatGPTIntegrationSection({
                   onClick={() => {
                     const assistant = chatGPTConnectionAssistant(connection);
                     if (!window.confirm(brand(t("End ChatGPT's access to this workspace?"), assistant))) return;
-                    void disconnect(connection.tokenHash, assistant);
+                    void disconnect({ connectionId: connection.connectionId, tokenHash: connection.tokenHash }, assistant);
                   }}
                 >
                   {t("Disconnect")}
@@ -119,6 +123,21 @@ export function ChatGPTIntegrationSection({
               </div>
             </article>
           ))}
+          {connections.length > 1 ? (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                className="button secondary"
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (!window.confirm(t("End every assistant connection to this workspace? Each assistant will need to connect again."))) return;
+                  void disconnect("all", BOTH);
+                }}
+              >
+                {t("Disconnect all")}
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
     </section>

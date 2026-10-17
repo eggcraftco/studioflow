@@ -4,7 +4,7 @@
 // Owner-only: connect a business bank account, see the live transaction feed.
 // Read-only account information — the app can never move money.
 
-import React, { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -592,6 +592,32 @@ function BankPageContent() {
     const result = await callable({ companyId, ...payload });
     return result.data;
   }, [companyId]);
+
+  // Arriving from an assistant's receipt upload link (?receiptUpload=…, made by
+  // the Claude tool attach_bank_receipt). The id grants nothing by itself: the
+  // server redeems it only for the signed-in owner it was made for, in this
+  // workspace, once, within 15 minutes, and answers with the transaction id.
+  // The file then goes through attachReceipt below — the app's own receipt
+  // upload (Storage rule, size/type limits, malware scan). The id leaves the
+  // address bar at once so it does not sit in history.
+  const [receiptRequest, setReceiptRequest] = useState<{ transactionId: string } | null>(null);
+  const [receiptRequestError, setReceiptRequestError] = useState<string | null>(null);
+  const redeemedReceiptRequest = useRef("");
+  useEffect(() => {
+    if (!companyId) return;
+    const nonce = searchParams.get("receiptUpload");
+    if (!nonce || redeemedReceiptRequest.current === nonce) return;
+    redeemedReceiptRequest.current = nonce;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("receiptUpload");
+      window.history.replaceState({}, "", url.pathname + url.search);
+    } catch { /* address bar stays as it was */ }
+    setReceiptRequestError(null);
+    call<{ ok: boolean; transactionId: string }>("resolveBankReceiptUploadRequest", { request: nonce })
+      .then(result => setReceiptRequest({ transactionId: result.transactionId }))
+      .catch(redeemError => setReceiptRequestError(redeemError instanceof Error ? redeemError.message : "This upload link could not be opened."));
+  }, [companyId, searchParams, call]);
 
   // Returning from the bank's consent screen: TrueLayer redirects back with
   // ?code=...&state=... — exchange the code for tokens, then clean the URL.
@@ -1769,6 +1795,29 @@ function BankPageContent() {
         {!canViewBank ? (
           <p style={{ fontSize: 13, opacity: 0.75 }}>{t("Bank connections are managed by the workspace owner.")}</p>
         ) : null}
+        {receiptRequestError ? <p style={{ margin: 0, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{t(receiptRequestError)}</p> : null}
+        {receiptRequest ? (() => {
+          const target = transactions.find(item => item.id === receiptRequest.transactionId);
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 12.5, padding: "10px 12px", borderRadius: 10, background: "rgba(37,99,235,0.08)", border: "1px solid rgba(37,99,235,0.2)" }}>
+              <span>
+                <strong>{t("Attach the receipt for this bank transaction")}</strong>
+                {target ? ` · ${target.counterparty || target.description} · ${money(target.amount, target.currency)} · ${target.bookingDate}` : ` · ${t("Loading...")}`}
+              </span>
+              <input type="file" accept="image/*,.pdf" style={{ display: "none" }} id="bank-request-receipt-input"
+                onChange={event => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file && target) void attachReceipt(target, file).then(() => setReceiptRequest(null));
+                }} />
+              <button type="button" disabled={!target || busy === `receipt-${target.id}`} style={{ ...bankBtnSm, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }}
+                onClick={() => document.getElementById("bank-request-receipt-input")?.click()}>
+                {t("Choose receipt file")}
+              </button>
+              <button type="button" style={bankBtnSm} onClick={() => setReceiptRequest(null)}>{t("Cancel")}</button>
+            </div>
+          );
+        })() : null}
         {status ? <p style={{ margin: 0, fontSize: 12, color: "#16a34a", fontWeight: 600 }}>{t(status)}</p> : null}
         {otherCurrencyRows > 0 ? <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>{otherCurrencyRows} {t("rows in other currencies are listed but not in these totals.")}</p> : null}
         {error ? <p style={{ margin: 0, fontSize: 12, color: "#dc2626", fontWeight: 600 }}>{t(error)}</p> : null}

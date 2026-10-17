@@ -23,7 +23,8 @@ const authorizationServerMetadata = {
   token_endpoint: "https://nivadesk.app/chatgptOAuthToken",
   registration_endpoint: "https://nivadesk.app/chatgptOAuthRegister",
   response_types_supported: ["code"],
-  grant_types_supported: ["authorization_code"],
+  // refresh_token: issued to a client that registers for that grant (rotated, single use, per connection).
+  grant_types_supported: ["authorization_code", "refresh_token"],
   code_challenge_methods_supported: ["S256"],
   token_endpoint_auth_methods_supported: ["none"],
   scopes_supported: scopesSupported,

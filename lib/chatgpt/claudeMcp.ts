@@ -23,7 +23,12 @@ export function assistantNameForResource(resource: string | null | undefined): "
   }
 }
 
-/** Brand name of the assistant a grant belongs to (Settings ▸ ChatGPT / Claude). No field (older server) = ChatGPT. */
-export function chatGPTConnectionAssistant(connection: { assistant?: string }): "ChatGPT" | "Claude" {
-  return connection.assistant === "claude" ? "Claude" : "ChatGPT";
+/**
+ * Which client a connection is (Settings ▸ ChatGPT / Claude): Claude Code is a
+ * Claude grant whose callback is a loopback address; no field (older server or
+ * a grant from before connections existed) = ChatGPT.
+ */
+export function chatGPTConnectionAssistant(connection: { assistant?: string; clientOrigin?: string }): "ChatGPT" | "Claude" | "Claude Code" {
+  if (connection.assistant !== "claude") return "ChatGPT";
+  return connection.clientOrigin === "loopback" ? "Claude Code" : "Claude";
 }

@@ -12,6 +12,7 @@ import { execFileSync } from "child_process";
 import * as claudeRoute from "../app/claudeMcp/route";
 import * as claudePrm from "../app/.well-known/oauth-protected-resource/claudeMcp/route";
 import * as authorizeRoute from "../app/chatgptOAuthAuthorize/route";
+import * as asRoute from "../app/.well-known/oauth-authorization-server/route";
 import { assistantNameForResource, chatGPTConnectionAssistant, CLAUDE_MCP_NO_CREDENTIAL_CHALLENGE } from "../lib/chatgpt/claudeMcp";
 
 let failures = 0; let checks = 0;
@@ -93,10 +94,15 @@ async function main() {
   }
 
   // Settings ▸ ChatGPT / Claude lists both kinds of grant; an older server (no field) means ChatGPT.
-  check(chatGPTConnectionAssistant({ assistant: "claude" }) === "Claude" && chatGPTConnectionAssistant({ assistant: "chatgpt" }) === "ChatGPT" && chatGPTConnectionAssistant({}) === "ChatGPT", "Settings row names each grant's assistant");
+  check(chatGPTConnectionAssistant({ assistant: "claude", clientOrigin: "https://claude.ai" }) === "Claude" && chatGPTConnectionAssistant({ assistant: "claude", clientOrigin: "loopback" }) === "Claude Code"
+    && chatGPTConnectionAssistant({ assistant: "chatgpt", clientOrigin: "https://chatgpt.com" }) === "ChatGPT" && chatGPTConnectionAssistant({}) === "ChatGPT", "Settings row names each connection's client: ChatGPT / Claude / Claude Code");
+  const asj = await (await asRoute.GET()).json();
+  check(JSON.stringify(asj.grant_types_supported) === '["authorization_code","refresh_token"]' && asj.issuer === "https://nivadesk.app" && asj.registration_endpoint === "https://nivadesk.app/chatgptOAuthRegister", "AS metadata advertises refresh_token; issuer / DCR unchanged");
+  const asDiff = execFileSync("git", ["diff", "-U0", "cce8480c", "--", "app/.well-known/oauth-authorization-server/route.ts"], { encoding: "utf8" }).split("\n").filter((l) => /^[+-][^+-]/.test(l));
+  check(asDiff.length === 3 && asDiff.filter((l) => l.startsWith("-")).length === 1 && /grant_types_supported/.test(asDiff.join("")), "AS metadata: the only change is grant_types_supported (+1 comment line)");
 
   // 4. ChatGPT routes untouched
-  const changed = execFileSync("git", ["diff", "--name-only", "cce8480c", "--", "app/chatgptMcp", "app/chatgptOAuthAuthorize", "app/chatgptOAuthToken", "app/chatgptOAuthRegister", "app/chatgptOAuthApprove", "app/.well-known/oauth-protected-resource/route.ts", "app/.well-known/oauth-protected-resource/chatgptMcp", "app/.well-known/oauth-authorization-server", "lib/chatgpt/proxyFirebaseFunction.ts"], { encoding: "utf8" }).trim();
+  const changed = execFileSync("git", ["diff", "--name-only", "cce8480c", "--", "app/chatgptMcp", "app/chatgptOAuthAuthorize", "app/chatgptOAuthToken", "app/chatgptOAuthRegister", "app/chatgptOAuthApprove", "app/.well-known/oauth-protected-resource/route.ts", "app/.well-known/oauth-protected-resource/chatgptMcp", "lib/chatgpt/proxyFirebaseFunction.ts"], { encoding: "utf8" }).trim();
   check(changed === "", `ChatGPT routes, metadata and proxy identical to cce8480c${changed ? `: ${changed}` : ""}`);
 
   console.log(`\n${checks - failures}/${checks} checks passed`);
