@@ -13,8 +13,10 @@ export type PrivacyPolicySection = {
   subsections?: PrivacyPolicySubsection[];
 };
 
-// Set to the day the customer-inbox text (7.1, 7.2) goes live.
-export const PRIVACY_POLICY_LAST_UPDATED = "28 September 2026";
+// Set to the day the newest section goes live. 7.3 (Amazon seller connection)
+// and 10 (AI assistants: ChatGPT and Claude) were approved by the owner and
+// published on 17 October 2026.
+export const PRIVACY_POLICY_LAST_UPDATED = "17 October 2026";
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -38,7 +40,8 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "customer support and email communication;",
       "payment and subscription management;",
       "uploaded files, client files, order records, notes, tasks, workflow data, and workspace content;",
-      "integrations or third-party services connected to NivaDesk."
+      "integrations or third-party services connected to NivaDesk;",
+      "the NivaDesk connections for AI assistants, such as ChatGPT and Claude (section 10)."
     ],
     subsections: [
       {
@@ -272,6 +275,27 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
           "your customer's Instagram account ID is not stored in readable form with their messages: the inbox shows only a short label, and the ID is kept encrypted only while a reply can still be sent (about a day after their last message);",
           "NivaDesk's AI features do not read the customer inbox: nothing in it is sent to an AI model by NivaDesk."
         ]
+      },
+      {
+        title: "7.3 Your Amazon orders (Amazon seller connection)",
+        paragraphs: [
+          "Availability. The Amazon seller connection is not open to customers yet: Amazon has not yet published NivaDesk's Selling Partner application, so a seller cannot complete Amazon's consent page, and NivaDesk receives no data from Amazon about any customer. When it opens, it will cover these Amazon marketplaces: the United Kingdom, Germany, France, Italy, Spain, the Netherlands, Sweden, Poland, Turkey, the United Arab Emirates and India. Amazon serves all of them through the endpoint of its Selling Partner API that it calls the \"Europe\" region; that name is Amazon's technical grouping of marketplaces, not a statement about where your data is processed, which is described below. The rest of this section describes what happens once a workspace connects an account.",
+          "If your workspace connects an Amazon seller account, NivaDesk reads that account's orders through Amazon's Selling Partner API so that they appear as orders in your workspace. You give this permission on Amazon's own consent page. NivaDesk then holds a refresh token for the account, which it uses only to read orders. The token and everything else NivaDesk receives from Amazon are handled in a dedicated system that runs in London (Google Cloud region europe-west2), the same region as the rest of NivaDesk, but separate from it.",
+          "NivaDesk does not accept personal data about your buyers from Amazon. Buyer names, delivery addresses, e-mail addresses, phone numbers and tax identifiers are refused at the boundary of that dedicated system: they are not stored there, not sent on to your workspace and not shown anywhere in NivaDesk. Any field that system has not been told is safe is refused too, and an order that cannot be read without such a field is left out rather than stored. What travels is the order itself: Amazon's order number, dates, status, totals, delivery service level, marketplace, and for each item its title, SKU, ASIN, quantities and prices.",
+          "What NivaDesk keeps, and for how long:"
+        ],
+        bullets: [
+          "a connection record (your Amazon seller ID, the marketplaces you chose, the dates of connection and of the last sync) and the refresh token, for as long as the connection is active;",
+          "a copy of each order in the dedicated system, kept for 90 days after NivaDesk last updated it from Amazon. An automatic job runs every 30 minutes and deletes a limited number of copies that have passed the 90 days each time it runs; copies it has not reached yet, or that a failed run did not delete, are deleted by the following runs. The dedicated system keeps no backups of these copies;",
+          "the order created in your workspace, which is your record like any other order: it stays until you delete it and follows section 17;",
+          "technical logs of the dedicated system (request times, document paths that include Amazon order numbers, your seller ID in connection events, and error codes) kept for up to 400 days for security and audit; they never contain buyer data or tokens."
+        ]
+      },
+      {
+        title: "",
+        paragraphs: [
+          "Disconnecting the account. When you disconnect the account in Settings, NivaDesk marks the connection as disconnected straight away and every sync stops: no further request is made to Amazon on your behalf, and nothing more is stored or sent to your workspace, including an order that was being read at that moment. NivaDesk then destroys the refresh token and deletes the order copies held in the dedicated system; if either step fails, it is retried automatically until it is done. Orders already created in your workspace are not deleted by disconnecting: delete them in your workspace if you no longer want them. A connection you make later is a new connection and is not affected by this cleanup. Amazon's own records of your orders are Amazon's, under Amazon's terms, and NivaDesk cannot delete them."
+        ]
       }
     ]
   },
@@ -303,13 +327,59 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     ]
   },
   {
-    title: "10. ChatGPT App and connected AI features",
+    title: "10. AI assistants: ChatGPT and Claude",
     paragraphs: [
-      "NivaDesk may offer a ChatGPT App or connected AI feature that allows you to connect your NivaDesk workspace to ChatGPT or a similar assistant through a secure OAuth connection and MCP server.",
-      "If you choose to connect NivaDesk to ChatGPT, the assistant may request workspace data only for the workspace you select and only for the tools and permissions you authorise. Access remains subject to your NivaDesk plan, workspace role, feature permissions, and security rules.",
-      "Depending on the tools enabled for your account, ChatGPT may be able to search, summarise, create, or update NivaDesk records such as orders, order details, dashboard summaries, financial fields, tasks, order notes, personal notes, messages, quick replies, workflow status, due dates, customer information, internal IDs, timestamps, and history or audit information.",
-      "Financial data, messages, notes, and other sensitive workspace content should only be returned where your NivaDesk role and plan allow access. Write actions, such as creating an order, adding a note, or updating an order status, should only happen after your request or confirmation.",
-      "We use the ChatGPT connection to provide the integration you choose to enable. We do not sell your workspace content or use it to advertise to your customers. You can disconnect or stop using the connected feature where the product provides that option."
+      "NivaDesk offers connections that let an AI assistant you use, such as ChatGPT (provided by OpenAI) or Claude (provided by Anthropic), work with your NivaDesk workspace. You connect by signing in to NivaDesk from the assistant (OAuth) and choosing one workspace. The assistant then calls NivaDesk's tools through our MCP server, and every call runs as you, in that workspace only.",
+      "Access always follows your NivaDesk plan, your workspace role and the access settings the workspace owner gives you, checked on our servers on every call. For example, a view-only member cannot change orders through an assistant, and financial and bank information is returned only where your role and plan allow it. Each tool declares to the assistant whether it only reads data, adds something new, or changes or overwrites existing data. Whether the assistant asks you before running a tool depends on the assistant's own settings and your choices there; NivaDesk does not control that. NivaDesk's own permissions are enforced on its servers on every call whatever the assistant's settings.",
+    ],
+    subsections: [
+      {
+        title: "10.1 What NivaDesk receives through an assistant connection",
+        bullets: [
+          "the requests the assistant makes on your behalf: which tool, and the details it sends with it;",
+          "connection data: which assistant registered with us (its name and return addresses), which NivaDesk account and workspace you connected, and when the connection was made, renewed, expires or was ended;",
+          "technical request data, such as time, IP address and user agent, for security and troubleshooting."
+        ]
+      },
+      {
+        title: "",
+        paragraphs: [
+          "NivaDesk has no access to your conversation with the assistant, the assistant's memory or chat history, or the files you keep in the assistant. The one exception is a file you hand to a NivaDesk tool yourself: when you ask ChatGPT to attach a receipt, ChatGPT gives NivaDesk a link to that one file and NivaDesk downloads it, as described in section 10.1.1.",
+          "Text you write in the conversation can still reach NivaDesk when the assistant puts it into a request: for example the words you search for, the fields of an order you ask it to create, the text of a note, or a status to set. NivaDesk receives that text as part of the request and stores it only where the tool saves it, for example in the order or note you asked for."
+        ]
+      },
+      {
+        title: "10.1.1 Receipts and other files",
+        paragraphs: [
+          "ChatGPT: when you share a receipt or invoice in ChatGPT and ask it to attach it to a bank transaction, ChatGPT gives NivaDesk a link to that file, with its name and type. NivaDesk downloads the file from that link (HTTPS only, public internet addresses only, no redirects, up to 15 MB; images, PDF, HTML or plain text) and stores it in your workspace's private receipt storage, where it goes through the same malware scan as other uploads. Image receipts are read with Google Cloud Vision to find the amount, date and merchant; ChatGPT may also send the amount, date and merchant it read from the document. If one transaction clearly matches, the file is attached to it; otherwise it waits in the workspace's receipt inbox until a transaction is chosen, and a file from which nothing can be read is deleted. Only the workspace owner can do this.",
+          "Claude: the receipt tool does not move a file from Claude to NivaDesk. When you ask Claude to attach a receipt, NivaDesk gives Claude only a single-use link to a NivaDesk page, valid for 15 minutes. You open it while signed in as the workspace owner and upload the file yourself on NivaDesk's Bank page, through NivaDesk's normal upload checks. Claude receives the link; the file goes from your device to NivaDesk, not through Claude."
+        ]
+      },
+      {
+        title: "10.2 What the assistant receives, and who handles it",
+        paragraphs: [
+          "When the assistant calls a tool, NivaDesk returns the result to it: the workspace data you asked about and are allowed to see. Depending on the tool, this can include order details, your customers' names and contact details, notes, workflow status, due dates, inventory, financial figures and bank transactions.",
+          "Those results become part of your conversation with the assistant and are handled by its provider, OpenAI for ChatGPT or Anthropic for Claude, under your agreement with that provider and its privacy policy (OpenAI: https://openai.com/policies/privacy-policy; Anthropic: https://www.anthropic.com/legal/privacy). The provider is a service you choose and connect; it is not a NivaDesk subprocessor, and we do not control how it stores or uses your conversations.",
+          "If your workspace holds personal data of your own customers, connecting an assistant is an instruction from you to us to send the data you request to that assistant. Some marketplaces do not allow their buyers' personal data to be shared with assistants; NivaDesk withholds that data from assistant results."
+        ]
+      },
+      {
+        title: "10.3 How long we keep it",
+        bullets: [
+          "a connection stays active until it is disconnected. Each access key lasts 30 days; an assistant that registers for renewal (Claude does) can renew it in the background with a renewal key that is valid for 90 days and replaced at every renewal, so a connection that is not used for 90 days ends. A connection whose assistant does not renew ends when its 30-day access key expires. A connection also ends when its user loses access to the workspace;",
+          "records of a connection's access keys and renewal keys (your NivaDesk account ID and e-mail address, the workspace, the assistant and its return address, the permissions granted, and when each key was issued, used, expired or was ended; we store only a fingerprint of each key, never the key itself) are kept after the connection ends so that we can investigate misuse of a connection and answer security questions about it. At present these records are not deleted automatically, including when an account is deleted; when we set a deletion period, we will state it here;",
+          "orders, notes and receipts created through an assistant are workspace content and are kept like any other workspace content (section 17); a receipt that is waiting in the receipt inbox stays there until it is attached or deleted;",
+          "a record of which assistant tool read personal data, by which account and when (without the data returned) is kept with the workspace's other access records and is deleted with the workspace; there is no fixed deletion period before that;",
+          "request logs of our cloud functions, including those that serve assistant connections, are kept for 30 days; our website host may also keep standard access logs for the assistant addresses on nivadesk.app, under its own retention."
+        ]
+      },
+      {
+        title: "10.4 How to stop it",
+        paragraphs: [
+          "You can disconnect NivaDesk in the assistant's own settings at any time. In NivaDesk, the workspace owner sees every assistant connection to the workspace under Settings › Integrations › AI assistants (ChatGPT and Claude), each with its assistant (ChatGPT, Claude or Claude Code) and the member who made it, and can end a single connection or all of them; ending one does not affect the others, and it stops working immediately. Other members end their own connections in the assistant's settings or ask the workspace owner. Once your NivaDesk account is deleted, an assistant connection can no longer reach any workspace.",
+          "We do not sell data received through an assistant connection or use it to advertise to you or your customers. Questions about assistant connections can be sent to contact@nivadesk.co.uk."
+        ]
+      }
     ]
   },
   {
@@ -370,6 +440,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "customer support tools;",
       "email delivery providers;",
       "messaging platforms your workspace connects, such as the WhatsApp Business Platform and Instagram, both operated by Meta, to receive and send your customers' messages;",
+      "AI assistants you choose to connect, such as ChatGPT (OpenAI) and Claude (Anthropic), which receive the results of the requests you make through them (section 10);",
       "error monitoring and crash reporting services;",
       "accountants, lawyers, or professional advisers;",
       "authorities where required by law."
@@ -424,7 +495,9 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "technical logs may be kept for a limited period for security and troubleshooting;",
       "deleted data may remain in backups for a limited time before being permanently removed;",
       "your customers' WhatsApp and Instagram messages are kept for 90 days, and NivaDesk's copies of files they send on WhatsApp for 30 days, as described in sections 7.1 and 7.2;",
-      "Client Files and cloud-stored message attachments whose paid access has ended may be retained for up to 90 days for restoration upon resubscription, after which they may be deleted."
+      "copies of your Amazon orders held in NivaDesk's dedicated Amazon system are deleted 90 days after NivaDesk last saw them change, and on disconnection, as described in section 7.3;",
+      "Client Files and cloud-stored message attachments whose paid access has ended may be retained for up to 90 days for restoration upon resubscription, after which they may be deleted;",
+      "AI assistant connections stay active until disconnected, or until 90 days without use for an assistant that renews its access (30 days for one that does not), and the related records are kept as described in section 10.3."
     ],
     subsections: [
       {
