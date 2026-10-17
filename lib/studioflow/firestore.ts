@@ -1821,6 +1821,15 @@ export function canRequestOrderDeletionApproval(workspace?: Pick<WorkspaceContex
   return requiresAssignedToSelfFilter(workspace) && workspaceAccessAllows(workspace.memberAccess, "orders");
 }
 
+/** What "Delete orders" means for a role: deletes itself, asks the owner (the approval scope above), or neither.
+ *  Settings ▸ Team Access ▸ Permission matrix reads this so its row says what the server enforces. */
+export type OrderDeletionAccess = "allowed" | "ownerApproval" | "none";
+export function orderDeletionAccess(workspace?: Pick<WorkspaceContext, "role" | "memberAccess"> | null): OrderDeletionAccess {
+  if (canDeleteOrRestoreOrders(workspace)) return "allowed";
+  if (canRequestOrderDeletionApproval(workspace)) return "ownerApproval";
+  return "none";
+}
+
 const workflowViewSyncByWorkspace = new Map<string, Promise<void>>();
 
 async function ensureWorkflowAssignedOrderViews(companyId: string, workspace?: WorkspaceContext | null) {

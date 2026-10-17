@@ -26803,6 +26803,45 @@ body[data-studio-theme="dark"] .financial-danger-button:hover:not(:disabled) {
 .permission-matrix-table td.is-off {
   color: var(--muted);
 }
+/* Delete orders in the owner-approval scope: the member asks, the owner deletes. */
+.permission-matrix-table td.is-approval {
+  white-space: normal;
+  min-width: 7.5em;
+  font-size: 0.76rem;
+  line-height: 1.25;
+  font-weight: 600;
+  color: #8a4b00;
+  background: var(--warning-soft);
+}
+body[data-studio-theme="dark"] .permission-matrix-table td.is-approval {
+  color: #ffd08a;
+}
+/* Right to left: the permission column sticks to the start (right) edge, or a
+   scrolled table carries it off screen and leaves the cells without labels. */
+[dir="rtl"] .permission-matrix-table thead th:first-child,
+[dir="rtl"] .permission-matrix-table tbody th {
+  left: auto;
+  right: 0;
+  text-align: right;
+  border-right: none;
+  border-left: 1px solid var(--border);
+}
+/* Phones: the sticky permission column took the whole scroll width (its longest
+   label, unwrapped, is wider than a 430 px phone's card), so every role column
+   sat underneath it. It wraps now and leaves room for the cells beside it. */
+@media (max-width: 640px) {
+  .permission-matrix-table thead th:first-child,
+  .permission-matrix-table tbody th {
+    white-space: normal;
+    min-width: 7rem;
+    max-width: 9.5rem;
+    overflow-wrap: anywhere;
+  }
+  .permission-matrix-table thead th {
+    white-space: normal;
+    min-width: 6.5rem;
+  }
+}
 .permission-matrix-legend {
   margin-top: 10px;
 }

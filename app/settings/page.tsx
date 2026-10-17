@@ -69,6 +69,7 @@ import {
   loadWorkspaceSettingsOverview,
   setWorkspaceQuickReplyMenuEnabled,
   normalizeWorkspaceRole,
+  orderDeletionAccess,
   workspaceAccessAllows,
   WORKSPACE_MEMBER_ACCESS_DEFAULTS,
   WORKSPACE_SETTINGS_ACCESS_OPTIONS,
@@ -117,7 +118,7 @@ import { approveJoinRequest, declineJoinRequest, deleteWorkspaceCustomRole, remo
 import { teamRefusalMessage } from "@/lib/studioflow/teamRefusal";
 import { describedByFor, TeamActionNotice, type TeamActionOutcome } from "@/components/TeamActionNotice";
 import { canManageWorkspaceLogoForRole, saveWorkspaceLogoUrl, uploadWorkspaceLogo, WORKSPACE_LOGO_ACCEPT } from "@/lib/studioflow/workspaceLogo";
-import { canDeleteOrdersForRole, canEditOrderStatusForRole } from "@/lib/studioflow/orders";
+import { canEditOrderStatusForRole } from "@/lib/studioflow/orders";
 import { canManageClientFilesForRole } from "@/lib/studioflow/clientFiles";
 import {
   addNivaDeskSupportTicketReply,
@@ -394,7 +395,8 @@ type PermissionMatrixColumn = {
   isCustom: boolean;
 };
 
-type PermissionMatrixCell = boolean | { enabled: number; total: number };
+/** "ownerApproval": the role may not do it itself but asks the owner, who does it (Delete orders). */
+type PermissionMatrixCell = boolean | "ownerApproval" | { enabled: number; total: number };
 
 type PermissionMatrixRow = {
   key: string;
@@ -445,7 +447,19 @@ function baseRoleMatrixAccess(baseRole: string): WorkspaceMemberAccess {
 const PERMISSION_MATRIX_ROWS: PermissionMatrixRow[] = [
   { key: "viewOrders", label: "View orders", value: column => column.access.orders !== false },
   { key: "editOrders", label: "Edit orders & workflow", value: column => canEditOrderStatusForRole(column.baseRole) },
-  { key: "deleteOrders", label: "Delete orders", value: column => canDeleteOrdersForRole(column.baseRole) },
+  // The server's rule, not the base role's (15 Oct 2026): an assigned-projects-only
+  // role — Workflow, or a custom role with Assigned Projects Only and without
+  // Change Project Assignments — moves nothing to Trash, restores nothing and
+  // purges nothing (deleteWebOrder / restoreWebOrder / purgeWebOrders refuse it);
+  // it asks the owner instead. Orders off means neither.
+  {
+    key: "deleteOrders",
+    label: "Delete orders",
+    value: column => {
+      const access = orderDeletionAccess({ role: column.baseRole, memberAccess: column.access });
+      return access === "ownerApproval" ? "ownerApproval" : access === "allowed";
+    }
+  },
   { key: "inventory", label: "Inventory", value: column => column.access.inventory !== false },
   { key: "dashboard", label: "Dashboard", value: column => column.access.dashboard !== false },
   { key: "financialInfo", label: "Financial Info", value: column => column.access.financialInfo !== false },
@@ -7881,6 +7895,9 @@ function TeamAccessSection({
                   <th scope="row">{t(row.label)}</th>
                   {matrixColumns.map(column => {
                     const cell = row.value(column);
+                    if (cell === "ownerApproval") {
+                      return <td key={column.key} className="is-approval" data-cell="owner-approval">{t("Needs owner approval")}</td>;
+                    }
                     if (typeof cell === "object") {
                       const none = cell.enabled === 0;
                       return (
@@ -7899,6 +7916,11 @@ function TeamAccessSection({
         <p className="settings-field-hint">
           ✓ {t("Allowed")} · — {t("Hidden / locked")} · {t("Numbers show how many settings menus the role can open.")}
         </p>
+        {matrixColumns.some(column => PERMISSION_MATRIX_ROWS.some(row => row.value(column) === "ownerApproval")) ? (
+          <p className="settings-field-hint" data-testid="matrix-owner-approval-legend">
+            <strong>{t("Needs owner approval")}</strong>: {t("the member sends a deletion request and the owner deletes the order.")}
+          </p>
+        ) : null}
         {customRoles.length > 0 ? (
           <div className="settings-field-stack">
             {customRoles.map(role => {

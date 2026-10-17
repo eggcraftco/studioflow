@@ -1,7 +1,8 @@
 import type { StudioLanguage } from "./language";
 
 // Web small fixes (17 Oct 2026): Team seats in use / included / extra / total
-// (Settings ▸ Team Access, /team).
+// (Settings ▸ Team Access, /team) and the permission matrix's owner-approval
+// cell for Delete orders.
 // Every language in one table, keyed by source text; merged last in
 // language.ts so no earlier table can hide a cell.
 export const WEB_SMALL_FIXES_TRANSLATIONS: Record<string, Partial<Record<StudioLanguage, string>>> = {
@@ -69,5 +70,31 @@ export const WEB_SMALL_FIXES_TRANSLATIONS: Record<string, Partial<Record<StudioL
     "中文 (Chinese)": "额外",
     "العربية (Arabic)": "إضافية",
     "हिन्दी (Hindi)": "अतिरिक्त"
+  },
+  "Needs owner approval": {
+    "Türkçe": "Sahip onayı gerekir",
+    "Deutsch": "Freigabe durch Inhaber nötig",
+    "Français": "Accord du propriétaire requis",
+    "Italiano": "Serve l'approvazione del titolare",
+    "Español (Spanish)": "Requiere aprobación del propietario",
+    "Português": "Requer aprovação do proprietário",
+    "Русский (Russian)": "Нужно одобрение владельца",
+    "日本語 (Japanese)": "オーナーの承認が必要",
+    "中文 (Chinese)": "需所有者批准",
+    "العربية (Arabic)": "يتطلب موافقة المالك",
+    "हिन्दी (Hindi)": "मालिक की मंज़ूरी ज़रूरी"
+  },
+  "the member sends a deletion request and the owner deletes the order.": {
+    "Türkçe": "üye bir silme isteği gönderir, siparişi sahip siler.",
+    "Deutsch": "Das Mitglied sendet eine Löschanfrage, und der Inhaber löscht den Auftrag.",
+    "Français": "le membre envoie une demande de suppression et le propriétaire supprime la commande.",
+    "Italiano": "il membro invia una richiesta di eliminazione e il titolare elimina l'ordine.",
+    "Español (Spanish)": "el miembro envía una solicitud de eliminación y el propietario elimina el pedido.",
+    "Português": "o membro envia um pedido de eliminação e o proprietário elimina a encomenda.",
+    "Русский (Russian)": "участник отправляет запрос на удаление, а владелец удаляет заказ.",
+    "日本語 (Japanese)": "メンバーが削除リクエストを送り、オーナーが注文を削除します。",
+    "中文 (Chinese)": "成员发送删除请求，由所有者删除订单。",
+    "العربية (Arabic)": "يرسل العضو طلب حذف ويحذف المالك الطلب.",
+    "हिन्दी (Hindi)": "सदस्य हटाने का अनुरोध भेजता है और मालिक ऑर्डर हटाता है।"
   }
 };
