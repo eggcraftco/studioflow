@@ -62,7 +62,8 @@
     "test:admin-insights": "node scripts/check-admin-insights-metrics.mts",
     "test:order-delete-buttons": "node scripts/check-order-delete-buttons.mjs",
     "test:getting-started": "npx tsx scripts/check-getting-started.mts",
-    "test:web-small-fixes": "npx tsx scripts/check-web-small-fixes.mts"
+    "test:web-small-fixes": "npx tsx scripts/check-web-small-fixes.mts",
+    "test:claude-guide": "npx tsx scripts/check-claude-guide.mts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

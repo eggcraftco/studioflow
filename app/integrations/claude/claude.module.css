@@ -1,0 +1,45 @@
+/* /integrations/claude — what this page adds to the Amazon page's module
+   (amazon.module.css): the conversation illustration, the connector-address box,
+   the tool groups with their read / write / destructive tags, and anchor offsets
+   so #connect / #tools do not land under the sticky header. */
+.anchor{scroll-margin-top:88px}
+
+/* Illustration: one question, one tool call, one answer */
+.chat{display:grid;gap:12px;padding:18px 18px 20px}
+.bubbleUser,.bubbleAssistant{margin:0;font-size:14px;line-height:1.6;padding:12px 14px;border-radius:14px;max-width:88%;overflow-wrap:anywhere}
+.bubbleUser{justify-self:end;background:#eef2ea;color:#23332a;border:1px solid #dbe3d6}
+.bubbleAssistant{justify-self:start;background:#fff;color:#2e3a33;border:1px solid #edf0ea}
+.toolCall{margin:0;justify-self:start;display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:#45584d;padding:6px 10px;border:1px dashed #c9d4c4;border-radius:999px;background:#fbfcf8}
+.toolDot{width:8px;height:8px;border-radius:50%;background:#c96f4a}
+
+/* Connector address */
+.urlBox{margin-top:20px;display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 20px}
+.urlLabel{font-weight:700;font-size:14px}
+.urlValue{font-size:14px;background:#f4f6f1;border-radius:6px;padding:4px 8px;overflow-wrap:anywhere}
+.urlPending{font-size:14px;color:#7b4b06;background:#fdf1dc;border:1px solid #f3d9a8;border-radius:6px;padding:4px 10px}
+
+/* Tool groups */
+.groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;margin-top:8px}
+.group{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px;min-width:0}
+.group h3{margin:0}
+.groupIntro{font-size:14px;line-height:1.7;color:var(--muted);margin:8px 0 14px}
+.toolList{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.toolList li{border-top:1px solid #eef1ea;padding-top:10px;min-width:0}
+.toolList p{margin:4px 0 0;font-size:14px;line-height:1.65;color:var(--muted)}
+.toolHead{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.toolHead code{font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.modeTag{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.modeRead{background:#e4f1e6;color:#25603a}
+.modeWrite{background:#e6eefb;color:#2b4f86}
+.modeDestructive{background:#f6e7e3;color:#8e3f2e}
+.examplesLabel{margin:16px 0 6px;font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#57715e}
+.examples{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.examples li{font-size:14px;line-height:1.6;color:#2e3a33;background:#f7f9f4;border-radius:8px;padding:8px 12px;overflow-wrap:anywhere}
+
+/* Live status band (the same green as /integrations/shopify), used once the connector
+   address is set. Two classes, so it wins whatever order the stylesheets load in. */
+.statusLive.statusLive{background:#f1f7ef;border-color:#d4e6cf}
+.statusLive .liveEyebrow{color:#4f7349}
+.statusLive .liveBadge{background:#e2f0de;color:#2f5f23}
+.statusLive .liveDot{background:#3f8a3a}
+.statusLive .liveBody{color:#3d5238}

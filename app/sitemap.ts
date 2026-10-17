@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { CLAUDE_CONNECTOR_URL } from "@/lib/studioflow/claudeConnector";
 
 const BASE_URL = "https://nivadesk.app";
 
@@ -10,6 +11,9 @@ const PUBLIC_PAGES: { path: string; priority: number; changeFrequency: MetadataR
   { path: "/integrations", priority: 0.8, changeFrequency: "monthly" },
   { path: "/integrations/amazon", priority: 0.7, changeFrequency: "monthly" },
   { path: "/integrations/shopify", priority: 0.7, changeFrequency: "monthly" },
+  // Listed only once the Claude endpoint's address is published; until then the
+  // page is noindex (app/integrations/claude/page.tsx reads the same constant).
+  ...(CLAUDE_CONNECTOR_URL ? [{ path: "/integrations/claude", priority: 0.7, changeFrequency: "monthly" as const }] : []),
   { path: "/features", priority: 0.9, changeFrequency: "weekly" },
   { path: "/pricing", priority: 0.9, changeFrequency: "weekly" },
   { path: "/chatgpt", priority: 0.9, changeFrequency: "weekly" },
