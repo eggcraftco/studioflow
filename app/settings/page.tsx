@@ -84,6 +84,7 @@ import {
   type WorkspaceContext,
   type WorkspaceSettingsOverview
 } from "@/lib/studioflow/firestore";
+import { teamSeatsAvailable } from "@/lib/studioflow/teamSeats";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import {
   clearUploadPolicyAcceptance,
@@ -7048,7 +7049,7 @@ function PlanAccessSection({
       });
     return () => { cancelled = true; };
   }, [workspace.id, currentPlan.orderLimit]);
-  const seatsIncluded = currentPlan.includedTeamSeats ?? workspace.billingTeamMemberLimit;
+  const seatsIncluded = workspace.teamSeatsIncluded;
   const billingActive = workspace.billingStatus === "active" || workspace.billingStatus === "trialing";
 
   return (
@@ -7097,7 +7098,11 @@ function PlanAccessSection({
             <div className="settings-metric">
               <small>{workspace.billingTeamMemberLimit > 1 ? t("Seats") : t("Users")}</small>
               <strong>{workspace.billingTeamMemberLimit > 1 ? `${seatsIncluded} ${t("included")}` : "1"}</strong>
-              <em>{workspace.billingTeamMemberLimit > 1 ? `${workspace.billingTeamMemberLimit} ${t("in total")}` : t("single-user plan")}</em>
+              <em>{workspace.billingTeamMemberLimit > 1
+                ? (workspace.teamSeatsExtra > 0
+                  ? `+${workspace.teamSeatsExtra} ${t("extra")} · ${workspace.billingTeamMemberLimit} ${t("in total")}`
+                  : `${workspace.billingTeamMemberLimit} ${t("in total")}`)
+                : t("single-user plan")}</em>
             </div>
             <div className="settings-metric">
               <small>{t("Storage")}</small>
@@ -7321,7 +7326,6 @@ function TeamAccessSection({
   const canViewTeamManagement = Boolean(hasTeamPlan && workspaceAccessAllows(workspace.memberAccess, "teamAccess"));
   const canManageTeam = Boolean(isOwner && canViewTeamManagement);
   const roleOptions = useMemo(() => standardAndCustomRoleOptions(customRoles), [customRoles]);
-  const teamLimit = workspace.billingTeamMemberLimit > 9999 ? t("Unlimited") : `${members.length} / ${workspace.billingTeamMemberLimit}`;
   const roleCounts = useMemo(() => {
     return members.reduce<Record<string, number>>((acc, member) => {
       acc[member.roleLabel] = (acc[member.roleLabel] ?? 0) + 1;
@@ -7371,17 +7375,21 @@ function TeamAccessSection({
     return columns;
   }, [customRoles, members]);
 
+  // Seats in use, seats the plan includes, and the total with bought seats —
+  // three numbers the server keeps apart (lib/studioflow/teamSeats.ts). A
+  // suspended member holds no seat (teamMemberCountFromCompanyData).
+  const seatsUsed = members.filter(member => !member.suspended).length;
   const seatLimit = workspace.billingTeamMemberLimit;
   const seatsUnlimited = seatLimit > 9999;
-  const seatPercent = seatsUnlimited ? 0 : Math.min(100, Math.round((members.length / Math.max(1, seatLimit)) * 100));
+  const seatPercent = seatsUnlimited ? 0 : Math.min(100, Math.round((seatsUsed / Math.max(1, seatLimit)) * 100));
   useSettingsHeaderActions(
     canViewTeamManagement ? (
       <span className="settings-header-chip">
         <CardIconGlyph icon="team" />
-        {seatsUnlimited ? studioCountLabel(members.length, "member", language) : t("{used} of {limit} seats used").replace("{used}", String(members.length)).replace("{limit}", String(seatLimit))}
+        {seatsUnlimited ? studioCountLabel(seatsUsed, "member", language) : t("{used} of {limit} seats used").replace("{used}", String(seatsUsed)).replace("{limit}", String(seatLimit))}
       </span>
     ) : null,
-    [canViewTeamManagement, members.length, seatLimit, language]
+    [canViewTeamManagement, seatsUsed, seatLimit, language]
   );
 
   async function copyText(value: string, label: string) {
@@ -7634,9 +7642,17 @@ function TeamAccessSection({
           <SettingsCardHead title={t("Team plan")} aside={<span className="settings-tag">{hasTeamPlan ? t("Team plan available") : t("Team plan locked")}</span>} />
           <div className="settings-metric settings-metric-wide">
             <small>{t("Team seats")}</small>
-            <strong>{seatsUnlimited ? t("Unlimited") : <>{members.length} <span className="settings-metric-of">/ {seatLimit}</span></>}</strong>
+            <strong>{seatsUnlimited ? t("Unlimited") : <>{seatsUsed} <span className="settings-metric-of">/ {seatLimit}</span></>}</strong>
             {!seatsUnlimited ? <div className="settings-progress-track"><div className="settings-progress-fill" style={{ width: `${seatPercent}%` }} /></div> : null}
-            {!seatsUnlimited ? <em>{Math.max(0, seatLimit - members.length)} {t("seats available")}</em> : null}
+            {!seatsUnlimited ? <em>{teamSeatsAvailable(seatsUsed, seatLimit)} {t("seats available")}</em> : null}
+            {!seatsUnlimited ? (
+              <dl className="settings-seat-breakdown" data-testid="team-seat-breakdown">
+                <div><dt>{t("Seats in use")}</dt><dd>{seatsUsed}</dd></div>
+                <div><dt>{t("Included in plan")}</dt><dd>{workspace.teamSeatsIncluded}</dd></div>
+                <div><dt>{t("Extra seats")}</dt><dd>{workspace.teamSeatsExtra > 0 ? `+${workspace.teamSeatsExtra}` : "0"}</dd></div>
+                <div className="is-total"><dt>{t("Total seats")}</dt><dd>{seatLimit}</dd></div>
+              </dl>
+            ) : null}
           </div>
           <p className="settings-field-hint">
             {hasTeamPlan

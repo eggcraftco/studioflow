@@ -208,7 +208,10 @@ export default function TeamPage() {
   const hasTeamPlan = Boolean(workspace?.entitlements.features.team_access);
   const canViewTeamManagement = Boolean(workspace && hasTeamPlan && workspaceAccessAllows(workspace.memberAccess, "teamAccess"));
   const canManageTeam = Boolean(isOwner && canViewTeamManagement && workspace);
+  // The server's seat allowance (lib/studioflow/teamSeats.ts): included + extra seats.
   const teamLimit = workspace?.billingTeamMemberLimit ?? workspace?.entitlements.teamMemberLimit ?? 1;
+  const teamSeatsExtra = workspace?.teamSeatsExtra ?? 0;
+  const teamSeatsIncluded = workspace?.teamSeatsIncluded ?? teamLimit;
   // Seats in use, which is not the same as people listed. A suspended
   // colleague stays on this screen — their record is never deleted — but they
   // hold no seat, and showing "3 / 2" would tell the owner they are over a
@@ -567,9 +570,11 @@ export default function TeamPage() {
         <StatCard
           label={t("Members")}
           value={`${currentMemberCount}`}
-          note={suspendedCount > 0
-            ? `${t("Limit")}: ${teamLimit > 9999 ? t("Unlimited") : teamLimit} · ${suspendedCount} ${t("without access")}`
-            : `${t("Limit")}: ${teamLimit > 9999 ? t("Unlimited") : teamLimit}`}
+          note={[
+            `${t("Limit")}: ${teamLimit > 9999 ? t("Unlimited") : teamLimit}`,
+            teamLimit <= 9999 && teamSeatsExtra > 0 ? `${teamSeatsIncluded} ${t("included")} + ${teamSeatsExtra} ${t("extra")}` : "",
+            suspendedCount > 0 ? `${suspendedCount} ${t("without access")}` : ""
+          ].filter(Boolean).join(" · ")}
         />
         <StatCard label={t("Pending join requests")} value={`${joinRequests.length}`} note={isOwner ? t("Owner only") : t("Only owners can review requests")} />
         <StatCard label={t("Roles")} value={`${Object.keys(roleCounts).length}`} note={Object.entries(roleCounts).map(([role, count]) => `${role}: ${count}`).join(" · ") || t("No members")} />

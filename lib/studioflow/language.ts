@@ -5,6 +5,7 @@ import { TRACKING_EMAIL_TRANSLATIONS } from "./trackingEmailTranslations";
 import { I18N_GAP_TRANSLATIONS } from "./screenGapTranslations";
 import { NOTES_SHARING_TRANSLATIONS } from "./notesSharingTranslations";
 import { BOOT_RECOVERY_TRANSLATIONS } from "./bootRecoveryTranslations";
+import { WEB_SMALL_FIXES_TRANSLATIONS } from "./webSmallFixesTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -9130,6 +9131,10 @@ mergeIntoTranslations({
   "Connect the shop you sell on — its orders then come in on their own.": { "Türkçe": "Satış yaptığınız mağazayı bağlayın — siparişleri sonra kendiliğinden gelir.", "Deutsch": "Verbinden Sie den Shop, in dem Sie verkaufen – seine Aufträge kommen dann von selbst herein.", "Français": "Connectez la boutique où vous vendez — ses commandes arrivent ensuite d'elles-mêmes.", "Italiano": "Collega il negozio in cui vendi: i suoi ordini arriveranno da soli.", "Español (Spanish)": "Conecta la tienda en la que vendes: sus pedidos llegarán solos.", "Português": "Ligue a loja onde vende — as encomendas passam a chegar sozinhas.", "Русский (Russian)": "Подключите магазин, где вы продаёте, — заказы будут поступать сами.", "日本語 (Japanese)": "販売しているショップを接続すると、注文が自動で届きます。", "中文 (Chinese)": "连接您销售所用的店铺，之后订单会自动进来。", "العربية (Arabic)": "اربط المتجر الذي تبيع عليه، وستصل طلباته تلقائيًا بعد ذلك.", "हिन्दी (Hindi)": "जिस शॉप पर आप बेचते हैं उसे कनेक्ट करें — फिर उसके ऑर्डर अपने आप आएँगे।" },
   "Choose how": { "Türkçe": "Yolunu seçin", "Deutsch": "Weg wählen", "Français": "Choisir comment", "Italiano": "Scegli come", "Español (Spanish)": "Elige cómo", "Português": "Escolher como", "Русский (Russian)": "Выбрать способ", "日本語 (Japanese)": "方法を選ぶ", "中文 (Chinese)": "选择方式", "العربية (Arabic)": "اختر الطريقة", "हिन्दी (Hindi)": "तरीका चुनें" }
 });
+
+// Web small fixes (17 Oct 2026): Team seat breakdown, the matrix's owner-approval
+// cell, the phone Schedule's Calendar File line. Merged last on purpose.
+mergeIntoTranslations(WEB_SMALL_FIXES_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

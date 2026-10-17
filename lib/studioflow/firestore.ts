@@ -18,6 +18,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase/client";
 import { entitlementsForPlan, normalizeBillingPlan, type PlanEntitlements, type StudioBillingPlan } from "@/lib/studioflow/plans";
+import { activeAdditionalTeamSeats, teamSeatAllowance } from "@/lib/studioflow/teamSeats";
 import { FINANCE_ENGINE_VERSION, REMAINING_PREFIX, customLineTotal, type FinanceBlock } from "@/lib/studioflow/financeEngine";
 import {
   WorkspaceAccessLostError,
@@ -73,7 +74,13 @@ export type WorkspaceContext = {
   billingHasMultipleActiveSubscriptions: boolean;
   billingEntitlementResolutionReason: string;
   billingStorageLimitMB: number;
+  /** The seat allowance the server enforces (lib/studioflow/teamSeats.ts): Team = min(10, 5 + active extra seats).
+   *  NOT the stored billingTeamMemberLimit field, which plan webhooks reset to the plan's 5. */
   billingTeamMemberLimit: number;
+  /** Seats the plan includes (Team: 5) — billingTeamMemberLimit = teamSeatsIncluded + teamSeatsExtra. */
+  teamSeatsIncluded: number;
+  /** Bought seats that count (billingAdditionalTeamSeatQuantity while its status is active/trialing/past_due). */
+  teamSeatsExtra: number;
   /** When the current paid period ends — a renewal date while active, an access-until date once cancelled. */
   billingCurrentPeriodEndMs: number;
   /** When the 14-day trial ends. Set by the server when the first real order
@@ -1167,6 +1174,12 @@ async function loadWorkspaceContextFromServer(uid: string): Promise<WorkspaceCon
     ? entitlementsForPlan("demo", "demo")
     : entitlementsForPlan(companyData.billingPlan as string | undefined, "demo");
   const storageAddonMB = numberValue(companyData.billingStorageAddonMB, numberValue(companyData.storageAddonMB, 0));
+  // The server's effectiveTeamSeatLimit, from the plan it honours (a lapsed trial is Free above).
+  const seatAllowance = teamSeatAllowance(
+    entitlements.plan,
+    entitlements.teamMemberLimit,
+    activeAdditionalTeamSeats(companyData.billingAdditionalTeamSeatQuantity, companyData.billingAdditionalTeamSeatStatus)
+  );
   const storageAddonStatus = stringValue(companyData.billingStorageAddonStatus, "");
   const storageAddonActive = ["active", "trialing", "past_due"].includes(storageAddonStatus.toLowerCase());
   const storageAddonKey = storageAddonActive ? stringValue(companyData.billingStorageAddonKey, "") : "";
@@ -1218,7 +1231,9 @@ async function loadWorkspaceContextFromServer(uid: string): Promise<WorkspaceCon
     billingEntitlementResolutionReason: stringValue(companyData.billingEntitlementResolutionReason, ""),
     billingStorageLimitMB: storedStorageLimitMB + storageAddonMB,
     storageAddonKey,
-    billingTeamMemberLimit: numberValue(companyData.billingTeamMemberLimit, entitlements.teamMemberLimit),
+    billingTeamMemberLimit: seatAllowance.total,
+    teamSeatsIncluded: seatAllowance.included,
+    teamSeatsExtra: seatAllowance.extra,
     storageAddonMB,
     currentMemberDisplayName: Object.prototype.hasOwnProperty.call(memberData, "displayName")
       ? (typeof memberData.displayName === "string" ? memberData.displayName : "")
