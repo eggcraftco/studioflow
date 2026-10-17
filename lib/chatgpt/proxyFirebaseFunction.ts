@@ -83,13 +83,33 @@ function addMcpAuthChallengeIfNeeded(
   responseHeaders.set("Access-Control-Expose-Headers", "WWW-Authenticate, MCP-Session-Id, mcp-session-id");
 }
 
+// The URL exactly as the client sent it. Next.js's NextRequest.url (and nextUrl) rewrite the FIRST 127.x.x.x / [::1] /
+// localhost found ANYWHERE in the URL to "localhost" (next/dist/server/web/next-url.js, REGEX_LOCALHOST_HOSTNAME) —
+// query string included — so an OAuth redirect_uri=http://127.0.0.1:PORT/cb reached the authorize function as
+// http://localhost:PORT/cb, and approve then refused it against the client's registered 127.0.0.1 URI (RFC 8252 §7.3).
+// The underlying Request keeps the unmodified URL; read it through Request's own getter, fall back to request.url.
+function rawRequestUrl(request: Request): string {
+  try {
+    const getter = Object.getOwnPropertyDescriptor(Request.prototype, "url")?.get;
+    const raw = getter ? String(getter.call(request)) : "";
+    if (raw) {
+      new URL(raw);
+      return raw;
+    }
+  } catch {
+    // not a platform Request: use what Next exposes
+  }
+  return request.url;
+}
+
 export async function proxyNivaDeskFirebaseFunction(
   request: Request,
   functionName: string
 ): Promise<Response> {
   const incomingUrl = new URL(request.url);
   const targetUrl = new URL(`${FIREBASE_FUNCTIONS_BASE_URL}/${functionName}`);
-  targetUrl.search = incomingUrl.search;
+  // The query is forwarded byte-for-byte as received (redirect_uri, state, …), never Next's localhost-normalised copy.
+  targetUrl.search = new URL(rawRequestUrl(request)).search;
 
   const headers = new Headers(request.headers);
   headers.delete("host");

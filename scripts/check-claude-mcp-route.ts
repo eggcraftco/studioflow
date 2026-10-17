@@ -121,8 +121,14 @@ async function main() {
     "r3: /connect re-exports the /chatgpt/connect page (ChatGPT's URL unchanged)");
 
   // 4. ChatGPT routes untouched
-  const changed = execFileSync("git", ["diff", "--name-only", "cce8480c", "--", "app/chatgptMcp", "app/chatgptOAuthAuthorize", "app/chatgptOAuthToken", "app/chatgptOAuthRegister", "app/chatgptOAuthApprove", "app/.well-known/oauth-protected-resource/route.ts", "app/.well-known/oauth-protected-resource/chatgptMcp", "lib/chatgpt/proxyFirebaseFunction.ts"], { encoding: "utf8" }).trim();
-  check(changed === "", `ChatGPT routes, metadata and proxy identical to cce8480c${changed ? `: ${changed}` : ""}`);
+  const changed = execFileSync("git", ["diff", "--name-only", "cce8480c", "--", "app/chatgptMcp", "app/chatgptOAuthAuthorize", "app/chatgptOAuthToken", "app/chatgptOAuthRegister", "app/chatgptOAuthApprove", "app/.well-known/oauth-protected-resource/route.ts", "app/.well-known/oauth-protected-resource/chatgptMcp"], { encoding: "utf8" }).trim();
+  check(changed === "", `ChatGPT routes and metadata identical to cce8480c${changed ? `: ${changed}` : ""}`);
+  // oauth-loopback-127: the proxy's only change since cce8480c is forwarding the query as received (rawRequestUrl);
+  // scripts/check-oauth-loopback-proxy.mts proves https clients' forwarded URLs are unchanged.
+  const proxyDiff = execFileSync("git", ["diff", "-U0", "cce8480c", "--", "lib/chatgpt/proxyFirebaseFunction.ts"], { encoding: "utf8" }).split("\n").filter((l) => /^[+-][^+-]/.test(l));
+  const removed = proxyDiff.filter((l) => l.startsWith("-"));
+  check(removed.length === 1 && removed[0] === "-  targetUrl.search = incomingUrl.search;" && proxyDiff.some((l) => l === "+  targetUrl.search = new URL(rawRequestUrl(request)).search;"),
+    "proxy vs cce8480c: only the query line changed (raw request URL), everything else is added helper code");
 
   console.log(`\n${checks - failures}/${checks} checks passed`);
   process.exit(failures ? 1 : 0);
