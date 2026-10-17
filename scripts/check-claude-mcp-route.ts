@@ -7,11 +7,12 @@
 //    https://nivadesk.app, the six scopes.
 // 3. the authorize proxy carries Claude's `resource` to the connect page; the page names Claude only for that resource.
 // 4. the ChatGPT routes are not touched by this change (byte-for-byte the files of cce8480c).
+// 5. Settings names each grant's assistant (Claude grants share the list).
 import { execFileSync } from "child_process";
 import * as claudeRoute from "../app/claudeMcp/route";
 import * as claudePrm from "../app/.well-known/oauth-protected-resource/claudeMcp/route";
 import * as authorizeRoute from "../app/chatgptOAuthAuthorize/route";
-import { assistantNameForResource, CLAUDE_MCP_NO_CREDENTIAL_CHALLENGE } from "../lib/chatgpt/claudeMcp";
+import { assistantNameForResource, chatGPTConnectionAssistant, CLAUDE_MCP_NO_CREDENTIAL_CHALLENGE } from "../lib/chatgpt/claudeMcp";
 
 let failures = 0; let checks = 0;
 const check = (ok: boolean, what: string) => { checks += 1; if (!ok) { failures += 1; console.error(`FAIL ${what}`); } else console.log(`ok   ${what}`); };
@@ -90,6 +91,9 @@ async function main() {
   for (const r of ["https://nivadesk.app/chatgptMcp", "https://mcp.nivadesk.app/chatgptMcp", "", null, "https://nivadesk.app/claudeMcp?x=1", "https://evil.example/claudeMcp", "not a url"]) {
     check(assistantNameForResource(r) === "ChatGPT", `connect page keeps ChatGPT for ${JSON.stringify(r)}`);
   }
+
+  // Settings ▸ ChatGPT / Claude lists both kinds of grant; an older server (no field) means ChatGPT.
+  check(chatGPTConnectionAssistant({ assistant: "claude" }) === "Claude" && chatGPTConnectionAssistant({ assistant: "chatgpt" }) === "ChatGPT" && chatGPTConnectionAssistant({}) === "ChatGPT", "Settings row names each grant's assistant");
 
   // 4. ChatGPT routes untouched
   const changed = execFileSync("git", ["diff", "--name-only", "cce8480c", "--", "app/chatgptMcp", "app/chatgptOAuthAuthorize", "app/chatgptOAuthToken", "app/chatgptOAuthRegister", "app/chatgptOAuthApprove", "app/.well-known/oauth-protected-resource/route.ts", "app/.well-known/oauth-protected-resource/chatgptMcp", "app/.well-known/oauth-authorization-server", "lib/chatgpt/proxyFirebaseFunction.ts"], { encoding: "utf8" }).trim();

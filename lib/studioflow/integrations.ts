@@ -348,6 +348,10 @@ export type ChatGPTConnection = {
   scope: string;
   grantedByEmail: string;
   grantedByUid: string;
+  /** Which assistant the grant is for (server: listChatGPTConnections). Absent from an older server = ChatGPT. */
+  assistant?: "chatgpt" | "claude";
+  /** The client app's callback origin, e.g. https://claude.ai, or "loopback" (Claude Code). Never a token. */
+  clientOrigin?: string;
   createdAtMs: number;
   expiresAtMs: number;
 };

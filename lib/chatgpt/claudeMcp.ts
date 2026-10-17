@@ -22,3 +22,8 @@ export function assistantNameForResource(resource: string | null | undefined): "
     return "ChatGPT";
   }
 }
+
+/** Brand name of the assistant a grant belongs to (Settings ▸ ChatGPT / Claude). No field (older server) = ChatGPT. */
+export function chatGPTConnectionAssistant(connection: { assistant?: string }): "ChatGPT" | "Claude" {
+  return connection.assistant === "claude" ? "Claude" : "ChatGPT";
+}

@@ -2837,7 +2837,7 @@ function BankPageContent() {
                                 <button type="button" onClick={() => openWaitingReceipt(item)} title={t("View receipt")}
                                   style={{ ...attentionLink, fontSize: 12.5, fontWeight: 700, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textAlign: "left" }}>{item.fileName}</button>
                                 <div style={{ fontSize: 11, opacity: 0.65 }}>
-                                  {item.amount ? (item.currency ? <span>{documentAmountKnown(item.amount, item.currency)}</span> : <span title={t("currency not read from the document")}>{documentAmount(item.amount)} <span style={{ opacity: 0.8 }}>({t("currency not read")})</span></span>) : t("Amount unknown")}{item.date ? ` · ${item.date}` : ""} · {item.source === "chatgpt" ? "ChatGPT" : t("Web")} · {ageDays === 0 ? t("today") : `${ageDays} ${t("days waiting")}`}
+                                  {item.amount ? (item.currency ? <span>{documentAmountKnown(item.amount, item.currency)}</span> : <span title={t("currency not read from the document")}>{documentAmount(item.amount)} <span style={{ opacity: 0.8 }}>({t("currency not read")})</span></span>) : t("Amount unknown")}{item.date ? ` · ${item.date}` : ""} · {item.source === "chatgpt" ? "ChatGPT" : item.source === "claude" ? "Claude" : t("Web")} · {ageDays === 0 ? t("today") : `${ageDays} ${t("days waiting")}`}
                                   {stale && !lookalike ? <span style={{ color: "#dc2626", fontWeight: 700 }}> · {t("Still no payment — check the amount or assign it by hand")}</span> : null}
                                 </div>
                                 {lookalike ? (

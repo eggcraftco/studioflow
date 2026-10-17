@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { chatGPTConnectionAssistant } from "@/lib/chatgpt/claudeMcp";
 import {
   loadIntegrationSignals,
   revokeChatGPTConnection,
@@ -16,6 +17,14 @@ import { studioT } from "@/lib/studioflow/language";
 // all, anywhere, and nothing in the product could withdraw the access. A token
 // lasts thirty days. This screen is the whole of that: what exists, who granted
 // it, when it lapses, and a button that ends it now.
+
+// The same screen lists Claude grants too (the Claude endpoint shares the grant
+// store). Strings stay the translated ChatGPT ones; only the brand word, which no
+// language translates, is swapped — so no new translation keys.
+function brand(text: string, name: string) {
+  return name === "ChatGPT" ? text : text.split("ChatGPT").join(name);
+}
+const BOTH = "ChatGPT / Claude";
 
 function formatDay(ms: number) {
   if (!ms) return "";
@@ -48,15 +57,15 @@ export function ChatGPTIntegrationSection({
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const disconnect = useCallback(async (tokenHash: string) => {
+  const disconnect = useCallback(async (tokenHash: string, assistant: string) => {
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      setMessage(t(await revokeChatGPTConnection(workspace.id, tokenHash)));
+      setMessage(brand(t(await revokeChatGPTConnection(workspace.id, tokenHash)), assistant));
       await refresh();
     } catch (failure) {
-      setError(failure instanceof Error ? t(failure.message) : t("ChatGPT could not be disconnected."));
+      setError(failure instanceof Error ? t(failure.message) : brand(t("ChatGPT could not be disconnected."), assistant));
     } finally {
       setBusy(false);
     }
@@ -64,10 +73,10 @@ export function ChatGPTIntegrationSection({
 
   return (
     <section className="card" style={{ padding: 22 }}>
-      <div className="pill">{t("ChatGPT")}</div>
-      <h2 style={{ margin: "12px 0 6px" }}>{t("ChatGPT access to this workspace")}</h2>
+      <div className="pill">{BOTH}</div>
+      <h2 style={{ margin: "12px 0 6px" }}>{brand(t("ChatGPT access to this workspace"), BOTH)}</h2>
       <p style={{ color: "var(--muted)", marginTop: 0 }}>
-        {t("Connecting is done from ChatGPT. Each connection lasts 30 days, and ending one here takes effect immediately.")}
+        {brand(t("Connecting is done from ChatGPT. Each connection lasts 30 days, and ending one here takes effect immediately."), BOTH)}
       </p>
 
       {message ? <p className="layout-message" style={{ margin: "0 0 12px" }}>{message}</p> : null}
@@ -77,7 +86,7 @@ export function ChatGPTIntegrationSection({
         <p style={{ color: "var(--muted)" }}>{t("Loading...")}</p>
       ) : connections.length === 0 ? (
         <p style={{ color: "var(--muted)" }}>
-          {t("No ChatGPT connection. Nothing outside NivaDesk can read this workspace.")}
+          {brand(t("No ChatGPT connection. Nothing outside NivaDesk can read this workspace."), BOTH)}
         </p>
       ) : (
         <div className="grid" style={{ gap: 10 }}>
@@ -89,6 +98,7 @@ export function ChatGPTIntegrationSection({
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                 <div>
+                  <span className="pill" style={{ marginRight: 8 }}>{chatGPTConnectionAssistant(connection)}</span>
                   <strong>{connection.grantedByEmail || t("A workspace member")}</strong>
                   <p style={{ color: "var(--muted)", margin: "6px 0 0", fontSize: 13 }}>
                     {t("Connected")} {formatDay(connection.createdAtMs)} · {t("ends")} {formatDay(connection.expiresAtMs)}
@@ -99,8 +109,9 @@ export function ChatGPTIntegrationSection({
                   type="button"
                   disabled={busy}
                   onClick={() => {
-                    if (!window.confirm(t("End ChatGPT's access to this workspace?"))) return;
-                    void disconnect(connection.tokenHash);
+                    const assistant = chatGPTConnectionAssistant(connection);
+                    if (!window.confirm(brand(t("End ChatGPT's access to this workspace?"), assistant))) return;
+                    void disconnect(connection.tokenHash, assistant);
                   }}
                 >
                   {t("Disconnect")}
