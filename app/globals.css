@@ -34703,6 +34703,81 @@ body[data-studio-theme="dark"] .gs-sheet { background: rgba(31, 31, 31, 0.98); b
   .gs-store.gs-hand { grid-template-columns: 1fr; }
 }
 
+/* ==== Schedule / Team Schedule on phones (review N15, 17 Oct 2026) ====
+   New Project stays in the header; Open Order and Calendar File act on the
+   selected bar, which only the timeline has, so where the agenda list replaces
+   the timeline (Schedule <= 640px, Team Schedule <= 900px) they give way to a
+   calendar button on each agenda card and one line saying what it does. */
+.schedule-header-card { flex-wrap: wrap; }
+.schedule-agenda-calendar-hint { display: none; }
+.schedule-agenda-row.has-calendar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+.schedule-agenda-calendar {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--accent);
+  cursor: pointer;
+}
+.schedule-agenda-calendar svg { width: 20px; height: 20px; }
+.schedule-agenda-calendar:hover { background: var(--accent-soft); }
+.schedule-agenda-calendar:focus-visible,
+.schedule-agenda-card:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+body[data-studio-theme="dark"] .schedule-agenda-calendar {
+  background: #1c1c1e;
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #6ea0ff;
+}
+@media (max-width: 900px) {
+  .schedule-main-pane.is-team .schedule-header-selection-action { display: none; }
+  .schedule-main-pane.is-team .schedule-agenda-calendar-hint {
+    display: flex;
+    flex-basis: 100%;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+}
+@media (max-width: 640px) {
+  .schedule-header-actions {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 14px;
+  }
+  .schedule-header-actions .studio-pill,
+  .schedule-header-selection-action { display: none; }
+  .schedule-header-actions .schedule-header-button {
+    flex: 1 1 auto;
+    min-height: 44px;
+    font-size: 14px;
+  }
+  .schedule-agenda-calendar-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 0;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .schedule-agenda-calendar-hint svg { width: 16px; height: 16px; flex: 0 0 auto; }
+}
+
 /* ==== Order detail on phones: the sticky header condenses (review N14, 17 Oct 2026) ====
    Full, it is the picture, names, facts, chips, assign/lock/Actions and the tab
    bar — 286 px of an 844 px phone, stuck under the 66 px app bar. Once it has

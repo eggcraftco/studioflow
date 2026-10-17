@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement, type WheelEvent as ReactWheelEvent } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
@@ -921,10 +921,17 @@ export default function SchedulePage() {
   }
 
   function downloadSelectedCalendarFile() {
+    downloadCalendarFileFor(selectedOrder);
+  }
+
+  // The desktop button exports the selected bar; the phone agenda has no
+  // selection (a card opens its order), so each card carries its own Calendar
+  // File button and passes its order here (review N15).
+  function downloadCalendarFileFor(order: ScheduleOrderItem | null) {
     setScheduleStatus("");
     setScheduleError("");
 
-    if (!selectedOrder) {
+    if (!order) {
       setScheduleError("Select an order before exporting a calendar file.");
       return;
     }
@@ -935,11 +942,33 @@ export default function SchedulePage() {
     }
 
     try {
-      downloadScheduleCalendarFile(selectedOrder);
+      downloadScheduleCalendarFile(order);
       setScheduleStatus("Calendar file downloaded.");
     } catch (calendarError) {
       setScheduleError(calendarError instanceof Error ? calendarError.message : "Calendar file could not be created.");
     }
+  }
+
+  // One phone agenda row: the card opens the order; the calendar button next
+  // to it downloads that project's all-day calendar file. Two sibling buttons,
+  // never one inside the other.
+  function renderAgendaRow(order: ScheduleOrderItem, card: ReactElement) {
+    if (!canUseCalendarExport) return <div key={order.id} className="schedule-agenda-row">{card}</div>;
+    const title = titleForOrder(order, t);
+    return (
+      <div key={order.id} className="schedule-agenda-row has-calendar">
+        {card}
+        <button
+          type="button"
+          className="schedule-agenda-calendar"
+          onClick={() => downloadCalendarFileFor(order)}
+          aria-label={`${t("Calendar File")}: ${title}`}
+          title={`${t("Calendar File")}: ${title}`}
+        >
+          <CardIconGlyph icon="calendar" />
+        </button>
+      </div>
+    );
   }
 
   const locale = studioLocaleTag(language);
@@ -1154,7 +1183,7 @@ export default function SchedulePage() {
         />
         </>)}
 
-        <main className={mobileControlsCollapsed ? "schedule-main-pane controls-collapsed" : "schedule-main-pane"}>
+        <main className={`schedule-main-pane${mobileControlsCollapsed ? " controls-collapsed" : ""}${teamMode ? " is-team" : ""}`}>
           <div className="schedule-header-card">
             <div className="schedule-title-block">
               <h1>{t(teamMode ? "Team Schedule" : "Schedule")}</h1>
@@ -1164,13 +1193,17 @@ export default function SchedulePage() {
             </div>
             <div className="schedule-header-actions">
               {workspace ? <span className="studio-pill">{workspace.name} - {workspace.roleLabel}</span> : null}
+              {/* Open Order and Calendar File act on the selected bar, which only
+                  the timeline has: where the phone agenda replaces it they are
+                  hidden (each agenda card has its own calendar button), and
+                  New Project stays (review N15). */}
               {selectedOrder && canOpenScheduleOrder(selectedOrder) ? (
-                <button className="button secondary schedule-header-button" type="button" onClick={() => openScheduleOrder(selectedOrder)}>
+                <button className="button secondary schedule-header-button schedule-header-selection-action" type="button" onClick={() => openScheduleOrder(selectedOrder)}>
                   {t("Open Order")}
                 </button>
               ) : null}
               <button
-                className="button secondary schedule-header-button"
+                className="button secondary schedule-header-button schedule-header-selection-action"
                 type="button"
                 disabled={!selectedOrder || !canUseCalendarExport}
                 onClick={downloadSelectedCalendarFile}
@@ -1188,6 +1221,12 @@ export default function SchedulePage() {
                 {`+ ${t("New Project")}`}
               </button>
             </div>
+            {canUseCalendarExport ? (
+              <p className="schedule-agenda-calendar-hint">
+                <CardIconGlyph icon="calendar" />
+                <span>{t("Calendar File: use the calendar button on a project to add it to your calendar.")}</span>
+              </p>
+            ) : null}
           </div>
 
           <div className={mobileControlsCollapsed ? "schedule-control-card is-collapsed" : "schedule-control-card"}>
@@ -1431,8 +1470,8 @@ export default function SchedulePage() {
                           </div>
                           {memberOrders.length === 0 ? (
                             <p className="team-agenda-empty">{t("No assigned work in this range.")}</p>
-                          ) : memberOrders.map(order => (
-                            <button key={order.id} type="button" className="schedule-agenda-card" onClick={() => openScheduleOrder(order)} title={scheduleOrderTooltip(order)} aria-disabled={!canOpenScheduleOrder(order) || undefined}>
+                          ) : memberOrders.map(order => renderAgendaRow(order,
+                            <button type="button" className="schedule-agenda-card" onClick={() => openScheduleOrder(order)} title={scheduleOrderTooltip(order)} aria-disabled={!canOpenScheduleOrder(order) || undefined}>
                               <span className={`schedule-agenda-accent ${scheduleTone(order)}`} aria-hidden="true" />
                               <span className="schedule-agenda-body">
                                 <span className="schedule-agenda-top">
@@ -1457,8 +1496,8 @@ export default function SchedulePage() {
                           <div><strong>{t("Unassigned")}</strong></div>
                           <span className="team-badge">{teamUnassignedOrders.length} {t("jobs")}</span>
                         </div>
-                        {teamUnassignedOrders.map(order => (
-                          <button key={order.id} type="button" className="schedule-agenda-card" onClick={() => openScheduleOrder(order)} title={scheduleOrderTooltip(order)} aria-disabled={!canOpenScheduleOrder(order) || undefined}>
+                        {teamUnassignedOrders.map(order => renderAgendaRow(order,
+                          <button type="button" className="schedule-agenda-card" onClick={() => openScheduleOrder(order)} title={scheduleOrderTooltip(order)} aria-disabled={!canOpenScheduleOrder(order) || undefined}>
                             <span className={`schedule-agenda-accent ${scheduleTone(order)}`} aria-hidden="true" />
                             <span className="schedule-agenda-body">
                               <span className="schedule-agenda-top">
@@ -1625,9 +1664,8 @@ export default function SchedulePage() {
                 const countdown = countdownText(order);
                 const late = orderIsLate(order);
                 const design = designForOrder(order);
-                return (
+                return renderAgendaRow(order,
                   <button
-                    key={order.id}
                     type="button"
                     className="schedule-agenda-card"
                     onClick={() => router.push(`/orders?selectedOrderId=${encodeURIComponent(order.id)}`)}

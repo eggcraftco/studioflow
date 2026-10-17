@@ -1,8 +1,8 @@
 import type { StudioLanguage } from "./language";
 
 // Web small fixes (17 Oct 2026): Team seats in use / included / extra / total
-// (Settings ▸ Team Access, /team) and the permission matrix's owner-approval
-// cell for Delete orders.
+// (Settings ▸ Team Access, /team), the permission matrix's owner-approval cell
+// for Delete orders, and the phone Schedule's per-project Calendar File line.
 // Every language in one table, keyed by source text; merged last in
 // language.ts so no earlier table can hide a cell.
 export const WEB_SMALL_FIXES_TRANSLATIONS: Record<string, Partial<Record<StudioLanguage, string>>> = {
@@ -96,5 +96,18 @@ export const WEB_SMALL_FIXES_TRANSLATIONS: Record<string, Partial<Record<StudioL
     "中文 (Chinese)": "成员发送删除请求，由所有者删除订单。",
     "العربية (Arabic)": "يرسل العضو طلب حذف ويحذف المالك الطلب.",
     "हिन्दी (Hindi)": "सदस्य हटाने का अनुरोध भेजता है और मालिक ऑर्डर हटाता है।"
+  },
+  "Calendar File: use the calendar button on a project to add it to your calendar.": {
+    "Türkçe": "Takvim Dosyası: bir projeyi takviminize eklemek için kartındaki takvim düğmesini kullanın.",
+    "Deutsch": "Kalenderdatei: Mit der Kalender-Schaltfläche an einem Projekt fügen Sie es Ihrem Kalender hinzu.",
+    "Français": "Fichier calendrier : utilisez le bouton calendrier d'un projet pour l'ajouter à votre calendrier.",
+    "Italiano": "File calendario: usa il pulsante calendario di un progetto per aggiungerlo al tuo calendario.",
+    "Español (Spanish)": "Archivo de calendario: usa el botón de calendario de un proyecto para añadirlo a tu calendario.",
+    "Português": "Ficheiro de calendário: use o botão de calendário de um projeto para o adicionar ao seu calendário.",
+    "Русский (Russian)": "Файл календаря: нажмите кнопку календаря у проекта, чтобы добавить его в свой календарь.",
+    "日本語 (Japanese)": "カレンダーファイル：プロジェクトのカレンダーボタンで、そのプロジェクトをカレンダーに追加できます。",
+    "中文 (Chinese)": "日历文件：使用项目上的日历按钮，将其添加到你的日历。",
+    "العربية (Arabic)": "ملف التقويم: استخدم زر التقويم في المشروع لإضافته إلى تقويمك.",
+    "हिन्दी (Hindi)": "कैलेंडर फ़ाइल: किसी प्रोजेक्ट को अपने कैलेंडर में जोड़ने के लिए उसके कैलेंडर बटन का उपयोग करें।"
   }
 };
