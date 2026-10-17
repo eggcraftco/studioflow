@@ -106,7 +106,7 @@ const EN: ClaudeHelpCopy = {
   heroFacts: [
     "Your own NivaDesk sign-in: no shared keys, no public data",
     "Your plan, role and workspace permissions apply to every answer",
-    "Claude asks before it changes anything marked destructive"
+    "Each tool declares whether it reads, adds or changes data"
   ],
   mockLabel: "Illustration: a Claude conversation using the NivaDesk connector",
   mockCaption: "Illustration with example data. Not a real workspace.",
@@ -139,7 +139,7 @@ const EN: ClaudeHelpCopy = {
     "Connections are independent. Connecting Claude does not disconnect ChatGPT or Claude Code, and disconnecting one leaves the others working. Each person connects with their own account and gets the access of their own role."
   ],
   toolsTitle: "What Claude can do with NivaDesk",
-  toolsIntro: "The connector has 21 tools. Read tools only look things up. Write tools add something new to your workspace. Tools marked destructive change existing records (and a status change can e-mail your customer), and Claude always asks you before running them.",
+  toolsIntro: "The connector has 21 tools. Each one declares whether it only reads, adds something new, or changes or overwrites existing records (marked destructive). Whether Claude asks you before running a tool depends on Claude's own settings and your choices there; NivaDesk's permissions (plan, role, workspace access) are enforced on its servers on every call either way.",
   modeRead: "Read",
   modeWrite: "Write",
   modeDestructive: "Destructive",
@@ -222,7 +222,7 @@ const EN: ClaudeHelpCopy = {
   safetyIntro: "The connector does what you could do yourself in NivaDesk with the same account, and nothing more.",
   safety: [
     ["Same rules as the app", "Every call is checked on NivaDesk's servers against your role, your access switches and your plan before anything is read or written. Claude cannot see another workspace or another member's personal notes."],
-    ["Claude asks first", "Each tool tells Claude whether it only reads, adds something new, or is destructive. Claude asks for your approval before every destructive tool: changing an order's status, adding a note to an order, adding to, editing, pinning or archiving a note. Your Claude settings decide whether it asks before the other writes."],
+    ["Tool types and confirmations", "Each tool declares whether it only reads, adds something new, or changes or overwrites existing data (changing an order's status, adding a note to an order, adding to, editing, pinning or archiving a note). Whether Claude asks before running a tool depends on Claude's own settings and the choices you make there; NivaDesk does not control that. NivaDesk's own permissions — your plan, your role and your workspace access — are enforced on its servers on every call, whatever Claude's settings."],
     ["Messages to customers", "Changing an order's status can send your customer an e-mail if your workspace's notifications are on for that order. Claude is told this, and it is the same message the app would send."],
     ["Nothing is deleted, no money moves", "No tool deletes orders, notes, customers or bank data; archiving a note can be undone. The connector cannot make payments, refunds or transfers."],
     ["Limits", "Searches return a bounded number of results, and what Claude reads is the data your answer needs, not a copy of your workspace."]
@@ -237,7 +237,7 @@ const EN: ClaudeHelpCopy = {
   disconnectTitle: "Disconnect",
   disconnect: [
     ["In Claude", "Open Settings › Connectors, choose NivaDesk and disconnect. Claude stops calling NivaDesk for you."],
-    ["In NivaDesk (workspace owner)", "Open Settings › Integrations › ChatGPT. Every assistant connection is listed with its assistant (ChatGPT, Claude or Claude Code). Disconnect ends that one connection; Disconnect all ends every assistant connection to the workspace. Either works at once."]
+    ["In NivaDesk (workspace owner)", "Open Settings › Integrations › AI assistants (ChatGPT and Claude). Every assistant connection is listed with its assistant (ChatGPT, Claude or Claude Code). Disconnect ends that one connection; Disconnect all ends every assistant connection to the workspace. Either works at once."]
   ],
   disconnectNote: "Disconnecting does not delete anything you created through Claude: those orders and notes stay in your workspace until you delete them in NivaDesk.",
   disconnectLink: "Open Settings › Integrations",
@@ -247,7 +247,7 @@ const EN: ClaudeHelpCopy = {
     ["Does it work on the Free plan?", "Yes. On Free and Starter the money tools return the basic totals only, and the bank tools have no data because a bank feed is a Pro and Team feature."],
     ["Can my team use it?", "Yes, each person with their own NivaDesk login. Each gets the access of their own role: a workflow-only member sees only their assigned orders and no money figures."],
     ["Does connecting Claude disconnect ChatGPT?", "No. Each assistant has its own connection. Connecting, renewing or disconnecting Claude does not touch a ChatGPT or Claude Code connection, unless you choose Disconnect all."],
-    ["Can Claude delete orders?", "No. There is no delete tool. Claude can create orders, add notes and change status; a status change is marked destructive, so Claude asks you first."],
+    ["Can Claude delete orders?", "No. There is no delete tool. Claude can create orders, add notes and change status; changing a status is declared as a destructive tool. Whether Claude asks before running it depends on your Claude settings."],
     ["Will my customers be contacted?", "Only through your own NivaDesk notification rules, when Claude changes an order's status and that order has notifications on. Claude does not send messages any other way."],
     ["Which language can I use?", "Ask Claude in any language it understands. NivaDesk's data comes back as it is stored in your workspace."],
     ["Something went wrong", "Tool errors say what was refused and why, for example that your role cannot update orders. If it is not clear, contact support with the time and what you asked."]
@@ -266,7 +266,7 @@ const TR: ClaudeHelpCopy = {
   heroFacts: [
     "Kendi NivaDesk girişiniz: paylaşılan anahtar yok, herkese açık veri yok",
     "Planınız, rolünüz ve çalışma alanı izinleriniz her yanıtta geçerlidir",
-    "Claude, yıkıcı olarak işaretlenen her değişiklikten önce size sorar"
+    "Her araç okuyup okumadığını, ekleyip eklemediğini ya da değiştirip değiştirmediğini bildirir"
   ],
   mockLabel: "Görsel: NivaDesk bağlayıcısını kullanan bir Claude sohbeti",
   mockCaption: "Örnek verilerle görsel. Gerçek bir çalışma alanı değildir.",
@@ -299,7 +299,7 @@ const TR: ClaudeHelpCopy = {
     "Bağlantılar birbirinden bağımsızdır. Claude'u bağlamak ChatGPT'yi ya da Claude Code'u koparmaz, birini kesmek diğerlerini çalışır bırakır. Herkes kendi hesabıyla bağlanır ve kendi rolünün erişimini alır."
   ],
   toolsTitle: "Claude NivaDesk ile neler yapabilir",
-  toolsIntro: "Bağlayıcının 21 aracı var. Okuma araçları yalnızca bakar. Yazma araçları çalışma alanınıza yeni bir şey ekler. Yıkıcı olarak işaretlenen araçlar mevcut kayıtları değiştirir (durum değişikliği müşterinize e-posta da gönderebilir); Claude bunları çalıştırmadan önce her zaman size sorar.",
+  toolsIntro: "Bağlayıcının 21 aracı var. Her araç yalnızca okuyup okumadığını, yeni bir şey ekleyip eklemediğini ya da mevcut kayıtları değiştirip değiştirmediğini (yıkıcı olarak işaretlenir) bildirir. Claude'un bir aracı çalıştırmadan önce size sorup sormayacağı Claude'un kendi ayarlarına ve oradaki seçimlerinize bağlıdır; NivaDesk izinleri (plan, rol, çalışma alanı erişimi) her durumda her çağrıda sunucularında uygulanır.",
   modeRead: "Okuma",
   modeWrite: "Yazma",
   modeDestructive: "Yıkıcı",
@@ -382,7 +382,7 @@ const TR: ClaudeHelpCopy = {
   safetyIntro: "Bağlayıcı, aynı hesapla NivaDesk'te sizin yapabileceğinizi yapar, fazlasını değil.",
   safety: [
     ["Uygulamayla aynı kurallar", "Her çağrı, bir şey okunmadan ya da yazılmadan önce NivaDesk sunucularında rolünüze, erişim ayarlarınıza ve planınıza göre denetlenir. Claude başka bir çalışma alanını ya da başka bir üyenin kişisel notlarını göremez."],
-    ["Claude önce sorar", "Her araç Claude'a yalnızca okuyup okumadığını, yeni bir şey ekleyip eklemediğini ya da yıkıcı olup olmadığını söyler. Claude her yıkıcı araçtan önce onayınızı ister: sipariş durumunu değiştirme, siparişe not ekleme, bir nota ekleme, notu düzenleme, sabitleme ya da arşivleme. Diğer yazmalardan önce sorup sormayacağına Claude ayarlarınız karar verir."],
+    ["Araç türleri ve onaylar", "Her araç yalnızca okuyup okumadığını, yeni bir şey ekleyip eklemediğini ya da mevcut veriyi değiştirip değiştirmediğini bildirir (sipariş durumunu değiştirme, siparişe not ekleme, bir nota ekleme, notu düzenleme, sabitleme ya da arşivleme). Claude'un bir aracı çalıştırmadan önce sorup sormayacağı Claude'un kendi ayarlarına ve oradaki seçimlerinize bağlıdır; bunu NivaDesk belirlemez. NivaDesk'in kendi izinleri — planınız, rolünüz ve çalışma alanı erişiminiz — Claude ayarları ne olursa olsun her çağrıda sunucularında uygulanır."],
     ["Müşterilere giden mesajlar", "Bir siparişin durumunu değiştirmek, çalışma alanınızda o sipariş için bildirimler açıksa müşterinize e-posta gönderebilir. Claude'a bu söylenir; giden mesaj uygulamanın göndereceği mesajın aynısıdır."],
     ["Hiçbir şey silinmez, para hareket etmez", "Hiçbir araç sipariş, not, müşteri ya da banka verisi silmez; notu arşivlemek geri alınabilir. Bağlayıcı ödeme, iade ya da transfer yapamaz."],
     ["Sınırlar", "Aramalar sınırlı sayıda sonuç döndürür; Claude'un okuduğu, yanıtınızın gerektirdiği veridir, çalışma alanınızın bir kopyası değil."]
@@ -397,7 +397,7 @@ const TR: ClaudeHelpCopy = {
   disconnectTitle: "Bağlantıyı kesme",
   disconnect: [
     ["Claude'da", "Settings › Connectors'ı açın, NivaDesk'i seçin ve bağlantıyı kesin. Claude sizin adınıza NivaDesk'i çağırmayı bırakır."],
-    ["NivaDesk'te (çalışma alanı sahibi)", "Ayarlar › Entegrasyonlar › ChatGPT'yi açın. Her asistan bağlantısı asistanıyla (ChatGPT, Claude ya da Claude Code) listelenir. Disconnect yalnızca o bağlantıyı, Disconnect all çalışma alanının tüm asistan bağlantılarını sonlandırır. İkisi de hemen etkili olur."]
+    ["NivaDesk'te (çalışma alanı sahibi)", "Ayarlar › Entegrasyonlar › Yapay zekâ asistanları (ChatGPT ve Claude) bölümünü açın. Her asistan bağlantısı asistanıyla (ChatGPT, Claude ya da Claude Code) listelenir. Disconnect yalnızca o bağlantıyı, Disconnect all çalışma alanının tüm asistan bağlantılarını sonlandırır. İkisi de hemen etkili olur."]
   ],
   disconnectNote: "Bağlantıyı kesmek Claude üzerinden oluşturduğunuz hiçbir şeyi silmez: o siparişler ve notlar siz NivaDesk'te silene kadar çalışma alanınızda kalır.",
   disconnectLink: "Ayarlar › Entegrasyonlar'ı aç",
@@ -407,7 +407,7 @@ const TR: ClaudeHelpCopy = {
     ["Free planda çalışır mı?", "Evet. Free ve Starter'da para araçları yalnızca temel toplamları döndürür; banka araçlarında veri yoktur çünkü banka akışı bir Pro ve Team özelliğidir."],
     ["Ekibim kullanabilir mi?", "Evet, herkes kendi NivaDesk girişiyle. Herkes kendi rolünün erişimini alır: yalnız iş akışı üyesi yalnızca kendisine atanan siparişleri görür, para rakamlarını görmez."],
     ["Claude'u bağlamak ChatGPT'yi koparır mı?", "Hayır. Her asistanın kendi bağlantısı var. Claude'u bağlamak, yenilemek ya da kesmek, Disconnect all'ı seçmediğiniz sürece ChatGPT ya da Claude Code bağlantısına dokunmaz."],
-    ["Claude sipariş silebilir mi?", "Hayır. Silme aracı yok. Claude sipariş oluşturabilir, not ekleyebilir ve durum değiştirebilir; durum değişikliği yıkıcı olarak işaretlidir, bu yüzden Claude önce size sorar."],
+    ["Claude sipariş silebilir mi?", "Hayır. Silme aracı yok. Claude sipariş oluşturabilir, not ekleyebilir ve durum değiştirebilir; durum değiştirme yıkıcı bir araç olarak bildirilir. Claude'un onu çalıştırmadan önce sorup sormayacağı Claude ayarlarınıza bağlıdır."],
     ["Müşterilerimle iletişime geçilir mi?", "Yalnızca kendi NivaDesk bildirim kurallarınızla: Claude bir siparişin durumunu değiştirdiğinde ve o siparişte bildirimler açıksa. Claude başka bir yolla mesaj göndermez."],
     ["Hangi dili kullanabilirim?", "Claude'a anladığı herhangi bir dilde sorun. NivaDesk verileri çalışma alanınızda nasıl kayıtlıysa öyle gelir."],
     ["Bir şeyler ters gitti", "Araç hataları neyin neden reddedildiğini söyler; örneğin rolünüzün sipariş güncelleyemediğini. Açık değilse saati ve ne sorduğunuzu yazarak destekle iletişime geçin."]
@@ -426,7 +426,7 @@ const DE: ClaudeHelpCopy = {
   heroFacts: [
     "Ihre eigene NivaDesk-Anmeldung: keine geteilten Schlüssel, keine öffentlichen Daten",
     "Ihr Plan, Ihre Rolle und Ihre Workspace-Rechte gelten für jede Antwort",
-    "Claude fragt nach, bevor es etwas als destruktiv Markiertes ändert"
+    "Jedes Tool gibt an, ob es liest, hinzufügt oder Daten ändert"
   ],
   mockLabel: "Illustration: ein Claude-Gespräch mit dem NivaDesk-Connector",
   mockCaption: "Illustration mit Beispieldaten. Kein echter Workspace.",
@@ -459,7 +459,7 @@ const DE: ClaudeHelpCopy = {
     "Verbindungen sind unabhängig. Claude zu verbinden trennt weder ChatGPT noch Claude Code, und das Trennen einer Verbindung lässt die anderen weiterlaufen. Jede Person verbindet sich mit ihrem eigenen Konto und erhält den Zugriff ihrer eigenen Rolle."
   ],
   toolsTitle: "Was Claude mit NivaDesk tun kann",
-  toolsIntro: "Der Connector hat 21 Tools. Lese-Tools schlagen nur nach. Schreib-Tools fügen Ihrem Workspace etwas Neues hinzu. Als destruktiv markierte Tools ändern bestehende Datensätze (eine Statusänderung kann Ihrem Kunden eine E-Mail senden); vor ihnen fragt Claude Sie immer.",
+  toolsIntro: "Der Connector hat 21 Tools. Jedes gibt an, ob es nur liest, etwas Neues hinzufügt oder bestehende Datensätze ändert oder überschreibt (als destruktiv markiert). Ob Claude vor einem Tool nachfragt, hängt von Claudes eigenen Einstellungen und Ihren Entscheidungen dort ab; die Berechtigungen von NivaDesk (Plan, Rolle, Workspace-Zugriff) werden in jedem Fall bei jedem Aufruf auf den Servern von NivaDesk durchgesetzt.",
   modeRead: "Lesen",
   modeWrite: "Schreiben",
   modeDestructive: "Destruktiv",
@@ -542,7 +542,7 @@ const DE: ClaudeHelpCopy = {
   safetyIntro: "Der Connector tut, was Sie mit demselben Konto selbst in NivaDesk tun könnten, und nicht mehr.",
   safety: [
     ["Dieselben Regeln wie in der App", "Jeder Aufruf wird auf den Servern von NivaDesk gegen Ihre Rolle, Ihre Zugriffsschalter und Ihren Plan geprüft, bevor etwas gelesen oder geschrieben wird. Claude sieht keinen anderen Workspace und keine persönlichen Notizen anderer Mitglieder."],
-    ["Claude fragt zuerst", "Jedes Tool sagt Claude, ob es nur liest, etwas Neues hinzufügt oder destruktiv ist. Vor jedem destruktiven Tool bittet Claude um Ihre Zustimmung: Auftragsstatus ändern, eine Notiz zu einem Auftrag hinzufügen, eine Notiz ergänzen, bearbeiten, anheften oder archivieren. Ob es vor den anderen Schreibvorgängen fragt, entscheiden Ihre Claude-Einstellungen."],
+    ["Tool-Arten und Bestätigungen", "Jedes Tool gibt an, ob es nur liest, etwas Neues hinzufügt oder bestehende Daten ändert oder überschreibt (Auftragsstatus ändern, eine Notiz zu einem Auftrag hinzufügen, eine Notiz ergänzen, bearbeiten, anheften oder archivieren). Ob Claude vor einem Tool nachfragt, hängt von Claudes eigenen Einstellungen und Ihren Entscheidungen dort ab; das steuert nicht NivaDesk. Die eigenen Berechtigungen von NivaDesk — Ihr Plan, Ihre Rolle und Ihr Workspace-Zugriff — werden bei jedem Aufruf auf den Servern durchgesetzt, unabhängig von Claudes Einstellungen."],
     ["Nachrichten an Kunden", "Eine Statusänderung kann Ihrem Kunden eine E-Mail senden, wenn die Benachrichtigungen Ihres Workspaces für diesen Auftrag aktiv sind. Claude wird darauf hingewiesen; es ist dieselbe Nachricht, die auch die App senden würde."],
     ["Nichts wird gelöscht, kein Geld bewegt", "Kein Tool löscht Aufträge, Notizen, Kunden oder Bankdaten; das Archivieren einer Notiz lässt sich rückgängig machen. Der Connector kann keine Zahlungen, Erstattungen oder Überweisungen auslösen."],
     ["Grenzen", "Suchen liefern eine begrenzte Zahl an Ergebnissen; Claude liest die Daten, die Ihre Antwort braucht, keine Kopie Ihres Workspaces."]
@@ -557,7 +557,7 @@ const DE: ClaudeHelpCopy = {
   disconnectTitle: "Verbindung trennen",
   disconnect: [
     ["In Claude", "Öffnen Sie Settings › Connectors, wählen Sie NivaDesk und trennen Sie die Verbindung. Claude ruft NivaDesk dann nicht mehr für Sie auf."],
-    ["In NivaDesk (Workspace-Inhaber)", "Öffnen Sie Einstellungen › Integrationen › ChatGPT. Jede Assistenten-Verbindung steht dort mit ihrem Assistenten (ChatGPT, Claude oder Claude Code). Disconnect beendet diese eine Verbindung; Disconnect all beendet alle Assistenten-Verbindungen des Workspaces. Beides wirkt sofort."]
+    ["In NivaDesk (Workspace-Inhaber)", "Öffnen Sie Einstellungen › Integrationen › KI-Assistenten (ChatGPT und Claude). Jede Assistenten-Verbindung steht dort mit ihrem Assistenten (ChatGPT, Claude oder Claude Code). Disconnect beendet diese eine Verbindung; Disconnect all beendet alle Assistenten-Verbindungen des Workspaces. Beides wirkt sofort."]
   ],
   disconnectNote: "Das Trennen löscht nichts, was Sie über Claude angelegt haben: Diese Aufträge und Notizen bleiben in Ihrem Workspace, bis Sie sie in NivaDesk löschen.",
   disconnectLink: "Einstellungen › Integrationen öffnen",
@@ -567,7 +567,7 @@ const DE: ClaudeHelpCopy = {
     ["Funktioniert er im Free-Plan?", "Ja. In Free und Starter liefern die Geld-Tools nur die Basissummen, und die Bank-Tools haben keine Daten, weil ein Bank-Feed eine Pro- und Team-Funktion ist."],
     ["Kann mein Team ihn nutzen?", "Ja, jede Person mit ihrer eigenen NivaDesk-Anmeldung und dem Zugriff ihrer eigenen Rolle: Ein Workflow-Mitglied sieht nur die ihm zugewiesenen Aufträge und keine Geldzahlen."],
     ["Trennt das Verbinden von Claude ChatGPT?", "Nein. Jeder Assistent hat seine eigene Verbindung. Claude zu verbinden, zu erneuern oder zu trennen berührt keine ChatGPT- oder Claude-Code-Verbindung, außer Sie wählen Disconnect all."],
-    ["Kann Claude Aufträge löschen?", "Nein. Es gibt kein Lösch-Tool. Claude kann Aufträge anlegen, Notizen hinzufügen und den Status ändern; eine Statusänderung ist als destruktiv markiert, also fragt Claude zuerst."],
+    ["Kann Claude Aufträge löschen?", "Nein. Es gibt kein Lösch-Tool. Claude kann Aufträge anlegen, Notizen hinzufügen und den Status ändern; eine Statusänderung ist als destruktives Tool angegeben. Ob Claude vorher nachfragt, hängt von Ihren Claude-Einstellungen ab."],
     ["Werden meine Kunden kontaktiert?", "Nur über Ihre eigenen NivaDesk-Benachrichtigungsregeln, wenn Claude den Status eines Auftrags ändert und dieser Auftrag Benachrichtigungen aktiv hat. Auf anderem Weg sendet Claude keine Nachrichten."],
     ["Welche Sprache kann ich verwenden?", "Fragen Sie Claude in jeder Sprache, die es versteht. Die Daten aus NivaDesk kommen so zurück, wie sie in Ihrem Workspace gespeichert sind."],
     ["Etwas hat nicht geklappt", "Tool-Fehler sagen, was abgelehnt wurde und warum, etwa dass Ihre Rolle keine Aufträge ändern darf. Ist es unklar, kontaktieren Sie den Support mit Uhrzeit und Ihrer Frage."]
@@ -586,7 +586,7 @@ const FR: ClaudeHelpCopy = {
   heroFacts: [
     "Votre propre connexion NivaDesk : pas de clé partagée, pas de données publiques",
     "Votre forfait, votre rôle et vos droits s'appliquent à chaque réponse",
-    "Claude vous demande avant toute modification marquée destructive"
+    "Chaque outil indique s'il lit, ajoute ou modifie des données"
   ],
   mockLabel: "Illustration : une conversation Claude utilisant le connecteur NivaDesk",
   mockCaption: "Illustration avec des données d'exemple. Pas un véritable espace de travail.",
@@ -619,7 +619,7 @@ const FR: ClaudeHelpCopy = {
     "Les connexions sont indépendantes. Connecter Claude ne déconnecte ni ChatGPT ni Claude Code, et en déconnecter une laisse les autres fonctionner. Chacun se connecte avec son propre compte et obtient l'accès de son propre rôle."
   ],
   toolsTitle: "Ce que Claude peut faire avec NivaDesk",
-  toolsIntro: "Le connecteur compte 21 outils. Les outils de lecture se contentent de consulter. Les outils d'écriture ajoutent quelque chose de nouveau à votre espace. Les outils marqués destructifs modifient des enregistrements existants (un changement de statut peut envoyer un e-mail à votre client), et Claude vous demande toujours avant de les lancer.",
+  toolsIntro: "Le connecteur compte 21 outils. Chacun indique s'il lit seulement, s'il ajoute quelque chose de nouveau ou s'il modifie ou écrase des enregistrements existants (marqué destructif). Que Claude vous demande ou non avant de lancer un outil dépend des réglages de Claude et de vos choix ; les autorisations de NivaDesk (forfait, rôle, accès à l'espace) sont appliquées sur ses serveurs à chaque appel dans tous les cas.",
   modeRead: "Lecture",
   modeWrite: "Écriture",
   modeDestructive: "Destructif",
@@ -702,7 +702,7 @@ const FR: ClaudeHelpCopy = {
   safetyIntro: "Le connecteur fait ce que vous pourriez faire vous-même dans NivaDesk avec le même compte, et rien de plus.",
   safety: [
     ["Les mêmes règles que l'application", "Chaque appel est vérifié sur les serveurs de NivaDesk selon votre rôle, vos accès et votre forfait avant toute lecture ou écriture. Claude ne voit ni un autre espace de travail ni les notes personnelles d'un autre membre."],
-    ["Claude demande d'abord", "Chaque outil indique à Claude s'il lit seulement, s'il ajoute quelque chose de nouveau ou s'il est destructif. Claude demande votre accord avant chaque outil destructif : changer le statut d'une commande, ajouter une note à une commande, compléter, modifier, épingler ou archiver une note. Vos réglages Claude décident s'il demande avant les autres écritures."],
+    ["Types d'outils et confirmations", "Chaque outil indique s'il lit seulement, s'il ajoute quelque chose de nouveau ou s'il modifie ou écrase des données existantes (changer le statut d'une commande, ajouter une note à une commande, compléter, modifier, épingler ou archiver une note). Que Claude demande ou non avant de lancer un outil dépend des réglages de Claude et de vos choix ; NivaDesk ne le contrôle pas. Les autorisations propres à NivaDesk — votre forfait, votre rôle et votre accès à l'espace — sont appliquées sur ses serveurs à chaque appel, quels que soient les réglages de Claude."],
     ["Messages aux clients", "Changer le statut d'une commande peut envoyer un e-mail à votre client si les notifications de votre espace sont activées pour cette commande. Claude en est informé ; c'est le même message que l'application enverrait."],
     ["Rien n'est supprimé, aucun argent ne circule", "Aucun outil ne supprime de commandes, de notes, de clients ou de données bancaires ; l'archivage d'une note est réversible. Le connecteur ne peut faire ni paiement, ni remboursement, ni virement."],
     ["Limites", "Les recherches renvoient un nombre limité de résultats ; Claude lit les données dont votre réponse a besoin, pas une copie de votre espace."]
@@ -717,7 +717,7 @@ const FR: ClaudeHelpCopy = {
   disconnectTitle: "Déconnexion",
   disconnect: [
     ["Dans Claude", "Ouvrez Settings › Connectors, choisissez NivaDesk et déconnectez-le. Claude cesse d'appeler NivaDesk pour vous."],
-    ["Dans NivaDesk (propriétaire de l'espace)", "Ouvrez Paramètres › Intégrations › ChatGPT. Chaque connexion d'assistant y figure avec son assistant (ChatGPT, Claude ou Claude Code). Disconnect met fin à cette connexion ; Disconnect all met fin à toutes les connexions d'assistants de l'espace. Les deux agissent immédiatement."]
+    ["Dans NivaDesk (propriétaire de l'espace)", "Ouvrez Paramètres › Intégrations › Assistants IA (ChatGPT et Claude). Chaque connexion d'assistant y figure avec son assistant (ChatGPT, Claude ou Claude Code). Disconnect met fin à cette connexion ; Disconnect all met fin à toutes les connexions d'assistants de l'espace. Les deux agissent immédiatement."]
   ],
   disconnectNote: "La déconnexion ne supprime rien de ce que vous avez créé via Claude : ces commandes et notes restent dans votre espace jusqu'à ce que vous les supprimiez dans NivaDesk.",
   disconnectLink: "Ouvrir Paramètres › Intégrations",
@@ -727,7 +727,7 @@ const FR: ClaudeHelpCopy = {
     ["Fonctionne-t-il avec le forfait Free ?", "Oui. En Free et Starter, les outils financiers ne renvoient que les totaux de base, et les outils bancaires n'ont pas de données car le flux bancaire est une fonction Pro et Team."],
     ["Mon équipe peut-elle l'utiliser ?", "Oui, chacun avec sa propre connexion NivaDesk et l'accès de son propre rôle : un membre flux de travail ne voit que ses commandes attribuées, sans montants."],
     ["Connecter Claude déconnecte-t-il ChatGPT ?", "Non. Chaque assistant a sa propre connexion. Connecter, renouveler ou déconnecter Claude ne touche pas une connexion ChatGPT ou Claude Code, sauf si vous choisissez Disconnect all."],
-    ["Claude peut-il supprimer des commandes ?", "Non. Il n'existe pas d'outil de suppression. Claude peut créer des commandes, ajouter des notes et changer un statut ; un changement de statut est marqué destructif, donc Claude vous demande d'abord."],
+    ["Claude peut-il supprimer des commandes ?", "Non. Il n'existe pas d'outil de suppression. Claude peut créer des commandes, ajouter des notes et changer un statut ; un changement de statut est déclaré comme outil destructif. Que Claude demande ou non avant de le lancer dépend de vos réglages Claude."],
     ["Mes clients seront-ils contactés ?", "Seulement via vos propres règles de notification NivaDesk, quand Claude change le statut d'une commande dont les notifications sont activées. Claude n'envoie de message par aucun autre moyen."],
     ["Quelle langue puis-je utiliser ?", "Demandez à Claude dans n'importe quelle langue qu'il comprend. Les données NivaDesk reviennent telles qu'elles sont enregistrées dans votre espace."],
     ["Quelque chose n'a pas marché", "Les erreurs d'outil disent ce qui a été refusé et pourquoi, par exemple que votre rôle ne peut pas modifier les commandes. Si ce n'est pas clair, contactez le support avec l'heure et votre question."]
@@ -746,7 +746,7 @@ const IT: ClaudeHelpCopy = {
   heroFacts: [
     "Il tuo accesso NivaDesk: nessuna chiave condivisa, nessun dato pubblico",
     "Piano, ruolo e permessi dello spazio valgono per ogni risposta",
-    "Claude chiede prima di cambiare qualsiasi cosa segnata come distruttiva"
+    "Ogni strumento dichiara se legge, aggiunge o modifica dati"
   ],
   mockLabel: "Illustrazione: una conversazione Claude che usa il connettore NivaDesk",
   mockCaption: "Illustrazione con dati di esempio. Non è uno spazio di lavoro reale.",
@@ -779,7 +779,7 @@ const IT: ClaudeHelpCopy = {
     "I collegamenti sono indipendenti. Collegare Claude non scollega ChatGPT né Claude Code, e scollegarne uno lascia funzionare gli altri. Ognuno si collega con il proprio account e ottiene l'accesso del proprio ruolo."
   ],
   toolsTitle: "Cosa può fare Claude con NivaDesk",
-  toolsIntro: "Il connettore ha 21 strumenti. Gli strumenti di lettura consultano soltanto. Quelli di scrittura aggiungono qualcosa di nuovo al tuo spazio. Gli strumenti segnati come distruttivi modificano dati esistenti (un cambio di stato può inviare un'e-mail al cliente), e Claude ti chiede sempre prima di usarli.",
+  toolsIntro: "Il connettore ha 21 strumenti. Ognuno dichiara se legge soltanto, se aggiunge qualcosa di nuovo o se modifica o sovrascrive dati esistenti (segnato come distruttivo). Se Claude ti chiede conferma prima di usare uno strumento dipende dalle impostazioni di Claude e dalle tue scelte; i permessi di NivaDesk (piano, ruolo, accesso allo spazio) vengono comunque applicati sui suoi server a ogni chiamata.",
   modeRead: "Lettura",
   modeWrite: "Scrittura",
   modeDestructive: "Distruttivo",
@@ -862,7 +862,7 @@ const IT: ClaudeHelpCopy = {
   safetyIntro: "Il connettore fa ciò che potresti fare tu in NivaDesk con lo stesso account, e niente di più.",
   safety: [
     ["Le stesse regole dell'app", "Ogni chiamata viene verificata sui server di NivaDesk in base a ruolo, accessi e piano prima di leggere o scrivere qualsiasi cosa. Claude non vede altri spazi di lavoro né le note personali di altri membri."],
-    ["Claude chiede prima", "Ogni strumento dice a Claude se legge soltanto, se aggiunge qualcosa di nuovo o se è distruttivo. Claude chiede la tua approvazione prima di ogni strumento distruttivo: cambiare lo stato di un ordine, aggiungere una nota a un ordine, aggiungere testo a una nota, modificarla, fissarla o archiviarla. Le tue impostazioni di Claude decidono se chiedere prima delle altre scritture."],
+    ["Tipi di strumento e conferme", "Ogni strumento dichiara se legge soltanto, se aggiunge qualcosa di nuovo o se modifica o sovrascrive dati esistenti (cambiare lo stato di un ordine, aggiungere una nota a un ordine, aggiungere testo a una nota, modificarla, fissarla o archiviarla). Se Claude chiede conferma prima di usare uno strumento dipende dalle impostazioni di Claude e dalle tue scelte; NivaDesk non lo controlla. I permessi di NivaDesk — il tuo piano, il tuo ruolo e il tuo accesso allo spazio — vengono applicati sui suoi server a ogni chiamata, qualunque siano le impostazioni di Claude."],
     ["Messaggi ai clienti", "Cambiare lo stato di un ordine può inviare un'e-mail al cliente se le notifiche del tuo spazio sono attive per quell'ordine. Claude ne è informato; è lo stesso messaggio che invierebbe l'app."],
     ["Nulla viene eliminato, nessun denaro si muove", "Nessuno strumento elimina ordini, note, clienti o dati bancari; archiviare una nota si può annullare. Il connettore non può fare pagamenti, rimborsi o bonifici."],
     ["Limiti", "Le ricerche restituiscono un numero limitato di risultati; Claude legge i dati che servono alla risposta, non una copia del tuo spazio."]
@@ -877,7 +877,7 @@ const IT: ClaudeHelpCopy = {
   disconnectTitle: "Scollegare",
   disconnect: [
     ["In Claude", "Apri Settings › Connectors, scegli NivaDesk e scollegalo. Claude smette di chiamare NivaDesk per te."],
-    ["In NivaDesk (proprietario dello spazio)", "Apri Impostazioni › Integrazioni › ChatGPT. Ogni collegamento di un assistente è elencato con il suo assistente (ChatGPT, Claude o Claude Code). Disconnect termina quel collegamento; Disconnect all termina tutti i collegamenti degli assistenti allo spazio. Entrambi hanno effetto subito."]
+    ["In NivaDesk (proprietario dello spazio)", "Apri Impostazioni › Integrazioni › Assistenti IA (ChatGPT e Claude). Ogni collegamento di un assistente è elencato con il suo assistente (ChatGPT, Claude o Claude Code). Disconnect termina quel collegamento; Disconnect all termina tutti i collegamenti degli assistenti allo spazio. Entrambi hanno effetto subito."]
   ],
   disconnectNote: "Scollegare non elimina nulla di ciò che hai creato tramite Claude: quegli ordini e quelle note restano nel tuo spazio finché non li elimini in NivaDesk.",
   disconnectLink: "Apri Impostazioni › Integrazioni",
@@ -887,7 +887,7 @@ const IT: ClaudeHelpCopy = {
     ["Funziona con il piano Free?", "Sì. Con Free e Starter gli strumenti finanziari restituiscono solo i totali di base, e gli strumenti bancari non hanno dati perché il feed bancario è una funzione Pro e Team."],
     ["Il mio team può usarlo?", "Sì, ognuno con il proprio accesso NivaDesk e l'accesso del proprio ruolo: un membro solo flusso di lavoro vede solo gli ordini assegnati e nessun importo."],
     ["Collegare Claude scollega ChatGPT?", "No. Ogni assistente ha il proprio collegamento. Collegare, rinnovare o scollegare Claude non tocca un collegamento ChatGPT o Claude Code, a meno che tu non scelga Disconnect all."],
-    ["Claude può eliminare ordini?", "No. Non esiste uno strumento di eliminazione. Claude può creare ordini, aggiungere note e cambiare stato; un cambio di stato è segnato come distruttivo, quindi Claude chiede prima."],
+    ["Claude può eliminare ordini?", "No. Non esiste uno strumento di eliminazione. Claude può creare ordini, aggiungere note e cambiare stato; il cambio di stato è dichiarato come strumento distruttivo. Se Claude chiede conferma prima di usarlo dipende dalle tue impostazioni di Claude."],
     ["I miei clienti verranno contattati?", "Solo tramite le tue regole di notifica NivaDesk, quando Claude cambia lo stato di un ordine con le notifiche attive. Claude non invia messaggi in nessun altro modo."],
     ["Che lingua posso usare?", "Chiedi a Claude in qualsiasi lingua che capisce. I dati NivaDesk tornano così come sono salvati nel tuo spazio."],
     ["Qualcosa non ha funzionato", "Gli errori degli strumenti dicono cosa è stato rifiutato e perché, per esempio che il tuo ruolo non può modificare gli ordini. Se non è chiaro, contatta l'assistenza indicando l'ora e cosa hai chiesto."]
@@ -906,7 +906,7 @@ const ES: ClaudeHelpCopy = {
   heroFacts: [
     "Tu propio inicio de sesión de NivaDesk: sin claves compartidas ni datos públicos",
     "Tu plan, tu rol y tus permisos se aplican a cada respuesta",
-    "Claude pregunta antes de cambiar algo marcado como destructivo"
+    "Cada herramienta declara si lee, añade o cambia datos"
   ],
   mockLabel: "Ilustración: una conversación de Claude con el conector de NivaDesk",
   mockCaption: "Ilustración con datos de ejemplo. No es un espacio de trabajo real.",
@@ -939,7 +939,7 @@ const ES: ClaudeHelpCopy = {
     "Las conexiones son independientes. Conectar Claude no desconecta ChatGPT ni Claude Code, y desconectar una deja funcionando las demás. Cada persona se conecta con su propia cuenta y obtiene el acceso de su propio rol."
   ],
   toolsTitle: "Qué puede hacer Claude con NivaDesk",
-  toolsIntro: "El conector tiene 21 herramientas. Las de lectura solo consultan. Las de escritura añaden algo nuevo a tu espacio. Las marcadas como destructivas cambian registros existentes (un cambio de estado puede enviar un correo a tu cliente), y Claude siempre te pregunta antes de usarlas.",
+  toolsIntro: "El conector tiene 21 herramientas. Cada una declara si solo lee, si añade algo nuevo o si cambia o sobrescribe registros existentes (marcada como destructiva). Que Claude te pregunte antes de usar una herramienta depende de la configuración de Claude y de tus elecciones allí; los permisos de NivaDesk (plan, rol, acceso al espacio) se aplican en sus servidores en cada llamada de todos modos.",
   modeRead: "Lectura",
   modeWrite: "Escritura",
   modeDestructive: "Destructiva",
@@ -1022,7 +1022,7 @@ const ES: ClaudeHelpCopy = {
   safetyIntro: "El conector hace lo que tú podrías hacer en NivaDesk con la misma cuenta, y nada más.",
   safety: [
     ["Las mismas reglas que la app", "Cada llamada se comprueba en los servidores de NivaDesk según tu rol, tus accesos y tu plan antes de leer o escribir nada. Claude no puede ver otro espacio de trabajo ni las notas personales de otro miembro."],
-    ["Claude pregunta primero", "Cada herramienta le dice a Claude si solo lee, si añade algo nuevo o si es destructiva. Claude pide tu aprobación antes de cada herramienta destructiva: cambiar el estado de un pedido, añadir una nota a un pedido, añadir texto a una nota, editarla, fijarla o archivarla. Tu configuración de Claude decide si pregunta antes de las demás escrituras."],
+    ["Tipos de herramienta y confirmaciones", "Cada herramienta declara si solo lee, si añade algo nuevo o si cambia o sobrescribe datos existentes (cambiar el estado de un pedido, añadir una nota a un pedido, añadir texto a una nota, editarla, fijarla o archivarla). Que Claude pregunte antes de usar una herramienta depende de la configuración de Claude y de tus elecciones; NivaDesk no lo controla. Los permisos propios de NivaDesk — tu plan, tu rol y tu acceso al espacio — se aplican en sus servidores en cada llamada, sea cual sea la configuración de Claude."],
     ["Mensajes a clientes", "Cambiar el estado de un pedido puede enviar un correo a tu cliente si las notificaciones de tu espacio están activas para ese pedido. Claude lo sabe; es el mismo mensaje que enviaría la app."],
     ["No se borra nada, no se mueve dinero", "Ninguna herramienta elimina pedidos, notas, clientes ni datos bancarios; archivar una nota se puede deshacer. El conector no puede hacer pagos, reembolsos ni transferencias."],
     ["Límites", "Las búsquedas devuelven un número limitado de resultados; Claude lee los datos que necesita tu respuesta, no una copia de tu espacio."]
@@ -1037,7 +1037,7 @@ const ES: ClaudeHelpCopy = {
   disconnectTitle: "Desconectar",
   disconnect: [
     ["En Claude", "Abre Settings › Connectors, elige NivaDesk y desconéctalo. Claude deja de llamar a NivaDesk por ti."],
-    ["En NivaDesk (propietario del espacio)", "Abre Ajustes › Integraciones › ChatGPT. Cada conexión de asistente aparece con su asistente (ChatGPT, Claude o Claude Code). Disconnect termina esa conexión; Disconnect all termina todas las conexiones de asistentes del espacio. Ambas actúan al momento."]
+    ["En NivaDesk (propietario del espacio)", "Abre Ajustes › Integraciones › Asistentes de IA (ChatGPT y Claude). Cada conexión de asistente aparece con su asistente (ChatGPT, Claude o Claude Code). Disconnect termina esa conexión; Disconnect all termina todas las conexiones de asistentes del espacio. Ambas actúan al momento."]
   ],
   disconnectNote: "Desconectar no elimina nada de lo que creaste mediante Claude: esos pedidos y notas siguen en tu espacio hasta que los elimines en NivaDesk.",
   disconnectLink: "Abrir Ajustes › Integraciones",
@@ -1047,7 +1047,7 @@ const ES: ClaudeHelpCopy = {
     ["¿Funciona con el plan Free?", "Sí. En Free y Starter las herramientas de dinero devuelven solo los totales básicos, y las bancarias no tienen datos porque el movimiento bancario es una función de Pro y Team."],
     ["¿Puede usarlo mi equipo?", "Sí, cada persona con su propio inicio de sesión de NivaDesk y el acceso de su rol: un miembro de solo flujo de trabajo ve solo sus pedidos asignados y ninguna cifra de dinero."],
     ["¿Conectar Claude desconecta ChatGPT?", "No. Cada asistente tiene su propia conexión. Conectar, renovar o desconectar Claude no toca una conexión de ChatGPT o Claude Code, salvo que elijas Disconnect all."],
-    ["¿Puede Claude eliminar pedidos?", "No. No hay herramienta de eliminación. Claude puede crear pedidos, añadir notas y cambiar estados; un cambio de estado está marcado como destructivo, así que Claude te pregunta antes."],
+    ["¿Puede Claude eliminar pedidos?", "No. No hay herramienta de eliminación. Claude puede crear pedidos, añadir notas y cambiar estados; cambiar un estado está declarado como herramienta destructiva. Que Claude pregunte antes de usarla depende de tu configuración de Claude."],
     ["¿Se contactará a mis clientes?", "Solo mediante tus propias reglas de notificación de NivaDesk, cuando Claude cambia el estado de un pedido que tiene las notificaciones activas. Claude no envía mensajes de ninguna otra forma."],
     ["¿Qué idioma puedo usar?", "Pregunta a Claude en cualquier idioma que entienda. Los datos de NivaDesk llegan tal como están guardados en tu espacio."],
     ["Algo ha fallado", "Los errores de herramienta dicen qué se rechazó y por qué, por ejemplo que tu rol no puede actualizar pedidos. Si no está claro, contacta con soporte indicando la hora y lo que preguntaste."]
@@ -1066,7 +1066,7 @@ const PT: ClaudeHelpCopy = {
   heroFacts: [
     "O seu próprio início de sessão NivaDesk: sem chaves partilhadas, sem dados públicos",
     "O seu plano, função e permissões aplicam-se a cada resposta",
-    "O Claude pergunta antes de alterar algo marcado como destrutivo"
+    "Cada ferramenta declara se lê, acrescenta ou altera dados"
   ],
   mockLabel: "Ilustração: uma conversa no Claude com o conector do NivaDesk",
   mockCaption: "Ilustração com dados de exemplo. Não é um espaço de trabalho real.",
@@ -1099,7 +1099,7 @@ const PT: ClaudeHelpCopy = {
     "As ligações são independentes. Ligar o Claude não desliga o ChatGPT nem o Claude Code, e desligar uma deixa as outras a funcionar. Cada pessoa liga-se com a sua própria conta e recebe o acesso da sua função."
   ],
   toolsTitle: "O que o Claude pode fazer com o NivaDesk",
-  toolsIntro: "O conector tem 21 ferramentas. As de leitura apenas consultam. As de escrita acrescentam algo novo ao seu espaço. As marcadas como destrutivas alteram registos existentes (uma alteração de estado pode enviar um e-mail ao seu cliente), e o Claude pergunta-lhe sempre antes de as usar.",
+  toolsIntro: "O conector tem 21 ferramentas. Cada uma declara se apenas lê, se acrescenta algo novo ou se altera ou substitui registos existentes (marcada como destrutiva). Se o Claude lhe pergunta antes de usar uma ferramenta depende das definições do Claude e das suas escolhas; as permissões do NivaDesk (plano, função, acesso ao espaço) são aplicadas nos seus servidores em cada chamada de qualquer forma.",
   modeRead: "Leitura",
   modeWrite: "Escrita",
   modeDestructive: "Destrutiva",
@@ -1182,7 +1182,7 @@ const PT: ClaudeHelpCopy = {
   safetyIntro: "O conector faz o que poderia fazer no NivaDesk com a mesma conta, e nada mais.",
   safety: [
     ["As mesmas regras da aplicação", "Cada chamada é verificada nos servidores do NivaDesk em função da sua função, acessos e plano antes de qualquer leitura ou escrita. O Claude não vê outro espaço de trabalho nem as notas pessoais de outro membro."],
-    ["O Claude pergunta primeiro", "Cada ferramenta diz ao Claude se apenas lê, se acrescenta algo novo ou se é destrutiva. O Claude pede a sua aprovação antes de cada ferramenta destrutiva: alterar o estado de uma encomenda, adicionar uma nota a uma encomenda, acrescentar texto a uma nota, editá-la, fixá-la ou arquivá-la. As suas definições do Claude decidem se pergunta antes das outras escritas."],
+    ["Tipos de ferramenta e confirmações", "Cada ferramenta declara se apenas lê, se acrescenta algo novo ou se altera ou substitui dados existentes (alterar o estado de uma encomenda, adicionar uma nota a uma encomenda, acrescentar texto a uma nota, editá-la, fixá-la ou arquivá-la). Se o Claude pergunta antes de usar uma ferramenta depende das definições do Claude e das suas escolhas; o NivaDesk não controla isso. As permissões do próprio NivaDesk — o seu plano, a sua função e o seu acesso ao espaço — são aplicadas nos seus servidores em cada chamada, sejam quais forem as definições do Claude."],
     ["Mensagens para clientes", "Alterar o estado de uma encomenda pode enviar um e-mail ao seu cliente se as notificações do seu espaço estiverem ativas para essa encomenda. O Claude é informado disso; é a mesma mensagem que a aplicação enviaria."],
     ["Nada é eliminado, nenhum dinheiro se move", "Nenhuma ferramenta elimina encomendas, notas, clientes ou dados bancários; arquivar uma nota pode ser desfeito. O conector não pode fazer pagamentos, reembolsos ou transferências."],
     ["Limites", "As pesquisas devolvem um número limitado de resultados; o Claude lê os dados de que a resposta precisa, não uma cópia do seu espaço."]
@@ -1197,7 +1197,7 @@ const PT: ClaudeHelpCopy = {
   disconnectTitle: "Desligar",
   disconnect: [
     ["No Claude", "Abra Settings › Connectors, escolha NivaDesk e desligue. O Claude deixa de chamar o NivaDesk por si."],
-    ["No NivaDesk (proprietário do espaço)", "Abra Configurações › Integrações › ChatGPT. Cada ligação de assistente aparece com o seu assistente (ChatGPT, Claude ou Claude Code). Disconnect termina essa ligação; Disconnect all termina todas as ligações de assistentes do espaço. Ambas têm efeito imediato."]
+    ["No NivaDesk (proprietário do espaço)", "Abra Configurações › Integrações › Assistentes de IA (ChatGPT e Claude). Cada ligação de assistente aparece com o seu assistente (ChatGPT, Claude ou Claude Code). Disconnect termina essa ligação; Disconnect all termina todas as ligações de assistentes do espaço. Ambas têm efeito imediato."]
   ],
   disconnectNote: "Desligar não elimina nada do que criou através do Claude: essas encomendas e notas ficam no seu espaço até as eliminar no NivaDesk.",
   disconnectLink: "Abrir Configurações › Integrações",
@@ -1207,7 +1207,7 @@ const PT: ClaudeHelpCopy = {
     ["Funciona no plano Free?", "Sim. No Free e no Starter as ferramentas de dinheiro devolvem apenas os totais básicos, e as bancárias não têm dados porque os movimentos bancários são uma funcionalidade Pro e Team."],
     ["A minha equipa pode usá-lo?", "Sim, cada pessoa com o seu próprio início de sessão NivaDesk e o acesso da sua função: um membro só de fluxo de trabalho vê apenas as encomendas atribuídas e nenhum valor."],
     ["Ligar o Claude desliga o ChatGPT?", "Não. Cada assistente tem a sua própria ligação. Ligar, renovar ou desligar o Claude não toca numa ligação do ChatGPT ou do Claude Code, a menos que escolha Disconnect all."],
-    ["O Claude pode eliminar encomendas?", "Não. Não existe ferramenta de eliminação. O Claude pode criar encomendas, adicionar notas e alterar estados; uma alteração de estado está marcada como destrutiva, por isso o Claude pergunta primeiro."],
+    ["O Claude pode eliminar encomendas?", "Não. Não existe ferramenta de eliminação. O Claude pode criar encomendas, adicionar notas e alterar estados; alterar um estado está declarado como ferramenta destrutiva. Se o Claude pergunta antes de a usar depende das suas definições do Claude."],
     ["Os meus clientes serão contactados?", "Apenas através das suas próprias regras de notificação do NivaDesk, quando o Claude altera o estado de uma encomenda com notificações ativas. O Claude não envia mensagens de nenhuma outra forma."],
     ["Que língua posso usar?", "Pergunte ao Claude em qualquer língua que ele entenda. Os dados do NivaDesk chegam tal como estão guardados no seu espaço."],
     ["Algo correu mal", "Os erros das ferramentas dizem o que foi recusado e porquê, por exemplo que a sua função não pode atualizar encomendas. Se não for claro, contacte o suporte com a hora e o que perguntou."]
@@ -1226,7 +1226,7 @@ const RU: ClaudeHelpCopy = {
   heroFacts: [
     "Ваш собственный вход в NivaDesk: никаких общих ключей и публичных данных",
     "Ваш тариф, роль и права в пространстве действуют для каждого ответа",
-    "Claude спрашивает перед любым изменением, отмеченным как деструктивное"
+    "Каждый инструмент сообщает, читает ли он, добавляет или меняет данные"
   ],
   mockLabel: "Иллюстрация: разговор в Claude с использованием коннектора NivaDesk",
   mockCaption: "Иллюстрация с примерными данными. Не настоящее рабочее пространство.",
@@ -1259,7 +1259,7 @@ const RU: ClaudeHelpCopy = {
     "Подключения независимы. Подключение Claude не отключает ChatGPT или Claude Code, а отключение одного оставляет остальные работать. Каждый подключается со своей учётной записью и получает доступ своей роли."
   ],
   toolsTitle: "Что Claude может делать с NivaDesk",
-  toolsIntro: "У коннектора 21 инструмент. Инструменты чтения только ищут и показывают. Инструменты записи добавляют в пространство что-то новое. Инструменты, отмеченные как деструктивные, меняют существующие записи (смена статуса может отправить клиенту письмо), и перед ними Claude всегда спрашивает вас.",
+  toolsIntro: "У коннектора 21 инструмент. Каждый сообщает, только ли он читает, добавляет ли что-то новое или меняет и перезаписывает существующие записи (отмечается как деструктивный). Спросит ли Claude перед запуском инструмента, зависит от настроек Claude и вашего выбора в них; права NivaDesk (тариф, роль, доступ к пространству) в любом случае проверяются на его серверах при каждом вызове.",
   modeRead: "Чтение",
   modeWrite: "Запись",
   modeDestructive: "Деструктивный",
@@ -1342,7 +1342,7 @@ const RU: ClaudeHelpCopy = {
   safetyIntro: "Коннектор делает то, что вы могли бы сделать в NivaDesk с той же учётной записью, и не больше.",
   safety: [
     ["Те же правила, что в приложении", "Каждый вызов проверяется на серверах NivaDesk по вашей роли, настройкам доступа и тарифу до того, как что-либо будет прочитано или записано. Claude не видит другое пространство и личные заметки других участников."],
-    ["Claude сначала спрашивает", "Каждый инструмент сообщает Claude, только ли он читает, добавляет ли что-то новое или является деструктивным. Перед каждым деструктивным инструментом Claude просит подтверждения: смена статуса заказа, добавление заметки к заказу, дополнение, правка, закрепление или архивирование заметки. Спрашивать ли перед другими записями, решают ваши настройки Claude."],
+    ["Типы инструментов и подтверждения", "Каждый инструмент сообщает, только ли он читает, добавляет ли что-то новое или меняет и перезаписывает существующие данные (смена статуса заказа, добавление заметки к заказу, дополнение, правка, закрепление или архивирование заметки). Спросит ли Claude перед запуском инструмента, зависит от настроек Claude и вашего выбора; NivaDesk этим не управляет. Собственные права NivaDesk — ваш тариф, роль и доступ к пространству — проверяются на его серверах при каждом вызове, какими бы ни были настройки Claude."],
     ["Сообщения клиентам", "Смена статуса заказа может отправить клиенту письмо, если для этого заказа в вашем пространстве включены уведомления. Claude об этом знает; это то же сообщение, которое отправило бы приложение."],
     ["Ничего не удаляется, деньги не двигаются", "Ни один инструмент не удаляет заказы, заметки, клиентов или банковские данные; архивирование заметки можно отменить. Коннектор не может совершать платежи, возвраты или переводы."],
     ["Ограничения", "Поиск возвращает ограниченное число результатов; Claude читает данные, нужные для ответа, а не копию вашего пространства."]
@@ -1357,7 +1357,7 @@ const RU: ClaudeHelpCopy = {
   disconnectTitle: "Отключение",
   disconnect: [
     ["В Claude", "Откройте Settings › Connectors, выберите NivaDesk и отключите его. Claude перестанет обращаться к NivaDesk от вашего имени."],
-    ["В NivaDesk (владелец пространства)", "Откройте Настройки › Интеграции › ChatGPT. Каждое подключение ассистента показано с его ассистентом (ChatGPT, Claude или Claude Code). Disconnect завершает это подключение; Disconnect all завершает все подключения ассистентов к пространству. Оба действуют сразу."]
+    ["В NivaDesk (владелец пространства)", "Откройте Настройки › Интеграции › ИИ-ассистенты (ChatGPT и Claude). Каждое подключение ассистента показано с его ассистентом (ChatGPT, Claude или Claude Code). Disconnect завершает это подключение; Disconnect all завершает все подключения ассистентов к пространству. Оба действуют сразу."]
   ],
   disconnectNote: "Отключение ничего не удаляет из созданного через Claude: эти заказы и заметки остаются в пространстве, пока вы не удалите их в NivaDesk.",
   disconnectLink: "Открыть Настройки › Интеграции",
@@ -1367,7 +1367,7 @@ const RU: ClaudeHelpCopy = {
     ["Работает ли он на тарифе Free?", "Да. На Free и Starter денежные инструменты возвращают только базовые итоги, а у банковских инструментов нет данных, потому что банковская лента — функция Pro и Team."],
     ["Может ли им пользоваться моя команда?", "Да, каждый со своим входом в NivaDesk и доступом своей роли: участник только рабочего процесса видит лишь назначенные ему заказы и никаких сумм."],
     ["Отключит ли подключение Claude ChatGPT?", "Нет. У каждого ассистента своё подключение. Подключение, обновление или отключение Claude не затрагивает подключение ChatGPT или Claude Code, если вы не выберете Disconnect all."],
-    ["Может ли Claude удалять заказы?", "Нет. Инструмента удаления нет. Claude может создавать заказы, добавлять заметки и менять статус; смена статуса отмечена как деструктивная, поэтому Claude сначала спрашивает."],
+    ["Может ли Claude удалять заказы?", "Нет. Инструмента удаления нет. Claude может создавать заказы, добавлять заметки и менять статус; смена статуса объявлена как деструктивный инструмент. Спросит ли Claude перед её запуском, зависит от ваших настроек Claude."],
     ["Свяжутся ли с моими клиентами?", "Только через ваши собственные правила уведомлений NivaDesk, когда Claude меняет статус заказа с включёнными уведомлениями. Другим способом Claude сообщений не отправляет."],
     ["На каком языке можно спрашивать?", "На любом языке, который понимает Claude. Данные NivaDesk возвращаются в том виде, в каком они хранятся в пространстве."],
     ["Что-то пошло не так", "Ошибки инструментов говорят, в чём отказано и почему, например что ваша роль не может менять заказы. Если непонятно, напишите в поддержку, указав время и ваш вопрос."]
@@ -1386,7 +1386,7 @@ const JA: ClaudeHelpCopy = {
   heroFacts: [
     "ご自身の NivaDesk サインイン：共有キーも公開データもありません",
     "プラン・ロール・ワークスペース権限がすべての回答に適用されます",
-    "破壊的とマークされた変更の前に Claude が確認します"
+    "各ツールは読み取り・追加・変更のどれを行うかを宣言します"
   ],
   mockLabel: "イラスト：NivaDesk コネクタを使う Claude の会話",
   mockCaption: "サンプルデータによるイラストです。実際のワークスペースではありません。",
@@ -1419,7 +1419,7 @@ const JA: ClaudeHelpCopy = {
     "接続はそれぞれ独立しています。Claude を接続しても ChatGPT や Claude Code の接続は切れず、1つを解除しても他は動き続けます。各自が自分のアカウントで接続し、そのロールのアクセス権が適用されます。"
   ],
   toolsTitle: "Claude が NivaDesk でできること",
-  toolsIntro: "コネクタには21のツールがあります。読み取りツールは調べるだけです。書き込みツールはワークスペースに新しいものを追加します。破壊的とマークされたツールは既存の記録を変更し（ステータス変更で顧客にメールが届くことがあります）、Claude は実行前に必ず確認します。",
+  toolsIntro: "コネクタには21のツールがあります。各ツールは、読み取りのみか、新しいものを追加するか、既存の記録を変更・上書きするか（破壊的とマーク）を宣言します。Claude がツール実行前に確認するかどうかは、Claude 自身の設定とそこでのあなたの選択によります。NivaDesk の権限（プラン、ロール、ワークスペースへのアクセス）は、いずれの場合も呼び出しのたびにサーバー側で適用されます。",
   modeRead: "読み取り",
   modeWrite: "書き込み",
   modeDestructive: "破壊的",
@@ -1502,7 +1502,7 @@ const JA: ClaudeHelpCopy = {
   safetyIntro: "コネクタができるのは、同じアカウントであなたが NivaDesk でできることだけです。",
   safety: [
     ["アプリと同じルール", "すべての呼び出しは、読み書きの前に NivaDesk のサーバーでロール、アクセス設定、プランに照らして確認されます。Claude は他のワークスペースや他のメンバーの個人メモを見られません。"],
-    ["Claude はまず確認します", "各ツールは、読み取りのみか、新しいものを追加するか、破壊的かを Claude に伝えます。破壊的なツール（注文ステータスの変更、注文へのメモ追加、メモへの追記・編集・ピン留め・アーカイブ）の前に、Claude は必ず承認を求めます。その他の書き込みの前に確認するかどうかは Claude の設定で決まります。"],
+    ["ツールの種類と確認", "各ツールは、読み取りのみか、新しいものを追加するか、既存のデータを変更・上書きするか（注文ステータスの変更、注文へのメモ追加、メモへの追記・編集・ピン留め・アーカイブ）を宣言します。Claude がツール実行前に確認するかどうかは Claude 自身の設定とあなたの選択によるもので、NivaDesk が制御するものではありません。NivaDesk 自身の権限（プラン、ロール、ワークスペースへのアクセス）は、Claude の設定にかかわらず呼び出しのたびにサーバー側で適用されます。"],
     ["顧客へのメッセージ", "注文のステータス変更は、その注文でワークスペースの通知がオンなら顧客にメールを送ることがあります。Claude はこれを知らされており、送られるのはアプリが送るものと同じメッセージです。"],
     ["削除なし、お金の移動なし", "注文、メモ、顧客、銀行データを削除するツールはありません。メモのアーカイブは元に戻せます。コネクタは支払い、返金、送金を行えません。"],
     ["上限", "検索結果の件数には上限があります。Claude が読むのは回答に必要なデータで、ワークスペースのコピーではありません。"]
@@ -1517,7 +1517,7 @@ const JA: ClaudeHelpCopy = {
   disconnectTitle: "接続を解除する",
   disconnect: [
     ["Claude で", "Settings › Connectors を開き、NivaDesk を選んで接続を解除します。Claude はあなたのために NivaDesk を呼び出さなくなります。"],
-    ["NivaDesk で（ワークスペースのオーナー）", "設定 › 連携 › ChatGPT を開きます。各アシスタント接続がアシスタント名（ChatGPT、Claude、Claude Code）付きで表示されます。Disconnect はその接続だけを、Disconnect all はワークスペースのすべてのアシスタント接続を終了します。どちらもすぐに反映されます。"]
+    ["NivaDesk で（ワークスペースのオーナー）", "設定 › 連携 › AI アシスタント（ChatGPT と Claude）を開きます。各アシスタント接続がアシスタント名（ChatGPT、Claude、Claude Code）付きで表示されます。Disconnect はその接続だけを、Disconnect all はワークスペースのすべてのアシスタント接続を終了します。どちらもすぐに反映されます。"]
   ],
   disconnectNote: "接続を解除しても、Claude 経由で作成したものは削除されません。それらの注文やメモは、NivaDesk で削除するまでワークスペースに残ります。",
   disconnectLink: "設定 › 連携 を開く",
@@ -1527,7 +1527,7 @@ const JA: ClaudeHelpCopy = {
     ["Free プランでも使えますか？", "はい。Free と Starter ではお金のツールは基本合計のみを返し、銀行フィードは Pro と Team の機能なので銀行ツールにはデータがありません。"],
     ["チームで使えますか？", "はい。各自が自分の NivaDesk ログインで、それぞれのロールのアクセス権で使います。ワークフローのみのメンバーは割り当てられた注文だけを見られ、金額は見られません。"],
     ["Claude を接続すると ChatGPT が切れますか？", "いいえ。アシスタントごとに接続は別です。Claude の接続・更新・解除は、Disconnect all を選ばない限り ChatGPT や Claude Code の接続に影響しません。"],
-    ["Claude は注文を削除できますか？", "いいえ。削除ツールはありません。Claude は注文の作成、メモの追加、ステータス変更ができます。ステータス変更は破壊的とマークされているため、Claude はまず確認します。"],
+    ["Claude は注文を削除できますか？", "いいえ。削除ツールはありません。Claude は注文の作成、メモの追加、ステータス変更ができます。ステータス変更は破壊的なツールとして宣言されています。実行前に Claude が確認するかどうかは Claude の設定によります。"],
     ["顧客に連絡が行きますか？", "Claude が通知オンの注文のステータスを変えたときに、あなた自身の NivaDesk 通知ルールを通じてのみです。Claude がそれ以外の方法でメッセージを送ることはありません。"],
     ["どの言語で使えますか？", "Claude が理解できる言語なら何でも構いません。NivaDesk のデータはワークスペースに保存されているとおりに返ります。"],
     ["うまくいかないとき", "ツールのエラーは、何がなぜ拒否されたかを示します（例：あなたのロールでは注文を更新できない）。分かりにくい場合は、時刻と質問内容を添えてサポートにご連絡ください。"]
@@ -1546,7 +1546,7 @@ const ZH: ClaudeHelpCopy = {
   heroFacts: [
     "使用您自己的 NivaDesk 登录：没有共享密钥，没有公开数据",
     "您的套餐、角色和工作区权限适用于每一次回答",
-    "对标记为破坏性的更改，Claude 会先征求您的同意"
+    "每个工具都会声明它是读取、新增还是更改数据"
   ],
   mockLabel: "示意图：使用 NivaDesk 连接器的 Claude 对话",
   mockCaption: "示例数据示意图，并非真实工作区。",
@@ -1579,7 +1579,7 @@ const ZH: ClaudeHelpCopy = {
     "各连接相互独立。连接 Claude 不会断开 ChatGPT 或 Claude Code，断开其中一个也不影响其他连接。每个人都用自己的账户连接，并获得各自角色的访问权限。"
   ],
   toolsTitle: "Claude 可以用 NivaDesk 做什么",
-  toolsIntro: "连接器有 21 个工具。读取工具只做查询。写入工具会在工作区中新增内容。标记为破坏性的工具会更改现有记录（更改状态可能会给客户发邮件），Claude 在运行前总会先征求您的同意。",
+  toolsIntro: "连接器有 21 个工具。每个工具都会声明它是只读、新增内容，还是更改或覆盖现有记录（标记为破坏性）。Claude 在运行工具前是否询问您，取决于 Claude 自身的设置以及您在其中的选择；无论如何，NivaDesk 的权限（套餐、角色、工作区访问）都会在每次调用时由其服务器执行。",
   modeRead: "读取",
   modeWrite: "写入",
   modeDestructive: "破坏性",
@@ -1662,7 +1662,7 @@ const ZH: ClaudeHelpCopy = {
   safetyIntro: "连接器能做的，就是您用同一账户在 NivaDesk 中自己能做的，仅此而已。",
   safety: [
     ["与应用相同的规则", "每次调用在读取或写入任何内容之前，都会在 NivaDesk 服务器上按您的角色、访问开关和套餐进行检查。Claude 看不到其他工作区，也看不到其他成员的个人笔记。"],
-    ["Claude 先询问", "每个工具都会告诉 Claude 它是只读、新增内容还是破坏性操作。运行每个破坏性工具前，Claude 都会请求您的批准：更改订单状态、给订单添加备注、追加、编辑、置顶或归档笔记。其他写入前是否询问，由您的 Claude 设置决定。"],
+    ["工具类型与确认", "每个工具都会声明它是只读、新增内容，还是更改或覆盖现有数据（更改订单状态、给订单添加备注、追加、编辑、置顶或归档笔记）。Claude 在运行工具前是否询问，取决于 Claude 自身的设置和您的选择；这不由 NivaDesk 控制。NivaDesk 自身的权限——您的套餐、角色和工作区访问——无论 Claude 如何设置，都会在每次调用时由其服务器执行。"],
     ["发给客户的消息", "如果您的工作区为该订单开启了通知，更改订单状态可能会给客户发送邮件。Claude 已被告知这一点；发送的消息与应用会发送的相同。"],
     ["不删除任何内容，不转移资金", "没有任何工具会删除订单、笔记、客户或银行数据；归档笔记可以撤销。连接器无法进行付款、退款或转账。"],
     ["限制", "搜索返回的结果数量有限；Claude 读取的是回答所需的数据，而不是您工作区的副本。"]
@@ -1677,7 +1677,7 @@ const ZH: ClaudeHelpCopy = {
   disconnectTitle: "断开连接",
   disconnect: [
     ["在 Claude 中", "打开 Settings › Connectors，选择 NivaDesk 并断开连接。Claude 将不再为您调用 NivaDesk。"],
-    ["在 NivaDesk 中（工作区所有者）", "打开 设置 › 集成 › ChatGPT。每个助手连接都会连同其助手（ChatGPT、Claude 或 Claude Code）列出。Disconnect 只结束该连接；Disconnect all 结束工作区的所有助手连接。两者都立即生效。"]
+    ["在 NivaDesk 中（工作区所有者）", "打开 设置 › 集成 › AI 助手（ChatGPT 和 Claude）。每个助手连接都会连同其助手（ChatGPT、Claude 或 Claude Code）列出。Disconnect 只结束该连接；Disconnect all 结束工作区的所有助手连接。两者都立即生效。"]
   ],
   disconnectNote: "断开连接不会删除您通过 Claude 创建的任何内容：这些订单和笔记会保留在您的工作区，直到您在 NivaDesk 中删除它们。",
   disconnectLink: "打开 设置 › 集成",
@@ -1687,7 +1687,7 @@ const ZH: ClaudeHelpCopy = {
     ["Free 套餐可以用吗？", "可以。在 Free 和 Starter 中，资金工具只返回基础合计；银行工具没有数据，因为银行流水是 Pro 和 Team 功能。"],
     ["我的团队可以使用吗？", "可以，每个人用自己的 NivaDesk 登录，并获得各自角色的访问权限：仅工作流成员只能看到分配给自己的订单，看不到金额。"],
     ["连接 Claude 会断开 ChatGPT 吗？", "不会。每个助手都有自己的连接。连接、续期或断开 Claude 不会影响 ChatGPT 或 Claude Code 的连接，除非您选择 Disconnect all。"],
-    ["Claude 能删除订单吗？", "不能。没有删除工具。Claude 可以创建订单、添加备注和更改状态；状态更改被标记为破坏性，因此 Claude 会先询问您。"],
+    ["Claude 能删除订单吗？", "不能。没有删除工具。Claude 可以创建订单、添加备注和更改状态；更改状态被声明为破坏性工具。Claude 在运行它之前是否询问，取决于您的 Claude 设置。"],
     ["会联系我的客户吗？", "只会通过您自己的 NivaDesk 通知规则：当 Claude 更改一个已开启通知的订单状态时。Claude 不会以其他任何方式发送消息。"],
     ["可以用什么语言？", "用 Claude 能理解的任何语言提问。NivaDesk 的数据会按照工作区中保存的原样返回。"],
     ["出了问题", "工具错误会说明拒绝了什么以及原因，例如您的角色不能更新订单。如果不清楚，请联系支持并说明时间和您的问题。"]
@@ -1706,7 +1706,7 @@ const AR: ClaudeHelpCopy = {
   heroFacts: [
     "تسجيل دخولك الخاص إلى NivaDesk: لا مفاتيح مشتركة ولا بيانات عامة",
     "خطتك ودورك وصلاحيات مساحة العمل تنطبق على كل إجابة",
-    "يسألك Claude قبل أي تغيير مصنّف على أنه إتلافي"
+    "تعلن كل أداة ما إذا كانت تقرأ أو تضيف أو تغيّر البيانات"
   ],
   mockLabel: "رسم توضيحي: محادثة في Claude تستخدم موصّل NivaDesk",
   mockCaption: "رسم توضيحي ببيانات مثال. ليست مساحة عمل حقيقية.",
@@ -1739,7 +1739,7 @@ const AR: ClaudeHelpCopy = {
     "الاتصالات مستقلة. ربط Claude لا يقطع ChatGPT ولا Claude Code، وقطع أحدها يترك البقية تعمل. يتصل كل شخص بحسابه الخاص ويحصل على وصول دوره."
   ],
   toolsTitle: "ما يمكن لـ Claude فعله مع NivaDesk",
-  toolsIntro: "للموصّل 21 أداة. أدوات القراءة تبحث فقط. أدوات الكتابة تضيف شيئًا جديدًا إلى مساحة عملك. أما الأدوات المصنّفة إتلافية فتغيّر سجلات موجودة (وقد يرسل تغيير الحالة بريدًا إلى عميلك)، ويسألك Claude دائمًا قبل تشغيلها.",
+  toolsIntro: "للموصّل 21 أداة. تعلن كل أداة ما إذا كانت تقرأ فقط، أو تضيف شيئًا جديدًا، أو تغيّر سجلات موجودة أو تستبدلها (مصنّفة إتلافية). أما ما إذا كان Claude يسألك قبل تشغيل أداة فيعتمد على إعدادات Claude نفسه واختياراتك فيها؛ وفي كل الأحوال تُطبَّق صلاحيات NivaDesk (الخطة والدور والوصول إلى مساحة العمل) على خوادمه في كل استدعاء.",
   modeRead: "قراءة",
   modeWrite: "كتابة",
   modeDestructive: "إتلافية",
@@ -1822,7 +1822,7 @@ const AR: ClaudeHelpCopy = {
   safetyIntro: "يفعل الموصّل ما يمكنك أنت فعله في NivaDesk بالحساب نفسه، ولا شيء أكثر.",
   safety: [
     ["القواعد نفسها كما في التطبيق", "يُفحص كل استدعاء على خوادم NivaDesk وفق دورك ومفاتيح وصولك وخطتك قبل قراءة أو كتابة أي شيء. لا يستطيع Claude رؤية مساحة عمل أخرى ولا الملاحظات الشخصية لعضو آخر."],
-    ["يسأل Claude أولًا", "تخبر كل أداة Claude ما إذا كانت تقرأ فقط أو تضيف شيئًا جديدًا أو أنها إتلافية. يطلب Claude موافقتك قبل كل أداة إتلافية: تغيير حالة طلب، إضافة ملاحظة إلى طلب، الإضافة إلى ملاحظة أو تعديلها أو تثبيتها أو أرشفتها. وتحدد إعدادات Claude ما إذا كان يسأل قبل عمليات الكتابة الأخرى."],
+    ["أنواع الأدوات والتأكيدات", "تعلن كل أداة ما إذا كانت تقرأ فقط، أو تضيف شيئًا جديدًا، أو تغيّر بيانات موجودة أو تستبدلها (تغيير حالة طلب، إضافة ملاحظة إلى طلب، الإضافة إلى ملاحظة أو تعديلها أو تثبيتها أو أرشفتها). أما ما إذا كان Claude يسأل قبل تشغيل أداة فيعتمد على إعدادات Claude واختياراتك، ولا يتحكم NivaDesk في ذلك. وتُطبَّق صلاحيات NivaDesk نفسه — خطتك ودورك ووصولك إلى مساحة العمل — على خوادمه في كل استدعاء أيًا كانت إعدادات Claude."],
     ["رسائل إلى العملاء", "قد يؤدي تغيير حالة الطلب إلى إرسال بريد إلكتروني إلى عميلك إذا كانت إشعارات مساحة عملك مفعّلة لذلك الطلب. يُبلَّغ Claude بذلك، وهي الرسالة نفسها التي كان التطبيق سيرسلها."],
     ["لا حذف ولا تحريك للأموال", "لا توجد أداة تحذف الطلبات أو الملاحظات أو العملاء أو البيانات البنكية، ويمكن التراجع عن أرشفة الملاحظة. لا يستطيع الموصّل إجراء مدفوعات أو استردادات أو تحويلات."],
     ["الحدود", "تُرجع عمليات البحث عددًا محدودًا من النتائج، وما يقرؤه Claude هو البيانات التي تحتاجها إجابتك، لا نسخة من مساحة عملك."]
@@ -1837,7 +1837,7 @@ const AR: ClaudeHelpCopy = {
   disconnectTitle: "قطع الاتصال",
   disconnect: [
     ["في Claude", "افتح Settings › Connectors واختر NivaDesk واقطع الاتصال. يتوقف Claude عن استدعاء NivaDesk نيابة عنك."],
-    ["في NivaDesk (مالك مساحة العمل)", "افتح الإعدادات › التكاملات › ChatGPT. يظهر كل اتصال مساعد مع اسم مساعده (ChatGPT أو Claude أو Claude Code). ينهي Disconnect ذلك الاتصال وحده، وينهي Disconnect all كل اتصالات المساعدين بمساحة العمل. كلاهما يسري فورًا."]
+    ["في NivaDesk (مالك مساحة العمل)", "افتح الإعدادات › التكاملات › مساعدو الذكاء الاصطناعي (ChatGPT وClaude). يظهر كل اتصال مساعد مع اسم مساعده (ChatGPT أو Claude أو Claude Code). ينهي Disconnect ذلك الاتصال وحده، وينهي Disconnect all كل اتصالات المساعدين بمساحة العمل. كلاهما يسري فورًا."]
   ],
   disconnectNote: "قطع الاتصال لا يحذف أي شيء أنشأته عبر Claude: تبقى تلك الطلبات والملاحظات في مساحة عملك حتى تحذفها في NivaDesk.",
   disconnectLink: "افتح الإعدادات › التكاملات",
@@ -1847,7 +1847,7 @@ const AR: ClaudeHelpCopy = {
     ["هل يعمل مع خطة Free؟", "نعم. في Free وStarter تُرجع أدوات المال الإجماليات الأساسية فقط، ولا توجد بيانات في الأدوات البنكية لأن حركة الحساب البنكي ميزة في Pro وTeam."],
     ["هل يمكن لفريقي استخدامه؟", "نعم، كل شخص بتسجيل دخوله الخاص إلى NivaDesk وبوصول دوره: عضو سير العمل فقط يرى الطلبات المسندة إليه فقط ولا يرى أي أرقام مالية."],
     ["هل يقطع ربط Claude اتصال ChatGPT؟", "لا. لكل مساعد اتصاله الخاص. ربط Claude أو تجديده أو قطعه لا يمس اتصال ChatGPT أو Claude Code، إلا إذا اخترت Disconnect all."],
-    ["هل يستطيع Claude حذف الطلبات؟", "لا. لا توجد أداة حذف. يمكن لـ Claude إنشاء الطلبات وإضافة الملاحظات وتغيير الحالة؛ وتغيير الحالة مصنّف إتلافيًا، لذلك يسألك Claude أولًا."],
+    ["هل يستطيع Claude حذف الطلبات؟", "لا. لا توجد أداة حذف. يمكن لـ Claude إنشاء الطلبات وإضافة الملاحظات وتغيير الحالة؛ وتغيير الحالة مُعلَن كأداة إتلافية. أما ما إذا كان Claude يسأل قبل تشغيلها فيعتمد على إعدادات Claude لديك."],
     ["هل سيُتواصل مع عملائي؟", "فقط من خلال قواعد الإشعارات الخاصة بك في NivaDesk، عندما يغيّر Claude حالة طلب مفعّلة إشعاراته. لا يرسل Claude رسائل بأي طريقة أخرى."],
     ["بأي لغة يمكنني السؤال؟", "اسأل Claude بأي لغة يفهمها. تعود بيانات NivaDesk كما هي محفوظة في مساحة عملك."],
     ["حدث خطأ ما", "توضّح أخطاء الأدوات ما الذي رُفض ولماذا، مثل أن دورك لا يمكنه تحديث الطلبات. وإن لم يكن الأمر واضحًا، تواصل مع الدعم مع ذكر الوقت وما سألته."]
@@ -1866,7 +1866,7 @@ const HI: ClaudeHelpCopy = {
   heroFacts: [
     "आपका अपना NivaDesk साइन-इन: कोई साझा कुंजी नहीं, कोई सार्वजनिक डेटा नहीं",
     "आपका प्लान, भूमिका और वर्कस्पेस अनुमतियां हर जवाब पर लागू होती हैं",
-    "विनाशकारी चिह्नित किसी भी बदलाव से पहले Claude आपसे पूछता है"
+    "हर टूल बताता है कि वह पढ़ता है, जोड़ता है या डेटा बदलता है"
   ],
   mockLabel: "चित्रण: NivaDesk कनेक्टर का उपयोग करती Claude बातचीत",
   mockCaption: "उदाहरण डेटा वाला चित्रण। यह असली वर्कस्पेस नहीं है।",
@@ -1899,7 +1899,7 @@ const HI: ClaudeHelpCopy = {
     "कनेक्शन एक-दूसरे से स्वतंत्र हैं। Claude जोड़ने से ChatGPT या Claude Code नहीं हटते, और एक हटाने से बाकी चलते रहते हैं। हर व्यक्ति अपने खाते से जुड़ता है और उसे अपनी भूमिका की पहुंच मिलती है।"
   ],
   toolsTitle: "Claude NivaDesk के साथ क्या कर सकता है",
-  toolsIntro: "कनेक्टर में 21 टूल हैं। पढ़ने वाले टूल सिर्फ़ जानकारी देखते हैं। लिखने वाले टूल आपके वर्कस्पेस में कुछ नया जोड़ते हैं। विनाशकारी चिह्नित टूल मौजूदा रिकॉर्ड बदलते हैं (स्थिति बदलने पर ग्राहक को ईमेल जा सकता है), और उन्हें चलाने से पहले Claude हमेशा आपसे पूछता है।",
+  toolsIntro: "कनेक्टर में 21 टूल हैं। हर टूल बताता है कि वह सिर्फ़ पढ़ता है, कुछ नया जोड़ता है, या मौजूदा रिकॉर्ड बदलता या उनकी जगह लिखता है (विनाशकारी चिह्नित)। टूल चलाने से पहले Claude आपसे पूछेगा या नहीं, यह Claude की अपनी सेटिंग्स और वहां आपके चुनावों पर निर्भर है; NivaDesk की अनुमतियां (प्लान, भूमिका, वर्कस्पेस पहुंच) हर हाल में हर कॉल पर उसके सर्वर पर लागू होती हैं।",
   modeRead: "पढ़ना",
   modeWrite: "लिखना",
   modeDestructive: "विनाशकारी",
@@ -1982,7 +1982,7 @@ const HI: ClaudeHelpCopy = {
   safetyIntro: "कनेक्टर वही करता है जो आप उसी खाते से NivaDesk में खुद कर सकते हैं, उससे ज़्यादा कुछ नहीं।",
   safety: [
     ["ऐप जैसे ही नियम", "कुछ भी पढ़ने या लिखने से पहले हर कॉल NivaDesk सर्वर पर आपकी भूमिका, पहुंच सेटिंग्स और प्लान के अनुसार जांची जाती है। Claude कोई दूसरा वर्कस्पेस या किसी दूसरे सदस्य के निजी नोट्स नहीं देख सकता।"],
-    ["Claude पहले पूछता है", "हर टूल Claude को बताता है कि वह सिर्फ़ पढ़ता है, कुछ नया जोड़ता है या विनाशकारी है। हर विनाशकारी टूल से पहले Claude आपकी मंज़ूरी मांगता है: ऑर्डर की स्थिति बदलना, ऑर्डर में नोट जोड़ना, नोट में जोड़ना, उसे बदलना, पिन या संग्रहित करना। बाकी लेखन से पहले पूछना है या नहीं, यह आपकी Claude सेटिंग्स तय करती हैं।"],
+    ["टूल के प्रकार और पुष्टि", "हर टूल बताता है कि वह सिर्फ़ पढ़ता है, कुछ नया जोड़ता है, या मौजूदा डेटा बदलता या उसकी जगह लिखता है (ऑर्डर की स्थिति बदलना, ऑर्डर में नोट जोड़ना, नोट में जोड़ना, उसे बदलना, पिन या संग्रहित करना)। टूल चलाने से पहले Claude पूछेगा या नहीं, यह Claude की अपनी सेटिंग्स और आपके चुनावों पर निर्भर है; इसे NivaDesk नियंत्रित नहीं करता। NivaDesk की अपनी अनुमतियां — आपका प्लान, आपकी भूमिका और वर्कस्पेस पहुंच — Claude की सेटिंग्स चाहे जो हों, हर कॉल पर उसके सर्वर पर लागू होती हैं।"],
     ["ग्राहकों को संदेश", "ऑर्डर की स्थिति बदलने पर ग्राहक को ईमेल जा सकता है, अगर उस ऑर्डर के लिए आपके वर्कस्पेस की सूचनाएं चालू हैं। Claude को यह बताया जाता है; यह वही संदेश है जो ऐप भेजता।"],
     ["कुछ भी हटाया नहीं जाता, पैसा नहीं चलता", "कोई भी टूल ऑर्डर, नोट्स, ग्राहक या बैंक डेटा नहीं हटाता; नोट का संग्रह वापस किया जा सकता है। कनेक्टर भुगतान, रिफ़ंड या ट्रांसफ़र नहीं कर सकता।"],
     ["सीमाएं", "खोज सीमित संख्या में नतीजे लौटाती है; Claude वही डेटा पढ़ता है जो जवाब के लिए ज़रूरी है, आपके वर्कस्पेस की प्रति नहीं।"]
@@ -1997,7 +1997,7 @@ const HI: ClaudeHelpCopy = {
   disconnectTitle: "कनेक्शन हटाएं",
   disconnect: [
     ["Claude में", "Settings › Connectors खोलें, NivaDesk चुनें और कनेक्शन हटाएं। Claude आपके लिए NivaDesk को कॉल करना बंद कर देता है।"],
-    ["NivaDesk में (वर्कस्पेस मालिक)", "सेटिंग्स › इंटीग्रेशन › ChatGPT खोलें। हर सहायक कनेक्शन अपने सहायक (ChatGPT, Claude या Claude Code) के साथ दिखता है। Disconnect सिर्फ़ उस कनेक्शन को खत्म करता है; Disconnect all वर्कस्पेस के सभी सहायक कनेक्शन खत्म करता है। दोनों तुरंत लागू होते हैं।"]
+    ["NivaDesk में (वर्कस्पेस मालिक)", "सेटिंग्स › इंटीग्रेशन › AI सहायक (ChatGPT और Claude) खोलें। हर सहायक कनेक्शन अपने सहायक (ChatGPT, Claude या Claude Code) के साथ दिखता है। Disconnect सिर्फ़ उस कनेक्शन को खत्म करता है; Disconnect all वर्कस्पेस के सभी सहायक कनेक्शन खत्म करता है। दोनों तुरंत लागू होते हैं।"]
   ],
   disconnectNote: "कनेक्शन हटाने से Claude के ज़रिए बनाई कोई चीज़ नहीं हटती: वे ऑर्डर और नोट्स आपके वर्कस्पेस में तब तक रहते हैं जब तक आप उन्हें NivaDesk में नहीं हटाते।",
   disconnectLink: "सेटिंग्स › इंटीग्रेशन खोलें",
@@ -2007,7 +2007,7 @@ const HI: ClaudeHelpCopy = {
     ["क्या यह Free प्लान पर चलता है?", "हां। Free और Starter पर पैसे वाले टूल सिर्फ़ बुनियादी कुल लौटाते हैं, और बैंक टूल में डेटा नहीं होता क्योंकि बैंक फ़ीड Pro और Team सुविधा है।"],
     ["क्या मेरी टीम इसे इस्तेमाल कर सकती है?", "हां, हर व्यक्ति अपने NivaDesk लॉगिन से और अपनी भूमिका की पहुंच के साथ: केवल-वर्कफ़्लो सदस्य सिर्फ़ अपने सौंपे गए ऑर्डर देखता है और कोई रकम नहीं।"],
     ["क्या Claude जोड़ने से ChatGPT हट जाता है?", "नहीं। हर सहायक का अपना कनेक्शन है। Claude को जोड़ना, नवीनीकृत करना या हटाना ChatGPT या Claude Code कनेक्शन को नहीं छूता, जब तक आप Disconnect all न चुनें।"],
-    ["क्या Claude ऑर्डर हटा सकता है?", "नहीं। हटाने का कोई टूल नहीं है। Claude ऑर्डर बना सकता है, नोट जोड़ सकता है और स्थिति बदल सकता है; स्थिति बदलना विनाशकारी चिह्नित है, इसलिए Claude पहले पूछता है।"],
+    ["क्या Claude ऑर्डर हटा सकता है?", "नहीं। हटाने का कोई टूल नहीं है। Claude ऑर्डर बना सकता है, नोट जोड़ सकता है और स्थिति बदल सकता है; स्थिति बदलना विनाशकारी टूल के रूप में घोषित है। Claude उसे चलाने से पहले पूछेगा या नहीं, यह आपकी Claude सेटिंग्स पर निर्भर है।"],
     ["क्या मेरे ग्राहकों से संपर्क होगा?", "सिर्फ़ आपके अपने NivaDesk सूचना नियमों के ज़रिए, जब Claude ऐसे ऑर्डर की स्थिति बदले जिसकी सूचनाएं चालू हैं। Claude किसी और तरीके से संदेश नहीं भेजता।"],
     ["मैं कौन-सी भाषा इस्तेमाल कर सकता हूं?", "Claude से उसकी समझी जाने वाली किसी भी भाषा में पूछें। NivaDesk का डेटा वैसा ही लौटता है जैसा आपके वर्कस्पेस में सहेजा है।"],
     ["कुछ गड़बड़ हुई", "टूल की त्रुटियां बताती हैं कि क्या और क्यों मना हुआ, जैसे कि आपकी भूमिका ऑर्डर अपडेट नहीं कर सकती। स्पष्ट न हो तो समय और अपना सवाल बताकर सपोर्ट से संपर्क करें।"]

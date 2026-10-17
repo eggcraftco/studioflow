@@ -69,7 +69,9 @@ export function ChatGPTIntegrationSection({
       setMessage(brand(t(result), assistant));
       await refresh();
     } catch (failure) {
-      setError(failure instanceof Error ? t(failure.message) : brand(t("ChatGPT could not be disconnected."), assistant));
+      setError(failure instanceof Error
+        ? t(failure.message)
+        : target === "all" ? t("The assistant connections could not be disconnected.") : brand(t("ChatGPT could not be disconnected."), assistant));
     } finally {
       setBusy(false);
     }
@@ -78,9 +80,9 @@ export function ChatGPTIntegrationSection({
   return (
     <section className="card" style={{ padding: 22 }}>
       <div className="pill">{BOTH}</div>
-      <h2 style={{ margin: "12px 0 6px" }}>{brand(t("ChatGPT access to this workspace"), BOTH)}</h2>
+      <h2 style={{ margin: "12px 0 6px" }}>{t("AI assistants (ChatGPT and Claude)")}</h2>
       <p style={{ color: "var(--muted)", marginTop: 0 }}>
-        {brand(t("Connecting is done from ChatGPT. Each connection lasts 30 days, and ending one here takes effect immediately."), BOTH)}
+        {t("Connecting is done from ChatGPT or Claude. Each connection is listed with its assistant, and ending one here takes effect immediately.")}
       </p>
 
       {message ? <p className="layout-message" style={{ margin: "0 0 12px" }}>{message}</p> : null}
@@ -90,7 +92,7 @@ export function ChatGPTIntegrationSection({
         <p style={{ color: "var(--muted)" }}>{t("Loading...")}</p>
       ) : connections.length === 0 ? (
         <p style={{ color: "var(--muted)" }}>
-          {brand(t("No ChatGPT connection. Nothing outside NivaDesk can read this workspace."), BOTH)}
+          {t("No AI assistant connection. Nothing outside NivaDesk can read this workspace.")}
         </p>
       ) : (
         <div className="grid" style={{ gap: 10 }}>

@@ -166,5 +166,27 @@ check("5b the page's internal links are the real routes", () => {
   assert.ok(read("app/bank/page.tsx").includes('searchParams.get("receiptUpload")'), "bank reads ?receiptUpload=");
 });
 
+check("6a no absolute confirmation promise; confirmations depend on Claude's settings, NivaDesk permissions always apply", () => {
+  // Owner, 17 Oct 2026: NivaDesk does not decide whether Claude asks before a tool.
+  const banned = /always asks|asks you first|asks before it changes|asks for your approval before every|Claude asks first|her zaman size sorar|Claude önce sorar|fragt Claude Sie immer|Claude fragt zuerst|vous demande toujours|ti chiede sempre|siempre te pregunta|pergunta-lhe sempre|всегда спрашивает|必ず確認|总会先征求|يسألك Claude دائمًا|हमेशा आपसे पूछता/;
+  for (const language of SUPPORTED_STUDIO_LANGUAGES) {
+    const text = strings(CLAUDE_HELP_COPY[language]!).join(" ");
+    assert.ok(!banned.test(text), `${language}: absolute confirmation promise: ${text.match(banned)?.[0]}`);
+    assert.ok(text.includes("Claude"), language);
+  }
+  assert.ok(/depends on Claude's own settings/.test(EN.toolsIntro) && /enforced on its servers on every call/.test(EN.toolsIntro));
+});
+
+check("6b the guide names the Settings heading that covers both assistants", () => {
+  const headings: Record<string, string> = {"English": "AI assistants (ChatGPT and Claude)", "Türkçe": "Yapay zekâ asistanları (ChatGPT ve Claude)", "Deutsch": "KI-Assistenten (ChatGPT und Claude)", "Français": "Assistants IA (ChatGPT et Claude)", "Italiano": "Assistenti IA (ChatGPT e Claude)", "Español (Spanish)": "Asistentes de IA (ChatGPT y Claude)", "Português": "Assistentes de IA (ChatGPT e Claude)", "Русский (Russian)": "ИИ-ассистенты (ChatGPT и Claude)", "日本語 (Japanese)": "AI アシスタント（ChatGPT と Claude）", "中文 (Chinese)": "AI 助手（ChatGPT 和 Claude）", "العربية (Arabic)": "مساعدو الذكاء الاصطناعي (ChatGPT وClaude)", "हिन्दी (Hindi)": "AI सहायक (ChatGPT और Claude)"};
+  for (const language of SUPPORTED_STUDIO_LANGUAGES) {
+    assert.ok(CLAUDE_HELP_COPY[language]!.disconnect[1][1].includes(headings[language]), `${language}: disconnect row names "${headings[language]}"`);
+  }
+  const section = read("app/settings/ChatGPTIntegrationSection.tsx");
+  assert.ok(section.includes('t("AI assistants (ChatGPT and Claude)")'), "Settings section heading");
+  assert.ok(!section.includes('t("ChatGPT access to this workspace")') && !section.includes('t("No ChatGPT connection.'), "no ChatGPT-only heading or empty state");
+  assert.ok(read("lib/studioflow/integrations.ts").includes('name: "AI assistants (ChatGPT and Claude)"'), "hub card name");
+});
+
 console.log(`\nclaude-guide: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

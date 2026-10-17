@@ -5719,7 +5719,7 @@ function IntegrationsSection({
         <nav className="integrations-crumb">
           <button type="button" onClick={() => setManaging("")}>{t("Integrations")}</button>
           <span aria-hidden="true">/</span>
-          <strong>{managing === "dhl" ? "DHL Express" : INTEGRATION_PROVIDERS.find((p) => p.manage === managing && p.kind !== "planned")?.name ?? t("Setup")}</strong>
+          <strong>{managing === "dhl" ? "DHL Express" : t(INTEGRATION_PROVIDERS.find((p) => p.manage === managing && p.kind !== "planned")?.name ?? "Setup")}</strong>
         </nav>
         {managing === "shopify" ? <ShopifyIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "etsy" ? <EtsyIntegrationSection workspace={workspace} language={language} /> : null}
@@ -5899,7 +5899,9 @@ function IntegrationCard({
             : <b>{provider.mark ?? provider.name.slice(0, 1)}</b>}
         </span>
         <div>
-          <strong>{provider.name}</strong>
+          {/* Brand names have no translation row and come back unchanged; the
+              assistants card's name is a label and is translated. */}
+          <strong>{t(provider.name)}</strong>
           <span className={`integration-state is-${live.unproven ? "unproven" : live.state}`}>{t(label)}</span>
         </div>
         {categoryLabel ? <span className="settings-tag is-muted integration-category">{categoryLabel}</span> : null}

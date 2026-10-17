@@ -67,9 +67,11 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     // Listed at last. The grant lives in a collection no client may read, so
     // for months a workspace that HAD connected ChatGPT was shown nothing at
     // all — and had no way to disconnect it either.
-    id: "chatgpt", name: "ChatGPT", category: "automation", kind: "native",
+    // One card for every assistant connection (ChatGPT, Claude, Claude Code): the
+    // name is a translated label, not a brand (owner, 17 Oct 2026).
+    id: "chatgpt", name: "AI assistants (ChatGPT and Claude)", category: "automation", kind: "native",
     logo: "/brand/integrations/chatgpt.svg",
-    blurb: "Ask ChatGPT about your orders, notes and spending. Access lasts 30 days and you can withdraw it here.",
+    blurb: "Ask ChatGPT or Claude about your orders, notes and spending. Every connection can be withdrawn here.",
     capabilities: ["Orders", "Notes", "Banking"], manage: "chatgpt",
   },
   {
