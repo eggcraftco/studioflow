@@ -27,7 +27,7 @@ import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
 import { BankReceiptViewer, type BankReceiptViewerRequest } from "@/components/BankReceiptViewer";
-import { documentAmountText, foreignAmountInBankText, waitingReceiptLookalikes } from "@/lib/studioflow/bankWaitingReceipts";
+import { documentAmountText, documentAmountWithCurrency, documentReceiptCurrency, foreignAmountInBankText, waitingReceiptLookalikes } from "@/lib/studioflow/bankWaitingReceipts";
 
 type BankAccountInfo = { id: string; name: string; currency: string };
 type BankConnection = {
@@ -130,7 +130,7 @@ type BankRule = {
 };
 // A receipt uploaded before its payment reached the bank feed; the server
 // re-scores it after every sync and attaches it when a confident match lands.
-type WaitingReceipt = { id: string; storagePath: string; fileName: string; amount: number; date: string; source: string; createdAt: Date | null; attempts: number };
+type WaitingReceipt = { id: string; storagePath: string; fileName: string; amount: number; currency: string | null; date: string; source: string; createdAt: Date | null; attempts: number };
 
 // NivaDesk's own VAT treatments — the accounting connector translates them
 // per provider at push time, nothing here is a Pandle code. Zero-rated and
@@ -357,7 +357,7 @@ function BankPageContent() {
   const [categoryRuleKeyword, setCategoryRuleKeyword] = useState("");
   const [ocrInboxPath, setOcrInboxPath] = useState<string | null>(null);
   const [ocrFileName, setOcrFileName] = useState("");
-  const [ocrParsed, setOcrParsed] = useState<{ amount: number; date: string } | null>(null);
+  const [ocrParsed, setOcrParsed] = useState<{ amount: number; date: string; currency?: string | null } | null>(null);
   const [ocrCandidates, setOcrCandidates] = useState<Array<{ transactionId: string; score: number; amount: number; currency: string; bookingDate: string; counterparty: string; description: string; hasReceipt: boolean }> | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -566,6 +566,8 @@ function BankPageContent() {
               storagePath: String(data.storagePath || ""),
               fileName: String(data.fileName || "receipt"),
               amount: Number(data.amount) || 0,
+              // N23: the document's own currency; null when not read (and on rows queued before it was stored).
+              currency: documentReceiptCurrency(data.documentCurrency),
               date: String(data.date || ""),
               source: String(data.source || "web"),
               createdAt: created?.toDate ? created.toDate() : null,
@@ -768,7 +770,7 @@ function BankPageContent() {
       const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120) || "receipt.jpg";
       const path = `companies/${companyId}/bank_receipts/_inbox/${Date.now()}_${safeName}`;
       await uploadBytes(storageRef(storage, path), file);
-      const result = await call<{ parsed: { amount: number; date: string }; candidates: NonNullable<typeof ocrCandidates> }>("bankMatchReceipt", { storagePath: path });
+      const result = await call<{ parsed: { amount: number; date: string; currency?: string | null }; candidates: NonNullable<typeof ocrCandidates> }>("bankMatchReceipt", { storagePath: path });
       setOcrInboxPath(path);
       setOcrFileName(file.name);
       setOcrParsed(result.parsed);
@@ -1700,9 +1702,12 @@ function BankPageContent() {
     const symbol = formatter.formatToParts(0).find(part => part.type === "currency")?.value ?? "";
     return hiddenMoneyLabel(symbol);
   };
-  // Review N23: a receipt's amount is read without its currency (the reader
-  // takes digits only), so it is never dressed in the bank's currency.
+  // Review N23: a receipt's amount is never dressed in the bank's currency.
+  // The reader now reads the document's own currency when it states one
+  // ("USD 838.80"); otherwise the bare number + "currency not read".
   const documentAmount = (value: number) => hideNumbers ? hiddenMoneyLabel("") : documentAmountText(value);
+  const documentAmountKnown = (value: number, currency: string | null | undefined) =>
+    hideNumbers ? hiddenMoneyLabel(documentReceiptCurrency(currency) ?? "") : documentAmountWithCurrency(value, currency);
 
   if (loading || workspaceLoading) return <LoadingScreen />;
   if (!user) return null;
@@ -1782,9 +1787,9 @@ function BankPageContent() {
               <strong style={{ fontSize: 13 }}>📷 {ocrFileName}</strong>
               {ocrParsed && ocrParsed.amount > 0 ? (
                 <span style={{ fontSize: 12, opacity: 0.75 }}>
-                  {t("Detected")}: <strong>{documentAmount(ocrParsed.amount)}</strong>
+                  {t("Detected")}: <strong>{documentAmountKnown(ocrParsed.amount, ocrParsed.currency) ?? documentAmount(ocrParsed.amount)}</strong>
                   {ocrParsed.date ? ` · ${ocrParsed.date}` : ""}
-                  {" · "}{t("currency not read from the document")}
+                  {documentReceiptCurrency(ocrParsed.currency) ? null : <>{" · "}{t("currency not read from the document")}</>}
                 </span>
               ) : <span style={{ fontSize: 12, opacity: 0.75 }}>{t("No amount detected on the receipt.")}</span>}
               <span style={{ flex: 1 }} />
@@ -2808,7 +2813,7 @@ function BankPageContent() {
                     </div>
                     {waitingReceipts.length > 0 ? (
                       <p className="bank-waiting-rule" style={{ margin: "0 0 8px", fontSize: 11.5, opacity: 0.75 }}>
-                        {t("Amounts are as written on the document; the currency is not read. “Assign to a transaction” closes the waiting item. Attaching a file straight to a transaction does not — if it is the same document, remove the waiting copy here.")}
+                        {t("Amounts are as written on the document, in its own currency when the document states one. “Assign to a transaction” closes the waiting item, and so does attaching the same file straight to a transaction. A different file of the same document does not — remove the waiting copy here.")}
                       </p>
                     ) : null}
                     {waitingReceipts.length === 0 ? (
@@ -2832,7 +2837,7 @@ function BankPageContent() {
                                 <button type="button" onClick={() => openWaitingReceipt(item)} title={t("View receipt")}
                                   style={{ ...attentionLink, fontSize: 12.5, fontWeight: 700, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textAlign: "left" }}>{item.fileName}</button>
                                 <div style={{ fontSize: 11, opacity: 0.65 }}>
-                                  {item.amount ? <span title={t("currency not read from the document")}>{documentAmount(item.amount)} <span style={{ opacity: 0.8 }}>({t("currency not read")})</span></span> : t("Amount unknown")}{item.date ? ` · ${item.date}` : ""} · {item.source === "chatgpt" ? "ChatGPT" : t("Web")} · {ageDays === 0 ? t("today") : `${ageDays} ${t("days waiting")}`}
+                                  {item.amount ? (item.currency ? <span>{documentAmountKnown(item.amount, item.currency)}</span> : <span title={t("currency not read from the document")}>{documentAmount(item.amount)} <span style={{ opacity: 0.8 }}>({t("currency not read")})</span></span>) : t("Amount unknown")}{item.date ? ` · ${item.date}` : ""} · {item.source === "chatgpt" ? "ChatGPT" : t("Web")} · {ageDays === 0 ? t("today") : `${ageDays} ${t("days waiting")}`}
                                   {stale && !lookalike ? <span style={{ color: "#dc2626", fontWeight: 700 }}> · {t("Still no payment — check the amount or assign it by hand")}</span> : null}
                                 </div>
                                 {lookalike ? (
@@ -2871,10 +2876,11 @@ function BankPageContent() {
                                     <span style={{ opacity: 0.6, minWidth: 62 }}>{new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}</span>
                                     <strong style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.provider === "paypal" ? <span title="PayPal" style={{ display: "inline-block", width: 14, height: 14, lineHeight: "14px", borderRadius: 999, fontSize: 9, fontWeight: 800, textAlign: "center" as const, color: "#fff", background: "#003087", marginRight: 6, verticalAlign: "middle" }}>P</span> : null}{tx.counterparty || tx.description}</strong>
                                     {(() => {
-                                      const foreign = foreignAmountInBankText(`${tx.description} ${tx.counterparty}`, item.amount, tx.currency);
+                                      const found = foreignAmountInBankText(`${tx.description} ${tx.counterparty}`, item.amount, tx.currency);
+                                      const foreign = found && (!item.currency || found.currency === item.currency) ? found : null;
                                       return foreign ? <span style={{ fontSize: 11, color: "#16a34a", fontWeight: 700, whiteSpace: "nowrap" }} title={t("Bank text")}>{foreign.currency} {documentAmount(foreign.amount)}</span> : null;
                                     })()}
-                                    <span style={{ fontVariantNumeric: "tabular-nums", color: Math.abs(Math.abs(tx.amount) - item.amount) < 0.015 ? "#16a34a" : "inherit", fontWeight: 700 }}>−{money(Math.abs(tx.amount), tx.currency)}</span>
+                                    <span style={{ fontVariantNumeric: "tabular-nums", color: Math.abs(Math.abs(tx.amount) - item.amount) < 0.015 && (!item.currency || item.currency === documentReceiptCurrency(tx.currency)) ? "#16a34a" : "inherit", fontWeight: 700 }}>−{money(Math.abs(tx.amount), tx.currency)}</span>
                                     {tx.receiptPath ? <span title={t("Already has a receipt — assigning replaces it.")} style={{ display: "inline-flex" }}><FileBadge name={tx.receiptName} size={16} /></span> : null}
                                   </button>
                                 ))}

@@ -17,8 +17,15 @@
 //   * "Assign to a transaction" closes the waiting item (the server moves the
 //     file and deletes the waiting record). Attaching a file straight onto a
 //     transaction does not touch the waiting list.
+//
+// N23 server part (functions/bankFeed.js, 17 Oct): the reader now reads the
+// document's own currency when the document states it, and the waiting
+// record carries it as `documentCurrency` (null = not read; rows queued
+// before that have no such field and read as unknown — never as the bank's
+// GBP). A direct attach of the same file (byte-identical) now closes its
+// waiting copy too. These helpers take the currency when it is known.
 
-export type WaitingReceiptLike = { amount: number; date: string };
+export type WaitingReceiptLike = { amount: number; date: string; currency?: string | null };
 
 export type BankRowLike = {
   id: string;
@@ -100,6 +107,7 @@ export function waitingReceiptLookalikes<T extends BankRowLike>(
   windowDays = 7,
 ): WaitingReceiptLookalike<T>[] {
   if (!(item.amount > 0)) return [];
+  const documentCurrency = documentReceiptCurrency(item.currency);
   const documentDay = dayNumber(item.date);
   const found: WaitingReceiptLookalike<T>[] = [];
   for (const transaction of transactions) {
@@ -107,12 +115,15 @@ export function waitingReceiptLookalikes<T extends BankRowLike>(
     const bookingDay = dayNumber(transaction.bookingDate);
     const daysApart = documentDay !== null && bookingDay !== null ? Math.abs(bookingDay - documentDay) : null;
     if (daysApart !== null && daysApart > windowDays) continue;
-    if (Math.abs(Math.abs(transaction.amount) - item.amount) < HALF_CENT) {
+    const bankCurrency = documentReceiptCurrency(transaction.currency);
+    // A known document currency that differs from the bank's: the same number is not the same amount.
+    const crossCurrency = Boolean(documentCurrency && bankCurrency && documentCurrency !== bankCurrency);
+    if (!crossCurrency && Math.abs(Math.abs(transaction.amount) - item.amount) < HALF_CENT) {
       found.push({ transaction, via: "amount", foreign: null, daysApart });
       continue;
     }
     const foreign = foreignAmountInBankText(`${transaction.description} ${transaction.counterparty}`, item.amount, transaction.currency);
-    if (foreign) found.push({ transaction, via: "foreign", foreign, daysApart });
+    if (foreign && (!documentCurrency || foreign.currency === documentCurrency)) found.push({ transaction, via: "foreign", foreign, daysApart });
   }
   return found.sort((a, b) => (a.daysApart ?? 99) - (b.daysApart ?? 99));
 }
@@ -120,4 +131,16 @@ export function waitingReceiptLookalikes<T extends BankRowLike>(
 /** The document's number as written, two decimals, no currency (none was read). */
 export function documentAmountText(amount: number, locale?: string): string {
   return new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+}
+
+/** The document currency the server read ("USD"), or null when it was not read / the row predates it. */
+export function documentReceiptCurrency(value: unknown): string | null {
+  const code = String(value ?? "").trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(code) ? code : null;
+}
+
+/** "USD 838.80" when the document's currency was read; null otherwise (show the bare number + "currency not read"). */
+export function documentAmountWithCurrency(amount: number, currency: unknown, locale?: string): string | null {
+  const code = documentReceiptCurrency(currency);
+  return code ? `${code} ${documentAmountText(amount, locale)}` : null;
 }
