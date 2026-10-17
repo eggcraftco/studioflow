@@ -13,7 +13,7 @@ import * as claudeRoute from "../app/claudeMcp/route";
 import * as claudePrm from "../app/.well-known/oauth-protected-resource/claudeMcp/route";
 import * as authorizeRoute from "../app/chatgptOAuthAuthorize/route";
 import * as asRoute from "../app/.well-known/oauth-authorization-server/route";
-import { assistantNameForResource, chatGPTConnectionAssistant, CLAUDE_MCP_NO_CREDENTIAL_CHALLENGE } from "../lib/chatgpt/claudeMcp";
+import { assistantNameForResource, chatGPTConnectionAssistant, CLAUDE_MCP_NO_CREDENTIAL_CHALLENGE, CLAUDE_CONNECT_CAPABILITIES, CLAUDE_MCP_TOOL_NAMES, clientMetadataHost, connectCapabilities } from "../lib/chatgpt/claudeMcp";
 
 let failures = 0; let checks = 0;
 const check = (ok: boolean, what: string) => { checks += 1; if (!ok) { failures += 1; console.error(`FAIL ${what}`); } else console.log(`ok   ${what}`); };
@@ -53,14 +53,19 @@ async function main() {
   const o = await claudeRoute.OPTIONS();
   check(o.status === 204 && (o.headers.get("access-control-expose-headers") || "").includes("WWW-Authenticate"), "OPTIONS: 204, exposes WWW-Authenticate");
 
-  // discovery without credential -> the claudeMcp function
+  // r3: nothing anonymous — initialize / tools/list / ping / notifications without a bearer get the 401 as well
   for (const m of ["initialize", "tools/list", "notifications/initialized", "ping"]) {
     seen = [];
+    const r = await claudeRoute.POST(req("POST", rpc(m)));
+    check(r.status === 401 && r.headers.get("www-authenticate") === CLAUDE_MCP_NO_CREDENTIAL_CHALLENGE && seen.length === 0, `r3: ${m} without bearer: 401 + challenge, the function is not called`);
+  }
+  // with a bearer, discovery methods go to the claudeMcp function untouched
+  for (const m of ["initialize", "tools/list"]) {
+    seen = [];
     const body = rpc(m);
-    const r = await claudeRoute.POST(req("POST", body));
-    check(r.status === 200 && seen.length === 1 && seen[0].url === "https://europe-west2-eggcraft-studio.cloudfunctions.net/claudeMcp" && seen[0].body === body,
-      `${m} without bearer: proxied to the claudeMcp function, body unchanged`);
-    check(seen[0]?.headers.get("x-forwarded-host") === "nivadesk.app", `${m}: x-forwarded-host nivadesk.app`);
+    const r = await claudeRoute.POST(req("POST", body, "some-token"));
+    check(r.status === 200 && seen.length === 1 && seen[0].url === "https://europe-west2-eggcraft-studio.cloudfunctions.net/claudeMcp" && seen[0].body === body && seen[0]?.headers.get("x-forwarded-host") === "nivadesk.app",
+      `${m} with bearer: proxied to the claudeMcp function, body unchanged, x-forwarded-host nivadesk.app`);
   }
 
   // with a bearer -> the function, which decides; its 401 comes back untouched
@@ -98,8 +103,22 @@ async function main() {
     && chatGPTConnectionAssistant({ assistant: "chatgpt", clientOrigin: "https://chatgpt.com" }) === "ChatGPT" && chatGPTConnectionAssistant({}) === "ChatGPT", "Settings row names each connection's client: ChatGPT / Claude / Claude Code");
   const asj = await (await asRoute.GET()).json();
   check(JSON.stringify(asj.grant_types_supported) === '["authorization_code","refresh_token"]' && asj.issuer === "https://nivadesk.app" && asj.registration_endpoint === "https://nivadesk.app/chatgptOAuthRegister", "AS metadata advertises refresh_token; issuer / DCR unchanged");
+  check(asj.client_id_metadata_document_supported === true && asj.token_endpoint_auth_methods_supported.includes("none") && asj.code_challenge_methods_supported.includes("S256"), "r3: AS metadata advertises CIMD (client_id_metadata_document_supported + \"none\" + S256 — what Claude checks)");
   const asDiff = execFileSync("git", ["diff", "-U0", "cce8480c", "--", "app/.well-known/oauth-authorization-server/route.ts"], { encoding: "utf8" }).split("\n").filter((l) => /^[+-][^+-]/.test(l));
-  check(asDiff.length === 3 && asDiff.filter((l) => l.startsWith("-")).length === 1 && /grant_types_supported/.test(asDiff.join("")), "AS metadata: the only change is grant_types_supported (+1 comment line)");
+  check(asDiff.length === 6 && asDiff.filter((l) => l.startsWith("-")).length === 2 && /grant_types_supported/.test(asDiff.join("")) && /client_id_metadata_document_supported: true/.test(asDiff.join("")), "AS metadata vs cce8480c: only grant_types_supported and client_id_metadata_document_supported changed (+2 comment lines)");
+
+  // r3: the consent page's list is built from the authorised endpoint's tools
+  const groups = CLAUDE_CONNECT_CAPABILITIES.flatMap((g) => [...g.tools]);
+  check(groups.length === CLAUDE_MCP_TOOL_NAMES.length && new Set(groups).size === groups.length && CLAUDE_MCP_TOOL_NAMES.every((n) => groups.includes(n)), "r3: every one of the 21 Claude tools is behind exactly one consent line");
+  const claudeLines = connectCapabilities("https://nivadesk.app/claudeMcp");
+  const gptLines = connectCapabilities("https://nivadesk.app/chatgptMcp");
+  check(!claudeLines.some((l) => /messages|quick replies/i.test(l)) && claudeLines.length === CLAUDE_CONNECT_CAPABILITIES.length + 1, "r3: the Claude consent list has no messages / quick replies line (no such tool)");
+  check(gptLines.length === 5 && gptLines[3] === "Read messages and quick replies only when your plan and role allow access.", "ChatGPT's consent list unchanged (5 lines, same text)");
+  check(clientMetadataHost("https://claude.ai/oauth/mcp-oauth-client-metadata") === "claude.ai" && clientMetadataHost("chatgpt_abc") === "" && clientMetadataHost("http://x.example/a") === "", "r3: a CIMD client_id shows its host as the requester; a registered id shows none");
+  // (source, not import: the page pulls in the Firebase client, which needs a browser config)
+  const aliasSrc = require("fs").readFileSync(require("path").join(__dirname, "..", "app", "connect", "page.tsx"), "utf8");
+  check(/export \{ default \} from "\.\.\/chatgpt\/connect\/page";/.test(aliasSrc) && /export const dynamic = "force-dynamic";/.test(aliasSrc) && require("fs").existsSync(require("path").join(__dirname, "..", "app", "chatgpt", "connect", "page.tsx")),
+    "r3: /connect re-exports the /chatgpt/connect page (ChatGPT's URL unchanged)");
 
   // 4. ChatGPT routes untouched
   const changed = execFileSync("git", ["diff", "--name-only", "cce8480c", "--", "app/chatgptMcp", "app/chatgptOAuthAuthorize", "app/chatgptOAuthToken", "app/chatgptOAuthRegister", "app/chatgptOAuthApprove", "app/.well-known/oauth-protected-resource/route.ts", "app/.well-known/oauth-protected-resource/chatgptMcp", "lib/chatgpt/proxyFirebaseFunction.ts"], { encoding: "utf8" }).trim();

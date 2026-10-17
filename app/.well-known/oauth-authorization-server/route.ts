@@ -30,7 +30,8 @@ const authorizationServerMetadata = {
   scopes_supported: scopesSupported,
   resource_indicators_supported: true,
   authorization_response_iss_parameter_supported: false,
-  client_id_metadata_document_supported: false,
+  // claude-endpoint-r3: an https client_id URL (Client ID Metadata Document) is accepted next to DCR; public clients.
+  client_id_metadata_document_supported: true,
   service_documentation: "https://nivadesk.app/privacy",
   ui_locales_supported: ["en", "tr"],
   server: "NivaDesk"

@@ -7,7 +7,7 @@ import { auth, db, googleProvider } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
-import { assistantNameForResource } from "@/lib/chatgpt/claudeMcp";
+import { assistantNameForResource, clientMetadataHost, connectCapabilities } from "@/lib/chatgpt/claudeMcp";
 
 type WorkspaceOption = {
   id: string;
@@ -258,6 +258,10 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
   // (https://nivadesk.app/claudeMcp), ChatGPT otherwise — the same words as
   // before for every ChatGPT connection. Wording only; the grant is the same.
   const assistant = assistantNameForResource(oauthParams.resource);
+  // The list comes from the tools of the endpoint being authorised (lib/chatgpt/claudeMcp.ts), not one fixed text.
+  const capabilities = connectCapabilities(oauthParams.resource);
+  // A client that names itself with a published metadata document (CIMD): its host is who is asking.
+  const requesterHost = clientMetadataHost(oauthParams.client_id);
 
   return (
     <main style={{
@@ -297,6 +301,12 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
             destination is the one thing a person can use to tell a genuine
             connection from a crafted one. The server refuses an unregistered
             destination outright; this is so the person can see it too. */}
+        {requesterHost ? (
+          <p style={{ color: "#6e6e73", lineHeight: 1.55, marginTop: -6, fontSize: 14 }}>
+            Requested by <strong style={{ color: "#1d1d1f" }}>{requesterHost}</strong> (the client&apos;s published identity).
+          </p>
+        ) : null}
+
         {redirectHost ? (
           <p style={{ color: "#6e6e73", lineHeight: 1.55, marginTop: -6, fontSize: 14 }}>
             After you allow it, NivaDesk will send the authorization to{" "}
@@ -375,11 +385,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
               color: "#3a3a3c"
             }}>
               <strong>{assistant} will be able to:</strong>
-              <span>• Search and summarise orders, tasks, timelines and dashboard information in the selected workspace.</span>
-              <span>• View financial summaries only when your NivaDesk plan and role allow financial access.</span>
-              <span>• Create new orders, add order notes, add personal notes and update order status after your request.</span>
-              <span>• Read messages and quick replies only when your plan and role allow access.</span>
-              <span>• It will not access other workspaces unless you connect them separately.</span>
+              {capabilities.map((line) => <span key={line}>• {line}</span>)}
             </div>
 
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", flexWrap: "wrap" }}>

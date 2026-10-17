@@ -14,14 +14,6 @@ import { CLAUDE_MCP_NO_CREDENTIAL_CHALLENGE, CLAUDE_MCP_RESOURCE_METADATA_URL } 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Discovery without an account: the tool metadata, never workspace data.
-const PUBLIC_MCP_METHODS = new Set([
-  "initialize",
-  "notifications/initialized",
-  "tools/list",
-  "ping"
-]);
-
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -67,15 +59,6 @@ function unauthorizedResponse(method: string) {
   );
 }
 
-async function readMcpMethod(request: Request) {
-  try {
-    const payload = await request.clone().json();
-    return typeof payload?.method === "string" ? payload.method : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function OPTIONS() {
   return new Response(null, { status: 204, headers: { ...corsHeaders(), ...noStoreHeaders() } });
 }
@@ -91,11 +74,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (!hasBearerToken(request)) {
-    const method = await readMcpMethod(request);
-    if (!method || !PUBLIC_MCP_METHODS.has(method)) {
-      return unauthorizedResponse("POST");
-    }
-  }
+  // claude-endpoint-r3: nothing on this endpoint is anonymous — initialize and tools/list included. The 401 is what
+  // makes Claude choose OAuth when the connector is added; the discovery documents stay public at /.well-known/.
+  if (!hasBearerToken(request)) return unauthorizedResponse("POST");
   return proxyNivaDeskFirebaseFunction(request, "claudeMcp");
 }
