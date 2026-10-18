@@ -5734,7 +5734,8 @@ function IntegrationsSection({
         {managing === "instagram" ? <CustomerChannelPanel workspace={workspace} language={language} channel="instagram" /> : null}
         {managing === "quickbooks" ? <QuickBooksIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "xero" ? <XeroIntegrationSection workspace={workspace} language={language} /> : null}
-        {managing === "chatgpt" ? <ChatGPTIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "chatgpt" ? <ChatGPTIntegrationSection workspace={workspace} language={language} assistant="chatgpt" /> : null}
+        {managing === "claude" ? <ChatGPTIntegrationSection workspace={workspace} language={language} assistant="claude" /> : null}
         {managing === "inbound" ? <InboundWebhookSection workspace={workspace} language={language} /> : null}
       </div>
     );

@@ -237,7 +237,7 @@ const EN: ClaudeHelpCopy = {
   disconnectTitle: "Disconnect",
   disconnect: [
     ["In Claude", "Open Settings › Connectors, choose NivaDesk and disconnect. Claude stops calling NivaDesk for you."],
-    ["In NivaDesk (workspace owner)", "Open Settings › Integrations › AI assistants (ChatGPT and Claude). Every assistant connection is listed with its assistant (ChatGPT, Claude or Claude Code). Disconnect ends that one connection; Disconnect all ends every assistant connection to the workspace. Either works at once."]
+    ["In NivaDesk (workspace owner)", "Open Settings › Integrations › Claude. Every Claude and Claude Code connection is listed there. Disconnect ends that one connection; Disconnect all ends every Claude connection to the workspace, and ChatGPT connections are not affected. Either works at once."]
   ],
   disconnectNote: "Disconnecting does not delete anything you created through Claude: those orders and notes stay in your workspace until you delete them in NivaDesk.",
   disconnectLink: "Open Settings › Integrations",
@@ -397,7 +397,7 @@ const TR: ClaudeHelpCopy = {
   disconnectTitle: "Bağlantıyı kesme",
   disconnect: [
     ["Claude'da", "Settings › Connectors'ı açın, NivaDesk'i seçin ve bağlantıyı kesin. Claude sizin adınıza NivaDesk'i çağırmayı bırakır."],
-    ["NivaDesk'te (çalışma alanı sahibi)", "Ayarlar › Entegrasyonlar › Yapay zekâ asistanları (ChatGPT ve Claude) bölümünü açın. Her asistan bağlantısı asistanıyla (ChatGPT, Claude ya da Claude Code) listelenir. Disconnect yalnızca o bağlantıyı, Disconnect all çalışma alanının tüm asistan bağlantılarını sonlandırır. İkisi de hemen etkili olur."]
+    ["NivaDesk'te (çalışma alanı sahibi)", "Ayarlar › Entegrasyonlar › Claude bölümünü açın. Tüm Claude ve Claude Code bağlantıları orada listelenir. Disconnect yalnızca o bağlantıyı, Disconnect all çalışma alanının tüm Claude bağlantılarını sonlandırır; ChatGPT bağlantıları etkilenmez. İkisi de hemen etkili olur."]
   ],
   disconnectNote: "Bağlantıyı kesmek Claude üzerinden oluşturduğunuz hiçbir şeyi silmez: o siparişler ve notlar siz NivaDesk'te silene kadar çalışma alanınızda kalır.",
   disconnectLink: "Ayarlar › Entegrasyonlar'ı aç",
@@ -557,7 +557,7 @@ const DE: ClaudeHelpCopy = {
   disconnectTitle: "Verbindung trennen",
   disconnect: [
     ["In Claude", "Öffnen Sie Settings › Connectors, wählen Sie NivaDesk und trennen Sie die Verbindung. Claude ruft NivaDesk dann nicht mehr für Sie auf."],
-    ["In NivaDesk (Workspace-Inhaber)", "Öffnen Sie Einstellungen › Integrationen › KI-Assistenten (ChatGPT und Claude). Jede Assistenten-Verbindung steht dort mit ihrem Assistenten (ChatGPT, Claude oder Claude Code). Disconnect beendet diese eine Verbindung; Disconnect all beendet alle Assistenten-Verbindungen des Workspaces. Beides wirkt sofort."]
+    ["In NivaDesk (Workspace-Inhaber)", "Öffnen Sie Einstellungen › Integrationen › Claude. Dort steht jede Verbindung von Claude und Claude Code. Disconnect beendet diese eine Verbindung; Disconnect all beendet jede Claude-Verbindung zum Workspace, ChatGPT-Verbindungen bleiben unberührt. Beides wirkt sofort."]
   ],
   disconnectNote: "Das Trennen löscht nichts, was Sie über Claude angelegt haben: Diese Aufträge und Notizen bleiben in Ihrem Workspace, bis Sie sie in NivaDesk löschen.",
   disconnectLink: "Einstellungen › Integrationen öffnen",
@@ -717,7 +717,7 @@ const FR: ClaudeHelpCopy = {
   disconnectTitle: "Déconnexion",
   disconnect: [
     ["Dans Claude", "Ouvrez Settings › Connectors, choisissez NivaDesk et déconnectez-le. Claude cesse d'appeler NivaDesk pour vous."],
-    ["Dans NivaDesk (propriétaire de l'espace)", "Ouvrez Paramètres › Intégrations › Assistants IA (ChatGPT et Claude). Chaque connexion d'assistant y figure avec son assistant (ChatGPT, Claude ou Claude Code). Disconnect met fin à cette connexion ; Disconnect all met fin à toutes les connexions d'assistants de l'espace. Les deux agissent immédiatement."]
+    ["Dans NivaDesk (propriétaire de l'espace)", "Ouvrez Paramètres › Intégrations › Claude. Chaque connexion Claude et Claude Code y est listée. Disconnect met fin à cette connexion ; Disconnect all met fin à toutes les connexions Claude à l'espace de travail, sans toucher aux connexions ChatGPT. Les deux prennent effet immédiatement."]
   ],
   disconnectNote: "La déconnexion ne supprime rien de ce que vous avez créé via Claude : ces commandes et notes restent dans votre espace jusqu'à ce que vous les supprimiez dans NivaDesk.",
   disconnectLink: "Ouvrir Paramètres › Intégrations",
@@ -877,7 +877,7 @@ const IT: ClaudeHelpCopy = {
   disconnectTitle: "Scollegare",
   disconnect: [
     ["In Claude", "Apri Settings › Connectors, scegli NivaDesk e scollegalo. Claude smette di chiamare NivaDesk per te."],
-    ["In NivaDesk (proprietario dello spazio)", "Apri Impostazioni › Integrazioni › Assistenti IA (ChatGPT e Claude). Ogni collegamento di un assistente è elencato con il suo assistente (ChatGPT, Claude o Claude Code). Disconnect termina quel collegamento; Disconnect all termina tutti i collegamenti degli assistenti allo spazio. Entrambi hanno effetto subito."]
+    ["In NivaDesk (proprietario dello spazio)", "Apri Impostazioni › Integrazioni › Claude. Lì è elencato ogni collegamento Claude e Claude Code. Disconnect termina quel collegamento; Disconnect all termina ogni collegamento Claude allo spazio di lavoro, senza toccare i collegamenti ChatGPT. Entrambi hanno effetto immediato."]
   ],
   disconnectNote: "Scollegare non elimina nulla di ciò che hai creato tramite Claude: quegli ordini e quelle note restano nel tuo spazio finché non li elimini in NivaDesk.",
   disconnectLink: "Apri Impostazioni › Integrazioni",
@@ -1037,7 +1037,7 @@ const ES: ClaudeHelpCopy = {
   disconnectTitle: "Desconectar",
   disconnect: [
     ["En Claude", "Abre Settings › Connectors, elige NivaDesk y desconéctalo. Claude deja de llamar a NivaDesk por ti."],
-    ["En NivaDesk (propietario del espacio)", "Abre Ajustes › Integraciones › Asistentes de IA (ChatGPT y Claude). Cada conexión de asistente aparece con su asistente (ChatGPT, Claude o Claude Code). Disconnect termina esa conexión; Disconnect all termina todas las conexiones de asistentes del espacio. Ambas actúan al momento."]
+    ["En NivaDesk (propietario del espacio)", "Abre Ajustes › Integraciones › Claude. Allí aparece cada conexión de Claude y Claude Code. Disconnect termina esa conexión; Disconnect all termina todas las conexiones de Claude con el espacio de trabajo, sin afectar a las de ChatGPT. Ambas surten efecto al instante."]
   ],
   disconnectNote: "Desconectar no elimina nada de lo que creaste mediante Claude: esos pedidos y notas siguen en tu espacio hasta que los elimines en NivaDesk.",
   disconnectLink: "Abrir Ajustes › Integraciones",
@@ -1197,7 +1197,7 @@ const PT: ClaudeHelpCopy = {
   disconnectTitle: "Desligar",
   disconnect: [
     ["No Claude", "Abra Settings › Connectors, escolha NivaDesk e desligue. O Claude deixa de chamar o NivaDesk por si."],
-    ["No NivaDesk (proprietário do espaço)", "Abra Configurações › Integrações › Assistentes de IA (ChatGPT e Claude). Cada ligação de assistente aparece com o seu assistente (ChatGPT, Claude ou Claude Code). Disconnect termina essa ligação; Disconnect all termina todas as ligações de assistentes do espaço. Ambas têm efeito imediato."]
+    ["No NivaDesk (proprietário do espaço)", "Abra Configurações › Integrações › Claude. Aí aparece cada ligação Claude e Claude Code. Disconnect termina essa ligação; Disconnect all termina todas as ligações Claude ao espaço de trabalho, sem afetar as ligações ChatGPT. Ambas têm efeito imediato."]
   ],
   disconnectNote: "Desligar não elimina nada do que criou através do Claude: essas encomendas e notas ficam no seu espaço até as eliminar no NivaDesk.",
   disconnectLink: "Abrir Configurações › Integrações",
@@ -1357,7 +1357,7 @@ const RU: ClaudeHelpCopy = {
   disconnectTitle: "Отключение",
   disconnect: [
     ["В Claude", "Откройте Settings › Connectors, выберите NivaDesk и отключите его. Claude перестанет обращаться к NivaDesk от вашего имени."],
-    ["В NivaDesk (владелец пространства)", "Откройте Настройки › Интеграции › ИИ-ассистенты (ChatGPT и Claude). Каждое подключение ассистента показано с его ассистентом (ChatGPT, Claude или Claude Code). Disconnect завершает это подключение; Disconnect all завершает все подключения ассистентов к пространству. Оба действуют сразу."]
+    ["В NivaDesk (владелец пространства)", "Откройте Настройки › Интеграции › Claude. Там указано каждое подключение Claude и Claude Code. Disconnect отключает это подключение; Disconnect all отключает все подключения Claude к рабочему пространству, подключения ChatGPT не затрагиваются. Оба действия срабатывают сразу."]
   ],
   disconnectNote: "Отключение ничего не удаляет из созданного через Claude: эти заказы и заметки остаются в пространстве, пока вы не удалите их в NivaDesk.",
   disconnectLink: "Открыть Настройки › Интеграции",
@@ -1517,7 +1517,7 @@ const JA: ClaudeHelpCopy = {
   disconnectTitle: "接続を解除する",
   disconnect: [
     ["Claude で", "Settings › Connectors を開き、NivaDesk を選んで接続を解除します。Claude はあなたのために NivaDesk を呼び出さなくなります。"],
-    ["NivaDesk で（ワークスペースのオーナー）", "設定 › 連携 › AI アシスタント（ChatGPT と Claude）を開きます。各アシスタント接続がアシスタント名（ChatGPT、Claude、Claude Code）付きで表示されます。Disconnect はその接続だけを、Disconnect all はワークスペースのすべてのアシスタント接続を終了します。どちらもすぐに反映されます。"]
+    ["NivaDesk で（ワークスペースのオーナー）", "設定 › 連携 › Claude を開きます。Claude と Claude Code の接続がすべて表示されます。Disconnect はその接続だけを、Disconnect all はワークスペースへの Claude の接続をすべて終了します（ChatGPT の接続には影響しません）。どちらもすぐに反映されます。"]
   ],
   disconnectNote: "接続を解除しても、Claude 経由で作成したものは削除されません。それらの注文やメモは、NivaDesk で削除するまでワークスペースに残ります。",
   disconnectLink: "設定 › 連携 を開く",
@@ -1677,7 +1677,7 @@ const ZH: ClaudeHelpCopy = {
   disconnectTitle: "断开连接",
   disconnect: [
     ["在 Claude 中", "打开 Settings › Connectors，选择 NivaDesk 并断开连接。Claude 将不再为您调用 NivaDesk。"],
-    ["在 NivaDesk 中（工作区所有者）", "打开 设置 › 集成 › AI 助手（ChatGPT 和 Claude）。每个助手连接都会连同其助手（ChatGPT、Claude 或 Claude Code）列出。Disconnect 只结束该连接；Disconnect all 结束工作区的所有助手连接。两者都立即生效。"]
+    ["在 NivaDesk 中（工作区所有者）", "打开 设置 › 集成 › Claude。这里列出每个 Claude 和 Claude Code 连接。Disconnect 只结束该连接；Disconnect all 结束此工作区的所有 Claude 连接，不影响 ChatGPT 连接。两者都会立即生效。"]
   ],
   disconnectNote: "断开连接不会删除您通过 Claude 创建的任何内容：这些订单和笔记会保留在您的工作区，直到您在 NivaDesk 中删除它们。",
   disconnectLink: "打开 设置 › 集成",
@@ -1837,7 +1837,7 @@ const AR: ClaudeHelpCopy = {
   disconnectTitle: "قطع الاتصال",
   disconnect: [
     ["في Claude", "افتح Settings › Connectors واختر NivaDesk واقطع الاتصال. يتوقف Claude عن استدعاء NivaDesk نيابة عنك."],
-    ["في NivaDesk (مالك مساحة العمل)", "افتح الإعدادات › التكاملات › مساعدو الذكاء الاصطناعي (ChatGPT وClaude). يظهر كل اتصال مساعد مع اسم مساعده (ChatGPT أو Claude أو Claude Code). ينهي Disconnect ذلك الاتصال وحده، وينهي Disconnect all كل اتصالات المساعدين بمساحة العمل. كلاهما يسري فورًا."]
+    ["في NivaDesk (مالك مساحة العمل)", "افتح الإعدادات › التكاملات › Claude. يظهر هناك كل اتصال Claude وClaude Code. يُنهي Disconnect ذلك الاتصال وحده، ويُنهي Disconnect all كل اتصالات Claude بمساحة العمل دون أن يمس اتصالات ChatGPT. كلاهما يسري فورًا."]
   ],
   disconnectNote: "قطع الاتصال لا يحذف أي شيء أنشأته عبر Claude: تبقى تلك الطلبات والملاحظات في مساحة عملك حتى تحذفها في NivaDesk.",
   disconnectLink: "افتح الإعدادات › التكاملات",
@@ -1997,7 +1997,7 @@ const HI: ClaudeHelpCopy = {
   disconnectTitle: "कनेक्शन हटाएं",
   disconnect: [
     ["Claude में", "Settings › Connectors खोलें, NivaDesk चुनें और कनेक्शन हटाएं। Claude आपके लिए NivaDesk को कॉल करना बंद कर देता है।"],
-    ["NivaDesk में (वर्कस्पेस मालिक)", "सेटिंग्स › इंटीग्रेशन › AI सहायक (ChatGPT और Claude) खोलें। हर सहायक कनेक्शन अपने सहायक (ChatGPT, Claude या Claude Code) के साथ दिखता है। Disconnect सिर्फ़ उस कनेक्शन को खत्म करता है; Disconnect all वर्कस्पेस के सभी सहायक कनेक्शन खत्म करता है। दोनों तुरंत लागू होते हैं।"]
+    ["NivaDesk में (वर्कस्पेस मालिक)", "सेटिंग्स › इंटीग्रेशन › Claude खोलें। वहाँ हर Claude और Claude Code कनेक्शन दिखता है। Disconnect सिर्फ़ उस कनेक्शन को, और Disconnect all वर्कस्पेस के सभी Claude कनेक्शन को खत्म करता है; ChatGPT कनेक्शन पर असर नहीं पड़ता। दोनों तुरंत लागू होते हैं।"]
   ],
   disconnectNote: "कनेक्शन हटाने से Claude के ज़रिए बनाई कोई चीज़ नहीं हटती: वे ऑर्डर और नोट्स आपके वर्कस्पेस में तब तक रहते हैं जब तक आप उन्हें NivaDesk में नहीं हटाते।",
   disconnectLink: "सेटिंग्स › इंटीग्रेशन खोलें",

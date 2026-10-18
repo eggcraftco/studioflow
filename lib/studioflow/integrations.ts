@@ -45,7 +45,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
 // "dhl" is not in INTEGRATION_PROVIDERS: DHL Express is shown only where the server
 // has opened it for the workspace, and never on the public integrations page.
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "dhl" | "whatsapp" | "instagram" | "stripe";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "claude" | "dhl" | "whatsapp" | "instagram" | "stripe";
 
 export type IntegrationProvider = {
   id: string;
@@ -67,12 +67,17 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     // Listed at last. The grant lives in a collection no client may read, so
     // for months a workspace that HAD connected ChatGPT was shown nothing at
     // all — and had no way to disconnect it either.
-    // One card for every assistant connection (ChatGPT, Claude, Claude Code): the
-    // name is a translated label, not a brand (owner, 17 Oct 2026).
-    id: "chatgpt", name: "AI assistants (ChatGPT and Claude)", category: "automation", kind: "native",
+    // One card per assistant (owner, 18 Oct 2026): ChatGPT here, Claude (and Claude
+    // Code) on its own card below. Both read the same grant list, split by assistant.
+    id: "chatgpt", name: "ChatGPT", category: "automation", kind: "native",
     logo: "/brand/integrations/chatgpt.svg",
-    blurb: "Ask ChatGPT or Claude about your orders, notes and spending. Every connection can be withdrawn here.",
+    blurb: "Ask ChatGPT about your orders, notes and spending. Every connection can be withdrawn here.",
     capabilities: ["Orders", "Notes", "Banking"], manage: "chatgpt",
+  },
+  {
+    id: "claude", name: "Claude", category: "automation", kind: "native", mark: "C",
+    blurb: "Ask Claude about your orders, notes and spending, in Claude or Claude Code. Every connection can be withdrawn here.",
+    capabilities: ["Orders", "Notes", "Banking"], manage: "claude",
   },
   {
     id: "shopify", name: "Shopify", category: "commerce", kind: "native",
@@ -528,10 +533,12 @@ function resolveProviderState(
     };
   }
 
-  if (provider.id === "chatgpt") {
+  if (provider.id === "chatgpt" || provider.id === "claude") {
     // Only the owner ever gets a non-empty list, so for everybody else this
     // reads "Available" — which is honest: they cannot connect or disconnect it.
-    const live = signals.chatgptConnections || [];
+    // Each card counts only its own assistant's grants (absent assistant = ChatGPT).
+    const wanted = provider.id === "claude" ? "claude" : "chatgpt";
+    const live = (signals.chatgptConnections || []).filter((row) => (row.assistant === "claude" ? "claude" : "chatgpt") === wanted);
     if (live.length === 0) return { state: "available" };
     return {
       state: "connected",

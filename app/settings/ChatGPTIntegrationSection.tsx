@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { chatGPTConnectionAssistant } from "@/lib/chatgpt/claudeMcp";
 import {
   loadIntegrationSignals,
-  revokeAllChatGPTConnections,
   revokeChatGPTConnection,
   type ChatGPTConnection
 } from "@/lib/studioflow/integrations";
@@ -19,13 +18,13 @@ import { studioT } from "@/lib/studioflow/language";
 // lasts thirty days. This screen is the whole of that: what exists, who granted
 // it, when it lapses, and a button that ends it now.
 
-// The same screen lists Claude grants too (the Claude endpoint shares the grant
-// store). Strings stay the translated ChatGPT ones; only the brand word, which no
-// language translates, is swapped — so no new translation keys.
+// One screen per assistant (owner, 18 Oct 2026): the ChatGPT card lists ChatGPT
+// grants, the Claude card lists Claude and Claude Code grants (the Claude endpoint
+// shares the grant store). Strings stay the translated ChatGPT ones; only the brand
+// word, which no language translates, is swapped — so no new translation keys.
 function brand(text: string, name: string) {
   return name === "ChatGPT" ? text : text.split("ChatGPT").join(name);
 }
-const BOTH = "ChatGPT / Claude";
 
 function formatDay(ms: number) {
   if (!ms) return "";
@@ -37,11 +36,14 @@ function formatDay(ms: number) {
 }
 
 export function ChatGPTIntegrationSection({
-  workspace, language = "English"
+  workspace, language = "English", assistant = "chatgpt"
 }: {
   workspace: WorkspaceContext;
   language?: string;
+  /** Which assistant's connections this card shows; a grant without one is ChatGPT's. */
+  assistant?: "chatgpt" | "claude";
 }) {
+  const name = assistant === "claude" ? "Claude" : "ChatGPT";
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const [connections, setConnections] = useState<ChatGPTConnection[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -52,37 +54,43 @@ export function ChatGPTIntegrationSection({
   const refresh = useCallback(async () => {
     if (!workspace.id) return;
     const signals = await loadIntegrationSignals(workspace.id);
-    setConnections(signals.chatgptConnections);
+    setConnections(signals.chatgptConnections.filter(row => (row.assistant === "claude" ? "claude" : "chatgpt") === assistant));
     setLoaded(true);
   }, [workspace.id]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
-  const disconnect = useCallback(async (target: { connectionId?: string; tokenHash?: string } | "all", assistant: string) => {
+  // "Disconnect all" on this card ends this assistant's connections only, one by one:
+  // the server's revoke-all would also end the other assistant's.
+  const disconnect = useCallback(async (target: { connectionId?: string; tokenHash?: string } | "all", label: string) => {
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      const result = target === "all"
-        ? await revokeAllChatGPTConnections(workspace.id)
-        : await revokeChatGPTConnection(workspace.id, target);
-      setMessage(brand(t(result), assistant));
+      if (target === "all") {
+        let result = "";
+        for (const row of connections) result = await revokeChatGPTConnection(workspace.id, { connectionId: row.connectionId, tokenHash: row.tokenHash });
+        setMessage(brand(t(result), label));
+      } else {
+        setMessage(brand(t(await revokeChatGPTConnection(workspace.id, target)), label));
+      }
       await refresh();
     } catch (failure) {
-      setError(failure instanceof Error
-        ? t(failure.message)
-        : target === "all" ? t("The assistant connections could not be disconnected.") : brand(t("ChatGPT could not be disconnected."), assistant));
+      setError(failure instanceof Error ? t(failure.message) : brand(t("ChatGPT could not be disconnected."), label));
+      await refresh();
     } finally {
       setBusy(false);
     }
-  }, [workspace.id, refresh, t]);
+  }, [workspace.id, connections, refresh, t]);
 
   return (
     <section className="card" style={{ padding: 22 }}>
-      <div className="pill">{BOTH}</div>
-      <h2 style={{ margin: "12px 0 6px" }}>{t("AI assistants (ChatGPT and Claude)")}</h2>
+      <div className="pill">{name}</div>
+      <h2 style={{ margin: "12px 0 6px" }}>{name}</h2>
       <p style={{ color: "var(--muted)", marginTop: 0 }}>
-        {t("Connecting is done from ChatGPT or Claude. Each connection is listed with its assistant, and ending one here takes effect immediately.")}
+        {assistant === "claude"
+          ? t("Connecting is done from Claude or Claude Code. Each connection is listed here, and ending one takes effect immediately.")
+          : t("Connecting is done from ChatGPT. Each connection is listed here, and ending one takes effect immediately.")}
       </p>
 
       {message ? <p className="layout-message" style={{ margin: "0 0 12px" }}>{message}</p> : null}
@@ -92,7 +100,7 @@ export function ChatGPTIntegrationSection({
         <p style={{ color: "var(--muted)" }}>{t("Loading...")}</p>
       ) : connections.length === 0 ? (
         <p style={{ color: "var(--muted)" }}>
-          {t("No AI assistant connection. Nothing outside NivaDesk can read this workspace.")}
+          {brand(t("No ChatGPT connection."), name)}
         </p>
       ) : (
         <div className="grid" style={{ gap: 10 }}>
@@ -115,9 +123,9 @@ export function ChatGPTIntegrationSection({
                   type="button"
                   disabled={busy}
                   onClick={() => {
-                    const assistant = chatGPTConnectionAssistant(connection);
-                    if (!window.confirm(brand(t("End ChatGPT's access to this workspace?"), assistant))) return;
-                    void disconnect({ connectionId: connection.connectionId, tokenHash: connection.tokenHash }, assistant);
+                    const label = chatGPTConnectionAssistant(connection);
+                    if (!window.confirm(brand(t("End ChatGPT's access to this workspace?"), label))) return;
+                    void disconnect({ connectionId: connection.connectionId, tokenHash: connection.tokenHash }, label);
                   }}
                 >
                   {t("Disconnect")}
@@ -132,8 +140,8 @@ export function ChatGPTIntegrationSection({
                 type="button"
                 disabled={busy}
                 onClick={() => {
-                  if (!window.confirm(t("End every assistant connection to this workspace? Each assistant will need to connect again."))) return;
-                  void disconnect("all", BOTH);
+                  if (!window.confirm(brand(t("End every ChatGPT connection to this workspace? ChatGPT will need to connect again."), name))) return;
+                  void disconnect("all", name);
                 }}
               >
                 {t("Disconnect all")}

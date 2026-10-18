@@ -177,15 +177,20 @@ check("6a no absolute confirmation promise; confirmations depend on Claude's set
   assert.ok(/depends on Claude's own settings/.test(EN.toolsIntro) && /enforced on its servers on every call/.test(EN.toolsIntro));
 });
 
-check("6b the guide names the Settings heading that covers both assistants", () => {
-  const headings: Record<string, string> = {"English": "AI assistants (ChatGPT and Claude)", "Türkçe": "Yapay zekâ asistanları (ChatGPT ve Claude)", "Deutsch": "KI-Assistenten (ChatGPT und Claude)", "Français": "Assistants IA (ChatGPT et Claude)", "Italiano": "Assistenti IA (ChatGPT e Claude)", "Español (Spanish)": "Asistentes de IA (ChatGPT y Claude)", "Português": "Assistentes de IA (ChatGPT e Claude)", "Русский (Russian)": "ИИ-ассистенты (ChatGPT и Claude)", "日本語 (Japanese)": "AI アシスタント（ChatGPT と Claude）", "中文 (Chinese)": "AI 助手（ChatGPT 和 Claude）", "العربية (Arabic)": "مساعدو الذكاء الاصطناعي (ChatGPT وClaude)", "हिन्दी (Hindi)": "AI सहायक (ChatGPT और Claude)"};
+check("6b ChatGPT and Claude are separate cards; the guide names the Claude card (owner, 18 Oct 2026)", () => {
   for (const language of SUPPORTED_STUDIO_LANGUAGES) {
-    assert.ok(CLAUDE_HELP_COPY[language]!.disconnect[1][1].includes(headings[language]), `${language}: disconnect row names "${headings[language]}"`);
+    const row = CLAUDE_HELP_COPY[language]!.disconnect[1][1];
+    assert.ok(/› Claude\b/.test(row) && !/\(ChatGPT/.test(row), `${language}: disconnect row names the Claude card only`);
+    assert.ok(row.includes("ChatGPT"), `${language}: says ChatGPT connections are not affected`);
   }
+  const hub = read("lib/studioflow/integrations.ts");
+  assert.ok(hub.includes('id: "chatgpt", name: "ChatGPT"') && hub.includes('id: "claude", name: "Claude"'), "two hub cards");
+  assert.ok(!hub.includes('name: "AI assistants (ChatGPT and Claude)"'), "no combined hub card");
   const section = read("app/settings/ChatGPTIntegrationSection.tsx");
-  assert.ok(section.includes('t("AI assistants (ChatGPT and Claude)")'), "Settings section heading");
-  assert.ok(!section.includes('t("ChatGPT access to this workspace")') && !section.includes('t("No ChatGPT connection.'), "no ChatGPT-only heading or empty state");
-  assert.ok(read("lib/studioflow/integrations.ts").includes('name: "AI assistants (ChatGPT and Claude)"'), "hub card name");
+  assert.ok(section.includes('assistant === "claude" ? "claude" : "chatgpt") === assistant'), "section lists one assistant's grants");
+  assert.ok(!section.includes("revokeAllChatGPTConnections"), "per-card Disconnect all never calls the server's revoke-all");
+  const page = read("app/settings/page.tsx");
+  assert.ok(page.includes('assistant="chatgpt"') && page.includes('assistant="claude"'), "settings renders both cards");
 });
 
 console.log(`\nclaude-guide: ${passed} passed, ${failed} failed`);
