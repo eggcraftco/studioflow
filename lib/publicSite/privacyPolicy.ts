@@ -15,7 +15,8 @@ export type PrivacyPolicySection = {
 
 // Set to the day the newest section goes live. 7.3 (Amazon seller connection)
 // and 10 (AI assistants: ChatGPT and Claude) were approved by the owner and
-// published on 17 October 2026.
+// published on 17 October 2026. 18 October 2026: section 10 names the separate
+// ChatGPT and Claude cards in Settings › Integrations (owner-approved).
 export const PRIVACY_POLICY_LAST_UPDATED = "18 October 2026";
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
@@ -376,7 +377,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       {
         title: "10.4 How to stop it",
         paragraphs: [
-          "You can disconnect NivaDesk in the assistant's own settings at any time. In NivaDesk, the workspace owner sees every assistant connection to the workspace under Settings › Integrations › AI assistants (ChatGPT and Claude), each with its assistant (ChatGPT, Claude or Claude Code) and the member who made it, and can end a single connection or all of them; ending one does not affect the others, and it stops working immediately. Other members end their own connections in the assistant's settings or ask the workspace owner. Once your NivaDesk account is deleted, an assistant connection can no longer reach any workspace.",
+          "You can disconnect NivaDesk in the assistant's own settings at any time. In NivaDesk, the workspace owner sees every assistant connection to the workspace under Settings › Integrations, on the ChatGPT card and on the Claude card (Claude and Claude Code), each with the member who made it, and can end a single connection or all of that assistant's connections; ending one does not affect the others, and it stops working immediately. Other members end their own connections in the assistant's settings or ask the workspace owner. Once your NivaDesk account is deleted, an assistant connection can no longer reach any workspace.",
           "We do not sell data received through an assistant connection or use it to advertise to you or your customers. Questions about assistant connections can be sent to contact@nivadesk.co.uk."
         ]
       }
