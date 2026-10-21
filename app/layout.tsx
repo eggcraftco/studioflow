@@ -17,6 +17,7 @@ import { PricePrivacyProvider } from "@/components/PricePrivacy";
 import { CookieConsent } from "@/components/CookieConsent";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { SessionAutoLock } from "@/components/SessionAutoLock";
+import { SecondFactorPromptHost } from "@/components/SecondFactorPromptHost";
 import { StudioToastHost } from "@/components/StudioToastHost";
 
 const isStagingPreview = process.env.NEXT_PUBLIC_STAGING_NO_INDEX === "true";
@@ -65,6 +66,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <AppRouteFrame>{children}</AppRouteFrame>
             <CookieConsent />
             <SessionAutoLock />
+            {/* GN-10: asks for the authenticator code when a sign-in needs it. */}
+            <SecondFactorPromptHost />
             {/* One toast host for the whole app. It used to live inside
                 AppShell, so a toast fired just before router.push died with
                 the shell that fired it — which is why the first-order

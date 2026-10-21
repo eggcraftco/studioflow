@@ -12,6 +12,7 @@ import {
 import { auth, googleProvider, appleProvider, clearFirestoreLocalCache } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { withSecondFactor } from "@/lib/auth/secondFactor";
 import {
   AUTO_LOCK_CHANGED_EVENT,
   AUTO_LOCK_MINUTES_KEY,
@@ -104,7 +105,7 @@ export function SessionAutoLock() {
     setError("");
     try {
       const credential = EmailAuthProvider.credential(user.email, password);
-      await reauthenticateWithCredential(user, credential);
+      await withSecondFactor(auth, () => reauthenticateWithCredential(user, credential), { email: user.email ?? "" });
       finishUnlock();
     } catch {
       setError(t("Incorrect password. Please try again."));
@@ -118,7 +119,7 @@ export function SessionAutoLock() {
     setBusy(true);
     setError("");
     try {
-      await reauthenticateWithPopup(user, provider);
+      await withSecondFactor(auth, () => reauthenticateWithPopup(user, provider));
       finishUnlock();
     } catch {
       setError(t("Could not unlock. Please try again."));

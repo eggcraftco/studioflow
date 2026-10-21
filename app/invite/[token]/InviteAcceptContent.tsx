@@ -12,6 +12,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { withSecondFactor } from "@/lib/auth/secondFactor";
 import { acceptInvitation, previewInvitation, type InvitationPreview } from "@/lib/studioflow/invitations";
 import { studioT } from "@/lib/studioflow/language";
 
@@ -133,7 +134,7 @@ export function InviteAcceptContent({ token }: { token: string }) {
           /* The invitation is what matters; their own workspace can wait. */
         }
       } else {
-        await signInWithEmailAndPassword(auth, invitation.email, password);
+        await withSecondFactor(auth, () => signInWithEmailAndPassword(auth, invitation.email, password), { email: invitation.email });
       }
     } catch (failure) {
       setError(failure instanceof Error ? t(failure.message) : t("That did not work. Check the password and try again."));

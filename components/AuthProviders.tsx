@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { signInWithPopup } from "firebase/auth";
 import { auth, appleProvider, googleProvider } from "@/lib/firebase/client";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
+import { SECOND_FACTOR_CANCELLED, withSecondFactor } from "@/lib/auth/secondFactor";
 
 function isApplePlatform() {
   if (typeof navigator === "undefined") return false;
@@ -62,11 +63,11 @@ export function AuthProviderButtons({
   async function signIn(provider: "apple" | "google") {
     onStart?.();
     try {
-      await signInWithPopup(auth, provider === "apple" ? appleProvider : googleProvider);
+      await withSecondFactor(auth, () => signInWithPopup(auth, provider === "apple" ? appleProvider : googleProvider));
       onSuccess();
     } catch (error) {
       const code = (error as { code?: string })?.code ?? "";
-      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request" || code === SECOND_FACTOR_CANCELLED) {
         onError("");
         return;
       }

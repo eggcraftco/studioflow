@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import { SECOND_FACTOR_CANCELLED, secondFactorRefusalMessage, withSecondFactor } from "@/lib/auth/secondFactor";
 import { doc, getDoc, getDocs, limit, query, where, collection } from "firebase/firestore";
 import { auth, db, googleProvider } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -108,7 +109,7 @@ async function loadWorkspaces(user: NonNullable<ReturnType<typeof useAuth>["user
 
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(data.message || data.error || "Could not load workspaces.");
+    throw new Error(secondFactorRefusalMessage(String(data.reason || "")) || data.message || data.error || "Could not load workspaces.");
   }
 
   const items = Array.isArray(data.workspaces) ? data.workspaces : [];
@@ -186,8 +187,9 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
     setError("");
     setSubmitting(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await withSecondFactor(auth, () => signInWithEmailAndPassword(auth, email, password), { email });
     } catch (loginError) {
+      if ((loginError as { code?: string })?.code === SECOND_FACTOR_CANCELLED) return;
       setError(friendlyErrorMessage(loginError, t) || t("Could not sign in."));
     } finally {
       setSubmitting(false);
@@ -198,8 +200,9 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
     setError("");
     setSubmitting(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      await withSecondFactor(auth, () => signInWithPopup(auth, googleProvider));
     } catch (loginError) {
+      if ((loginError as { code?: string })?.code === SECOND_FACTOR_CANCELLED) return;
       setError(friendlyErrorMessage(loginError, t) || t("Could not sign in with Google."));
     } finally {
       setSubmitting(false);
@@ -230,7 +233,8 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.redirect_uri) {
-        throw new Error(data.message || data.error || "Could not approve ChatGPT connection.");
+        // GN-10: an MFA-enrolled account must have entered its code in THIS sign-in.
+        throw new Error(secondFactorRefusalMessage(String(data.reason || "")) || data.message || data.error || "Could not approve ChatGPT connection.");
       }
 
       window.location.assign(data.redirect_uri);
