@@ -1,5 +1,5 @@
-import type { DashboardFinanceOrder, WorkspaceSettingsOverview } from "@/lib/studioflow/firestore";
-import { financeFor, type FinanceBlock } from "@/lib/studioflow/financeEngine";
+import type { DashboardFinanceOrder, OrderDetail, WorkspaceSettingsOverview } from "@/lib/studioflow/firestore";
+import { computeOrderFinance, financeFor, type FinanceBlock } from "@/lib/studioflow/financeEngine";
 
 // Every figure below now comes from ONE definition: the Finance Engine, which
 // the server stamps onto each order as `finance`. These functions kept their
@@ -215,6 +215,46 @@ export function adjustedDashboardNetProfit(order: DashboardFinanceOrder, setting
  */
 export function orderFinanceBlock(order: DashboardFinanceOrder, settings: WorkspaceSettingsOverview | null) {
   return blockFor(order, settings);
+}
+
+type OrderDetailFinanceInput = Pick<OrderDetail,
+  | "paidAmount" | "remainingAmount" | "refundedAmount" | "watchPurchasePrice" | "paymentFee" | "deliveryCost"
+  | "taxAmount" | "taxRate" | "taxType" | "lineItems" | "customFields" | "paymentDate"
+  | "platformFeeKnown" | "taxAmountKnown" | "taxResponsibility" | "taxIncludedInPrice" | "taxRateStated">;
+
+/**
+ * GN-12 (22 Oct 2026): the order card's and the order PDF's figures, from the
+ * Finance Engine — the same definition the Dashboard, the stamp, the export and
+ * the Mac, iPhone and Android cards use.
+ *
+ * The card used to compute its own profit (paid + remaining − the stored fee −
+ * the stored VAT …, no invoice lines, no refund), so one order showed +2,369.94
+ * here while the Mac, reading the engine, showed −1,495.06. Computed locally
+ * rather than taken from the stamp because the card is edited in place: an
+ * optimistic change has to move the profit before the server's block arrives,
+ * and the mirror gives the server's numbers for the same document.
+ */
+export function orderDetailFinance(order: OrderDetailFinanceInput, settings: WorkspaceSettingsOverview | null | undefined): FinanceBlock {
+  return computeOrderFinance({
+    paidAmount: order.paidAmount,
+    remainingAmount: order.remainingAmount,
+    refundedAmount: order.refundedAmount,
+    watchPurchasePrice: order.watchPurchasePrice,
+    paymentFee: order.paymentFee,
+    deliveryCost: order.deliveryCost,
+    platformFeeKnown: order.platformFeeKnown,
+    taxAmountKnown: order.taxAmountKnown,
+    taxAmount: order.taxAmount,
+    taxResponsibility: order.taxResponsibility,
+    taxIncludedInPrice: order.taxIncludedInPrice ?? undefined,
+    // An absent rate is the workspace's default to the engine, on every platform.
+    taxRate: order.taxRateStated ? order.taxRate : undefined,
+    taxType: order.taxType,
+    lineItems: order.lineItems,
+    customFields: order.customFields
+  }, engineSettings(settings), {
+    paymentDateMs: order.paymentDate instanceof Date ? order.paymentDate.getTime() : undefined
+  });
 }
 
 export function dashboardCostTotal(

@@ -227,6 +227,22 @@ export type DashboardFinanceOrder = {
    * how every screen came to agree. Absent on an order the stamping trigger
    * has not reached yet, and the helpers fall back to the mirror. */
   finance?: FinanceBlock | null;
+  /**
+   * GN-12 (22 Oct 2026): the rest of what the engine reads, for the mirror an
+   * order falls back to when its stamp is missing or from another engine
+   * version. Without them that fallback ignored the invoice lines, the refund,
+   * the order's own VAT rate and method and the connector's fee and tax — so in
+   * the window between two releases the Dashboard computed a different profit
+   * from the order card. Optional: absent reads as the engine's own default.
+   */
+  lineItems?: Array<{ lineTotal?: unknown }>;
+  refundedAmount?: number;
+  taxRate?: number;
+  taxType?: string;
+  platformFeeKnown?: boolean;
+  taxAmountKnown?: boolean;
+  taxResponsibility?: string;
+  taxIncludedInPrice?: boolean | null;
 };
 
 export type WorkspaceSettingsOverview = {
@@ -656,7 +672,18 @@ export type OrderDetail = {
   taxType: string;
   taxRate: number;
   taxAmount: number;
-  netProfit: number;
+  /**
+   * GN-12 (22 Oct 2026): what a connector told the server about the fee and the
+   * tax, and whether the document states a VAT rate at all — the inputs the
+   * Finance Engine reads that the card did not carry. Read-only: no save sends
+   * them back. The card's money figures come from `orderDetailFinance`
+   * (lib/studioflow/finance.ts), never from a formula of its own.
+   */
+  platformFeeKnown: boolean;
+  taxAmountKnown: boolean;
+  taxResponsibility: string;
+  taxIncludedInPrice: boolean | null;
+  taxRateStated: boolean;
   emailAddress: string;
   instagramUsername: string;
   whatsappNumber: string;
@@ -1557,7 +1584,18 @@ export async function loadDashboardFinanceOrders(companyId: string, workspace?: 
       designName: stringValue(data.designName, ""),
       watchRef: stringValue(data.watchRef, ""),
       countsTowardBalance: orderCountsTowardBalance(data),
-      finance: financeBlockValue(data.finance)
+      finance: financeBlockValue(data.finance),
+      lineItems: Array.isArray(data.lineItems)
+        ? data.lineItems.map(item => ({ lineTotal: item && typeof item === "object" ? (item as Record<string, unknown>).lineTotal : 0 }))
+        : undefined,
+      refundedAmount: numberValue(data.refundedAmount, 0),
+      // Absent stays absent: the engine reads a missing rate as the workspace's default.
+      taxRate: typeof data.taxRate === "number" ? data.taxRate : undefined,
+      taxType: typeof data.taxType === "string" ? data.taxType : undefined,
+      platformFeeKnown: data.platformFeeKnown === true,
+      taxAmountKnown: data.taxAmountKnown === true,
+      taxResponsibility: typeof data.taxResponsibility === "string" ? data.taxResponsibility : undefined,
+      taxIncludedInPrice: typeof data.taxIncludedInPrice === "boolean" ? data.taxIncludedInPrice : undefined
     };
   });
 }
@@ -2568,23 +2606,6 @@ function mapOrderDetailSnapshot(
   const paymentFee = numberValue(data.paymentFee, 0);
   const deliveryCost = numberValue(data.deliveryCost, 0);
   const taxAmount = numberValue(data.taxAmount, 0);
-  // Custom "Remaining" receivables count toward the sales total exactly like
-  // remainingAmount (same rule as Mac, Android and the backend).
-  const rawCustomFields = data.customFields && typeof data.customFields === "object" && !Array.isArray(data.customFields)
-    ? data.customFields as Record<string, unknown>
-    : {};
-  const customRemainingTotal = Object.entries(rawCustomFields).reduce((total, [key, raw]) => {
-    if (!key.startsWith("financialRemaining::")) return total;
-    const parsed = Number(String(raw ?? "").replace(/,/g, ""));
-    return total + (Number.isFinite(parsed) ? parsed : 0);
-  }, 0);
-  // Custom spending reduces the profit shown before Corporation Tax, matching
-  // the Mac card and the optimistic client-side recalculation.
-  const customExpenseTotalParsed = Object.entries(rawCustomFields).reduce((total, [key, raw]) => {
-    if (!key.startsWith("financialExpense::")) return total;
-    const parsed = Number(String(raw ?? "").replace(/,/g, ""));
-    return total + (Number.isFinite(parsed) ? parsed : 0);
-  }, 0);
 
   return {
     id: snapshot.id,
@@ -2613,7 +2634,11 @@ function mapOrderDetailSnapshot(
     taxType: stringValue(data.taxType, ""),
     taxRate: numberValue(data.taxRate, 0),
     taxAmount,
-    netProfit: paidAmount + remainingAmount + customRemainingTotal - watchPurchasePrice - customExpenseTotalParsed - paymentFee - deliveryCost - taxAmount,
+    platformFeeKnown: data.platformFeeKnown === true,
+    taxAmountKnown: data.taxAmountKnown === true,
+    taxResponsibility: stringValue(data.taxResponsibility, ""),
+    taxIncludedInPrice: typeof data.taxIncludedInPrice === "boolean" ? data.taxIncludedInPrice : null,
+    taxRateStated: data.taxRate !== undefined && data.taxRate !== null && data.taxRate !== "",
     emailAddress: stringValue(data.emailAddress, ""),
     instagramUsername: stringValue(data.instagramUsername, ""),
     whatsappNumber: stringValue(data.whatsappNumber, ""),

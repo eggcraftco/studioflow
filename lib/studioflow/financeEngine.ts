@@ -13,7 +13,14 @@
 // Do not "improve" a formula here. Change functions/finance/engine.js, add a
 // vector, then port it across. Spec: docs/finance-engine.md.
 
-export const FINANCE_ENGINE_VERSION = 4;
+// 5 (GN-12, 22 Oct 2026): money recorded beyond the invoice lines counts, and
+// the block says which side the revenue came from.
+export const FINANCE_ENGINE_VERSION = 5;
+
+export const REVENUE_FROM_LINES = "lines";
+export const REVENUE_FROM_MONEY = "money";
+export const REVENUE_FROM_MONEY_ABOVE_LINES = "money_above_lines";
+export type RevenueSource = typeof REVENUE_FROM_LINES | typeof REVENUE_FROM_MONEY | typeof REVENUE_FROM_MONEY_ABOVE_LINES;
 
 export const REMAINING_PREFIX = "financialRemaining::";
 export const EXPENSE_PREFIX = "financialExpense::";
@@ -72,6 +79,10 @@ export type FinanceBlock = {
   netProfit: number;
   customerTotal: number;
   fromLineItems: boolean;
+  /** lines | money | money_above_lines — which side the revenue came from (version 5). */
+  revenueSource: RevenueSource;
+  /** What the invoice lines alone add up to (0 without lines). */
+  linesTotal: number;
   orphanKeys: string[];
   computedAtMs?: number;
 };
@@ -328,9 +339,29 @@ export function computeOrderFinance(
   // Adding it back restores what the sale was WORTH, which is what a line-item
   // order already reports and what the single subtraction below then takes off
   // exactly once.
-  const revenue = items.count > 0
-    ? items.total
-    : readAmount(source.paidAmount) + readAmount(source.remainingAmount) + receivables.total + refunded;
+  const moneyValue = readAmount(source.paidAmount) + readAmount(source.remainingAmount) + receivables.total + refunded;
+
+  // Version 5 (GN-12): the lines are a floor, not a ceiling. When the money
+  // recorded — taken, still owed or refunded — is MORE than the lines, the lines
+  // are incomplete (a deposit product with the balance in `remainingAmount`, or a
+  // merge that moved a payment without its lines) and the money is what the sale
+  // was worth. Only where the tax sits inside the price: with tax added on top
+  // the money carries that tax and the lines do not, so version 4's rule stands.
+  const taxInsidePriceForRevenue = source.taxAmountKnown === true && typeof source.taxIncludedInPrice === "boolean"
+    ? source.taxIncludedInPrice
+    : settings.pricesIncludeVat;
+  let revenue: number;
+  let revenueSource: RevenueSource;
+  if (items.count === 0) {
+    revenue = moneyValue;
+    revenueSource = REVENUE_FROM_MONEY;
+  } else if (taxInsidePriceForRevenue && moneyValue - items.total > 0.005) {
+    revenue = moneyValue;
+    revenueSource = REVENUE_FROM_MONEY_ABOVE_LINES;
+  } else {
+    revenue = items.total;
+    revenueSource = REVENUE_FROM_LINES;
+  }
 
   const directCost = readAmount(source.watchPurchasePrice);
   const otherExpenses = expenses.total;
@@ -448,6 +479,8 @@ export function computeOrderFinance(
     customerTotal: round2(taxInsidePrice ? revenue : revenue + vatDue + platformCollectedTax),
 
     fromLineItems: items.count > 0,
+    revenueSource,
+    linesTotal: round2(items.total),
     receivableLines: receivables.lines,
     expenseLines: expenses.lines,
     orphanKeys: [
