@@ -69,6 +69,8 @@ export type CustomsItem = {
 };
 
 export type ShipmentCustomsView = {
+  // The server's reading of the saved route: "international", "gb_northern_ireland" or "".
+  route?: string;
   declarable?: boolean | null;
   dutiesPayer: "" | "receiver" | "sender";
   incoterm: string;
@@ -417,6 +419,21 @@ export function openShipmentPdf(document: { fileName: string; contentType: strin
     link.remove();
   }
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/**
+ * Whether the shipment needs the "does it declare goods?" answer: two countries,
+ * or Great Britain ↔ Northern Ireland (GB on both ends, exactly one BT postcode).
+ * The same rule as functions/shipping/draft.js customsRoute; DHL has no country
+ * code for Northern Ireland, so the postcode is the only sign.
+ */
+export function needsCustomsChoice(fromCountry: string, fromPostcode: string, toCountry: string, toPostcode: string): boolean {
+  const from = String(fromCountry ?? "").trim().toUpperCase();
+  const to = String(toCountry ?? "").trim().toUpperCase();
+  if (!from || !to) return false;
+  if (from !== to) return true;
+  const ni = (code: string) => /^BT\d/.test(String(code ?? "").toUpperCase().replace(/\s+/g, ""));
+  return from === "GB" && ni(fromPostcode) !== ni(toPostcode);
 }
 
 /**
