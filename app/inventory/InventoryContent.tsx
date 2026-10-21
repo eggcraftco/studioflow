@@ -2,7 +2,7 @@
 import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePrivateMoney } from "@/components/PricePrivacy";
+import { useCanSeeCost, usePrivateMoney } from "@/components/PricePrivacy";
 import { CardIconGlyph } from "@/components/CardTitle";
 import {
   INVENTORY_CATEGORIES,
@@ -110,6 +110,7 @@ export function InventoryContent({
   canEdit: boolean;
 }) {
   const money = usePrivateMoney();
+  const canSeeCost = useCanSeeCost();
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
 
@@ -363,16 +364,19 @@ export function InventoryContent({
     // Header names match what the importer understands, and the unit cost
     // travels as "Purchase price" — exporting only a line total meant prices
     // never came back on import.
+    // FIN-01: without Financial Info the export carries no money columns at
+    // all — a column of zeros would read as prices.
+    const withCost = canSeeCost && !checkedItems.some(item => item.costHidden);
     const header = [
       "Number", "Name", "Category", "Type", "Status", "SKU", "Serial number",
-      "On hand", "Unit", "Purchase price", "Line value", "Location", "Supplier"
+      "On hand", "Unit", ...(withCost ? ["Purchase price", "Line value"] : []), "Location", "Supplier"
     ];
     const rows = checkedItems.map(item => [
       item.number, item.name, item.category, item.trackingType, item.status,
       item.sku || "", item.serialNumber || "",
       String(inventoryOnHand(item)), item.quantity?.unit || "",
-      (Number(item.valuationCost) || 0).toFixed(2),
-      inventoryLineValue(item).toFixed(2), item.location || "", item.supplierName || ""
+      ...(withCost ? [(Number(item.valuationCost) || 0).toFixed(2), inventoryLineValue(item).toFixed(2)] : []),
+      item.location || "", item.supplierName || ""
     ]);
     const csv = [header, ...rows]
       .map(row => row.map(cell => /[",\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell).join(","))
@@ -905,6 +909,7 @@ function NewItemModal({
   onSaved: () => void | Promise<void>;
 }) {
   const money = usePrivateMoney();
+  const canSeeCost = useCanSeeCost();
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
   const editingId = initialItem?.id || "";
@@ -1134,6 +1139,10 @@ function NewItemModal({
           </label>
         </div>
 
+        {/* FIN-01: an edit by somebody without Financial Info does not show the
+            cost (the server keeps the stored one whatever is sent). A new item's
+            price may still be typed in: writing it is not reading it. */}
+        {canSeeCost || !editingId ? (
         <div className="inventory-cost-block">
           <div className="inventory-cost-head">
             <strong>{t("Cost")}</strong>
@@ -1192,6 +1201,7 @@ function NewItemModal({
             <strong>{money(currencySymbol, internalTotal)}</strong>
           </div>
         </div>
+        ) : null}
 
         <label className="inventory-ownership">
           <input

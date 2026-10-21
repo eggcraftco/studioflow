@@ -51,6 +51,25 @@ export function usePricePrivacy() {
   return useContext(PricePrivacyContext);
 }
 
+// FIN-01 (21 Oct 2026): a screen subtree for somebody without Financial Info.
+// Every usePrivateMoney() below it prints the hidden label whatever the
+// toolbar switch says, and useCanSeeCost() is false. The server already zeroes
+// the figures; this keeps the screen from presenting those zeros as prices.
+const CostVisibilityContext = createContext(true);
+
+export function FinanceHiddenMoney({ children }: { children: ReactNode }) {
+  const forced = useMemo<PricePrivacyContextValue>(() => ({ hideNumbers: true, toggleHideNumbers: () => undefined }), []);
+  return (
+    <CostVisibilityContext.Provider value={false}>
+      <PricePrivacyContext.Provider value={forced}>{children}</PricePrivacyContext.Provider>
+    </CostVisibilityContext.Provider>
+  );
+}
+
+export function useCanSeeCost() {
+  return useContext(CostVisibilityContext);
+}
+
 /**
  * Money formatter that obeys the toolbar's hide-figures switch. Screens used
  * to keep private copies of this formatting, which is why newer areas

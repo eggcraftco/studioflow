@@ -10,7 +10,7 @@
 // anything the existing callables would not.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePrivateMoney } from "@/components/PricePrivacy";
+import { useCanSeeCost, usePrivateMoney } from "@/components/PricePrivacy";
 import QRCode from "qrcode";
 import { inventoryItemQrValue } from "@/lib/studioflow/inventory";
 import { doc, getDoc } from "firebase/firestore";
@@ -121,6 +121,7 @@ export function ItemDetailPanel({
   allItems?: InventoryItem[];
 }) {
   const money = usePrivateMoney();
+  const canSeeCost = useCanSeeCost();
   const { language, user } = useAuth();
   const t = useCallback((text: string) => studioT(text, language), [language]);
 
@@ -202,6 +203,19 @@ export function ItemDetailPanel({
       setPurchase("none");
       return;
     }
+    // FIN-01: the purchase document carries its prices, so its direct read is
+    // closed to somebody without Financial Info. What the item itself knows
+    // about where it came from is shown instead — no total, no bank hop.
+    if (!canSeeCost) {
+      setPurchase({
+        number: String(item.purchaseNumber || ""),
+        supplierName: String(item.supplierName || ""),
+        purchaseDate: String(item.purchaseDate || ""),
+        total: 0,
+        bankTransactionId: ""
+      });
+      return;
+    }
     (async () => {
       try {
         const snap = await getDoc(doc(db, "companies", workspace.id, "purchases", item.purchaseId as string));
@@ -236,7 +250,7 @@ export function ItemDetailPanel({
       }
     })();
     return () => { cancelled = true; };
-  }, [workspace.id, item.purchaseId, item.purchaseNumber]);
+  }, [workspace.id, item.purchaseId, item.purchaseNumber, item.supplierName, item.purchaseDate, canSeeCost]);
 
   const reservations = useMemo(() => {
     const rows = (item.reservations || []).filter(row => row && row.orderId);

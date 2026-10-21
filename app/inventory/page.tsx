@@ -20,6 +20,7 @@ import {
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { moneySymbol } from "@/lib/studioflow/money";
 import { studioT } from "@/lib/studioflow/language";
+import { FinanceHiddenMoney } from "@/components/PricePrivacy";
 import { InventoryContent } from "./InventoryContent";
 
 export default function InventoryPage() {
@@ -82,14 +83,20 @@ export default function InventoryPage() {
   // Inventory rides the orders permission: someone who cannot see orders has no
   // reason to see what the workshop owns, and only a full editor can change it.
   const canEdit = workspaceAccessAllows(workspace.memberAccess, "orders");
+  // FIN-01: stock is the inventory/orders area, what it cost is finance. The
+  // server masks cost for this person; the screen hides the figures with it.
+  const canSeeCost = workspaceAccessAllows(workspace.memberAccess, "financialInfo");
+  const content = (
+    <InventoryContent
+      workspace={workspace}
+      currencySymbol={moneySymbol(settings)}
+      canEdit={canEdit}
+    />
+  );
 
   return (
     <AppShell>
-      <InventoryContent
-        workspace={workspace}
-        currencySymbol={moneySymbol(settings)}
-        canEdit={canEdit}
-      />
+      {canSeeCost ? content : <FinanceHiddenMoney>{content}</FinanceHiddenMoney>}
     </AppShell>
   );
 }

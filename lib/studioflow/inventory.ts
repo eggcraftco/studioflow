@@ -96,6 +96,8 @@ export type InventoryItem = {
   updatedAtMs: number;
   /** eBay listings linked to this card (package E4) — ids only; the listing's price and quantity stay server-side. */
   channelLinks?: Array<{ provider: string; connectionId: string; itemId: string; variationKey: string }>;
+  /** FIN-01: the server zeroed this row's cost fields — the caller has no Financial Info. */
+  costHidden?: boolean;
 };
 
 export type InventorySummary = {
@@ -112,6 +114,8 @@ export type InventorySummary = {
   customerOwnedCount: number;
   /** Ledger-derived 30-day change; available=false means "not watching long enough", never fake 0%. */
   monthlyChange?: { available: boolean; netValue30d: number; pct: number; ledgerStartsMs: number };
+  /** FIN-01: every value above is zeroed by the server — show none of them. */
+  costHidden?: boolean;
 };
 
 // What the New Item form collects. Deliberately flat: the branching between a
@@ -581,7 +585,7 @@ export type OrderInventoryLine = {
 };
 
 export async function getOrderInventory(workspace: WorkspaceContext, orderId: string) {
-  return call<{ ok?: boolean; items?: OrderInventoryLine[]; totalCost?: number }>(
+  return call<{ ok?: boolean; items?: OrderInventoryLine[]; totalCost?: number; costHidden?: boolean }>(
     "getOrderInventory",
     { companyId: workspace.id, orderId },
     "The order's stock could not be loaded."

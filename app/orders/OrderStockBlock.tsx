@@ -55,6 +55,9 @@ export function OrderStockBlock({
 
   const [lines, setLines] = useState<OrderInventoryLine[]>([]);
   const [total, setTotal] = useState(0);
+  // FIN-01: the server zeroes stock cost for somebody without Financial Info
+  // and says so; the block then shows the stock and no money.
+  const [costHidden, setCostHidden] = useState(!workspaceAccessAllows(workspace.memberAccess, "financialInfo"));
   const [loading, setLoading] = useState(true);
   const [picking, setPicking] = useState(false);
   const [swapFrom, setSwapFrom] = useState<OrderInventoryLine | null>(null);
@@ -75,6 +78,7 @@ export function OrderStockBlock({
       const result = await getOrderInventory(workspace, orderId);
       setLines(result?.items ?? []);
       setTotal(Number(result?.totalCost) || 0);
+      setCostHidden(result?.costHidden === true || !workspaceAccessAllows(workspace.memberAccess, "financialInfo"));
     } catch (failure) {
       setNotice(failure instanceof Error ? t(failure.message) : "");
     } finally {
@@ -157,7 +161,7 @@ export function OrderStockBlock({
                       .join(" · ")}
                   </span>
                 </span>
-                <span className="order-stock-cost">{money(currencySymbol, line.lineCost)}</span>
+                {costHidden ? null : <span className="order-stock-cost">{money(currencySymbol, line.lineCost)}</span>}
                 {canEdit ? (
                   <span className="order-stock-actions">
                     <button
@@ -183,11 +187,13 @@ export function OrderStockBlock({
               </li>
             ))}
           </ul>
-          <div className="order-stock-total">
-            <span>{t("Committed stock cost")}</span>
-            <strong>{money(currencySymbol, total)}</strong>
-          </div>
-          {canEdit && onUseAsBaseCost && total > 0 ? (
+          {costHidden ? null : (
+            <div className="order-stock-total">
+              <span>{t("Committed stock cost")}</span>
+              <strong>{money(currencySymbol, total)}</strong>
+            </div>
+          )}
+          {canEdit && onUseAsBaseCost && total > 0 && !costHidden ? (
             <button type="button" className="inventory-link" onClick={() => onUseAsBaseCost(total)}>{t("Use as the base cost on the Financial card")}</button>
           ) : null}
         </>
@@ -353,7 +359,7 @@ function ReserveStockModal({
                       />
                     ) : (
                       <span className="inventory-match-amount">
-                        <strong>{money(currencySymbol, item.valuationCost)}</strong>
+                        {item.costHidden ? null : <strong>{money(currencySymbol, item.valuationCost)}</strong>}
                       </span>
                     )}
                     <button

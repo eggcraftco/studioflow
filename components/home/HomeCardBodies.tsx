@@ -667,7 +667,8 @@ function BankActivityChart({ transactions, t, symbol }: {
 export function InventoryCardBody({ size, data, t, language, moneySettings, hideNumbers }: CardBodyProps) {
   const summary = data.inventory;
   if (!summary) return null;
-  const money = (value: number) => cash(value, hideNumbers, moneySettings);
+  // FIN-01: the server zeroes stock value for somebody without Financial Info.
+  const money = (value: number) => cash(value, hideNumbers || summary.costHidden === true, moneySettings);
 
   if (size === "1x1") {
     // The sheet reads: what the stock is worth, then the three counts that say
