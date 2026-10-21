@@ -68,7 +68,8 @@ export function EbayItemLinks({ workspace, item, items, canEdit, language, onCha
     <section className="inventory-panel-card ebay-inv-card" data-testid="ebay-item-links">
       <header><strong>{t("On eBay")}</strong></header>
       <p className="inventory-sub">{t("eBay's quantity and price are eBay's; the shelf count and the cost on this card are yours.")}</p>
-      {item.source === "ebay" && Number(item.internalTotalCost || 0) === 0 ? <p className="inventory-sub" data-testid="ebay-cost-unknown">{t("Cost not entered — eBay does not know what you paid.")}</p> : null}
+      {/* FIN-01: a hidden cost arrives as 0 — only somebody who may see the cost can be told it was never entered. */}
+      {money && !item.costHidden && item.source === "ebay" && Number(item.internalTotalCost || 0) === 0 ? <p className="inventory-sub" data-testid="ebay-cost-unknown">{t("Cost not entered — eBay does not know what you paid.")}</p> : null}
       {links === null && !error ? <p className="inventory-sub">{t("Loading…")}</p> : null}
       {error ? <p className="layout-error">{error}</p> : null}
       {notice ? <p className="success-copy">{notice}</p> : null}

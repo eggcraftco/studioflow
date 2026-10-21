@@ -328,7 +328,8 @@ export function OpeningStockModal({
                             <td className="r">
                               {item.onHand}{item.unit ? ` ${item.unit}` : ""}
                             </td>
-                            <td className="r">{money(currencySymbol, item.purchasePrice || 0)}</td>
+                            {/* FIN-01-B: null = the sheet says nothing about the price (an update keeps the stored cost). */}
+                            <td className="r">{item.purchasePrice === null || item.purchasePrice === undefined ? "—" : money(currencySymbol, item.purchasePrice)}</td>
                             <td>{item.location || "—"}</td>
                           </tr>
                         ))}

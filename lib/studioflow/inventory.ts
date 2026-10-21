@@ -263,7 +263,7 @@ export async function deleteInventoryItem(workspace: WorkspaceContext, itemId: s
 
 export async function importOpeningStock(
   workspace: WorkspaceContext,
-  items: InventoryItemInput[],
+  items: Array<InventoryItemInput | OpeningStockPreviewItem>,
   openingDate: string,
   duplicatePolicy?: "create" | "skip" | "update"
 ) {
@@ -710,7 +710,13 @@ export type OpeningStockSkip = {
   reason: "noName" | "noAmount";
 };
 
-export type OpeningStockPreviewItem = InventoryItemInput & {
+export type OpeningStockPreviewItem = Omit<InventoryItemInput, "purchasePrice"> & {
+  /**
+   * FIN-01-B: null when the sheet has no price column or the cell is blank —
+   * importing that row as an update keeps the stored cost. A number (0
+   * included) is what the sheet says and is written.
+   */
+  purchasePrice: number | null;
   rowIndex: number;
   /** What this line is worth on the shelf, worked out by the server. */
   lineValue: number;

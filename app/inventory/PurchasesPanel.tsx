@@ -9,7 +9,7 @@
 // from a bank feed.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePrivateMoney } from "@/components/PricePrivacy";
+import { useCanSeeCost, usePrivateMoney } from "@/components/PricePrivacy";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import {
@@ -88,6 +88,9 @@ export function PurchasesPanel({
   onStockChanged: () => void;
 }) {
   const money = usePrivateMoney();
+  // FIN-01: matching a purchase to a bank payment answers with both amounts,
+  // so the server refuses it without Financial Info — the button goes with it.
+  const canSeeCost = useCanSeeCost();
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
 
@@ -250,7 +253,7 @@ export function PurchasesPanel({
                   <td>
                     {purchase.bankTransactionId ? (
                       <span className="inventory-chip" data-status="available">{t("Matched")}</span>
-                    ) : canEdit ? (
+                    ) : canEdit && canSeeCost ? (
                       <button type="button" className="inventory-link" onClick={() => setMatching(purchase)}>{t("Match payment")}</button>
                     ) : (
                       <span className="inventory-sub">{t("Not matched")}</span>
