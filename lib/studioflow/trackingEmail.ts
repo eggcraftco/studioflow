@@ -3,12 +3,19 @@
 // Two calls on one callable: `preview: true` returns what the e-mail would say — recipient,
 // sender identity, subject, message, carrier, number and the server-built link — and sends
 // nothing; a call without it sends exactly once for the number and records the result. The
-// server decides the link (an allow-list of carriers, else 17TRACK's public page, https only);
-// the client never sends one.
+// server decides the link (an allow-list of carriers; 17TRACK's working page for a carrier it
+// detected; NO link while the carrier is unknown — GN-13), https only; the client never sends one.
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { trackingEmailRecordFrom, type TrackingEmailRecord } from "@/lib/studioflow/trackingEmailRules";
+import { isDeadTrackingUrl } from "@/lib/studioflow/trackingCarriers";
+
+/**
+ * "official" | "generic" | "none" from the server (GN-13). "dead": an older server built the
+ * 17TRACK page that answers 404 for an unknown carrier — the dialog then refuses to send.
+ */
+export type TrackingLinkKind = "official" | "generic" | "none" | "dead";
 
 export type TrackingEmailPreview = {
   to: string;
@@ -26,6 +33,10 @@ export type TrackingEmailPreview = {
   trackingNumber: string;
   link: string;
   linkIsGeneric: boolean;
+  linkKind: TrackingLinkKind;
+  carrierKnown: boolean;
+  /** The server's background carrier lookup for this number: "pending" | "running" | "done" | "not_found" | "". */
+  carrierLookupState: string;
   orderReference: string;
   locale: string;
   lastResult: TrackingEmailRecord | null;
@@ -43,6 +54,14 @@ type RawResponse = Record<string, unknown> & { ok?: boolean; reason?: string; me
 
 function str(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function linkKindOf(data: Record<string, unknown>): TrackingLinkKind {
+  if (isDeadTrackingUrl(data.link)) return "dead";
+  const kind = str(data.linkKind);
+  if (kind === "official" || kind === "generic" || kind === "none") return kind;
+  if (!/^https:\/\//i.test(str(data.link))) return "none";
+  return data.linkIsGeneric === true ? "generic" : "official";
 }
 
 export async function previewOrderTrackingEmail(
@@ -68,8 +87,11 @@ export async function previewOrderTrackingEmail(
     carrier: str(data.carrier),
     carrierLabel: str(data.carrierLabel),
     trackingNumber: str(data.trackingNumber),
-    link: /^https:\/\//i.test(str(data.link)) ? str(data.link) : "",
+    link: /^https:\/\//i.test(str(data.link)) && !isDeadTrackingUrl(data.link) ? str(data.link) : "",
     linkIsGeneric: data.linkIsGeneric === true,
+    linkKind: linkKindOf(data),
+    carrierKnown: data.carrierKnown === true || (data.carrierKnown === undefined && Boolean(str(data.carrierLabel) || str(data.carrier))),
+    carrierLookupState: str((data.carrierLookup as Record<string, unknown> | null | undefined)?.state),
     orderReference: str(data.orderReference),
     locale: str(data.locale),
     lastResult: trackingEmailRecordFrom(data.lastResult),

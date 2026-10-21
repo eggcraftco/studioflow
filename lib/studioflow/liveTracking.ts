@@ -14,6 +14,8 @@
 //
 // Pure: no Firebase import, so scripts/check-live-tracking.mjs can compile and run it.
 
+import { isAutoDetect, resolveCarrier, trackingLink, type CarrierEntry } from "./trackingCarriers";
+
 export const TRACKING_KEYS = [
   "trackingNumber", "status", "statusText", "subStatus", "carrier", "carrierCode", "checkpoint", "location",
   "eta", "lastUpdate", "lastCheckedAt", "trackingUrl", "provider", "trackingSupportStatus", "supportMessage",
@@ -153,13 +155,58 @@ export function trackingTone(status: string, supportStatus: string): string {
   return TRACKING_TONES.blue;
 }
 
-/** Where "Open Tracking" goes: the answer's own page, else the provider's page for this number. */
-export function trackingOpenUrl(values: TrackingValues, orderTrackingNumber: string): string {
-  const stored = String(values.trackingUrl || "").trim();
-  if (/^https:\/\//i.test(stored)) return stored;
-  const number = encodeURIComponent(cleanTrackingNumber(orderTrackingNumber));
-  if (trackingProvider(values) === "DHL Express") return `https://www.dhl.com/gb-en/home/tracking/tracking-express.html?submit=1&tracking-id=${number}`;
-  return `https://www.17track.net/en/track-details?nums=${number}`;
+/**
+ * The carrier of the number the order carries now (GN-13), most trusted first: the member's
+ * Courier, the tracker's answer (name and 17TRACK code), the shop's own words (`sourceCarrier`
+ * on the row, written for this number only). null = not identified yet.
+ */
+export function trackingCarrier(values: TrackingValues, courier: string, sourceCarrier = ""): CarrierEntry | null {
+  const answered = trackingProvider(values) === "DHL Express" && !values.carrier ? "DHL Express" : values.carrier;
+  return resolveCarrier([
+    { carrier: isAutoDetect(courier) ? "" : courier },
+    { carrier: answered, carrierCode: values.carrierCode },
+    { carrier: sourceCarrier }
+  ]);
+}
+
+/**
+ * Where "Open Tracking" goes: the carrier's official page, or 17TRACK's working page for a carrier
+ * it detected; "" while the carrier is not identified (no button — never the old 404 page, and
+ * never a URL a store or a member typed).
+ */
+export function trackingOpenUrl(values: TrackingValues, orderTrackingNumber: string, courier = "", sourceCarrier = ""): string {
+  return trackingLink(trackingCarrier(values, courier, sourceCarrier), orderTrackingNumber).url;
+}
+
+/** The server's background carrier lookup for THIS number (GN-13), from the row's `carrierLookup`. */
+export type CarrierLookup = { state: string; trackingNumber: string };
+
+function sameNumber(raw: unknown, orderTrackingNumber: string): boolean {
+  const number = cleanTrackingNumber(raw).toUpperCase();
+  return Boolean(number) && number === cleanTrackingNumber(orderTrackingNumber).toUpperCase();
+}
+
+export function carrierLookupFor(raw: unknown, orderTrackingNumber: string): CarrierLookup | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  if (!sameNumber(value.trackingNumber, orderTrackingNumber)) return null;
+  return { state: String(value.state || ""), trackingNumber: cleanTrackingNumber(value.trackingNumber) };
+}
+
+/** The shop's carrier words on the row (`sourceCarrier`), only when written for this number. */
+export function sourceCarrierFor(raw: unknown, orderTrackingNumber: string): string {
+  if (!raw || typeof raw !== "object") return "";
+  const value = raw as Record<string, unknown>;
+  if (!sameNumber(value.trackingNumber, orderTrackingNumber)) return "";
+  return String(value.carrier || value.carrierKey || "");
+}
+
+/** What the card says when no carrier is identified yet: looking, or "choose the courier". */
+export function carrierUnknownSentence(lookup: CarrierLookup | null): string {
+  const state = lookup?.state || "";
+  if (state === "pending" || state === "running") return "Looking up the carrier for this number. The tracking link appears when it is found.";
+  if (state === "not_found") return "The carrier could not be identified. Choose the Courier, then Check Again.";
+  return "Carrier not identified yet. Choose the Courier or press Check Again.";
 }
 
 /** An ISO time as a local date and time; anything else is shown as the server wrote it. */

@@ -5,7 +5,9 @@
 // Opening it sends nothing: the server renders the words (preview: true) and the member reads
 // them — recipient, sender, subject, message, and the details block the server will append: the
 // order reference, the carrier, the number and a link the server built from an allow-list of
-// carriers (else 17TRACK's public page). Only the Send button sends, exactly once per number;
+// carriers. GN-13: while the carrier is not identified there is NO link (the e-mail carries the
+// number alone and the dialog says so — the old fallback page answered 404); an older server that
+// still builds that page is refused here. Only the Send button sends, exactly once per number;
 // "Send again" is the member's explicit choice and is counted on the record.
 
 import { useEffect, useRef, useState } from "react";
@@ -78,9 +80,12 @@ export function TrackingEmailDialog({
 
   const toValid = isPlausibleEmail(to);
   const willResend = resend || Boolean(alreadySent);
+  // A link that would 404 (older server, carrier unknown) is never e-mailed.
+  const deadLink = preview?.linkKind === "dead";
+  const lookingUp = preview?.carrierLookupState === "pending" || preview?.carrierLookupState === "running";
 
   async function send() {
-    if (!preview || sending || !toValid) return;
+    if (!preview || sending || !toValid || deadLink) return;
     setSending(true);
     setSendError(null);
     try {
@@ -213,14 +218,20 @@ export function TrackingEmailDialog({
                 <div style={{ display: "contents" }}>
                   <dt style={{ opacity: 0.7, fontWeight: 700, fontSize: 11 }}>{t("Tracking link")}</dt>
                   <dd style={{ margin: 0, overflowWrap: "anywhere" }}>
-                    {preview.link ? <a href={preview.link} target="_blank" rel="noopener noreferrer">{preview.link}</a> : "-"}
+                    {preview.link
+                      ? <a href={preview.link} target="_blank" rel="noopener noreferrer">{preview.link}</a>
+                      : <span data-link-kind={preview.linkKind}>{t("No link yet: the carrier of this number is not identified.")}</span>}
                   </dd>
                 </div>
               </dl>
               <p className="shipment-muted" style={{ marginTop: 8 }}>
-                {preview.linkIsGeneric
-                  ? t("17TRACK public page: this carrier is not in the link list.")
-                  : t("The link is built by NivaDesk from the tracking number; a typed link is never used.")}
+                {deadLink
+                  ? t("This number's carrier is not identified, so its link would not open. Choose the Courier or press Check Again first.")
+                  : preview.linkKind === "none"
+                    ? `${t("The e-mail will carry the tracking number without a link.")}${lookingUp ? ` ${t("NivaDesk is looking up the carrier. Reopen this preview in a few minutes for the carrier's own tracking page.")}` : ""}`
+                    : preview.linkIsGeneric
+                      ? t("17TRACK public page: this carrier is not in the link list.")
+                      : t("The link is built by NivaDesk from the tracking number; a typed link is never used.")}
                 {" "}
                 {`${preview.labels.closing} ${preview.fromName}`}
               </p>
@@ -230,7 +241,7 @@ export function TrackingEmailDialog({
 
             <div className="inventory-modal-actions">
               <button type="button" className="button secondary" onClick={onClose} disabled={sending}>{t("Cancel")}</button>
-              <button type="submit" className="button" disabled={sending || !toValid} data-resend={willResend ? "true" : "false"}>
+              <button type="submit" className="button" disabled={sending || !toValid || deadLink} data-resend={willResend ? "true" : "false"}>
                 {sending ? t("Sending…") : willResend ? t("Send again") : t("Send")}
               </button>
             </div>

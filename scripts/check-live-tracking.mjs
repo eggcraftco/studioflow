@@ -38,6 +38,9 @@ const read = (rel) => (exists(rel) ? fs.readFileSync(path.join(root, rel), "utf8
 
 // ---- 1. the rules
 if (!exists("lib/studioflow/liveTracking.ts")) failures.push("lib/studioflow/liveTracking.ts does not exist: the web reads no live status at all");
+// GN-13: liveTracking imports the carrier table; compile it beside it.
+if (exists("lib/studioflow/trackingCarriers.ts")) compile("lib/studioflow/trackingCarriers.ts", "trackingCarriers.mjs");
+else failures.push("lib/studioflow/trackingCarriers.ts does not exist");
 const L = exists("lib/studioflow/liveTracking.ts") ? await import(pathToFileURL(compile("lib/studioflow/liveTracking.ts", "liveTracking.mjs")).href) : null;
 if (L) {
 const stored = (number, over = {}) => Object.fromEntries(Object.entries({ trackingNumber: number, provider: "17TRACK", status: "InTransit", statusText: "InTransit", carrier: "UPS", ...over }).map(([k, v]) => [`tracking::${k}`, v]));
@@ -82,11 +85,21 @@ expect("tone delivery failed is not green", L.trackingTone("DeliveryFailure", "a
 expect("tone exception", L.trackingTone("Exception", "active"), L.TRACKING_TONES.red);
 expect("tone waiting", L.trackingTone("Registered", "waiting"), L.TRACKING_TONES.blue);
 expect("tone carrier required", L.trackingTone("Carrier Required", "carrier_required"), L.TRACKING_TONES.orange);
-// Where "Open Tracking" goes.
-expect("open 17TRACK", L.trackingOpenUrl({}, "1Z 1"), "https://www.17track.net/en/track-details?nums=1Z1");
-expect("open DHL", L.trackingOpenUrl({ provider: "DHL Express", trackingUrl: "" }, "1234567890"), "https://www.dhl.com/gb-en/home/tracking/tracking-express.html?submit=1&tracking-id=1234567890");
-expect("open stored https", L.trackingOpenUrl({ trackingUrl: "https://example.test/t" }, "1"), "https://example.test/t");
-expect("open refuses non-https", L.trackingOpenUrl({ trackingUrl: "javascript:alert(1)" }, "1"), "https://www.17track.net/en/track-details?nums=1");
+// Where "Open Tracking" goes (GN-13, 22 Oct 2026): the carrier's own page; NO link while the carrier is
+// unknown — the old fallback https://www.17track.net/en/track-details?nums=… answers 404.
+expect("open: carrier unknown -> no link", L.trackingOpenUrl({}, "1Z 1"), "");
+expect("open: the stored 404 URL is never opened", L.trackingOpenUrl({ trackingUrl: "https://www.17track.net/en/track-details?nums=1234567890" }, "1234567890"), "");
+expect("open: a stored URL is never trusted (carrier decides)", L.trackingOpenUrl({ trackingUrl: "https://example.test/t" }, "1234"), "");
+expect("open DHL provider", L.trackingOpenUrl({ provider: "DHL Express", trackingUrl: "" }, "1234567890"), "https://www.dhl.com/gb-en/home/tracking/tracking-express.html?submit=1&tracking-id=1234567890");
+expect("open 17TRACK answer DHL + code", L.trackingOpenUrl({ carrier: "DHL", carrierCode: "100001" }, "1234567890"), "https://www.dhl.com/gb-en/home/tracking/tracking-express.html?submit=1&tracking-id=1234567890");
+expect("open courier picker Royal Mail", L.trackingOpenUrl({}, "AB123456789GB", "Royal Mail"), "https://www.royalmail.com/track-your-item#/tracking-results/AB123456789GB");
+expect("open Auto Detect courier is not a carrier", L.trackingOpenUrl({}, "AB123456789GB", "Auto Detect"), "");
+expect("open shop's carrier (sourceCarrier)", L.trackingOpenUrl({}, "H00A0B1234567890", "Auto Detect", "Evri"), "https://www.evri.com/track/parcel/H00A0B1234567890");
+expect("open carrier detected by 17TRACK without a name -> 17TRACK working page", L.trackingOpenUrl({ carrier: "Carrier #190271", carrierCode: "190271" }, "LX123"), "https://t.17track.net/en#nums=LX123");
+expect("open refuses a nasty number", L.trackingOpenUrl({ carrier: "UPS" }, '1Z"><x'), "");
+expect("lookup for this number only", [L.carrierLookupFor({ state: "pending", trackingNumber: "1Z1" }, "1Z 1")?.state, L.carrierLookupFor({ state: "pending", trackingNumber: "OLD" }, "1Z1")], ["pending", null]);
+expect("sourceCarrier for this number only", [L.sourceCarrierFor({ trackingNumber: "E1", carrier: "Evri" }, "E1"), L.sourceCarrierFor({ trackingNumber: "OLD", carrier: "Evri" }, "E1")], ["Evri", ""]);
+expect("unknown sentences", [L.carrierUnknownSentence({ state: "pending", trackingNumber: "1" }), L.carrierUnknownSentence({ state: "not_found", trackingNumber: "1" }), L.carrierUnknownSentence(null)].map((x) => x.split(" ")[0]), ["Looking", "The", "Carrier"]);
 
 }
 
@@ -101,7 +114,7 @@ const orders = fs.readFileSync(path.join(root, "lib/studioflow/orders.ts"), "utf
 expect("the callable is registerTracking", /registerOrderTrackingFromWeb[\s\S]{0,700}httpsCallable<[\s\S]{0,120}?>\(functions, "registerTracking"\)/.test(orders), true);
 
 // ---- 3. every sentence the panel prints, in all eleven languages, through studioT
-for (const [rel, out] of [["lib/studioflow/macTranslations.ts", "macTranslations.mjs"], ["lib/studioflow/settingsContentTranslations.ts", "settingsContentTranslations.mjs"], ["lib/studioflow/shippingTranslations.ts", "shippingTranslations.mjs"], ["lib/studioflow/trackingEmailTranslations.ts", "trackingEmailTranslations.mjs"], ["lib/studioflow/screenGapTranslations.ts", "screenGapTranslations.mjs"]]) compile(rel, out);
+for (const m of fs.readFileSync(path.join(root, "lib/studioflow/language.ts"), "utf8").matchAll(/from "\.\/([A-Za-z]+)"/g)) compile(`lib/studioflow/${m[1]}.ts`, `${m[1]}.mjs`); // every table language.ts merges (the fixed list went stale when new tables were added)
 const { studioT } = await import(pathToFileURL(compile("lib/studioflow/language.ts", "language.mjs")).href);
 const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
 const panel = read("app/orders/OrderLiveTrackingPanel.tsx");
