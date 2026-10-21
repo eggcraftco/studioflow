@@ -8,6 +8,7 @@ import { BOOT_RECOVERY_TRANSLATIONS } from "./bootRecoveryTranslations";
 import { WEB_SMALL_FIXES_TRANSLATIONS } from "./webSmallFixesTranslations";
 import { ORDER_LIST_VIEW_TRANSLATIONS } from "./orderListViewTranslations";
 import { FILES_NOTES_ACCOUNT_TRANSLATIONS } from "./filesNotesAccountTranslations";
+import { SALES_STORES_TRANSLATIONS } from "./salesStoresTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -9210,6 +9211,9 @@ mergeIntoTranslations(ORDER_LIST_VIEW_TRANSLATIONS);
 
 // GN-01 / GN-02 (22 Oct 2026): Files selection and drop, note sharing faces. Merged last on purpose.
 mergeIntoTranslations(FILES_NOTES_ACCOUNT_TRANSLATIONS);
+
+// MC-2 (22 Oct 2026): Sales stores and brands. Merged last on purpose.
+mergeIntoTranslations(SALES_STORES_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

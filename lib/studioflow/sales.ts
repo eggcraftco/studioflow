@@ -41,6 +41,13 @@ export type SalesRow = {
   financeState: "missing" | "stale" | "current";
   revenue: number | null;
   currency: string | null;
+  // MC-2 — present on servers from 22 Oct 2026; optional so an older server still type-checks.
+  storeKey?: string;
+  storeName?: string;
+  storeOrdinal?: number;
+  brandId?: string;
+  brandName?: string;
+  brandState?: "none" | "store" | "override" | "ambiguous";
 };
 
 export type SalesCursor = { ms: number; id: string } | null;
@@ -57,13 +64,29 @@ export type SalesRowsPage = {
   scope: "assigned" | "workspace";
   scanned: number;
   queryPath: "workspace" | "assigned_indexed" | "assigned_fallback" | "none";
+  brandsExist?: boolean;
 };
 
 export type SalesProduct = { productId: string; name: string; sku: string; linkedItemId: string; channel: string };
 export type SalesProductsPage = { ok: boolean; companyId: string; enabled: boolean; reason: string; products: SalesProduct[]; catalogExists: boolean };
 
 export type SalesChannel = { id: string; connected: boolean; connectionCount: number; unavailable: boolean };
-export type SalesChannelsPage = { ok: boolean; companyId: string; enabled: boolean; reason: string; channels: SalesChannel[] };
+export type SalesStore = {
+  storeKey: string;
+  provider: string;
+  nickname: string;
+  name: string;
+  address: string;          // owner/admin only; empty for everybody else
+  status: "connected" | "needs_attention" | "disconnected";
+  errorCode: string;
+  lastSyncAtMs: number;
+  ordinal: number;
+};
+export type SalesBrand = { brandId: string; name: string; color: string; storeKeys: string[] };
+export type SalesChannelsPage = {
+  ok: boolean; companyId: string; enabled: boolean; reason: string; channels: SalesChannel[];
+  stores?: SalesStore[]; brands?: SalesBrand[]; canManage?: boolean;
+};
 
 export type SalesRowsRequest = {
   companyId: string;
@@ -72,6 +95,8 @@ export type SalesRowsRequest = {
   channel?: string;
   includeBespoke?: boolean;
   needsAttentionOnly?: boolean;
+  storeKey?: string;
+  brandId?: string;          // a brand id, or "unassigned"
 };
 
 export async function fetchSalesCapability(companyId: string): Promise<SalesCapability> {
@@ -92,6 +117,39 @@ export async function fetchSalesProducts(companyId: string): Promise<SalesProduc
 export async function fetchSalesChannels(companyId: string): Promise<SalesChannelsPage> {
   const call = httpsCallable<{ companyId: string }, SalesChannelsPage>(functions, "listSalesChannels");
   return (await call({ companyId })).data;
+}
+
+// MC-2 writes — owner/admin only; the server refuses everybody else. They touch
+// brand documents, store nicknames and the Sales side document, never an order.
+export async function saveSalesBrand(input: { companyId: string; brandId?: string; name: string; color?: string; storeKeys: string[] }) {
+  const call = httpsCallable<typeof input, { ok: boolean; brand: SalesBrand }>(functions, "saveSalesBrand");
+  return (await call(input)).data;
+}
+
+export async function deleteSalesBrand(input: { companyId: string; brandId: string }) {
+  const call = httpsCallable<typeof input, { ok: boolean }>(functions, "deleteSalesBrand");
+  return (await call(input)).data;
+}
+
+export async function setSalesOrderBrand(input: { companyId: string; orderId: string; brandId: string }) {
+  const call = httpsCallable<typeof input, { ok: boolean }>(functions, "setSalesOrderBrand");
+  return (await call(input)).data;
+}
+
+export async function setSalesStoreNickname(input: { companyId: string; storeKey: string; nickname: string }) {
+  const call = httpsCallable<typeof input, { ok: boolean }>(functions, "setSalesStoreNickname");
+  return (await call(input)).data;
+}
+
+/**
+ * How a store is named on screen: the server's name (nickname or the shop's own),
+ * else "<Provider> · Store N". `t` is the caller's translator — every word that is
+ * not a proper name goes through it (the "Added by hand" lesson).
+ */
+export function salesStoreLabel(store: { provider: string; name?: string; ordinal?: number }, t: (text: string) => string) {
+  const provider = t(salesChannelName(store.provider));
+  if (store.name) return `${provider} · ${store.name}`;
+  return store.ordinal ? `${provider} · ${t("Store")} ${store.ordinal}` : provider;
 }
 
 /** The order this row came from, opened where Orders opens it — the same id, the same screen. */
