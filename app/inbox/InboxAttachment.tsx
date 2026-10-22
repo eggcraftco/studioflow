@@ -14,10 +14,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { openCustomerInboxMedia, type CustomerInboxMedia } from "@/lib/studioflow/customerInbox";
+import { nextScanPollDelay } from "@/lib/studioflow/scanPollSchedule";
 
-/** How often, and how many times, "still being checked" asks again on its own. */
-const SCAN_POLL_MS = 4000;
-const SCAN_POLL_TRIES = 8;
+// "Still being checked" keeps asking on its own: the verdict is written where
+// only the server reads it and nothing tells the page when it lands, so the
+// photo appears only if the page asks again. How often, and for how long, is
+// lib/studioflow/scanPollSchedule.ts (330 s: past the scanner's own limit).
 
 type Phase =
   | { at: "idle" }
@@ -80,47 +82,113 @@ export function InboxAttachment({
   t: (text: string) => string;
 }) {
   const [phase, setPhase] = useState<Phase>({ at: "idle" });
+  const phaseNow = useRef<Phase>({ at: "idle" });
   const alive = useRef(true);
   const url = useRef("");
   const timer = useRef<number | null>(null);
+  /** An ask on its way to the server: a second one would only duplicate it. */
+  const asking = useRef(false);
+  /** Bumped when the message changes or the bubble goes: a late answer for the old one is dropped. */
+  const round = useRef(0);
+  /** When this round of asking began, and how many "still scanning" answers it has had. */
+  const startedAt = useRef(0);
+  const scanTries = useRef(0);
+
+  const show = useCallback((next: Phase) => {
+    phaseNow.current = next;
+    setPhase(next);
+  }, []);
+
+  const stopTimer = useCallback(() => {
+    if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null; }
+  }, []);
 
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
-      if (timer.current !== null) window.clearTimeout(timer.current);
+      round.current += 1;
+      stopTimer();
       // The bytes go with the message: nothing of the file outlives the bubble.
       if (url.current) URL.revokeObjectURL(url.current);
       url.current = "";
     };
-  }, []);
+  }, [stopTimer]);
 
-  const open = useCallback(async (tries: number) => {
-    if (timer.current !== null) { window.clearTimeout(timer.current); timer.current = null; }
-    setPhase(tries === 0 ? { at: "opening" } : { at: "scanning", tries });
+  // Another message in the same bubble starts from nothing: no timer, no
+  // answer, no bytes of the one before.
+  useEffect(() => {
+    return () => {
+      round.current += 1;
+      stopTimer();
+      asking.current = false;
+      if (url.current) URL.revokeObjectURL(url.current);
+      url.current = "";
+      show({ at: "idle" });
+    };
+  }, [companyId, conversationId, messageId, show, stopTimer]);
+
+  /** Ask the server for the file. `fresh` starts a new round (a press, or after "still being checked"). */
+  const open = useCallback(async (fresh: boolean) => {
+    stopTimer();
+    if (asking.current) return;
+    if (fresh) { startedAt.current = Date.now(); scanTries.current = 0; }
+    const mine = round.current;
+    const before = phaseNow.current.at;
+    show(before === "idle" || before === "failed" ? { at: "opening" } : { at: "scanning", tries: scanTries.current });
+    asking.current = true;
     try {
       const answer = await openCustomerInboxMedia(companyId, conversationId, messageId);
-      if (!alive.current) return;
+      if (!alive.current || mine !== round.current) return;
       if (answer.state === "ready") {
         if (url.current) URL.revokeObjectURL(url.current);
         url.current = URL.createObjectURL(answer.blob);
-        setPhase({ at: "ready", url: url.current, kind: answer.kind });
+        show({ at: "ready", url: url.current, kind: answer.kind });
       } else if (answer.state === "scanning") {
-        if (tries < SCAN_POLL_TRIES) {
-          setPhase({ at: "scanning", tries });
-          timer.current = window.setTimeout(() => { void open(tries + 1); }, SCAN_POLL_MS);
+        scanTries.current += 1;
+        const wait = nextScanPollDelay(Date.now() - startedAt.current, scanTries.current);
+        if (wait === null) {
+          show({ at: "waited" });
         } else {
-          setPhase({ at: "waited" });
+          show({ at: "scanning", tries: scanTries.current });
+          // A hidden tab does not ask: coming back asks at once instead.
+          if (!document.hidden) {
+            timer.current = window.setTimeout(() => {
+              timer.current = null;
+              if (document.hidden) return;
+              void open(false);
+            }, wait);
+          }
         }
       } else if (answer.state === "refused") {
-        setPhase({ at: "refused", reason: answer.reason });
+        show({ at: "refused", reason: answer.reason });
       } else {
-        setPhase({ at: answer.state });
+        show({ at: answer.state });
       }
     } catch {
-      if (alive.current) setPhase({ at: "failed" });
+      if (alive.current && mine === round.current) show({ at: "failed" });
+    } finally {
+      if (mine === round.current) asking.current = false;
     }
-  }, [companyId, conversationId, messageId]);
+  }, [companyId, conversationId, messageId, show, stopTimer]);
+
+  // Back to the tab (or the window): a file still being checked is asked
+  // about at once, not after the rest of a wait that was paused.
+  useEffect(() => {
+    const recheck = () => {
+      if (document.hidden) { stopTimer(); return; }
+      const at = phaseNow.current.at;
+      if ((at === "scanning" || at === "waited") && timer.current === null && !asking.current) {
+        void open(at === "waited");
+      }
+    };
+    document.addEventListener("visibilitychange", recheck);
+    window.addEventListener("focus", recheck);
+    return () => {
+      document.removeEventListener("visibilitychange", recheck);
+      window.removeEventListener("focus", recheck);
+    };
+  }, [open, stopTimer]);
 
   const isImage = media.kind === "image";
   const name = isImage ? t("Photo") : media.filename || t("PDF document");
@@ -171,7 +239,7 @@ export function InboxAttachment({
         )
       ) : phase.at === "idle" || phase.at === "failed" ? (
         <>
-          <button type="button" className="inbox-attachment-action" onClick={() => { void open(0); }}>
+          <button type="button" className="inbox-attachment-action" onClick={() => { void open(true); }}>
             {isImage ? t("View photo") : t("Open PDF")}
           </button>
           {phase.at === "failed" ? <span className="inbox-attachment-note" role="alert">{t("The file could not be opened.")}</span> : null}
@@ -183,7 +251,7 @@ export function InboxAttachment({
       ) : phase.at === "waited" ? (
         <>
           <span className="inbox-attachment-note" role="status">{t("Still being checked. Try again in a minute.")}</span>
-          <button type="button" className="inbox-attachment-action" onClick={() => { void open(1); }}>
+          <button type="button" className="inbox-attachment-action" onClick={() => { void open(true); }}>
             {t("Check again")}
           </button>
         </>
