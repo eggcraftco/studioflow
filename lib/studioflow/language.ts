@@ -9,6 +9,7 @@ import { WEB_SMALL_FIXES_TRANSLATIONS } from "./webSmallFixesTranslations";
 import { ORDER_LIST_VIEW_TRANSLATIONS } from "./orderListViewTranslations";
 import { FILES_NOTES_ACCOUNT_TRANSLATIONS } from "./filesNotesAccountTranslations";
 import { SALES_STORES_TRANSLATIONS } from "./salesStoresTranslations";
+import { WOO_STORES_TRANSLATIONS } from "./wooStoresTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -9214,6 +9215,9 @@ mergeIntoTranslations(FILES_NOTES_ACCOUNT_TRANSLATIONS);
 
 // MC-2 (22 Oct 2026): Sales stores and brands. Merged last on purpose.
 mergeIntoTranslations(SALES_STORES_TRANSLATIONS);
+
+// Multistore (23 Oct 2026): WooCommerce stores of one workspace. After MC-2.
+mergeIntoTranslations(WOO_STORES_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {
