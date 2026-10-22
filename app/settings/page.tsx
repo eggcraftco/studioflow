@@ -5823,7 +5823,7 @@ function IntegrationsSection({
           <div className="integrations-grid settings-integrations-grid">
             <IntegrationCard
               provider={DHL_EXPRESS_TILE}
-              live={{ state: dhl.connected ? "connected" : "available", detail: dhl.connected && dhl.environment === "test" ? t("DHL test environment") : undefined }}
+              live={{ state: dhl.connected ? "connected" : "available", detail: dhl.connected && dhl.environment === "test" ? `${t("Limited access")} · ${t("DHL test environment")}` : t("Limited access") }}
               t={t}
               highlighted={false}
               onManage={() => setManaging("dhl")}
@@ -5897,8 +5897,8 @@ const TRACK17_TILE: IntegrationProvider = {
 // built here and shown only to a workspace the server has opened DHL for.
 const DHL_EXPRESS_TILE: IntegrationProvider = {
   id: "dhl_express", name: "DHL Express", category: "commerce", kind: "native", mark: "DHL",
-  blurb: "Create DHL Express labels from an order, with the customs declaration, and follow each parcel.",
-  capabilities: ["Shipping labels", "Customs declaration", "Tracking"], manage: "dhl",
+  blurb: "See the DHL Express services for an order's route, create the label with the commercial invoice where customs needs one, and follow each parcel.",
+  capabilities: ["DHL services", "Shipping labels", "Commercial invoice", "Tracking"], manage: "dhl",
 };
 
 function IntegrationCard({
