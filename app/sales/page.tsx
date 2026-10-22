@@ -2,8 +2,8 @@
 
 // Sales, Faz 1 — three read-only tabs over the callables that already exist.
 //
-// This screen writes nothing. There is no New sale, no product creation, and no
-// stock, payment or listing call anywhere in it. The list is the server's —
+// Orders are never changed from this screen. There is no New sale, no product
+// creation, and no stock, payment or listing call anywhere in it. The list is the server's —
 // paging, filtering and the assigned-member scope all happen in listSalesRows,
 // which reads the canonical orders, so this file never decides who may see what.
 //
@@ -19,11 +19,12 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { loadWorkspaceContext, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
+import { createSalesListLoader, salesListFilterKey } from "@/lib/studioflow/salesListLoader";
 import {
   fetchSalesCapability, fetchSalesRows, fetchSalesProducts, fetchSalesChannels,
   saveSalesBrand, deleteSalesBrand, setSalesOrderBrand, setSalesStoreNickname,
   salesOrderHref, salesChannelName, salesDateLabel, salesStoreLabel,
-  type SalesCapability, type SalesRow, type SalesCursor,
+  type SalesCapability, type SalesRow, type SalesRowsPage, type SalesRowsRequest,
   type SalesProduct, type SalesChannel, type SalesStore, type SalesBrand
 } from "@/lib/studioflow/sales";
 
@@ -57,7 +58,6 @@ export default function SalesPage() {
   const [booting, setBooting] = useState(true);
 
   const [rows, setRows] = useState<SalesRow[] | null>(null);
-  const [cursor, setCursor] = useState<SalesCursor>(null);
   const [hasMore, setHasMore] = useState(false);
   const [financeVisible, setFinanceVisible] = useState(false);
   const [listBusy, setListBusy] = useState(false);
@@ -91,6 +91,36 @@ export default function SalesPage() {
   const requestId = useRef(0);
   const currentCompany = useRef("");
 
+  // The list itself (MC-2 fix, 23 Oct 2026): every listSalesRows call gets its
+  // own request id and the filter it was asked for. A filter change starts a new
+  // generation, so a slow answer for the previous filter — or a "Show more"
+  // asked before the change — is dropped, and pages of different filters never
+  // merge (lib/studioflow/salesListLoader.ts, scripts/check-sales-list-requests.mjs).
+  // The Products and Channels reads get their own sequence too: after a brand or
+  // store-name change two directory reads can be in flight, and only the newest
+  // may paint (a slow older answer would bring a deleted brand back on screen).
+  const productsRequest = useRef(0);
+  const channelsRequest = useRef(0);
+  const tRef = useRef(t);
+  tRef.current = t;
+  type ListFilter = Omit<SalesRowsRequest, "limit" | "cursor">;
+  const listLoader = useRef<ReturnType<typeof createSalesListLoader<SalesRow, SalesRowsPage, ListFilter>> | null>(null);
+  if (!listLoader.current) {
+    listLoader.current = createSalesListLoader<SalesRow, SalesRowsPage, ListFilter>({
+      fetchPage: (filter, nextCursor) => fetchSalesRows({ ...filter, limit: 25, cursor: nextCursor }),
+      apply: (update) => {
+        setRows(update.rows);
+        setHasMore(update.hasMore);
+        setFinanceVisible(update.page.financeVisible);
+        setBrandsExist(update.page.brandsExist === true);
+      },
+      busy: (value) => setListBusy(value),
+      fail: (err) => setListError(err instanceof Error ? err.message : tRef.current("Could not load.")),
+      reset: () => { setRows(null); setHasMore(false); setListError(""); },
+      rowId: (row) => row.orderId
+    });
+  }
+
   useEffect(() => {
     if (authLoading) return;
     const uid = user?.uid ?? "";
@@ -105,6 +135,7 @@ export default function SalesPage() {
         if (cancelled || ticket !== requestId.current) return;
         setWorkspace(loaded);
         currentCompany.current = loaded.id;
+        listLoader.current?.invalidate();
         const cap = await fetchSalesCapability(loaded.id);
         if (cancelled || ticket !== requestId.current) return;
         setCapability(cap);
@@ -118,51 +149,39 @@ export default function SalesPage() {
     return () => { cancelled = true; };
   }, [authLoading, user?.uid, t]);
 
-  const loadRows = useCallback(async (nextCursor: SalesCursor) => {
+  // First page for the filters on screen; a new filter is a new generation.
+  const loadRows = useCallback(() => {
     const companyId = currentCompany.current;
-    if (!companyId) return;
-    const ticket = requestId.current;
-    setListBusy(true);
-    setListError("");
-    try {
-      const page = await fetchSalesRows({
-        companyId, limit: 25, cursor: nextCursor,
-        channel: channelFilter || undefined,
-        storeKey: storeFilter || undefined,
-        brandId: brandFilter || undefined,
-        includeBespoke, needsAttentionOnly
-      });
-      if (ticket !== requestId.current || companyId !== currentCompany.current) return;
-      setRows((previous) => (nextCursor && previous ? [...previous, ...page.rows] : page.rows));
-      setCursor(page.nextCursor);
-      setHasMore(page.hasMore);
-      setFinanceVisible(page.financeVisible);
-      setBrandsExist(page.brandsExist === true);
-    } catch (err) {
-      if (ticket !== requestId.current) return;
-      setListError(err instanceof Error ? err.message : t("Could not load."));
-    } finally {
-      if (ticket === requestId.current) setListBusy(false);
-    }
-  }, [channelFilter, storeFilter, brandFilter, includeBespoke, needsAttentionOnly, t]);
+    if (!companyId || !listLoader.current) return;
+    const filter: ListFilter = {
+      companyId,
+      channel: channelFilter || undefined,
+      storeKey: storeFilter || undefined,
+      brandId: brandFilter || undefined,
+      includeBespoke, needsAttentionOnly
+    };
+    listLoader.current.load(salesListFilterKey(companyId, {
+      channel: channelFilter, storeKey: storeFilter, brandId: brandFilter, includeBespoke, needsAttentionOnly
+    }), filter);
+  }, [channelFilter, storeFilter, brandFilter, includeBespoke, needsAttentionOnly]);
 
   useEffect(() => {
     if (!capability?.canOpenSales || tab !== "sales") return;
-    setRows(null);
-    void loadRows(null);
+    loadRows();
   }, [capability?.canOpenSales, tab, loadRows]);
 
   useEffect(() => {
     if (!capability?.canOpenSales || tab !== "products" || !currentCompany.current) return;
     const ticket = requestId.current;
+    const mine = (productsRequest.current += 1);
     (async () => {
       try {
         const page = await fetchSalesProducts(currentCompany.current);
-        if (ticket !== requestId.current) return;
+        if (ticket !== requestId.current || mine !== productsRequest.current) return;
         setProducts(page.products);
         setProductsError("");
       } catch (err) {
-        if (ticket !== requestId.current) return;
+        if (ticket !== requestId.current || mine !== productsRequest.current) return;
         setProductsError(err instanceof Error ? err.message : t("Could not load."));
         setProducts([]);
       }
@@ -172,17 +191,18 @@ export default function SalesPage() {
   useEffect(() => {
     if (!capability?.canOpenSales || !currentCompany.current) return;
     const ticket = requestId.current;
+    const mine = (channelsRequest.current += 1);
     (async () => {
       try {
         const page = await fetchSalesChannels(currentCompany.current);
-        if (ticket !== requestId.current) return;
+        if (ticket !== requestId.current || mine !== channelsRequest.current) return;
         setChannels(page.channels);
         setStores(Array.isArray(page.stores) ? page.stores : []);
         setBrands(Array.isArray(page.brands) ? page.brands : []);
         setCanManage(page.canManage === true);
         setChannelsError("");
       } catch (err) {
-        if (ticket !== requestId.current) return;
+        if (ticket !== requestId.current || mine !== channelsRequest.current) return;
         setChannelsError(err instanceof Error ? err.message : t("Could not load."));
         setChannels([]);
       }
@@ -199,7 +219,7 @@ export default function SalesPage() {
     try {
       await work(companyId);
       setDirectoryVersion((value) => value + 1);
-      if (tab === "sales") void loadRows(null);
+      if (tab === "sales") loadRows();
       return true;
     } catch (err) {
       setManageError(err instanceof Error ? err.message : t("Could not save."));
@@ -258,7 +278,7 @@ export default function SalesPage() {
       <section className="card app-card">
         <CardTitle icon="orders" eyebrow={t("Sales")} title={t("Sales")} />
         <p className="muted-copy">
-          {t("Everything you have sold, from the orders you already have. Nothing here is created or changed.")}
+          {t("Everything you have sold, from the orders you already have. Orders are not changed from this screen. The owner or an admin can manage brands and store names here.")}
         </p>
         {capability.scope === "assigned" ? (
           <p className="muted-copy" style={{ marginTop: 6 }}>{t("You are seeing the orders assigned to you, the same ones Orders shows you.")}</p>
@@ -393,7 +413,7 @@ export default function SalesPage() {
           )}
 
           {hasMore ? (
-            <button type="button" className="button secondary" style={{ marginTop: 12 }} disabled={listBusy} onClick={() => void loadRows(cursor)}>
+            <button type="button" className="button secondary" style={{ marginTop: 12 }} disabled={listBusy} onClick={() => listLoader.current?.more()}>
               {listBusy ? t("Loading…") : t("Show more")}
             </button>
           ) : null}

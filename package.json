@@ -69,7 +69,9 @@
     "test:getting-started": "npx tsx scripts/check-getting-started.mts",
     "test:web-small-fixes": "npx tsx scripts/check-web-small-fixes.mts",
     "test:claude-guide": "npx tsx scripts/check-claude-guide.mts",
-    "test:gn12-order-finance": "npx tsx scripts/check-gn12-order-finance.mts"
+    "test:gn12-order-finance": "npx tsx scripts/check-gn12-order-finance.mts",
+    "test:sales-list-requests": "node scripts/check-sales-list-requests.mjs",
+    "test:sales-mc2-translations": "npx tsx scripts/check-sales-mc2-translations.mts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
