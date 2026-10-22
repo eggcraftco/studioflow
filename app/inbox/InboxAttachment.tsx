@@ -31,7 +31,17 @@ type Phase =
   | { at: "failed" };
 
 /** The server's reason words, as sentences. Keys: the caller translates. */
-function refusalSentence(reason: string): string {
+function refusalSentence(reason: string, channel = ""): string {
+  // GN-07: an Instagram photo names Instagram, not WhatsApp.
+  if (channel === "instagram") {
+    switch (reason) {
+      case "expired": return "Instagram no longer serves this photo. Ask the customer to send it again.";
+      case "no_provider": return "Instagram is not connected, so the photo cannot be fetched.";
+      case "provider_auth": return "Instagram refused the request. Try again later.";
+      case "provider_unavailable": return "Instagram did not answer. Try again in a moment.";
+      default: break;
+    }
+  }
   switch (reason) {
     case "type_not_allowed": return "This kind of file cannot be opened in NivaDesk yet.";
     case "too_large": return "This file is too large to open here.";
@@ -57,6 +67,7 @@ export function InboxAttachment({
   messageId,
   messageType,
   media,
+  channel = "",
   t
 }: {
   companyId: string;
@@ -64,6 +75,8 @@ export function InboxAttachment({
   messageId: string;
   messageType: string;
   media: CustomerInboxMedia;
+  /** The conversation's medium ("whatsapp" | "instagram"), for the refusal's wording (GN-07). */
+  channel?: string;
   t: (text: string) => string;
 }) {
   const [phase, setPhase] = useState<Phase>({ at: "idle" });
@@ -183,7 +196,7 @@ export function InboxAttachment({
           {t("This file could not be checked, so it stays closed.")}
         </span>
       ) : (
-        <span className="inbox-attachment-note" role="alert">{t(refusalSentence(phase.reason))}</span>
+        <span className="inbox-attachment-note" role="alert">{t(refusalSentence(phase.reason, channel))}</span>
       )}
     </div>
   );

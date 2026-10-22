@@ -44,8 +44,12 @@ self.addEventListener("notificationclick", (event) => {
   const data = event.notification.data || {};
   let targetUrl = "/messages";
   if (data.route === "customerInbox") {
-    // A customer wrote: the customer inbox, on that conversation.
-    targetUrl = data.conversationId ? "/inbox?conversation=" + encodeURIComponent(data.conversationId) : "/inbox";
+    // A customer wrote: the customer inbox, on that conversation — and the
+    // workspace the server named (GN-07), so a push for another workspace says
+    // so instead of opening "That conversation no longer exists."
+    targetUrl = data.conversationId
+      ? "/inbox?conversation=" + encodeURIComponent(data.conversationId) + (data.companyId ? "&workspace=" + encodeURIComponent(data.companyId) : "")
+      : "/inbox";
   } else if (data.route === "notes" || data.inviteId || data.noteId) {
     // A note invitation or share: Notes lists the waiting invitations first.
     targetUrl = "/notes";
