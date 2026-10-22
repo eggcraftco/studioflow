@@ -29,6 +29,9 @@ for (const map of page.matchAll(/_LABELS: Record<string, string> = \{([^}]+)\}/g
 const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
 const layoutProblems: string[] = [];
 if (/not synced from any channel/.test(page)) layoutProblems.push("Channels note still says products and stock are not synced from any channel");
+// MC-2 fix (23 Oct 2026): the intro must not say nothing is changed here (owner/admin manage brands and store names).
+if (/Nothing here is created or changed/.test(page)) layoutProblems.push("Sales intro still says nothing here is created or changed");
+if (!/Orders are not changed from this screen\. The owner or an admin can manage brands and store names here\./.test(page)) layoutProblems.push("Sales intro does not say orders are not changed here and who manages brands and store names");
 const selects = [...page.matchAll(/<select[\s\S]*?className="([^"]*)"/g)].map((m) => m[1]);
 if (!selects.length || selects.some((c) => !c.split(" ").includes("sales-filter-select"))) layoutProblems.push(`a Sales <select> without sales-filter-select: ${JSON.stringify(selects)}`);
 if (!/\.sales-filter-select\s*\{[^}]*var\(--surface\)[^}]*var\(--text\)/.test(css)) layoutProblems.push("app/globals.css has no themed .sales-filter-select rule");

@@ -593,13 +593,13 @@ const TREE_EN: GuideNode[] = [
     id: "sales",
     title: "Sales",
     blocks: [
-      { kind: "para", text: "Sales shows everything you have sold, built from the orders you already have. It is a read-only view: nothing on it creates or changes an order, a product, a stock level or a payment. It appears in the menu only when your workspace has it switched on and your account includes orders." },
+      { kind: "para", text: "Sales shows everything you have sold, built from the orders you already have. Orders are not changed from this screen: nothing on it creates or edits an order, a product, a stock level or a payment. The owner or an admin can manage brands and store names here; that changes how sales are grouped, never the orders themselves. It appears in the menu only when your workspace has it switched on and your account includes orders." },
       { kind: "sub", text: "The Sales tab" },
       { kind: "bullets", items: [
         "One row per order, newest first, with the customer, what was sold, the channel it came from, the payment and delivery state and the revenue.",
         "Opening a row opens that same order in Orders — it is the same order, not a copy.",
-        "Filters: one channel or every channel, only what needs attention, and whether to include bespoke work. Show more brings the next page from the server.",
-        "Revenue appears only if your account includes financial information; otherwise the column shows a dash and the rest of the row is unchanged. An order whose figures have not been worked out yet, or are out of date, says so instead of showing a number.",
+        "Filters: one channel or every channel, one store, one brand (or no brand), only what needs attention, and whether to include bespoke work. Show more brings the next page of the same filters from the server; changing a filter starts the list again.",
+        "Revenue appears only if your account includes financial information; otherwise the column shows a dash and the rest of the row is unchanged. It is the same revenue the order card, the Dashboard and the export show, worked out from the order when the list is read. If it cannot be worked out, the row says \"Not calculated\" instead of showing a number.",
         "If your account is limited to the work assigned to you, Sales shows exactly the orders Orders shows you, and says so above the list.",
         "A marketplace that keeps the buyer's details, such as eBay or Amazon, shows \"Held by the marketplace\" in place of a name.",
         "An order with no usable date says \"Date unknown\" rather than guessing one."
@@ -609,7 +609,9 @@ const TREE_EN: GuideNode[] = [
       { kind: "sub", text: "Channels" },
       { kind: "bullets", items: [
         "One row per sales channel, saying whether it is connected to this workspace. Connect or disconnect a channel in Settings → Integrations.",
-        "Connected means the channel is linked. It does not mean orders have arrived from it, and products and stock are not synced from any channel yet.",
+        "Connected means the channel is linked. It does not mean orders have arrived from it. Today a connected channel brings in its orders; products and stock levels are not imported from a channel automatically, and NivaDesk does not change a listing, a price or a stock level on the channel itself. Your stock is kept in Inventory.",
+        "Stores: each connected shop account is listed on its own, with its status and last sync, so two stores on the same platform are never mixed. The owner or an admin can give a store a name of their own.",
+        "Brands are optional: the owner or an admin can create, edit and delete a brand and link it to the stores it sells through. Deleting a brand changes no order; its orders simply show their store again.",
         "Amazon is not listed: its connection is held outside this project, so the screen cannot check it without guessing."
       ] }
     ]
@@ -1898,13 +1900,13 @@ const TREE_TR: GuideNode[] = [
     id: "sales",
     title: "Satışlar (Sales)",
     blocks: [
-      { kind: "para", text: "Sales, sattığınız her şeyi hâlihazırdaki siparişlerinizden derleyerek gösterir. Salt-okunur bir ekrandır: üzerinde hiçbir sipariş, ürün, stok ya da ödeme oluşturulmaz veya değiştirilmez. Menüde yalnızca çalışma alanınızda açıksa ve hesabınız siparişleri kapsıyorsa görünür." },
+      { kind: "para", text: "Sales, sattığınız her şeyi hâlihazırdaki siparişlerinizden derleyerek gösterir. Siparişler bu ekrandan değiştirilmez: burada hiçbir sipariş, ürün, stok ya da ödeme oluşturulmaz veya düzenlenmez. Sahip ya da bir yönetici markaları ve mağaza adlarını burada yönetebilir; bu, satışların nasıl gruplandığını değiştirir, siparişlerin kendisini asla değiştirmez. Menüde yalnızca çalışma alanınızda açıksa ve hesabınız siparişleri kapsıyorsa görünür." },
       { kind: "sub", text: "Sales sekmesi" },
       { kind: "bullets", items: [
         "Her sipariş için bir satır, en yeniden eskiye; müşteri, satılan şey, geldiği kanal, ödeme ve teslimat durumu ve gelir.",
         "Bir satırı açmak aynı siparişi Siparişler'de açar — kopyası değil, aynısıdır.",
-        "Filtreler: tek kanal veya tüm kanallar, yalnız ilgi bekleyenler, ve özel işlerin dahil edilip edilmeyeceği. Daha fazla göster, sonraki sayfayı sunucudan getirir.",
-        "Gelir yalnızca hesabınız finansal bilgileri kapsıyorsa görünür; kapsamıyorsa sütunda çizgi olur ve satırın geri kalanı değişmez. Rakamları henüz hesaplanmamış ya da güncelliğini yitirmiş bir sipariş, sayı göstermek yerine bunu söyler.",
+        "Filtreler: tek kanal veya tüm kanallar, tek mağaza, tek marka (ya da markasız), yalnız ilgi bekleyenler, ve özel işlerin dahil edilip edilmeyeceği. Daha fazla göster, aynı filtrelerin sonraki sayfasını sunucudan getirir; bir filtreyi değiştirmek listeyi baştan başlatır.",
+        "Gelir yalnızca hesabınız finansal bilgileri kapsıyorsa görünür; kapsamıyorsa sütunda çizgi olur ve satırın geri kalanı değişmez. Sipariş kartı, Pano ve dışa aktarımın gösterdiği gelirin aynısıdır; liste okunurken siparişten hesaplanır. Hesaplanamazsa satır sayı yerine \"Hesaplanmadı\" der.",
         "Hesabınız yalnız size atanan işlerle sınırlıysa Sales, Siparişler'in gösterdiği siparişlerin aynısını gösterir ve bunu listenin üstünde yazar.",
         "Alıcı bilgisini kendinde tutan bir pazaryeri — eBay veya Amazon gibi — isim yerine \"Pazaryeri tarafından saklanıyor\" gösterir.",
         "Kullanılabilir tarihi olmayan sipariş, tarih uydurmak yerine \"Tarih bilinmiyor\" der."
@@ -1914,7 +1916,9 @@ const TREE_TR: GuideNode[] = [
       { kind: "sub", text: "Kanallar (Channels)" },
       { kind: "bullets", items: [
         "Her satış kanalı için bir satır; bu çalışma alanına bağlı olup olmadığını söyler. Bağlama ve kaldırma Ayarlar → Entegrasyonlar'da yapılır.",
-        "Bağlı, kanalın bağlandığı anlamına gelir. Oradan sipariş geldiği anlamına gelmez; ürün ve stok hiçbir kanaldan senkronlanmıyor.",
+        "Bağlı, kanalın bağlandığı anlamına gelir; oradan sipariş geldiği anlamına gelmez. Bugün bağlı bir kanal siparişlerini getirir; ürünler ve stok adetleri bir kanaldan kendiliğinden aktarılmaz ve NivaDesk kanaldaki bir ilanı, fiyatı ya da stok adedini değiştirmez. Stokunuz Envanter'de (Inventory) tutulur.",
+        "Mağazalar: bağlı her mağaza hesabı durumu ve son eşitlemesiyle ayrı listelenir; aynı platformdaki iki mağaza asla karışmaz. Sahip ya da bir yönetici bir mağazaya kendi adını verebilir.",
+        "Markalar isteğe bağlıdır: sahip ya da bir yönetici marka oluşturabilir, düzenleyebilir, silebilir ve onu sattığı mağazalara bağlayabilir. Bir markayı silmek hiçbir siparişi değiştirmez; o siparişler yeniden mağazalarıyla görünür.",
         "Amazon listelenmez: bağlantısı bu projenin dışında tutulur, bu yüzden ekran tahmin etmeden kontrol edemez."
       ] }
     ]

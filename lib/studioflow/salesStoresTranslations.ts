@@ -150,5 +150,20 @@ export const SALES_STORES_TRANSLATIONS: Record<string, Partial<Record<StudioLang
     "中文 (Chinese)": "“已连接”表示该渠道已关联到此工作区，并不表示已有订单到达。渠道订单在此处为只读；渠道支持时，可在“库存”中按渠道管理产品和库存关联。",
     "العربية (Arabic)": "«متصل» تعني أن القناة مرتبطة بمساحة العمل هذه، ولا تعني أن طلبات قد وصلت منها. طلبات القنوات هنا للقراءة فقط؛ وحيث تدعم القناة ذلك، تُدار روابط المنتجات والمخزون لكل قناة في المخزون.",
     "हिन्दी (Hindi)": "“कनेक्टेड” का अर्थ है कि चैनल इस वर्कस्पेस से जुड़ा है, यह नहीं कि वहाँ से ऑर्डर आ चुके हैं। चैनल के ऑर्डर यहाँ केवल-पठन हैं; जहाँ चैनल इसका समर्थन करता है, उत्पाद और स्टॉक के लिंक इन्वेंटरी में हर चैनल के लिए अलग से प्रबंधित होते हैं।"
+  },
+  // MC-2 fix (23 Oct 2026): the Sales intro no longer says "nothing here is created or changed" —
+  // orders are not changed from this screen, but the owner/admin does manage brands and store names.
+  "Everything you have sold, from the orders you already have. Orders are not changed from this screen. The owner or an admin can manage brands and store names here.": {
+    "Türkçe": "Sattığınız her şey, mevcut siparişlerinizden. Siparişler bu ekrandan değiştirilmez. Sahip ya da bir yönetici markaları ve mağaza adlarını burada yönetebilir.",
+    "Deutsch": "Alles, was Sie verkauft haben, aus Ihren vorhandenen Aufträgen. Aufträge werden auf dieser Seite nicht geändert. Der Inhaber oder ein Admin kann hier Marken und Shop-Namen verwalten.",
+    "Français": "Tout ce que vous avez vendu, à partir de vos commandes existantes. Les commandes ne sont pas modifiées depuis cet écran. Le propriétaire ou un administrateur peut gérer ici les marques et les noms de boutique.",
+    "Italiano": "Tutto ciò che hai venduto, dagli ordini che hai già. Gli ordini non vengono modificati da questa schermata. Il titolare o un amministratore può gestire qui marchi e nomi dei negozi.",
+    "Español (Spanish)": "Todo lo que has vendido, a partir de los pedidos que ya tienes. Los pedidos no se modifican desde esta pantalla. El propietario o un administrador puede gestionar aquí las marcas y los nombres de las tiendas.",
+    "Português": "Tudo o que vendeu, a partir das encomendas que já tem. As encomendas não são alteradas a partir deste ecrã. O proprietário ou um administrador pode gerir aqui as marcas e os nomes das lojas.",
+    "Русский (Russian)": "Всё, что вы продали, на основе уже имеющихся заказов. Заказы на этом экране не изменяются. Владелец или администратор может управлять здесь брендами и названиями магазинов.",
+    "日本語 (Japanese)": "すでにある注文から見た、これまでの売上です。この画面から注文が変更されることはありません。オーナーまたは管理者は、ここでブランドとストア名を管理できます。",
+    "中文 (Chinese)": "根据你已有的订单列出的全部销售。订单不会在此页面被更改。所有者或管理员可以在这里管理品牌和店铺名称。",
+    "العربية (Arabic)": "كل ما بعته، مستمدًّا من الطلبات الموجودة لديك. لا تُعدَّل الطلبات من هذه الشاشة. يمكن للمالك أو المسؤول إدارة العلامات التجارية وأسماء المتاجر هنا.",
+    "हिन्दी (Hindi)": "आपकी सभी बिक्री, आपके मौजूदा ऑर्डरों से। इस स्क्रीन से ऑर्डर नहीं बदले जाते। मालिक या एडमिन यहाँ ब्रांड और स्टोर के नाम प्रबंधित कर सकते हैं।"
   }
 };
