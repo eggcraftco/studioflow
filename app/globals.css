@@ -34886,7 +34886,7 @@ body[data-studio-theme="dark"] .orders-view-control-field select option {
   height: 1px;
 }
 /* Show all: rows far off screen skip layout and paint (browser-side virtualisation). */
-.orders-list.is-view-all > div,
+.orders-list.is-view-all > div:not(.orders-list-pager),
 .orders-list.is-view-all > a {
   content-visibility: auto;
   contain-intrinsic-size: auto 132px;
