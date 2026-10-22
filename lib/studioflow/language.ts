@@ -9137,6 +9137,14 @@ mergeIntoTranslations({
 // cell, the phone Schedule's Calendar File line. Merged last on purpose.
 mergeIntoTranslations(WEB_SMALL_FIXES_TRANSLATIONS);
 
+// GN-12 release gate (22 Oct 2026): an estimated platform fee is labelled as one —
+// "Platform Fee (estimate, 3%)" on an order, the footnote on a total. Lowercase
+// "estimate" is its own key: "Estimate" above is the quote document (Teklif).
+mergeIntoTranslations({
+  "estimate": { "Türkçe": "tahmini", "Deutsch": "geschätzt", "Français": "estimation", "Italiano": "stima", "Español (Spanish)": "estimación", "Português": "estimativa", "Русский (Russian)": "оценка", "日本語 (Japanese)": "推定", "中文 (Chinese)": "估算", "العربية (Arabic)": "تقديري", "हिन्दी (Hindi)": "अनुमानित" },
+  "Includes estimated platform fees": { "Türkçe": "Tahmini platform ücretlerini içerir", "Deutsch": "Enthält geschätzte Plattformgebühren", "Français": "Inclut des frais de plateforme estimés", "Italiano": "Include commissioni della piattaforma stimate", "Español (Spanish)": "Incluye comisiones de plataforma estimadas", "Português": "Inclui taxas de plataforma estimadas", "Русский (Russian)": "Включает расчётные комиссии платформ", "日本語 (Japanese)": "推定のプラットフォーム手数料を含みます", "中文 (Chinese)": "包含估算的平台费用", "العربية (Arabic)": "يشمل رسوم منصات تقديرية", "हिन्दी (Hindi)": "अनुमानित प्लेटफ़ॉर्म शुल्क शामिल हैं" }
+});
+
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {
   return Object.keys(TRANSLATIONS);

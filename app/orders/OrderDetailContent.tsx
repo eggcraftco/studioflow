@@ -143,7 +143,7 @@ import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
 import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
-import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, orderDetailFinance, type FinancialItemWithId } from "@/lib/studioflow/finance";
+import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, orderDetailFinance, platformFeeLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
 
@@ -822,7 +822,8 @@ function orderPdfHtml(
   if (showFinInternal) {
     // The engine's figures (GN-12), so the rows add up to the profit printed under them.
     const pdfFinance = orderDetailFinance(order, settings);
-    financeRows.push({ title: "Platform Fee", value: formatMoney(pdfFinance.platformFee), tone: "red" });
+    // GN-12 gate: a fee the shop did not report is the workspace estimate and says so.
+    financeRows.push({ title: platformFeeLabel(pdfFinance, undefined, settings), value: formatMoney(pdfFinance.platformFee), tone: "red" });
     financeRows.push({ title: "Watch Cost", value: formatMoney(pdfFinance.directCost), tone: "red" });
     financeRows.push({ title: "Shipping Cost", value: formatMoney(pdfFinance.deliveryCost), tone: "red" });
     financeRows.push({ title: `Tax Amount (${taxRuleName})`, value: formatMoney(pdfFinance.vatDue), tone: "red" });
@@ -7394,7 +7395,7 @@ export function OrderDetailContent({
                       </button>
                     ) : null}
                     <FinanceInlineRow
-                      label={t("Platform Fee")}
+                      label={platformFeeLabel(orderFinance, t, moneySettings)}
                       displayValue={money(orderFinance.platformFee, hideNumbers)}
                       value={orderFinance.platformFee}
                       tone="negative-soft"

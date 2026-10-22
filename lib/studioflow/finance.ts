@@ -73,8 +73,12 @@ export function orderCustomRemainingTotal(order: DashboardFinanceOrder) {
 }
 
 // Order value: classic paid+remaining plus custom receivables — same on every platform.
-export function orderSalesTotal(order: DashboardFinanceOrder) {
-  return blockFor(order).revenue;
+// GN-12: pass the workspace settings wherever a profit from the same block sits
+// beside it. Version 5 decides lines-vs-money by whether tax is inside the
+// price, so without the settings the mirror's revenue (default: inside) could
+// disagree with the profit under it for a workspace that adds VAT on top.
+export function orderSalesTotal(order: DashboardFinanceOrder, settings?: WorkspaceSettingsOverview | null) {
+  return blockFor(order, settings).revenue;
 }
 
 // Settings-free counterpart of customExpenseTotal, mirroring orderCustomRemainingTotal.
@@ -272,4 +276,88 @@ export function dashboardCostTotal(
   if (!showShipping) total += finance.deliveryCost;
   if (!showTax) total += finance.vatDue;
   return total;
+}
+
+// ---------------------------------------------------------------------------
+// GN-12 release gate (22 Oct 2026): an estimated platform fee says so.
+//
+// When the shop did not report its commission the engine takes the
+// workspace's percentage of the revenue (`commissionEstimated`, with the rate
+// in `commissionRatePercent`). Every surface that prints that fee, or a profit
+// with it inside, labels it — "Platform Fee (estimate, 3%)" on one order, the
+// footnote "Includes estimated platform fees" on a total.
+//
+// A block stamped before the two fields existed (engine 4, or an early 5
+// stamp) carries only `platformFeeKnown`; the fee is the estimate exactly when
+// that is not true, which is the rule the engine itself applies.
+
+type CommissionBlock = Partial<Pick<FinanceBlock, "commissionEstimated" | "commissionRatePercent" | "platformFeeKnown" | "platformFee">>;
+
+export const ESTIMATED_PLATFORM_FEES_FOOTNOTE = "Includes estimated platform fees";
+
+/** Whether this block's platform fee is the workspace percentage rather than the shop's figure. */
+export function commissionIsEstimated(block: CommissionBlock | null | undefined): boolean {
+  if (!block) return false;
+  if (typeof block.commissionEstimated === "boolean") return block.commissionEstimated;
+  return block.platformFeeKnown !== true;
+}
+
+/** The percentage behind an estimated fee (the workspace's when an old stamp lacks it). */
+export function commissionEstimateRate(block: CommissionBlock | null | undefined, settings?: WorkspaceSettingsOverview | null): number {
+  const stamped = Number(block?.commissionRatePercent);
+  if (block && typeof block.commissionRatePercent === "number" && Number.isFinite(stamped)) return stamped;
+  const workspace = Number(settings?.feePercentage);
+  return Number.isFinite(workspace) ? workspace : 0;
+}
+
+function formatRate(rate: number) {
+  return `${Number(rate.toFixed(2))}%`;
+}
+
+/**
+ * The label for one order's platform fee: `t("Platform Fee")`, followed by
+ * " (estimate, 3%)" when the fee is the workspace's estimate. `t` defaults to
+ * the identity so the English-only order PDF can use the same words.
+ */
+export function platformFeeLabel(
+  block: CommissionBlock | null | undefined,
+  t: (text: string) => string = (text) => text,
+  settings?: WorkspaceSettingsOverview | null,
+  base = "Platform Fee"
+): string {
+  if (!commissionIsEstimated(block)) return t(base);
+  return `${t(base)} (${t("estimate")}, ${formatRate(commissionEstimateRate(block, settings))})`;
+}
+
+/**
+ * What a total over many orders says about its platform fees. `footnote` is
+ * true when any order in scope contributes an estimated fee above zero. The
+ * total's own label carries "(estimate, 3%)" only when every fee in it is an
+ * estimate at the same rate — otherwise the footnote alone tells the truth.
+ */
+export function estimatedFeeSummary(blocks: Array<CommissionBlock | null | undefined>, settings?: WorkspaceSettingsOverview | null) {
+  let estimated = 0;
+  let reported = 0;
+  const rates = new Set<number>();
+  for (const block of blocks) {
+    if (!block || !(Number(block.platformFee) > 0)) continue;
+    if (commissionIsEstimated(block)) {
+      estimated += 1;
+      rates.add(commissionEstimateRate(block, settings));
+    } else {
+      reported += 1;
+    }
+  }
+  const uniformRate = estimated > 0 && reported === 0 && rates.size === 1 ? [...rates][0] : null;
+  return { footnote: estimated > 0, estimatedCount: estimated, uniformRate };
+}
+
+/** A total's fee label: "(estimate, 3%)" only when all of it is one estimate. */
+export function platformFeeTotalLabel(
+  summary: ReturnType<typeof estimatedFeeSummary>,
+  t: (text: string) => string,
+  base = "Platform Fee"
+): string {
+  if (summary.uniformRate === null) return t(base);
+  return `${t(base)} (${t("estimate")}, ${formatRate(summary.uniformRate)})`;
 }

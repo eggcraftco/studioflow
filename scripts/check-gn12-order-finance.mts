@@ -11,7 +11,11 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { orderDetailFinance, orderFinanceBlock } from "../lib/studioflow/finance";
+import {
+  commissionEstimateRate, commissionIsEstimated, ESTIMATED_PLATFORM_FEES_FOOTNOTE, estimatedFeeSummary,
+  orderDetailFinance, orderFinanceBlock, orderSalesTotal, platformFeeLabel, platformFeeTotalLabel
+} from "../lib/studioflow/finance";
+import { studioT } from "../lib/studioflow/language";
 import { FINANCE_ENGINE_VERSION } from "../lib/studioflow/financeEngine";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -90,6 +94,66 @@ ok("card: Final Profit and Profit before CT read the engine block", (content.mat
 ok("card: Platform Fee and VAT Amount rows show the engine's figures", content.includes("displayValue={money(orderFinance.platformFee, hideNumbers)}") && content.includes("value={money(orderFinance.vatDue, hideNumbers)}"));
 ok("PDF: the Financial Info rows and profit come from the engine", content.includes("const pdfFinance = orderDetailFinance(order, settings);") && content.includes("const profitAfterVat = pdfFinance.netProfit;"));
 ok("hidden finance: PDF finance rows still sit behind showFinInternal", /if \(showFinInternal\) \{\s*\/\/ The engine's figures/.test(content));
+
+// ---------------------------------------------------------------------------
+// GN-12 release gate: an estimated platform fee is labelled as one.
+const tr = (text: string) => studioT(text, "Türkçe");
+ok("estimate: no shop commission → commissionEstimated, rate 3", card.commissionEstimated === true && card.commissionRatePercent === 3);
+ok("estimate: card label reads \"Platform Fee (estimate, 3%)\"", platformFeeLabel(card, (x) => x, settings) === "Platform Fee (estimate, 3%)");
+ok("estimate: Turkish label reads \"Platform Ücreti (tahmini, 3%)\"", platformFeeLabel(card, tr, settings) === "Platform Ücreti (tahmini, 3%)");
+const reportedCard = orderDetailFinance(order({ platformFeeKnown: true, paymentFee: 40.05 }), settings);
+ok("reported: a shop's own fee is not an estimate and keeps the plain label",
+  reportedCard.commissionEstimated === false && reportedCard.commissionRatePercent === 0 && reportedCard.platformFee === 40.05
+  && platformFeeLabel(reportedCard, (x) => x, settings) === "Platform Fee");
+ok("estimate: another workspace rate is printed (2.5%)",
+  platformFeeLabel(orderDetailFinance(order(), { ...(settings as object), feePercentage: 2.5 } as never), (x) => x) === "Platform Fee (estimate, 2.5%)");
+ok("old stamp: no commissionEstimated → estimated = platformFeeKnown !== true",
+  commissionIsEstimated({ platformFeeKnown: false }) && commissionIsEstimated({}) && !commissionIsEstimated({ platformFeeKnown: true }));
+ok("old stamp: missing rate falls back to the workspace percentage", commissionEstimateRate({ platformFeeKnown: false }, settings) === 3);
+// A version 5 stamp written before the two fields existed (it is the block the Dashboard is handed as-is).
+const earlyV5 = orderFinanceBlock({
+  id: "o2", paymentDate: null, paidAmount: 100, remainingAmount: 0, watchPurchasePrice: 0, paymentFee: 3, deliveryCost: 0, taxAmount: 0,
+  customerName: "", designName: "", watchRef: "", customFields: {}, lineItems: [], taxRate: 0,
+  finance: { engineVersion: 5, revenue: 100, netProfit: 97, platformFee: 3, platformFeeKnown: false } as never
+}, settings);
+ok("Dashboard: an early v5 stamp without the flag is still read as an estimate", earlyV5.netProfit === 97 && commissionIsEstimated(earlyV5));
+const reportedBlock = { platformFee: 10, platformFeeKnown: true, commissionEstimated: false, commissionRatePercent: 0 };
+const estimatedBlock = { platformFee: 6, platformFeeKnown: false, commissionEstimated: true, commissionRatePercent: 3 };
+const zeroEstimate = { platformFee: 0, platformFeeKnown: false, commissionEstimated: true, commissionRatePercent: 0 };
+ok("footnote: shown when any order in scope has an estimated fee above zero", estimatedFeeSummary([reportedBlock, estimatedBlock]).footnote === true);
+ok("footnote: not shown when every fee is the shop's own", estimatedFeeSummary([reportedBlock, reportedBlock]).footnote === false);
+ok("footnote: an estimate of zero (0% workspace) needs no footnote", estimatedFeeSummary([zeroEstimate, reportedBlock]).footnote === false);
+ok("footnote: an early v5 stamp in scope counts", estimatedFeeSummary([reportedBlock, earlyV5], settings).footnote === true);
+ok("total label: all one estimate → \"Platform Fee (estimate, 3%)\"; mixed → plain",
+  platformFeeTotalLabel(estimatedFeeSummary([estimatedBlock, estimatedBlock]), (x) => x) === "Platform Fee (estimate, 3%)"
+  && platformFeeTotalLabel(estimatedFeeSummary([estimatedBlock, reportedBlock]), (x) => x) === "Platform Fee");
+ok("translations: \"estimate\" and the footnote are Turkish, and \"Estimate\" (quote) is unchanged",
+  tr("estimate") === "tahmini" && tr(ESTIMATED_PLATFORM_FEES_FOOTNOTE) === "Tahmini platform ücretlerini içerir" && tr("Estimate") === "Teklif");
+ok("translations: every language the table carries has both keys",
+  ["Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"]
+    .every((lang) => studioT("estimate", lang) !== "estimate" && studioT(ESTIMATED_PLATFORM_FEES_FOOTNOTE, lang) !== ESTIMATED_PLATFORM_FEES_FOOTNOTE));
+ok("mirror: revenue with the workspace settings agrees with the profit's block (VAT on top)",
+  (() => {
+    const onTop = { ...(settings as object), pricesIncludeVat: false } as never;
+    const o = { id: "o3", paymentDate: null, paidAmount: 5200, remainingAmount: 0, watchPurchasePrice: 0, paymentFee: 0, deliveryCost: 0, taxAmount: 0,
+      customerName: "", designName: "", watchRef: "", customFields: {}, lineItems: [{ lineTotal: 1335 }], taxRate: 0, finance: null } as never;
+    return orderSalesTotal(o, onTop) === orderFinanceBlock(o, onTop).revenue && orderSalesTotal(o, onTop) === 1335;
+  })());
+
+const dashboardSrc = read("app/dashboard/page.tsx");
+const homeSrc = read("components/home/HomeCardBodies.tsx");
+ok("card: the Platform Fee row label comes from platformFeeLabel", content.includes("label={platformFeeLabel(orderFinance, t, moneySettings)}"));
+ok("PDF: the Financial Info fee row label comes from platformFeeLabel", content.includes("title: platformFeeLabel(pdfFinance, undefined, settings)"));
+ok("Dashboard: fee tile, profit tile, CT tiles carry the footnote",
+  (dashboardSrc.match(/sub=\{rangeFeeSummary\.footnote \? t\(ESTIMATED_PLATFORM_FEES_FOOTNOTE\) : undefined\}/g) || []).length === 4);
+ok("Dashboard: breakdown fee row, breakdown/chart/year footnotes, Extra Spending and Tax set-aside are labelled",
+  dashboardSrc.includes("label={platformFeeTotalLabel(rangeFeeSummary, t)}")
+  && (dashboardSrc.match(/dashboard-estimate-footnote/g) || []).length === 3
+  && dashboardSrc.includes("push(platformFeeLabel(block, t, settings)")
+  && dashboardSrc.includes("ctIncludesEstimatedFees"));
+ok("Dashboard: Revenue is the same block's revenue as the profit", dashboardSrc.includes("revenue: totals.revenue + block.revenue,"));
+ok("Home: the money card carries the note and the fee row label", homeSrc.includes("estimatedFeeSummary(blocks, data.settings)")
+  && (homeSrc.match(/\{footnote\}/g) || []).length === 2 && homeSrc.includes('platformFeeTotalLabel(feeSummary, t, "Platform fees")'));
 
 if (failures.length) {
   console.log(`\n❌ GN-12 ORDER FINANCE: ${failures.length} of ${checks} failed`);
