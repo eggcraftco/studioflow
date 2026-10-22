@@ -96,6 +96,11 @@ export default function SalesPage() {
   // generation, so a slow answer for the previous filter — or a "Show more"
   // asked before the change — is dropped, and pages of different filters never
   // merge (lib/studioflow/salesListLoader.ts, scripts/check-sales-list-requests.mjs).
+  // The Products and Channels reads get their own sequence too: after a brand or
+  // store-name change two directory reads can be in flight, and only the newest
+  // may paint (a slow older answer would bring a deleted brand back on screen).
+  const productsRequest = useRef(0);
+  const channelsRequest = useRef(0);
   const tRef = useRef(t);
   tRef.current = t;
   type ListFilter = Omit<SalesRowsRequest, "limit" | "cursor">;
@@ -168,14 +173,15 @@ export default function SalesPage() {
   useEffect(() => {
     if (!capability?.canOpenSales || tab !== "products" || !currentCompany.current) return;
     const ticket = requestId.current;
+    const mine = (productsRequest.current += 1);
     (async () => {
       try {
         const page = await fetchSalesProducts(currentCompany.current);
-        if (ticket !== requestId.current) return;
+        if (ticket !== requestId.current || mine !== productsRequest.current) return;
         setProducts(page.products);
         setProductsError("");
       } catch (err) {
-        if (ticket !== requestId.current) return;
+        if (ticket !== requestId.current || mine !== productsRequest.current) return;
         setProductsError(err instanceof Error ? err.message : t("Could not load."));
         setProducts([]);
       }
@@ -185,17 +191,18 @@ export default function SalesPage() {
   useEffect(() => {
     if (!capability?.canOpenSales || !currentCompany.current) return;
     const ticket = requestId.current;
+    const mine = (channelsRequest.current += 1);
     (async () => {
       try {
         const page = await fetchSalesChannels(currentCompany.current);
-        if (ticket !== requestId.current) return;
+        if (ticket !== requestId.current || mine !== channelsRequest.current) return;
         setChannels(page.channels);
         setStores(Array.isArray(page.stores) ? page.stores : []);
         setBrands(Array.isArray(page.brands) ? page.brands : []);
         setCanManage(page.canManage === true);
         setChannelsError("");
       } catch (err) {
-        if (ticket !== requestId.current) return;
+        if (ticket !== requestId.current || mine !== channelsRequest.current) return;
         setChannelsError(err instanceof Error ? err.message : t("Could not load."));
         setChannels([]);
       }

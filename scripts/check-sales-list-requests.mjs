@@ -204,7 +204,9 @@ const pageChecks = [
   ["page calls fetchSalesRows only inside the loader's fetchPage", (page.match(/fetchSalesRows\(/g) || []).length === 1 && /fetchPage: \(filter, nextCursor\) => fetchSalesRows\(/.test(page)],
   ["page has no hand-rolled merge of pages", !/\[\.\.\.previous, \.\.\.page\.rows\]/.test(page)],
   ["Show more goes through the loader", /listLoader\.current\?\.more\(\)/.test(page)],
-  ["a workspace change invalidates the loader", /listLoader\.current\?\.invalidate\(\)/.test(page)]
+  ["a workspace change invalidates the loader", /listLoader\.current\?\.invalidate\(\)/.test(page)],
+  ["Channels (store/brand directory) answers are sequenced: only the newest paints", /const mine = \(channelsRequest\.current \+= 1\)/.test(page) && (page.match(/mine !== channelsRequest\.current/g) || []).length === 2],
+  ["Products answers are sequenced", /const mine = \(productsRequest\.current \+= 1\)/.test(page) && (page.match(/mine !== productsRequest\.current/g) || []).length === 2]
 ];
 for (const [name, ok] of pageChecks) { console.log(`${ok ? "PASS" : "FAIL"}  ${name}`); if (!ok) failures += 1; }
 
