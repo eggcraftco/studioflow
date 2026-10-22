@@ -49,3 +49,40 @@ export function senderDifferences(draftShipper: ShipmentParty | null | undefined
   if (regs(was.registrationNumbers, a.countryCode) !== regs(now.registrationNumbers, b.countryCode)) out.push("Registration numbers (EORI, VAT)");
   return out;
 }
+
+/**
+ * The server's own reading (listOrderShipments, 22 Oct 2026): `senderOutdated` names the sender fields of a
+ * not-yet-created draft that differ from the profile in Settings — names only, so every preparer gets the
+ * warning without reading the profile (only an owner or admin does). Same field order and labels as
+ * senderDifferences.
+ */
+export const SENDER_FIELD_LABELS: ReadonlyArray<readonly [string, string]> = [
+  ["companyName", "Business name"],
+  ["contactName", "Contact name"],
+  ["contactTitle", "Title / Position (optional)"],
+  ["phone", "Phone"],
+  ["email", "Email"],
+  ["address", "Address"],
+  ["registrationNumbers", "Registration numbers (EORI, VAT)"]
+];
+
+/** English labels for the server's field names (unknown names are left out). */
+export function senderOutdatedLabels(fields: readonly string[]): string[] {
+  const set = new Set(fields);
+  return SENDER_FIELD_LABELS.filter(([field]) => set.has(field)).map(([, label]) => label);
+}
+
+/**
+ * What the draft dialog warns about. The server's field when the list carried it (every role, before and after
+ * an update); without it (a server from before 22 Oct) the old compare, which only an owner or admin can make
+ * because only they read the profile.
+ */
+export function senderWarningLabels({ serverFields, draftShipper, profile, manager }: {
+  serverFields: readonly string[] | null | undefined;
+  draftShipper: ShipmentParty | null | undefined;
+  profile: ShipperProfile | null | undefined;
+  manager: boolean;
+}): string[] {
+  if (Array.isArray(serverFields)) return senderOutdatedLabels(serverFields);
+  return manager ? senderDifferences(draftShipper, profile) : [];
+}

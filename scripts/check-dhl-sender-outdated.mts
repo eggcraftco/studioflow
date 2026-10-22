@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { senderDifferences, senderFromProfile } from "../lib/studioflow/shippingSender";
+import { senderDifferences, senderFromProfile, senderOutdatedLabels, senderWarningLabels, SENDER_FIELD_LABELS } from "../lib/studioflow/shippingSender";
 import type { ShipperProfile } from "../lib/studioflow/shipping";
 import { studioT } from "../lib/studioflow/language";
 
@@ -32,8 +32,22 @@ eq("registration issuer defaults to the sender country", senderDifferences({ ...
 eq("address and phone", senderDifferences({ ...same, phone: "+441", address: { ...same.address, city: "Leeds" } }, profile), ["Phone", "Address"]);
 eq("senderFromProfile carries contactTitle", same.contactTitle, "Director");
 
+// The server's field (listOrderShipments 22 Oct 2026): names only, the same labels for every role.
+eq("server names -> the same labels, in the compare's order", senderOutdatedLabels(["registrationNumbers", "phone", "companyName", "nonsense"]), ["Business name", "Phone", "Registration numbers (EORI, VAT)"]);
+eq("every server field name has the compare's label", SENDER_FIELD_LABELS.map(([, label]) => label), ["Business name", "Contact name", "Title / Position (optional)", "Phone", "Email", "Address", "Registration numbers (EORI, VAT)"]);
+const changedDraft = { ...same, phone: "+441" };
+eq("a member with the server's field gets the warning", senderWarningLabels({ serverFields: ["phone"], draftShipper: changedDraft, profile: null, manager: false }), ["Phone"]);
+eq("a member on an older server (no field) gets nothing — they cannot read the profile", senderWarningLabels({ serverFields: undefined, draftShipper: changedDraft, profile: null, manager: false }), []);
+eq("a manager on an older server falls back to the compare", senderWarningLabels({ serverFields: undefined, draftShipper: changedDraft, profile, manager: true }), ["Phone"]);
+eq("the server's [] wins over the compare (cleared after an update)", senderWarningLabels({ serverFields: [], draftShipper: changedDraft, profile, manager: true }), []);
+
 const dialog = fs.readFileSync(path.join(root, "app/orders/ShipmentDraftDialog.tsx"), "utf8");
-ok("dialog compares the draft shipper with the profile", dialog.includes("senderDifferences(shipper, latestProfile)"));
+ok("dialog warns from the server's field, compare only for managers without it", dialog.includes("senderWarningLabels({ serverFields: serverOutdated, draftShipper: shipper, profile: latestProfile, manager: can.senderPaysDuties })"));
+ok("dialog re-reads the list for the server's field when it opens", dialog.includes("listOrderShipments(companyId, orderId)") && dialog.includes("Array.isArray(row.senderOutdated)"));
+ok("the update clears the server's flag", dialog.includes("setServerOutdated(current => (Array.isArray(current) ? [] : current));"));
+ok("non-managers see who can update", /can\.senderPaysDuties \? \([\s\S]{0,300}An owner or admin can update them\./.test(dialog));
+const shippingTs = fs.readFileSync(path.join(root, "lib/studioflow/shipping.ts"), "utf8");
+ok("OrderShipment carries senderOutdated", /senderOutdated\?: string\[\];/.test(shippingTs));
 ok("dialog re-reads the profile when it opens", dialog.includes("getShippingConnection(companyId, { fresh: true })"));
 ok("update writes the whole sender block (contactTitle too)", dialog.includes("const next = senderFromProfile(profile);"));
 ok("only managers get the action", /senderChanged\.length > 0 \? \([\s\S]{0,600}can\.senderPaysDuties \? \(/.test(dialog));
