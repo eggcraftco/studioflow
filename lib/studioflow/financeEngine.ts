@@ -71,6 +71,14 @@ export type FinanceBlock = {
   platformFee: number;
   /** Whether platformFee is the shop's own figure or the workspace's percentage. */
   platformFeeKnown: boolean;
+  /**
+   * GN-12 release gate: true when the shop reported no commission and
+   * platformFee is the workspace percentage applied to the revenue — an
+   * estimate every surface labels as one, with `commissionRatePercent`.
+   */
+  commissionEstimated: boolean;
+  /** The percentage behind an estimated fee; 0 when the fee is the shop's own. */
+  commissionRatePercent: number;
   deliveryCost: number;
   otherExpenses: number;
   refunded: number;
@@ -466,6 +474,8 @@ export function computeOrderFinance(
     grossMargin: round2(grossMargin),
     platformFee,
     platformFeeKnown: source.platformFeeKnown === true,
+    commissionEstimated: source.platformFeeKnown !== true,
+    commissionRatePercent: source.platformFeeKnown === true ? 0 : settings.feePercentage,
     deliveryCost: round2(deliveryCost),
     otherExpenses: round2(otherExpenses),
     refunded: round2(refunded),
