@@ -26,6 +26,7 @@ import {
   confirmOrderShipmentCustoms,
   createOrderShipment,
   listShipmentProducts,
+  needsCustomsChoice,
   saveOrderShipmentDraft,
   shipmentIssueMessage,
   shippingErrorMessage,
@@ -146,7 +147,8 @@ export function ShipmentDraftDialog({
   }
 
   const fromCountry = String(shipper.address?.countryCode ?? "").toUpperCase();
-  const international = Boolean(fromCountry && recipient.countryCode && fromCountry !== recipient.countryCode.toUpperCase());
+  // Another country, or Great Britain ↔ Northern Ireland (a BT postcode): DHL treats both as customs routes.
+  const international = needsCustomsChoice(fromCountry, String(shipper.address?.postalCode ?? ""), recipient.countryCode, recipient.postalCode);
   const declaring = international && declarable === true;
 
   const change = <T,>(setter: (value: T) => void, { customs = false } = {}) => (value: T) => {
