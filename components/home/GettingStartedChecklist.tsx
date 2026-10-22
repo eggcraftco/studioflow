@@ -23,7 +23,9 @@ import {
 import {
   BRING_IN_STORE_IDS,
   bringInOffers,
+  gettingStartedAccess,
   gettingStartedHidden,
+  openHelpAssistant,
   nextGettingStartedStep,
   resolveGettingStartedSteps,
   showGettingStarted,
@@ -178,7 +180,7 @@ export function GettingStartedChecklist({ workspace, language = "English" }: { w
       Boolean(order.customFields?.["Shopify Status"] || order.customFields?.["WooCommerce Status"])),
     hasInventory: (data.inventory?.uniqueCount ?? 0) + (data.inventory?.quantityCount ?? 0) > 0,
     hasBankTransaction: data.bankTransactions.length > 0,
-  });
+  }, gettingStartedAccess({ role: workspace.role, billingPlan: workspace.billingPlan, canOpenSettings: true }));
   const complete = steps.filter((step) => step.done).length;
   const next = nextGettingStartedStep(steps);
   const hidden = layout ? gettingStartedHidden(layout) : false;
@@ -232,6 +234,9 @@ export function GettingStartedChecklist({ workspace, language = "English" }: { w
                 {step.done ? <span className="gs-tag is-done">{t("Done")}</span> : null}
                 {step.opensBringIn ? (
                   <button type="button" className={`button ${step.done ? "secondary" : ""}`} onClick={() => setSheetOpen(true)}>{label}</button>
+                ) : step.opensHelp ? (
+                  // The help assistant opens over this page (GN-05).
+                  <button type="button" className={`button ${step.done ? "secondary" : ""}`} onClick={() => openHelpAssistant()}>{label}</button>
                 ) : step.href ? (
                   <a className={`button ${step.done ? "secondary" : ""}`} href={step.href}>{label}</a>
                 ) : null}

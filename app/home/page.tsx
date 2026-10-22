@@ -64,7 +64,7 @@ import { saveHomeLayout, subscribeHomeLayout } from "@/lib/studioflow/homeLayout
 import { useHomeData, type HomeDomain } from "@/lib/studioflow/useHomeData";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { loadSetupChecklist, type SetupChecklist } from "@/lib/studioflow/setupChecklist";
-import { skipGettingStarted } from "@/lib/studioflow/gettingStarted";
+import { gettingStartedAccess, skipGettingStarted } from "@/lib/studioflow/gettingStarted";
 import { BringInOrdersSheet } from "@/components/home/GettingStartedChecklist";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 
@@ -388,6 +388,7 @@ export default function HomePage() {
             onSkipCard={handleSkipGettingStarted}
             onOpenBringIn={() => setBringInOpen(true)}
             checklist={setupChecklist}
+            access={workspace ? gettingStartedAccess({ role: workspace.role, billingPlan: workspace.billingPlan, canOpenSettings: true }) : undefined}
             // Strictly the boolean, so the fallback's first step does not tick
             // for somebody who pressed Skip. Only read when the call did not
             // answer; the server's own list carries its own doneness.

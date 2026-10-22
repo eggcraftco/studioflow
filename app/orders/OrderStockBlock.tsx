@@ -11,7 +11,7 @@
 // figure a person typed is a decision, and silently overwriting it with a
 // computed one would lose that decision without telling anyone.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyRecipeToOrder,
   consumeInventoryForOrder,
@@ -90,6 +90,19 @@ export function OrderStockBlock({
     void reload();
   }, [reload]);
 
+  // Getting started ▸ "Use stock on a job" opens the order that holds stock
+  // with ?focus=stock (GN-05): bring this block into view once it has drawn,
+  // then take the parameter off so a reload does not jump again.
+  const blockRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (loading || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("focus") !== "stock") return;
+    url.searchParams.delete("focus");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    blockRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [loading]);
+
   async function release(line: OrderInventoryLine) {
     setBusyId(line.id);
     setNotice("");
@@ -123,7 +136,7 @@ export function OrderStockBlock({
   }
 
   return (
-    <div className="order-stock-block">
+    <div className="order-stock-block" ref={blockRef}>
       <div className="order-stock-head">
         <span className="order-stock-title">{t("Stock reserved for this order")}</span>
         {canEdit ? (

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { OPEN_HELP_ASSISTANT_EVENT } from "@/lib/studioflow/gettingStarted";
 import { askAppAssistant, getAppAssistantAvailability, type AppAssistantAnswer } from "@/lib/studioflow/appAssistant";
 import { createNivaDeskSupportTicket } from "@/lib/studioflow/supportTickets";
 import { type WorkspaceContext } from "@/lib/studioflow/firestore";
@@ -70,6 +72,26 @@ export default function AppHelpAssistant({
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [turns, busy]);
+
+  // Opened from Getting started ▸ "Ask the help assistant a question" (GN-05):
+  // by the window event when the button is on the same page, and by
+  // ?help=open when the step arrived from another page (the Dashboard card,
+  // Settings ▸ Getting started). The parameter is taken off the address once
+  // read, so Back or a reload does not keep reopening the panel.
+  const pathname = usePathname();
+  useEffect(() => {
+    const openNow = () => setOpen(true);
+    window.addEventListener(OPEN_HELP_ASSISTANT_EVENT, openNow);
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("help") === "open") {
+        url.searchParams.delete("help");
+        window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+        setOpen(true);
+      }
+    } catch { /* an address we cannot read opens nothing */ }
+    return () => window.removeEventListener(OPEN_HELP_ASSISTANT_EVENT, openNow);
+  }, [pathname]);
 
   if (!available) return null;
 

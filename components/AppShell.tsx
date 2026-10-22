@@ -63,6 +63,7 @@ import {
 } from "@/lib/studioflow/onboardingWizard";
 import { clearOnboardingProgress } from "@/lib/studioflow/onboardingProgress";
 import AppHelpAssistant from "@/components/AppHelpAssistant";
+import WebUpdateNotice from "@/components/WebUpdateNotice";
 import FeedbackCenter from "@/components/FeedbackCenter";
 import RetentionNudge from "@/components/RetentionNudge";
 import {
@@ -3504,6 +3505,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         />
       ) : null}
       <AppHelpAssistant workspace={workspace} language={language} t={t} />
+      <WebUpdateNotice t={t} />
       <FeedbackCenter
         workspace={workspace}
         uid={user?.uid ?? ""}

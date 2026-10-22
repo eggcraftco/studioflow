@@ -245,6 +245,19 @@ function BankPageContent() {
   const [auditEntries, setAuditEntries] = useState<Array<{ id: string; atMs: number; kind: string; ok?: boolean; bank?: string; imported?: number; error?: string; state?: string; accounts?: number }> | null>(null);
   const [auditOpen, setAuditOpen] = useState(false);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
+  // The feed has answered from the server at least once (not only the cache),
+  // so "nothing to match" is a fact rather than a list still loading (GN-05).
+  const [txFeedAnswered, setTxFeedAnswered] = useState(false);
+  // Getting started ▸ "Match your first transaction" (GN-05): ?tx=<id> (the
+  // transaction the server named) or ?match=next (the newest with no job).
+  // Read once; handled when the feed has answered.
+  const [matchRequest, setMatchRequest] = useState<{ tx: string; next: boolean } | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const tx = String(params.get("tx") || "").trim();
+    const next = params.get("match") === "next";
+    return tx || next ? { tx, next } : null;
+  });
   const [customCategories, setCustomCategories] = useState<BankCategoryRecord[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [view, setView] = useState<"week" | "month" | "year" | "custom">("month");
@@ -417,6 +430,7 @@ function BankPageContent() {
     // and a refused listener answers with nothing at all.
     setConnections([]);
     setTransactions([]);
+    setTxFeedAnswered(false);
     setCustomCategories([]);
     setRules([]);
     setVendors([]);
@@ -494,10 +508,12 @@ function BankPageContent() {
             importedAt: toDate(data.importedAt)
           };
         }));
+        if (!snap.metadata.fromCache) setTxFeedAnswered(true);
       },
       () => {
         // Permission lost: drop the rows the cache already painted.
         setTransactions([]);
+        setTxFeedAnswered(true);
       }
     );
     const unsubCategories = onSnapshot(
@@ -1403,6 +1419,40 @@ function BankPageContent() {
     setIncomingOrderId(tx.linkedOrderId || "");
     setFilesPicker(prev => ({ ...prev, open: false, search: "" }));
   }
+  // GN-05: arriving from Getting started opens the transaction to match, with
+  // the order picker ("Linked order or project") in its drawer — not the
+  // Banking overview. Linking is the owner's (the drawer's picker is disabled
+  // for everyone else). No bank: the overview, whose first card connects one.
+  // Bank but nothing open to match: say so, rather than an empty drawer.
+  useEffect(() => {
+    if (!matchRequest || !txFeedAnswered || !workspace) return;
+    setMatchRequest(null);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("tx");
+      url.searchParams.delete("match");
+      window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+    } catch { /* the address keeps its parameters; nothing reopens on its own */ }
+    const open = (item: BankTransaction) => !item.linkedOrderId && !item.outgoingKind;
+    const named = matchRequest.tx ? transactions.find(item => item.id === matchRequest.tx && open(item)) : undefined;
+    const target = named
+      ?? transactions.find(item => open(item) && item.amount > 0)
+      ?? transactions.find(open);
+    if (target && isOwner) {
+      setTab("transactions");
+      openDrawer(target);
+      setStatus("Choose the order this payment belongs to under “Linked order or project”, then save.");
+      return;
+    }
+    if (connections.length === 0) {
+      setTab("overview");
+      return;
+    }
+    setTab("transactions");
+    if (!target) setStatus("Every transaction already has a job, or none has arrived yet. New ones appear after the next bank sync.");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchRequest, txFeedAnswered, workspace, transactions, connections.length, isOwner]);
+
   function drawerStep(direction: -1 | 1) {
     if (!drawerTx) return;
     const index = sortedTransactions.findIndex(item => item.id === drawerTx.id);

@@ -1,17 +1,29 @@
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
 // ---------------------------------------------------------------------------
-// NivaDesk public changelog
+// NivaDesk public changelog — https://nivadesk.app/changelog (no sign-in)
 //
-// HOW TO ADD A RELEASE (for the team):
-//   1. Add a new object to the TOP of CHANGELOG below (newest first).
-//   2. Set `version` (match the app version), `date` (e.g. "14 June 2026").
-//   3. Optionally set `highlight`: one short headline sentence.
-//   4. List `changes`, each tagged "new" | "improved" | "fixed".
+// HOW TO ADD A RELEASE (for the team) — part of docs/release-checklist-platforms.md
+// in the app repository ("Release notes" step), done for EVERY store release:
+//   1. Add a new object to the TOP of CHANGELOG below (newest first), one per
+//      platform family that shipped: `platformKey` "apple" (iPhone, iPad, Mac —
+//      one App Store record) or "android"; "all" only for a release that went
+//      to every platform at once.
+//   2. Set `version` to the app's own version string (Apple
+//      CFBundleShortVersionString / Android versionName) — the apps link to
+//      #<platformKey>-<version>, so a mismatch lands on the top of the page.
+//   3. `date` is the day the store release STARTED (a phased or staged rollout
+//      says so in `highlight`), never the day it was submitted.
+//   4. List only what reached that platform's users: not candidate work, not
+//      features behind a server switch, not web-only changes. Copy from the
+//      store notes that were actually entered (ASC What's New / Play notes).
 //   5. Update CHANGELOG_LAST_UPDATED to the same date.
+//   6. After the web deploy, read back https://nivadesk.app/changelog#<anchor>
+//      and check the app's "NivaDesk updated — see what's new" link opens it.
 //
-// Settings ▸ About shows CHANGELOG[0].version, so the top entry is also what
-// the web app reports as its version. Keep the list newest-first.
+// The web app has no version of its own (it is replaced on every deploy), so
+// Settings ▸ About on the web shows the build it is running instead of an
+// entry from this list.
 //
 // Release text is written in English (the source of truth). The page chrome
 // (titles, tags, labels) is localized to all 12 languages automatically.
@@ -24,8 +36,13 @@ export type ChangelogChange = {
   text: string;
 };
 
+export type ChangelogPlatformKey = "apple" | "android" | "all";
+
 export type ChangelogEntry = {
   version: string;
+  /** Which app this entry is for; with `version` it makes the entry's anchor
+   *  (#apple-2.1), which is what the apps' "see what's new" link opens. */
+  platformKey: ChangelogPlatformKey;
   // Optional platform this release targets (e.g. "Android", "Mac & iPhone",
   // "Web"). Shown as a small pill so staggered per-platform releases read
   // clearly. Omit for a cross-platform entry.
@@ -35,11 +52,64 @@ export type ChangelogEntry = {
   changes: ChangelogChange[];
 };
 
-export const CHANGELOG_LAST_UPDATED = "5 July 2026";
+/** The entry's anchor on /changelog: "<platformKey>-<version>", e.g. "android-2.1". */
+export function changelogAnchor(entry: Pick<ChangelogEntry, "platformKey" | "version">): string {
+  return `${entry.platformKey}-${String(entry.version).trim()}`.toLowerCase().replace(/[^a-z0-9.-]/g, "-");
+}
+
+/** True for the newest entry of its platform (each platform's own "Latest"). */
+export function isLatestForPlatform(entry: ChangelogEntry, list: ChangelogEntry[] = CHANGELOG): boolean {
+  return list.find((item) => item.platformKey === entry.platformKey) === entry;
+}
+
+export const CHANGELOG_LAST_UPDATED = "17 October 2026";
 
 export const CHANGELOG: ChangelogEntry[] = [
+  // 2.1 — from the store notes that were entered (docs/store/release-2.1/:
+  // app-store-whats-new.en-GB.txt, play-release-notes.en-GB.txt) for the code
+  // tagged store-2.1-30-apple / store-2.1-vc18-android (3d690eeb). Server-gated
+  // features (customer inbox, DHL, payment links, eBay inventory) are left out
+  // on purpose: they are not on for everybody.
+  {
+    version: "2.1",
+    platformKey: "apple",
+    platform: "iPhone, iPad & Mac",
+    date: "17 October 2026",
+    highlight: "A new layout, team access that follows each member, and shared notes. Released to the App Store on 17 October 2026 as a phased release over seven days; you can update by hand in the App Store at any time.",
+    changes: [
+      { tag: "new", text: "New layout: a collapsible sidebar on iPad and Mac, a menu drawer on iPhone. Settings is under your name in the menu." },
+      { tag: "improved", text: "Team roles: screens and notifications follow each member's current access; if a team change is refused, you see why." },
+      { tag: "improved", text: "Improved privacy of finance information for team members." },
+      { tag: "new", text: "Notes: share with a person from your member list. View Only members can read shared notes but not edit them." },
+      { tag: "new", text: "Work Time: log a full or half day on an order, kept separate from timer hours. The owner can correct entries." },
+      { tag: "improved", text: "New orders start from your default delivery time and keep the due date you pick." },
+      { tag: "improved", text: "Dashboard rows now add up to Net Profit, with a Refunds row." },
+      { tag: "new", text: "Live PDF export preview, and tracking email preview before sending." },
+      { tag: "improved", text: "Upload progress for each file, with Cancel and Retry. Delete several client files at once." },
+      { tag: "improved", text: "Clearer Plan & Access, including for workspaces billed through Shopify." },
+      { tag: "improved", text: "If you use Sign in with Apple, deleting your account also disconnects your Apple ID from NivaDesk." },
+      { tag: "fixed", text: "Better layouts on small screens, more translations and bug fixes." },
+    ],
+  },
+  {
+    version: "2.1",
+    platformKey: "android",
+    platform: "Android",
+    date: "17 October 2026",
+    highlight: "A new layout, team access that follows each member, and shared notes. Rolled out on Google Play from 17 October 2026, to everybody from 18 October.",
+    changes: [
+      { tag: "new", text: "New layout: sidebar on tablets, menu drawer on phones." },
+      { tag: "improved", text: "Improved privacy of finance information for team members; screens and alerts follow each member's access." },
+      { tag: "new", text: "Notes: share with a team member; View Only members can only read." },
+      { tag: "new", text: "Work Time: log full or half days." },
+      { tag: "improved", text: "Dashboard rows add up to Net Profit; new orders keep the date you pick." },
+      { tag: "new", text: "PDF and tracking email previews; upload progress for each file." },
+      { tag: "fixed", text: "Clearer Plan & Access, more translations, fixes." },
+    ],
+  },
   {
     version: "1.1",
+    platformKey: "apple",
     platform: "Mac & iPhone",
     date: "5 July 2026",
     highlight: "Widgets arrive: your net profit and deliveries, right on the Home Screen and desktop.",
@@ -54,6 +124,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: "0.1.7",
+    platformKey: "android",
     platform: "Android",
     date: "5 July 2026",
     highlight: "Home-screen widgets and a full Financial Breakdown.",
@@ -68,6 +139,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: "0.1.6",
+    platformKey: "android",
     platform: "Android",
     date: "2 July 2026",
     highlight: "Clearer email verification and a tidier default order layout.",
@@ -78,6 +150,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   {
     version: "0.1.3",
+    platformKey: "all",
     date: "June 2026",
     highlight: "Welcome to NivaDesk: this is our first release, and we're just getting started.",
     changes: [
