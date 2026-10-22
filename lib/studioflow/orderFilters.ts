@@ -13,6 +13,9 @@ export type OrderQuickFilterId =
   | "trash";
 
 export type FilterableOrder = {
+  /** The document id and project number break ties on equal dates (GN-11, orderListView.ts). */
+  id?: string;
+  projectNumber?: number;
   customerName: string;
   designName: string;
   watchRef?: string;
@@ -277,6 +280,26 @@ export function orderMatchesSearch(order: FilterableOrder, query: string) {
   ].some(value => String(value ?? "").toLowerCase().includes(cleaned));
 }
 
+/**
+ * The tie-break every order sort ends with (GN-11): a higher project number first (the
+ * newer job), then the document id. Equal dates (imports stamped in the same second,
+ * orders with no date at all) used to keep whatever order the query returned them in, so
+ * a reload or a live update could swap two rows and a page boundary could show one of
+ * them twice and drop the other. Mirrored in EGGcraft/OrderListView.swift and Android
+ * OrderListView.kt.
+ */
+export function compareOrdersTieBreak(
+  left: { id?: string; projectNumber?: number },
+  right: { id?: string; projectNumber?: number }
+): number {
+  const leftNumber = Number(left.projectNumber ?? 0) || 0;
+  const rightNumber = Number(right.projectNumber ?? 0) || 0;
+  if (leftNumber !== rightNumber) return rightNumber - leftNumber;
+  const leftId = String(left.id ?? "");
+  const rightId = String(right.id ?? "");
+  return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+}
+
 export function sortOrdersForMode<T extends FilterableOrder>(orders: T[], sortMode: OrderSortMode) {
   return [...orders].sort((left, right) => {
     if (sortMode === "smart") {
@@ -290,7 +313,8 @@ export function sortOrdersForMode<T extends FilterableOrder>(orders: T[], sortMo
       }
     }
 
-    return (right.paymentDate?.getTime() ?? 0) - (left.paymentDate?.getTime() ?? 0);
+    const byDate = (right.paymentDate?.getTime() ?? 0) - (left.paymentDate?.getTime() ?? 0);
+    return byDate !== 0 ? byDate : compareOrdersTieBreak(left, right);
   });
 }
 

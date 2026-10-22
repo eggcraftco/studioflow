@@ -32,7 +32,7 @@ import { trackingEmailRecordFrom, type TrackingEmailRecord } from "@/lib/studiof
 import { mapWorkDayHistory, mapWorkDays, type WorkDayDetail, type WorkDayHistoryDetail } from "@/lib/studioflow/workDays";
 import { productionWorkIsLive, type ProductionStage } from "@/lib/studioflow/production";
 import type { HeadingItem } from "@/lib/studioflow/blockHeadings";
-import { orderIsCancelled, type FilterableOrder } from "@/lib/studioflow/orderFilters";
+import { compareOrdersTieBreak, orderIsCancelled, type FilterableOrder } from "@/lib/studioflow/orderFilters";
 
 export type JoinedWorkspaceOption = {
   id: string;
@@ -1878,11 +1878,48 @@ function workspaceOrderDoc(companyId: string, orderId: string, workspace?: Works
 }
 
 export async function loadRecentOrders(companyId: string, workspace?: WorkspaceContext | null, uid = "", trashedOnly = false): Promise<OrderListItem[]> {
+  const lists = await loadOrderListsWithTrash(companyId, workspace, uid);
+  return trashedOnly ? lists.trashed : lists.orders;
+}
+
+/**
+ * The live list and the Trash from ONE read of the workspace's order scope (GN-11).
+ * The query returns both (isDeleted is filtered here, not in Firestore), so the
+ * Orders page used to read the whole scope twice on arrival, and again on every
+ * quick-filter click (its Trash effect depended on the filter). On a 1,500-order
+ * workspace that was 1,500 document reads per click.
+ */
+export async function loadOrderListsWithTrash(
+  companyId: string,
+  workspace?: WorkspaceContext | null,
+  uid = ""
+): Promise<{ orders: OrderListItem[]; trashed: OrderListItem[] }> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
   // No limit: load every order in the workspace scope so the web list matches
-  // the Mac and Android apps (which load the full set).
+  // the Mac and Android apps (which load the full set). Search, the quick
+  // filters and Smart sorting read fields no Firestore query can (notes, custom
+  // fields, free-text statuses, due dates), so the list pages the filtered
+  // result in memory (orderListView.ts) instead of paging the query.
   const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
-  const orders = snapshot.docs.filter(orderDocument => booleanValue(orderDocument.data().isDeleted, false) === trashedOnly).map(orderDocument => {
+  const orders: OrderListItem[] = [];
+  const trashed: OrderListItem[] = [];
+  for (const orderDocument of snapshot.docs) {
+    const item = orderListItemFromDocument(orderDocument);
+    if (booleanValue(orderDocument.data().isDeleted, false)) trashed.push(item);
+    else orders.push(item);
+  }
+  return { orders: orders.sort(compareRecentOrderListItems), trashed: trashed.sort(compareRecentOrderListItems) };
+}
+
+// Newest payment date first; equal dates by project number, then id (GN-11:
+// the same rows in the same order on every read, so a page never repeats or drops one).
+function compareRecentOrderListItems(lhs: OrderListItem, rhs: OrderListItem) {
+  const left = lhs.paymentDate?.getTime() ?? 0;
+  const right = rhs.paymentDate?.getTime() ?? 0;
+  return right !== left ? right - left : compareOrdersTieBreak(lhs, rhs);
+}
+
+function orderListItemFromDocument(orderDocument: QueryDocumentSnapshot<DocumentData>): OrderListItem {
     const data = orderDocument.data();
     const paymentDate = dateValue(data.paymentDate);
     const deliveryTime = numberValue(data.deliveryTime, 0);
@@ -1932,13 +1969,6 @@ export async function loadRecentOrders(companyId: string, workspace?: WorkspaceC
         : "",
       orderSource: stringValue(data.orderSource, "")
     };
-  });
-
-  return orders.sort((lhs, rhs) => {
-    const left = lhs.paymentDate?.getTime() ?? 0;
-    const right = rhs.paymentDate?.getTime() ?? 0;
-    return right - left;
-  });
 }
 
 export async function loadScheduleOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<ScheduleOrderItem[]> {

@@ -34819,3 +34819,101 @@ body[data-studio-theme="dark"] .schedule-agenda-calendar {
     margin-left: 0;
   }
 }
+
+/* GN-11 (22 Oct 2026): the Orders list view row and its footer (components/OrderListViewControl.tsx).
+   Logical properties only, so the Arabic (dir=rtl) list mirrors without a second rule. */
+.orders-view-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+.orders-view-control-label {
+  color: var(--muted);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  font-size: 11px;
+}
+.orders-view-control-field {
+  display: inline-flex;
+  min-width: 0;
+}
+.orders-view-control-field select {
+  min-width: 0;
+  max-width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  /* Own colours, not inherited: the phone list's band behind this row stays light in
+     the dark theme, and inherited light text vanished on it (seen 22 Oct, 375 px, dark). */
+  background: var(--surface-strong);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+}
+.orders-mobile-list > .orders-view-control {
+  margin: 0 10px 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+}
+.orders-list-pager {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 6px 4px 14px;
+  text-align: center;
+}
+.orders-list-pager-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.orders-list-pager-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.orders-list-pager-actions .button {
+  font-size: 13px;
+  padding: 7px 12px;
+}
+.orders-list-pager-sentinel {
+  width: 100%;
+  height: 1px;
+}
+/* Show all: rows far off screen skip layout and paint (browser-side virtualisation). */
+.orders-list.is-view-all > div:not(.orders-list-pager),
+.orders-list.is-view-all > a {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 132px;
+}
+.orders-rail-pager {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  padding-top: 4px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--muted);
+}
+.orders-rail-pager button {
+  width: 36px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font-weight: 900;
+  cursor: pointer;
+}
+.orders-rail-pager button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
