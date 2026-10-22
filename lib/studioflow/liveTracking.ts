@@ -93,7 +93,7 @@ const STATUS_LABELS: Record<string, string> = {
   delivered: "Delivered", exception: "Exception", registering: "Registering", registered: "Registered",
   waiting: "Waiting", error: "Error", limitedsupport: "Limited support", carrierrequired: "Carrier required",
   notregistered: "Not Registered", labelcreated: "Label created", pickupbooked: "Pickup booked", pickedup: "Picked up",
-  incustoms: "In customs", cancelled: "Cancelled"
+  incustoms: "In customs", cancelled: "Cancelled", registrationneeded: "Registration needed"
 };
 
 function compact(value: string): string {
@@ -116,6 +116,7 @@ export function trackingSupportLabel(value: string): string {
     case "unsupported": return "Unsupported";
     case "credentials_missing": return "Not configured";
     case "error": return "Error";
+    case "registration_required": return "Registration needed";
     default: return value;
   }
 }
@@ -142,6 +143,7 @@ export function trackingTone(status: string, supportStatus: string): string {
     case "waiting": return TRACKING_TONES.blue;
     case "limited":
     case "carrier_required":
+    case "registration_required":
     case "unsupported":
     case "credentials_missing": return TRACKING_TONES.orange;
     case "error": return TRACKING_TONES.red;

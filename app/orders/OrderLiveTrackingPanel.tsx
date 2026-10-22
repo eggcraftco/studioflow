@@ -56,7 +56,9 @@ export function OrderLiveTrackingPanel({
   language,
   canRefresh,
   syncing,
-  onCheckAgain
+  onCheckAgain,
+  canRegisterNew = false,
+  onRegisterNew
 }: {
   companyId: string;
   orderId: string;
@@ -67,6 +69,9 @@ export function OrderLiveTrackingPanel({
   canRefresh: boolean;
   syncing: boolean;
   onCheckAgain: () => void;
+  /** GN-13: the workspace owner may register a number explicitly when automatic registration is off. */
+  canRegisterNew?: boolean;
+  onRegisterNew?: () => void;
 }) {
   const t = (text: string) => studioT(text, language);
   const [live, setLive] = useState<TrackingValues | null>(null);
@@ -153,7 +158,16 @@ export function OrderLiveTrackingPanel({
             {syncing ? t("Checking tracking…") : t("Check Again")}
           </button>
         ) : null}
+        {canRegisterNew && onRegisterNew && supportStatus === "registration_required" ? (
+          <button type="button" className="button" data-testid="register-with-17track" disabled={syncing} onClick={onRegisterNew}
+                  title={t("Registering uses one of the workspace's 17TRACK registrations.")}>
+            {t("Register with 17TRACK")}
+          </button>
+        ) : null}
       </div>
+      {canRegisterNew && onRegisterNew && supportStatus === "registration_required" ? (
+        <p className="shipment-muted" style={{ margin: 0, fontSize: 11.5 }}>{t("Registering uses one of the workspace's 17TRACK registrations.")}</p>
+      ) : null}
     </div>
   );
 }

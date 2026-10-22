@@ -47,6 +47,7 @@ import { AmazonIntegrationSection } from "./AmazonIntegrationSection";
 import { PayPalIntegrationSection } from "./PayPalIntegrationSection";
 import { StripeIntegrationSection } from "./StripeIntegrationSection";
 import { DhlExpressIntegrationSection } from "./DhlExpressIntegrationSection";
+import { TrackingRegistrationSection } from "./TrackingRegistrationSection";
 import { getShippingConnection, type ShippingConnectionView } from "@/lib/studioflow/shipping";
 import { QuickBooksIntegrationSection, XeroIntegrationSection } from "./QuickBooksIntegrationSection";
 import { SettingsPageHeader, SettingsHeaderActionsContext, SettingsCardHead, useSettingsHeaderActions, type SettingsHeaderStatus } from "./pageHeader";
@@ -649,7 +650,7 @@ export default function SettingsPage() {
       rawRequested === "inbound" ||
       rawRequested === "etsy" ||
       rawRequested === "square" || rawRequested === "ebay" || rawRequested === "amazon" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero" ||
-      rawRequested === "dhl" || rawRequested === "whatsapp" || rawRequested === "instagram" || rawRequested === "stripe"
+      rawRequested === "dhl" || rawRequested === "whatsapp" || rawRequested === "instagram" || rawRequested === "stripe" || rawRequested === "tracking"
     ) {
       setIntegrationProvider(rawRequested);
     }
@@ -5719,7 +5720,7 @@ function IntegrationsSection({
         <nav className="integrations-crumb">
           <button type="button" onClick={() => setManaging("")}>{t("Integrations")}</button>
           <span aria-hidden="true">/</span>
-          <strong>{managing === "dhl" ? "DHL Express" : t(INTEGRATION_PROVIDERS.find((p) => p.manage === managing && p.kind !== "planned")?.name ?? "Setup")}</strong>
+          <strong>{managing === "dhl" ? "DHL Express" : managing === "tracking" ? t("17TRACK tracking") : t(INTEGRATION_PROVIDERS.find((p) => p.manage === managing && p.kind !== "planned")?.name ?? "Setup")}</strong>
         </nav>
         {managing === "shopify" ? <ShopifyIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "etsy" ? <EtsyIntegrationSection workspace={workspace} language={language} /> : null}
@@ -5730,6 +5731,7 @@ function IntegrationsSection({
         {managing === "paypal" ? <PayPalIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "stripe" ? <StripeIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "dhl" ? <DhlExpressIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "tracking" ? <TrackingRegistrationSection workspace={workspace} language={language} /> : null}
         {managing === "whatsapp" ? <CustomerChannelPanel workspace={workspace} language={language} channel="whatsapp" /> : null}
         {managing === "instagram" ? <CustomerChannelPanel workspace={workspace} language={language} channel="instagram" /> : null}
         {managing === "quickbooks" ? <QuickBooksIntegrationSection workspace={workspace} language={language} /> : null}
@@ -5829,6 +5831,22 @@ function IntegrationsSection({
         </section>
       ) : null}
 
+      {/* GN-13: 17TRACK registration (every workspace; the setting is the owner's). */}
+      {(!needle || "17track tracking".includes(needle)) && (filter === "all" || filter === "available") ? (
+        <section className="card app-card">
+          <SettingsCardHead title={t("Tracking")} aside={<span className="settings-tag is-muted">1</span>} />
+          <div className="integrations-grid settings-integrations-grid">
+            <IntegrationCard
+              provider={TRACK17_TILE}
+              live={{ state: "available" }}
+              t={t}
+              highlighted={false}
+              onManage={() => setManaging("tracking")}
+            />
+          </div>
+        </section>
+      ) : null}
+
       {groups.map(group => group.rows.length === 0 ? null : (
         <section key={group.id} className="card app-card">
           <SettingsCardHead title={t(group.title)} aside={<span className="settings-tag is-muted">{group.rows.length}</span>} />
@@ -5865,6 +5883,14 @@ function IntegrationsSection({
     </div>
   );
 }
+
+// The 17TRACK tracking tile (GN-13): where the owner decides whether new numbers are registered
+// automatically, and everyone sees the workspace's use of the 17TRACK allowance.
+const TRACK17_TILE: IntegrationProvider = {
+  id: "track17", name: "17TRACK tracking", category: "commerce", kind: "native", mark: "17",
+  blurb: "Follow any courier's tracking number through 17TRACK.",
+  capabilities: ["Tracking"], manage: "tracking",
+};
 
 // The DHL Express tile. Not in INTEGRATION_PROVIDERS (see integrations.ts): it is
 // built here and shown only to a workspace the server has opened DHL for.
