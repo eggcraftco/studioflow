@@ -51,6 +51,10 @@ import {
   noteMemberIdentity,
   noteMemberLabel,
   noteUnmatchedCollaboratorEmails,
+  noteAvatarPeople,
+  noteAvatarPersonText,
+  noteAvatarStack,
+  type NoteAvatarPerson,
   pickableNoteMembers,
   workspaceFanOutDue,
   workspaceInviteTargets,
@@ -163,6 +167,9 @@ export default function NotesPage() {
   // workspace.role is the effective role (custom role → its base); a role change reloads the page
   // (AuthProvider access watch), so this always follows the server.
   const readOnlyNote = (note: Pick<StudioKeepNote, "ownerUserId">) => Boolean(user && workspace && noteIsReadOnlyForMe(note, user.uid, workspace.role));
+  // GN-02: the faces on a shared note's card, from the note's own lists and the
+  // members map on every render (nothing cached, nothing written).
+  const avatarsFor = (note: StudioKeepNote) => (user ? noteAvatarPeople(note, members, user.uid, user.email ?? "") : []);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -855,11 +862,11 @@ export default function NotesPage() {
             {pinned.length > 0 && (
               <>
                 <SectionHeader title={t("PINNED")} />
-                <NotesGrid notes={pinned} isReadOnly={readOnlyNote} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+                <NotesGrid notes={pinned} isReadOnly={readOnlyNote} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} avatarsFor={avatarsFor} />
               </>
             )}
             {pinned.length > 0 && others.length > 0 && <SectionHeader title={t("OTHERS")} />}
-            <NotesGrid notes={others} isReadOnly={readOnlyNote} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+            <NotesGrid notes={others} isReadOnly={readOnlyNote} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} avatarsFor={avatarsFor} />
             {visible.length === 0 && !(section === "reminders" && orderAlerts.length > 0) && (
               <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>
                 {search.trim()
@@ -1139,7 +1146,9 @@ function NotesGrid({
   allLabels,
   selectedIds,
   onToggleSelect,
+  avatarsFor,
 }: {
+  avatarsFor: (n: StudioKeepNote) => NoteAvatarPerson[];
   notes: StudioKeepNote[];
   isReadOnly: (n: StudioKeepNote) => boolean;
   onClick: (n: StudioKeepNote) => void;
@@ -1168,7 +1177,7 @@ function NotesGrid({
       }}
     >
       {notes.map((n) => (
-        <NoteCard key={n.id} note={n} readOnly={isReadOnly(n)} onClick={() => onClick(n)} onSave={onSave} onDelete={onDelete} onOpenImage={onOpenImage} onMove={onMove} canDrag={canDrag} onDuplicate={onDuplicate} onCopy={onCopy} onToggleLabel={onToggleLabel} allLabels={allLabels} isSelected={selectedIds.has(n.id)} selectionActive={selectedIds.size > 0} onToggleSelect={() => onToggleSelect(n.id)} />
+        <NoteCard key={n.id} note={n} readOnly={isReadOnly(n)} onClick={() => onClick(n)} onSave={onSave} onDelete={onDelete} onOpenImage={onOpenImage} onMove={onMove} canDrag={canDrag} onDuplicate={onDuplicate} onCopy={onCopy} onToggleLabel={onToggleLabel} allLabels={allLabels} isSelected={selectedIds.has(n.id)} selectionActive={selectedIds.size > 0} onToggleSelect={() => onToggleSelect(n.id)} avatars={avatarsFor(n)} />
       ))}
     </div>
   );
@@ -1188,6 +1197,79 @@ function notesSectionHeadingColor(): string {
   return notesIsDark() ? "#9ca3af" : "#6b7280";
 }
 
+/**
+ * GN-02 (22 Oct 2026): the small faces of the people a note is shared with,
+ * as on the Mac. Photo when the members map has one, initials otherwise, each
+ * in a colour taken from the person's id (two people with the same initials
+ * differ). Owner: a solid accent ring. Invitation pending: dashed ring, faded,
+ * with a clock. At most four circles; the fourth becomes "+N", which opens the
+ * full list. Purely visual: clicks here never open or change the note.
+ */
+function NoteAvatarStack({ people }: { people: NoteAvatarPerson[] }) {
+  const { language } = useAuth();
+  const t = (text: string) => studioT(text, language);
+  const [listOpen, setListOpen] = useState(false);
+  const { shown, overflow } = noteAvatarStack(people);
+  const pending = people.filter((person) => person.status === "pending").length;
+  const summary = (pending > 0
+    ? t("Shared with {count} people, {pending} invitation pending")
+    : people.length === 1 ? t("Shared with 1 person") : t("Shared with {count} people"))
+    .replace("{count}", String(people.length))
+    .replace("{pending}", String(pending));
+  useEffect(() => {
+    if (!listOpen) return;
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setListOpen(false); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [listOpen]);
+  return (
+    <div className="note-avatars" role="group" aria-label={summary} onClick={(event) => event.stopPropagation()}>
+      <div className="note-avatars-row">
+        {shown.map((person) => (
+          <span
+            key={person.key}
+            className={`note-avatar is-${person.status}`}
+            role="img"
+            aria-label={noteAvatarPersonText(person, t)}
+            title={noteAvatarPersonText(person, t)}
+            style={{ backgroundColor: `hsl(${person.hue} 52% 36%)` }}
+          >
+            {person.photoURL ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={person.photoURL} alt="" referrerPolicy="no-referrer" onError={(event) => { (event.currentTarget as HTMLImageElement).style.display = "none"; }} />
+            ) : null}
+            <span className="note-avatar-initials" aria-hidden="true">{person.initials}</span>
+            {person.status === "pending" ? <span className="note-avatar-badge" aria-hidden="true">⏳</span> : null}
+          </span>
+        ))}
+        {overflow > 0 || pending > 0 ? (
+          <button
+            type="button"
+            className={overflow > 0 ? "note-avatar note-avatar-more" : "note-avatar-list-toggle"}
+            aria-expanded={listOpen}
+            aria-label={t("Show everyone this note is shared with")}
+            title={t("Show everyone this note is shared with")}
+            onClick={(event) => { event.stopPropagation(); setListOpen((open) => !open); }}
+          >
+            {overflow > 0 ? `+${overflow}` : "⋯"}
+          </button>
+        ) : null}
+      </div>
+      {listOpen ? (
+        <ul className="note-avatars-list">
+          {people.map((person) => (
+            <li key={person.key} className={`is-${person.status}`}>
+              <strong>{person.label}</strong>
+              {person.identity && person.identity !== person.label ? <span className="muted-copy"> {person.identity}</span> : null}
+              <span className="note-avatars-status"> · {t(person.status === "owner" ? "Owner" : person.status === "pending" ? "Invitation pending" : "Shared")}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 function NoteCard({
   note,
   readOnly,
@@ -1204,7 +1286,10 @@ function NoteCard({
   isSelected,
   selectionActive,
   onToggleSelect,
+  avatars,
 }: {
+  /** GN-02: the people this note is shared with (owner / accepted / pending), never me. */
+  avatars: NoteAvatarPerson[];
   note: StudioKeepNote;
   /** View Only member, someone else's note: no colour or reminder changes from the card. */
   readOnly: boolean;
@@ -1413,9 +1498,7 @@ function NoteCard({
           ⏰ {new Date(note.reminderDateMillis).toLocaleDateString()}
         </div>
       )}
-      {(note.collaboratorUserIds.length > 0 || note.collaboratorEmails.length > 0) && (
-        <div style={{ fontSize: 11, color: "#6b7280" }}>👥 {t("Shared")} · {Math.max(note.collaboratorUserIds.length, note.collaboratorEmails.length)}</div>
-      )}
+      {avatars.length > 0 && <NoteAvatarStack people={avatars} />}
       {note.linkedOrderLabel && (
         <div style={{ fontSize: 11, color: "#2D7BF4", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⛓ {note.linkedOrderLabel}</div>
       )}

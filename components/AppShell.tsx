@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
 import { signOut } from "firebase/auth";
@@ -53,7 +54,7 @@ import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import { studioLanguageDir, studioLanguageLocale } from "@/lib/studioflow/languageDirection";
 import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
 import { EMPTY_INTEGRATION_SIGNALS, loadIntegrationSignals, type IntegrationSignals } from "@/lib/studioflow/integrations";
-import { savePersonalInterfaceSettings } from "@/lib/studioflow/settingsActions";
+import { canEditWorkspaceSettingsForRole, savePersonalInterfaceSettings } from "@/lib/studioflow/settingsActions";
 import {
   businessTypeForWorkKinds,
   saveOnboardingAnswers,
@@ -2007,6 +2008,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     }
     function handleKey(event: KeyboardEvent) {
       if (event.key === "Escape") setAvatarMenuOpen(false);
+      // GN-03: Escape hands focus back to the account button, as a native menu does.
+      if (event.key === "Escape") sidebarUserRef.current?.querySelector<HTMLElement>(".app-sidebar-user-button")?.focus();
     }
     // A floating menu is positioned from a measurement, so a resize closes it
     // rather than leaving it hanging where the avatar used to be.
@@ -2029,6 +2032,29 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     const first = sidebarUserMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]');
     first?.focus();
   }, [accountMenuFloats]);
+  // GN-03 (22 Oct 2026): opened from the keyboard (Enter/Space/arrow on the
+  // account button), the menu takes focus on its first entry, like the Mac's
+  // menu; the arrow keys, Home and End move between its entries.
+  const accountMenuKeyboardOpen = useRef(false);
+  useEffect(() => {
+    if (!avatarMenuOpen || !accountMenuKeyboardOpen.current) return;
+    accountMenuKeyboardOpen.current = false;
+    sidebarUserMenuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [avatarMenuOpen]);
+  function handleAccountMenuKeys(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]'));
+    if (items.length === 0) return;
+    const index = items.indexOf(document.activeElement as HTMLElement);
+    let next = -1;
+    if (event.key === "ArrowDown") next = index < 0 ? 0 : (index + 1) % items.length;
+    else if (event.key === "ArrowUp") next = index < 0 ? items.length - 1 : (index - 1 + items.length) % items.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = items.length - 1;
+    else if (event.key === "Tab") { setAvatarMenuOpen(false); return; }
+    if (next < 0) return;
+    event.preventDefault();
+    items[next].focus();
+  }
   // Toggling the rail while the menu is open invalidates the measurement.
   useEffect(() => {
     setAvatarMenuOpen(false);
@@ -3269,12 +3295,26 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 <button
                   type="button"
                   className="app-sidebar-user-button"
-                  aria-label={t("Account menu")}
+                  aria-label={`${t("Account")}: ${[sidebarUserName, workspace?.name?.trim()].filter(Boolean).join(", ")}`}
                   aria-haspopup="menu"
                   aria-expanded={avatarMenuOpen}
                   aria-controls="app-sidebar-user-menu"
                   title={sidebarUserTitle}
-                  onClick={() => (avatarMenuOpen ? setAvatarMenuOpen(false) : openAvatarMenu())}
+                  onClick={(event) => {
+                    if (avatarMenuOpen) {
+                      setAvatarMenuOpen(false);
+                      return;
+                    }
+                    // detail 0 = Enter/Space, not a pointer click.
+                    accountMenuKeyboardOpen.current = event.detail === 0;
+                    openAvatarMenu();
+                  }}
+                  onKeyDown={(event) => {
+                    if (avatarMenuOpen || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+                    event.preventDefault();
+                    accountMenuKeyboardOpen.current = true;
+                    openAvatarMenu();
+                  }}
                 >
                   <span className="app-sidebar-avatar toolbar-avatar">
                     {showToolbarAvatarImage ? (
@@ -3289,12 +3329,27 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                   </span>
                   <span className="app-sidebar-user-text">
                     <strong>{sidebarUserName}</strong>
-                    <span>{workspace?.name?.trim() || sidebarUserRole}</span>
+                    {/* GN-03: role · workspace, as the Mac, iPad and Android blocks print it. */}
+                    <span>{[sidebarUserRole, workspace?.name?.trim()].filter(Boolean).join(" · ")}</span>
                   </span>
                   <span className="app-sidebar-user-chevron" aria-hidden="true">
                     <NavIcon name="chevron" />
                   </span>
                 </button>
+                {/* GN-03 (22 Oct 2026): in the phone/tablet drawer (< 1024 px) a gear beside the
+                    account block opens Settings in one tap, as on the iPhone and Android drawers.
+                    Hidden on the desktop sidebar, whose account menu lists Settings first. */}
+                {memberCanAccess(workspace, "settings") ? (
+                  <button
+                    type="button"
+                    className="app-sidebar-settings-shortcut"
+                    aria-label={t("Settings")}
+                    title={t("Settings")}
+                    onClick={() => openSettingsSection()}
+                  >
+                    <NavIcon name="settings" />
+                  </button>
+                ) : null}
                 {avatarMenuOpen ? (
                   <div
                     id="app-sidebar-user-menu"
@@ -3306,6 +3361,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                     }
                     role="menu"
                     aria-label={t("Account menu")}
+                    onKeyDown={handleAccountMenuKeys}
                     style={
                       accountMenuFloats && railMenuAnchor
                         ? {
@@ -3334,7 +3390,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                       <NavIcon name="account" />
                       {t("Account")}
                     </button>
-                    {memberCanAccess(workspace, "settings") ? (
+                    {/* GN-03: the same gate as the Mac, iPad and Android menus — a role
+                        that can edit workspace settings (owner, admin, member). */}
+                    {memberCanAccess(workspace, "settings") && canEditWorkspaceSettingsForRole(workspace?.role ?? "") ? (
                       <button
                         type="button"
                         role="menuitem"

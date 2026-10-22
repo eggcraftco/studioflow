@@ -87,7 +87,8 @@ check("per-row Delete still calls deleteClientFileForOrder", /async function han
 check("Delete all still loops deleteClientFileForOrder per file", /async function handleDeleteOrderGroup\(group: FilesByOrder\)[\s\S]*?for \(const file of group\.files\) \{\s*try \{\s*await deleteClientFileForOrder\(/.test(page));
 check("Delete all's confirm sentence unchanged", page.includes('t("Delete all {count} files for {name}? This cannot be undone.")'));
 check("per-row confirm sentence unchanged", page.includes('t("Delete \\"{name}\\" from this order? This cannot be undone.")'));
-check("selection pruned when the list changes", /useEffect\(\(\) => \{\s*setSelectedFileIds\(previous => \{\s*const present = new Set\(files\.map\(file => file\.id\)\);/.test(page));
+// GN-01 (22 Oct 2026): pruned to the rows SHOWN (search included), per workspace (lib/studioflow/fileSelection.ts).
+check("selection pruned when the list changes", /useEffect\(\(\) => \{\s*setSelection\(previous => pruneFileSelection\(selectionForWorkspace\(previous, workspace\?\.id \?\? ""\), shownFileIds\)\);/.test(page));
 check("bar is sticky", /\.files-selection-bar \{[^}]*position: sticky;/.test(css));
 check("bar text: N selected · Delete selected · Clear selection", page.includes('t("{count} selected").replace("{count}", String(selectedCount))') && page.includes('t("Delete selected")') && page.includes('t("Clear selection")'));
 

@@ -14,6 +14,8 @@ export type NoteWorkspaceMember = {
   role: string;
   isOwner: boolean;
   suspended: boolean;
+  /** The profile photo the workspace's members map holds for them (GN-02); "" when none. */
+  photoURL?: string;
 };
 
 function asMap(value: unknown): Record<string, unknown> {
@@ -39,6 +41,7 @@ export function noteMembersFromCompany(companyData: Record<string, unknown> | nu
       role: "owner",
       isOwner: true,
       suspended: false,
+      photoURL: memberPhotoURL(entry),
     });
   }
   for (const [key, raw] of Object.entries(members)) {
@@ -52,9 +55,156 @@ export function noteMembersFromCompany(companyData: Record<string, unknown> | nu
       role: clean(entry.role) || "member",
       isOwner: false,
       suspended: Object.prototype.hasOwnProperty.call(suspended, uid),
+      photoURL: memberPhotoURL(entry),
     });
   }
   return Array.from(out.values());
+}
+
+/** Only an https address is used as a photo; anything else falls back to initials. */
+function memberPhotoURL(entry: Record<string, unknown>): string {
+  for (const key of ["photoURL", "accountPhotoURL", "avatarURL", "profilePhotoURL"]) {
+    const value = clean(entry[key]);
+    if (value && /^https:\/\//i.test(value)) return value;
+  }
+  return "";
+}
+
+// ---------------------------------------------------------------------------
+// GN-02 (22 Oct 2026): the small faces on a shared note's card, the same on
+// every app. One person per uid; the owner (when it is someone else's note),
+// then the accepted collaborators, then — on the owner's own copy only, where
+// the server keeps that list — the people invited who have not answered yet.
+// The signed-in person is never shown. A store-app e-mail that matches no
+// member still shows (as accepted, by e-mail) so nobody silently disappears.
+// Nothing here is cached or written: the faces are worked out from the note
+// and the members map on every render, so a revoked share loses its face the
+// moment the note's lists change.
+
+export type NoteAvatarStatus = "owner" | "accepted" | "pending";
+
+export type NoteAvatarPerson = {
+  /** uid, or "email:<address>" for an unmatched store-app e-mail. */
+  key: string;
+  uid: string;
+  email: string;
+  label: string;
+  /** What tells two people with the same name apart: the e-mail, or "ID abc123". */
+  identity: string;
+  photoURL: string;
+  initials: string;
+  /** 0–359, from the key: two people with the same initials get different colours. */
+  hue: number;
+  status: NoteAvatarStatus;
+};
+
+export const NOTE_AVATAR_MAX_SHOWN = 4;
+
+export function noteAvatarHue(key: string): number {
+  // FNV-1a 32-bit over the UTF-16 code units; the same numbers on every platform.
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < key.length; index += 1) {
+    hash ^= key.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash % 360;
+}
+
+export function noteAvatarInitials(label: string, email: string): string {
+  const words = label.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return (Array.from(words[0])[0] + Array.from(words[1])[0]).toUpperCase();
+  if (words.length === 1) return (Array.from(words[0])[0] ?? "").toUpperCase();
+  return (Array.from(email.trim())[0] ?? "?").toUpperCase();
+}
+
+function avatarPerson(key: string, uid: string, email: string, name: string, photoURL: string, status: NoteAvatarStatus): NoteAvatarPerson {
+  const cleanName = clean(name);
+  const mail = cleanEmail(email);
+  const label = cleanName || (mail ? mail.split("@")[0] : "") || (uid ? uid.slice(0, 6) : "?");
+  return {
+    key,
+    uid,
+    email: mail,
+    label,
+    identity: mail || (uid ? `ID ${uid.slice(0, 6)}` : ""),
+    photoURL: photoURL && /^https:\/\//i.test(photoURL) ? photoURL : "",
+    initials: noteAvatarInitials(cleanName, mail || uid),
+    hue: noteAvatarHue(key),
+    status,
+  };
+}
+
+/**
+ * Order inside a status group: label, then identity, lower-cased, by UTF-16
+ * code unit — not the locale's collation — so every app lists the same faces in
+ * the same order (Swift and Kotlin compare the same way).
+ */
+function compareAvatarPeople(a: NoteAvatarPerson, b: NoteAvatarPerson): number {
+  const order = (x: string, y: string) => (x < y ? -1 : x > y ? 1 : 0);
+  return order(a.label.toLowerCase(), b.label.toLowerCase()) || order(a.identity.toLowerCase(), b.identity.toLowerCase());
+}
+
+export function noteAvatarPeople(
+  note: Pick<StudioKeepNote, "ownerUserId" | "ownerEmail" | "ownerName" | "collaboratorUserIds" | "pendingCollaboratorUserIds" | "sharedWith" | "collaboratorEmails">,
+  members: NoteWorkspaceMember[],
+  selfUid: string,
+  selfEmail = ""
+): NoteAvatarPerson[] {
+  const byUid = new Map(members.map((member) => [member.uid, member]));
+  const me = clean(selfUid);
+  const myEmail = cleanEmail(selfEmail);
+  const owner = clean(note.ownerUserId);
+  const seen = new Set<string>();
+  const out: NoteAvatarPerson[] = [];
+  const push = (person: NoteAvatarPerson) => {
+    if (seen.has(person.key)) return;
+    seen.add(person.key);
+    out.push(person);
+  };
+  const fromUid = (uid: string, status: NoteAvatarStatus) => {
+    const member = byUid.get(uid);
+    const fallbackEmail = status === "owner" ? note.ownerEmail : "";
+    const fallbackName = status === "owner" ? note.ownerName : "";
+    return avatarPerson(uid, uid, member?.email || fallbackEmail || "", member?.name || fallbackName || "", member?.photoURL || "", status);
+  };
+
+  if (owner && owner !== me) push(fromUid(owner, "owner"));
+  const accepted = noteCollaboratorUids(note, members).filter((uid) => uid !== me && uid !== owner);
+  const acceptedPeople = accepted.map((uid) => fromUid(uid, "accepted"));
+  const legacy = noteUnmatchedCollaboratorEmails(note, members)
+    .filter((email) => email !== myEmail && email !== cleanEmail(note.ownerEmail))
+    .map((email) => avatarPerson(`email:${email}`, "", email, "", "", "accepted"));
+  [...acceptedPeople, ...legacy]
+    .sort(compareAvatarPeople)
+    .forEach(push);
+  const acceptedSet = new Set(accepted);
+  (note.pendingCollaboratorUserIds ?? [])
+    .map(clean)
+    .filter((uid) => uid && uid !== me && uid !== owner && !acceptedSet.has(uid))
+    .map((uid) => fromUid(uid, "pending"))
+    .sort(compareAvatarPeople)
+    .forEach(push);
+  return out;
+}
+
+/** The faces drawn on the card and how many more there are ("+N"). */
+export function noteAvatarStack(people: NoteAvatarPerson[], max = NOTE_AVATAR_MAX_SHOWN): { shown: NoteAvatarPerson[]; overflow: number } {
+  if (people.length <= max) return { shown: people, overflow: 0 };
+  // With an overflow chip the last slot goes to "+N", so the row never grows past `max` circles.
+  return { shown: people.slice(0, max - 1), overflow: people.length - (max - 1) };
+}
+
+/** English source of the status words; each app translates them through its own table. */
+export const NOTE_AVATAR_STATUS_TEXT: Record<NoteAvatarStatus, string> = {
+  owner: "Owner",
+  accepted: "Shared",
+  pending: "Invitation pending",
+};
+
+/** "Ayşe Kaya (ayse@x.com) — Invitation pending": what a screen reader and a tooltip say for one face. */
+export function noteAvatarPersonText(person: NoteAvatarPerson, translate: (text: string) => string = (text) => text): string {
+  const who = person.identity && person.identity !== person.label ? `${person.label} (${person.identity})` : person.label;
+  return `${who} — ${translate(NOTE_AVATAR_STATUS_TEXT[person.status])}`;
 }
 
 export function noteMemberLabel(member: Pick<NoteWorkspaceMember, "name" | "email" | "uid">): string {

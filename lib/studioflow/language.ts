@@ -7,6 +7,7 @@ import { NOTES_SHARING_TRANSLATIONS } from "./notesSharingTranslations";
 import { BOOT_RECOVERY_TRANSLATIONS } from "./bootRecoveryTranslations";
 import { WEB_SMALL_FIXES_TRANSLATIONS } from "./webSmallFixesTranslations";
 import { ORDER_LIST_VIEW_TRANSLATIONS } from "./orderListViewTranslations";
+import { FILES_NOTES_ACCOUNT_TRANSLATIONS } from "./filesNotesAccountTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -9146,6 +9147,9 @@ mergeIntoTranslations(WEB_SMALL_FIXES_TRANSLATIONS);
 
 // GN-11 (22 Oct 2026): the Orders list view. Merged last on purpose.
 mergeIntoTranslations(ORDER_LIST_VIEW_TRANSLATIONS);
+
+// GN-01 / GN-02 (22 Oct 2026): Files selection and drop, note sharing faces. Merged last on purpose.
+mergeIntoTranslations(FILES_NOTES_ACCOUNT_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {
