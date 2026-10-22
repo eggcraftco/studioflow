@@ -6,6 +6,7 @@ import { I18N_GAP_TRANSLATIONS } from "./screenGapTranslations";
 import { NOTES_SHARING_TRANSLATIONS } from "./notesSharingTranslations";
 import { BOOT_RECOVERY_TRANSLATIONS } from "./bootRecoveryTranslations";
 import { WEB_SMALL_FIXES_TRANSLATIONS } from "./webSmallFixesTranslations";
+import { FILES_NOTES_ACCOUNT_TRANSLATIONS } from "./filesNotesAccountTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -9136,6 +9137,9 @@ mergeIntoTranslations({
 // Web small fixes (17 Oct 2026): Team seat breakdown, the matrix's owner-approval
 // cell, the phone Schedule's Calendar File line. Merged last on purpose.
 mergeIntoTranslations(WEB_SMALL_FIXES_TRANSLATIONS);
+
+// GN-01 / GN-02 (22 Oct 2026): Files selection and drop, note sharing faces. Merged last on purpose.
+mergeIntoTranslations(FILES_NOTES_ACCOUNT_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

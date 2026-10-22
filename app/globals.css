@@ -34819,3 +34819,124 @@ body[data-studio-theme="dark"] .schedule-agenda-calendar {
     margin-left: 0;
   }
 }
+
+/* ---- GN-01 Files: select all shown + multi-file drop (22 Oct 2026) ------- */
+.files-select-shown {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.files-select-shown input { width: 18px; height: 18px; cursor: pointer; }
+.files-selection-scope { font-size: 12px; overflow-wrap: anywhere; }
+.files-drop-zone { transition: box-shadow 120ms ease, background-color 120ms ease; }
+.files-order-group { border-radius: 12px; padding: 4px; margin: -4px; }
+.files-drop-zone[data-drop-active="true"],
+.files-order-group[data-drop-active="true"] {
+  box-shadow: 0 0 0 2px var(--accent, #2563eb) inset;
+  background-color: color-mix(in srgb, var(--accent, #2563eb) 8%, transparent);
+}
+.files-drop-hint { font-size: 12.5px; }
+.files-staged-list { margin: 12px 0 0; padding-left: 18px; font-size: 13px; }
+.files-staged-list li { margin: 2px 0; overflow-wrap: anywhere; }
+.library-table th.library-tick,
+.library-table td.library-tick { width: 34px; text-align: center; }
+.library-table td.library-tick input,
+.library-table th.library-tick input { width: 17px; height: 17px; cursor: pointer; }
+@media (max-width: 640px) {
+  .files-selection-bar-row > .button { flex: 1 1 auto; }
+}
+
+/* ---- GN-02 Notes: faces of the people a note is shared with (22 Oct 2026) - */
+.note-avatars { --note-avatar-ring: #ffffff; display: grid; gap: 6px; min-width: 0; }
+body[data-studio-theme="dark"] .note-avatars { --note-avatar-ring: #1f2937; }
+.note-avatars-row { display: flex; align-items: center; flex-wrap: nowrap; min-width: 0; padding-inline-start: 6px; }
+.note-avatar {
+  position: relative;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  margin-inline-start: -6px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  overflow: visible;
+  color: #ffffff;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 0 0 2px var(--note-avatar-ring);
+}
+.note-avatar > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  object-fit: cover;
+  z-index: 1;
+}
+.note-avatar-initials { position: relative; z-index: 0; }
+.note-avatar.is-owner { box-shadow: 0 0 0 2px var(--note-avatar-ring), 0 0 0 3.5px #2d7bf4; }
+.note-avatar.is-pending { opacity: 0.6; box-shadow: none; outline: 2px dashed #6b7280; outline-offset: 1px; }
+.note-avatar-badge {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  z-index: 2;
+  font-size: 10px;
+  line-height: 1;
+  filter: saturate(0.6);
+}
+.note-avatar-more {
+  border: none;
+  cursor: pointer;
+  background: #e5e7eb;
+  color: #374151;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+body[data-studio-theme="dark"] .note-avatar-more { background: #374151; color: #e5e7eb; }
+.note-avatar-list-toggle {
+  margin-inline-start: 6px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.note-avatar-more:focus-visible,
+.note-avatar-list-toggle:focus-visible { outline: 2px solid #2d7bf4; outline-offset: 2px; }
+.note-avatars-list { margin: 0; padding: 6px 8px; list-style: none; font-size: 11.5px; border-radius: 8px; background: rgba(0, 0, 0, 0.05); }
+body[data-studio-theme="dark"] .note-avatars-list { background: rgba(255, 255, 255, 0.07); }
+.note-avatars-list li { overflow-wrap: anywhere; padding: 2px 0; }
+.note-avatars-list li.is-pending { opacity: 0.75; font-style: italic; }
+.note-avatars-status { color: #6b7280; }
+
+/* ---- GN-03 account block: one-tap Settings in the drawer (22 Oct 2026) ---- */
+.app-sidebar-settings-shortcut { display: none; }
+@media (max-width: 1023px) {
+  .app-sidebar-user { display: flex; align-items: center; gap: 6px; }
+  .app-sidebar-user > .app-sidebar-user-button { flex: 1 1 auto; min-width: 0; }
+  .app-sidebar-settings-shortcut {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .app-sidebar-settings-shortcut svg { width: 20px; height: 20px; }
+  .app-sidebar-settings-shortcut:hover { background: rgba(37, 99, 235, 0.07); }
+  .app-sidebar-settings-shortcut:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
+}

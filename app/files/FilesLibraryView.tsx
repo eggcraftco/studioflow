@@ -4,7 +4,7 @@
 // right-hand record panel. Everything here manipulates LINKS and metadata —
 // the bytes stay wherever their feature put them.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type DragEvent as ReactDragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import {
@@ -28,6 +28,20 @@ import { loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext 
 import { openSharedFile } from "@/lib/studioflow/fileMask";
 import { UploadQueuePanel } from "@/components/UploadQueuePanel";
 import { useUploadQueue } from "@/lib/studioflow/useUploadQueue";
+import {
+  dragCarriesFiles,
+  emptyFileSelection,
+  filesFromDrop,
+  pruneFileSelection,
+  runBulkSequentially,
+  selectedRows,
+  selectionForWorkspace,
+  selectionScope,
+  toggleAllShown,
+  toggleFileSelected,
+  type BulkRowOutcome,
+  type FileSelection
+} from "@/lib/studioflow/fileSelection";
 
 export type LibraryView =
   | "all" | "recent" | "sharedClients" | "internalOnly" | "unlinked"
@@ -140,6 +154,104 @@ export function FilesLibraryView({
     [files, selectedId]
   );
 
+  // GN-01 (22 Oct 2026): ticking several records. Separate from `selectedId`
+  // (the one record open in the side panel). Pruned to the rows this view and
+  // search show; another workspace starts empty (lib/studioflow/fileSelection.ts).
+  const [ticked, setTicked] = useState<FileSelection>(() => emptyFileSelection(workspace.id));
+  const [bulkFailures, setBulkFailures] = useState<BulkRowOutcome[]>([]);
+  const [dropActive, setDropActive] = useState(false);
+  const visibleIds = useMemo(() => visible.map(file => file.id), [visible]);
+  useEffect(() => {
+    setTicked(previous => pruneFileSelection(selectionForWorkspace(previous, workspace.id), visibleIds));
+  }, [visibleIds, workspace.id]);
+  // Another view is another scope: the last run's failure list belongs to the old one.
+  useEffect(() => {
+    setBulkFailures([]);
+  }, [view]);
+  const tickedRows = selectedRows(ticked, visible);
+  const tickScope = selectionScope(ticked, visibleIds);
+  const inTrash = view === "trash";
+  const canTickRows = canEdit && (inTrash || canDelete);
+
+  async function runBulk(kind: "trash" | "restore" | "delete") {
+    const rows = tickedRows;
+    if (rows.length === 0 || busy) return;
+    const count = String(rows.length);
+    if (kind === "trash") {
+      const linked = rows.filter(file => file.links.length > 1).length;
+      const question = t("Move {count} files to trash? They are hidden everywhere until restored.").replace("{count}", count) +
+        (linked > 0 ? "\n" + t("{linked} of them are linked to more than one record.").replace("{linked}", String(linked)) : "");
+      if (!window.confirm(question)) return;
+    }
+    if (kind === "delete" && !window.confirm(
+      t("Delete {count} file records permanently? Files uploaded through the library are also removed from storage; indexed files keep their original storage.").replace("{count}", count)
+    )) return;
+    setBusy(true);
+    setNotice("");
+    setBulkFailures([]);
+    try {
+      const outcome = await runBulkSequentially(
+        rows,
+        file => file.displayName || file.fileName,
+        file => kind === "trash"
+          ? trashLibraryFile(workspace, file.id)
+          : kind === "restore"
+            ? restoreLibraryFile(workspace, file.id)
+            : deleteLibraryFile(workspace, file.id),
+        "Could not be completed."
+      );
+      setBulkFailures(outcome.failed);
+      const doneText = kind === "trash"
+        ? t("Moved {count} files to trash.")
+        : kind === "restore"
+          ? t("Restored {count} files.")
+          : t("Deleted {count} files.");
+      setNotice(outcome.failed.length > 0
+        ? `${outcome.succeeded > 0 ? doneText.replace("{count}", String(outcome.succeeded)) + " " : ""}${t("{failed} of {total} files could not be changed.").replace("{failed}", String(outcome.failed.length)).replace("{total}", String(outcome.requested))}`
+        : doneText.replace("{count}", String(outcome.succeeded)));
+      // The rows that failed stay ticked so they can be tried again.
+      const failedIds = new Set(outcome.failed.map(row => row.id));
+      setTicked(previous => ({ workspaceId: previous.workspaceId, ids: new Set([...previous.ids].filter(id => failedIds.has(id))) }));
+      if (selectedId && !failedIds.has(selectedId) && rows.some(file => file.id === selectedId)) setSelectedId("");
+      await reload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function dropProps() {
+    if (!canEdit || inTrash) return {};
+    return {
+      "data-drop-active": dropActive ? "true" : undefined,
+      onDragEnter: (event: ReactDragEvent) => {
+        if (!dragCarriesFiles(event.dataTransfer)) return;
+        event.preventDefault();
+        setDropActive(true);
+      },
+      onDragOver: (event: ReactDragEvent) => {
+        if (!dragCarriesFiles(event.dataTransfer)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+      },
+      onDragLeave: (event: ReactDragEvent) => {
+        const next = event.relatedTarget as Node | null;
+        if (next && (event.currentTarget as Node).contains(next)) return;
+        setDropActive(false);
+      },
+      onDrop: (event: ReactDragEvent) => {
+        if (!dragCarriesFiles(event.dataTransfer)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setDropActive(false);
+        const { files: dropped, skippedFolders } = filesFromDrop(event.dataTransfer);
+        setNotice(skippedFolders > 0
+          ? t("{count} folders were left out. Drop the files inside them instead.").replace("{count}", String(skippedFolders))
+          : "");
+        if (dropped.length > 0) uploads.enqueue(dropped, { kind: "new" });
+      }
+    };
+  }
+
   // Library uploads and new versions go through the queue: measured progress
   // per file, cancel, and a retry that lands on the same storage path (so the
   // server's sha1(path) record is the same one). The list reloads after each.
@@ -180,7 +292,7 @@ export function FilesLibraryView({
 
   return (
     <div className={selected ? "library-body has-panel" : "library-body"}>
-      <div className="card library-list" style={{ padding: 18 }}>
+      <div className="card library-list files-drop-zone" style={{ padding: 18 }} {...dropProps()}>
         <div className="library-toolbar">
           <input
             className="input"
@@ -219,7 +331,70 @@ export function FilesLibraryView({
           ) : null}
         </div>
 
+        {canEdit && !inTrash ? (
+          <p className="muted-copy files-drop-hint" style={{ margin: "0 0 10px" }}>
+            {t("Drop several files here to add them to the library.")}
+          </p>
+        ) : null}
         {notice ? <p className="inventory-notice">{t(notice)}</p> : null}
+        {canTickRows && (tickedRows.length > 0 || bulkFailures.length > 0) ? (
+          <div className="files-selection-bar" role="region" aria-label={t("Selected files")} aria-live="polite">
+            <div className="files-selection-bar-row">
+              <strong>{t("{count} selected").replace("{count}", String(tickedRows.length))}</strong>
+              <span className="muted-copy files-selection-scope">
+                {search.trim()
+                  ? t("Only files shown by the current search are included.")
+                  : t("Only files in this view are included.")}
+              </span>
+              <span style={{ flex: 1 }} />
+              {inTrash ? (
+                <>
+                  <button className="button secondary" type="button" disabled={busy || tickedRows.length === 0} onClick={() => void runBulk("restore")}>
+                    {t("Restore selected")}
+                  </button>
+                  {canDelete ? (
+                    <button
+                      className="button"
+                      type="button"
+                      style={{ background: "var(--danger)", borderColor: "var(--danger)" }}
+                      disabled={busy || tickedRows.length === 0}
+                      onClick={() => void runBulk("delete")}
+                    >
+                      {t("Delete selected permanently")}
+                    </button>
+                  ) : null}
+                </>
+              ) : (
+                <button
+                  className="button"
+                  type="button"
+                  style={{ background: "var(--danger)", borderColor: "var(--danger)" }}
+                  disabled={busy || tickedRows.length === 0}
+                  onClick={() => void runBulk("trash")}
+                >
+                  {t("Move selected to trash")}
+                </button>
+              )}
+              <button
+                className="button secondary"
+                type="button"
+                disabled={busy}
+                onClick={() => { setTicked(emptyFileSelection(workspace.id)); setBulkFailures([]); }}
+              >
+                {t("Clear selection")}
+              </button>
+            </div>
+            {bulkFailures.length > 0 ? (
+              <ul className="files-selection-failures">
+                {bulkFailures.map(row => (
+                  <li key={row.id}>
+                    <strong>{row.label}</strong>{" — "}{row.message ? t(row.message) : t("Could not be completed.")}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null}
         <UploadQueuePanel
           items={uploads.items}
           onCancel={uploads.cancel}
@@ -242,6 +417,23 @@ export function FilesLibraryView({
           <table className="inventory-table library-table">
             <thead>
               <tr>
+                {canTickRows ? (
+                  <th className="library-tick">
+                    <input
+                      type="checkbox"
+                      aria-label={(search.trim()
+                        ? t("Select all {count} files matching the search")
+                        : t("Select all {count} files in this view")).replace("{count}", String(visibleIds.length))}
+                      title={(search.trim()
+                        ? t("Select all {count} files matching the search")
+                        : t("Select all {count} files in this view")).replace("{count}", String(visibleIds.length))}
+                      checked={tickScope === "all"}
+                      ref={element => { if (element) element.indeterminate = tickScope === "some"; }}
+                      disabled={busy}
+                      onChange={() => setTicked(previous => toggleAllShown(previous, visibleIds))}
+                    />
+                  </th>
+                ) : null}
                 <th>{t("File")}</th>
                 <th>{t("Links")}</th>
                 <th>{t("Visibility")}</th>
@@ -256,6 +448,20 @@ export function FilesLibraryView({
                   className={selectedId === file.id ? "is-selected" : undefined}
                   onClick={() => setSelectedId(current => current === file.id ? "" : file.id)}
                 >
+                  {canTickRows ? (
+                    <td className="library-tick" onClick={event => event.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        aria-label={t("Select {name}").replace("{name}", file.displayName || file.fileName)}
+                        checked={ticked.ids.has(file.id)}
+                        disabled={busy}
+                        onChange={event => {
+                          const on = event.target.checked;
+                          setTicked(previous => toggleFileSelected(previous, file.id, on));
+                        }}
+                      />
+                    </td>
+                  ) : null}
                   <td>
                     <strong>{file.displayName}</strong>
                     <span className="inventory-sub">{SOURCE_LABEL[file.source] ? t(SOURCE_LABEL[file.source]) : file.source}{file.versions.length > 1 ? ` · v${file.activeVersionIndex + 1}/${file.versions.length}` : ""}</span>

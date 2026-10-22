@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type DragEvent as ReactDragEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -51,6 +51,19 @@ import { FilesLibraryView, type LibraryView } from "./FilesLibraryView";
 import { maskFileUrl, openSharedFile } from "@/lib/studioflow/fileMask";
 import { UploadQueuePanel } from "@/components/UploadQueuePanel";
 import { useUploadQueue } from "@/lib/studioflow/useUploadQueue";
+import {
+  dragCarriesFiles,
+  emptyFileSelection,
+  filesFromDrop,
+  pruneFileSelection,
+  selectedRows,
+  selectionForWorkspace,
+  selectionScope,
+  toggleAllShown,
+  toggleFileSelected as toggleSelectionId,
+  uploadBatchRefusal,
+  type FileSelection
+} from "@/lib/studioflow/fileSelection";
 
 function formatDate(date: Date | null, language: string) {
   if (!date) return "-";
@@ -260,7 +273,14 @@ export default function FilesPage() {
   // (or a whole order at once) and go in one confirmed call to the server's
   // deleteClientFilesBatch; every refused row comes back by name. The ids are
   // the list rows' ids (orderId + fileId), so a refresh prunes what is gone.
-  const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(() => new Set());
+  // GN-01 (22 Oct 2026): the selection is pruned to the rows on screen (search,
+  // reload) and belongs to one workspace, so a bulk action only ever touches
+  // what is ticked AND shown (lib/studioflow/fileSelection.ts).
+  const [selection, setSelection] = useState<FileSelection>(() => emptyFileSelection());
+  const selectedFileIds = selection.ids;
+  // A drag with files over the upload card ("upload") or an order's group (its id).
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [dropNotice, setDropNotice] = useState<string | null>(null);
   const [deletingSelection, setDeletingSelection] = useState(false);
   const [selectionFailures, setSelectionFailures] = useState<ClientFileBatchDeleteRow[]>([]);
   // "classic" is the original per-order upload/browse experience; everything
@@ -298,25 +318,19 @@ export default function FilesPage() {
   }
 
   function toggleFileSelected(fileId: string, selected: boolean) {
-    setSelectedFileIds(previous => {
-      const next = new Set(previous);
-      if (selected) next.add(fileId); else next.delete(fileId);
-      return next;
-    });
+    setSelection(previous => toggleSelectionId(previous, fileId, selected));
   }
 
   function toggleOrderSelected(group: FilesByOrder, selected: boolean) {
-    setSelectedFileIds(previous => {
-      const next = new Set(previous);
-      for (const file of group.files) {
-        if (selected) next.add(file.id); else next.delete(file.id);
-      }
+    setSelection(previous => {
+      let next = previous;
+      for (const file of group.files) next = toggleSelectionId(next, file.id, selected);
       return next;
     });
   }
 
   function clearSelection() {
-    setSelectedFileIds(new Set());
+    setSelection(previous => emptyFileSelection(previous.workspaceId));
     setSelectionFailures([]);
   }
 
@@ -329,10 +343,15 @@ export default function FilesPage() {
       setActionError("Client Files delete is available to editable Pro and Team workspace members.");
       return;
     }
-    const chosen = files.filter(file => selectedFileIds.has(file.id));
+    // Ticked AND shown: a row the current search hides is never deleted from here.
+    const chosen = selectedRows(selection, filteredSortedFiles);
     if (chosen.length === 0) return;
+    const orderCount = new Set(chosen.map(file => file.orderId)).size;
     const confirmed = window.confirm(
-      t("Delete {count} files? This cannot be undone.").replace("{count}", String(chosen.length))
+      t("Delete {count} files? This cannot be undone.").replace("{count}", String(chosen.length)) +
+        "\n" + t("From {orders} orders in {workspace}.")
+          .replace("{orders}", String(orderCount))
+          .replace("{workspace}", workspace.name || t("this workspace"))
     );
     if (!confirmed) return;
 
@@ -350,7 +369,7 @@ export default function FilesPage() {
       setSelectionFailures(failedRows);
       // Keep only the rows that did not go, so the person can retry or clear.
       const failedIds = new Set(failedRows.map(row => chosen.find(file => file.orderId === row.orderId && file.fileId === row.fileId)?.id ?? ""));
-      setSelectedFileIds(new Set([...selectedFileIds].filter(id => failedIds.has(id))));
+      setSelection(previous => ({ workspaceId: previous.workspaceId, ids: new Set([...previous.ids].filter(id => failedIds.has(id))) }));
       if (failedRows.length > 0) {
         setActionStatus(null);
         setActionError(
@@ -418,6 +437,25 @@ export default function FilesPage() {
     if (!loading && !user) router.replace("/login");
   }, [loading, router, user]);
 
+  // Files dropped anywhere else on this screen must not make the browser open
+  // them in the tab (which would leave the page and its upload queue). Only a
+  // drop zone takes them; elsewhere the drop is refused.
+  useEffect(() => {
+    function refuseStrayFileDrop(event: DragEvent) {
+      // A drop zone already took it (its handler prevented the default).
+      if (event.defaultPrevented || !dragCarriesFiles(event.dataTransfer)) return;
+      event.preventDefault();
+      if (event.type === "dragover" && event.dataTransfer) event.dataTransfer.dropEffect = "none";
+      if (event.type === "drop") setDropTarget(null);
+    }
+    window.addEventListener("dragover", refuseStrayFileDrop);
+    window.addEventListener("drop", refuseStrayFileDrop);
+    return () => {
+      window.removeEventListener("dragover", refuseStrayFileDrop);
+      window.removeEventListener("drop", refuseStrayFileDrop);
+    };
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     const uid = user.uid;
@@ -479,14 +517,14 @@ export default function FilesPage() {
   }, [files, fileSearch, fileSort]);
 
   const groupedFiles = useMemo(() => groupFilesByOrder(filteredSortedFiles), [filteredSortedFiles]);
+  const shownFileIds = useMemo(() => filteredSortedFiles.map(file => file.id), [filteredSortedFiles]);
+  // A reload, a delete elsewhere or a new search drops the rows no longer
+  // shown; another workspace starts with nothing selected.
   useEffect(() => {
-    setSelectedFileIds(previous => {
-      const present = new Set(files.map(file => file.id));
-      const kept = [...previous].filter(id => present.has(id));
-      return kept.length === previous.size ? previous : new Set(kept);
-    });
-  }, [files]);
-  const selectedCount = selectedFileIds.size;
+    setSelection(previous => pruneFileSelection(selectionForWorkspace(previous, workspace?.id ?? ""), shownFileIds));
+  }, [shownFileIds, workspace?.id]);
+  const selectedCount = selectedRows(selection, filteredSortedFiles).length;
+  const shownSelectionScope = selectionScope(selection, shownFileIds);
   const canUseClientFiles = Boolean(workspace?.entitlements.features.client_files);
   const previewFiles = useMemo(
     () => files.filter(file => canUseClientFiles && Boolean(file.downloadURL)),
@@ -551,36 +589,101 @@ export default function FilesPage() {
     setUploadError(null);
     setUploadStatus(null);
 
-    if (!canUploadClientFiles) {
-      setUploadError("Client Files upload is available to editable Pro and Team workspace members.");
+    const refusal = queueUploadsForOrder(selectedFiles, selectedOrderId);
+    if (refusal) {
+      setUploadError(refusal);
       return;
     }
-    if (!selectedOrderId) {
-      setUploadError("Choose an order before uploading.");
-      return;
-    }
-    if (selectedFiles.length === 0) {
-      setUploadError("Choose a file to upload.");
-      return;
-    }
-    if (!uploadPolicyAllows(requireUploadPolicyAcceptance, browserUploadPolicyAcceptance)) {
-      setUploadError("Accept the upload policy in this browser before uploading.");
-      return;
-    }
-    const tooLarge = selectedFiles.filter(file => file.size > maxUploadSizeMB * 1024 * 1024);
-    if (tooLarge.length > 0) {
-      setUploadError(`This file is larger than the ${maxUploadSizeMB} MB workspace upload limit.`);
-      return;
-    }
-
-    uploadQueue.enqueue(selectedFiles, {
-      orderId: selectedOrderId,
-      policy: uploadPolicyStamp(requireUploadPolicyAcceptance, browserUploadPolicyAcceptance),
-      maxSizeMB: maxUploadSizeMB
-    });
     setSelectedFiles([]);
     setSelectedOrderId("");
     setFileInputKey(value => value + 1);
+  }
+
+  /**
+   * One path for a pick, a drop on the upload card and a drop on an order's
+   * group: the same role/plan, order, policy and size checks, then the queue
+   * (which skips a file already queued or moving for that order, so a double
+   * drop is one upload). The order is fixed here, at queue time.
+   */
+  function queueUploadsForOrder(filesToQueue: File[], orderId: string): string | null {
+    const refusal = uploadBatchRefusal({
+      canUpload: canUploadClientFiles,
+      orderId,
+      orderExists: orders.some(order => order.id === orderId),
+      files: filesToQueue,
+      maxSizeMB: maxUploadSizeMB,
+      policyAllows: uploadPolicyAllows(requireUploadPolicyAcceptance, browserUploadPolicyAcceptance)
+    });
+    if (refusal) return refusal;
+    uploadQueue.enqueue(filesToQueue, {
+      orderId,
+      policy: uploadPolicyStamp(requireUploadPolicyAcceptance, browserUploadPolicyAcceptance),
+      maxSizeMB: maxUploadSizeMB
+    });
+    return null;
+  }
+
+  // --- Dropping files (GN-01) ---------------------------------------------
+  function dropZoneProps(target: string, onFiles: (dropped: File[]) => void) {
+    return {
+      "data-drop-active": dropTarget === target ? "true" : undefined,
+      onDragEnter: (event: ReactDragEvent) => {
+        if (!canUploadClientFiles || !dragCarriesFiles(event.dataTransfer)) return;
+        event.preventDefault();
+        setDropTarget(target);
+      },
+      onDragOver: (event: ReactDragEvent) => {
+        if (!canUploadClientFiles || !dragCarriesFiles(event.dataTransfer)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        if (dropTarget !== target) setDropTarget(target);
+      },
+      onDragLeave: (event: ReactDragEvent) => {
+        const next = event.relatedTarget as Node | null;
+        if (next && (event.currentTarget as Node).contains(next)) return;
+        setDropTarget(current => (current === target ? null : current));
+      },
+      onDrop: (event: ReactDragEvent) => {
+        if (!dragCarriesFiles(event.dataTransfer)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setDropTarget(null);
+        if (!canUploadClientFiles) return;
+        const { files: dropped, skippedFolders } = filesFromDrop(event.dataTransfer);
+        setDropNotice(skippedFolders > 0
+          ? t("{count} folders were left out. Drop the files inside them instead.").replace("{count}", String(skippedFolders))
+          : null);
+        if (dropped.length > 0) onFiles(dropped);
+      }
+    };
+  }
+
+  function stageDroppedFiles(dropped: File[]) {
+    // The upload card: the files wait for an order and the Upload button,
+    // exactly like a pick from the file input.
+    setUploadError(null);
+    setUploadStatus(null);
+    setSelectedFiles(dropped);
+    if (selectedOrderId) {
+      setUploadStatus(t("{count} files ready. Press Upload to send them to the chosen order.").replace("{count}", String(dropped.length)));
+    } else {
+      setUploadStatus(t("{count} files ready. Choose the order, then press Upload.").replace("{count}", String(dropped.length)));
+    }
+  }
+
+  function uploadDroppedFilesToOrder(group: FilesByOrder, dropped: File[]) {
+    setActionError(null);
+    setActionStatus(null);
+    const refusal = queueUploadsForOrder(dropped, group.orderId);
+    if (refusal) {
+      setActionError(refusal);
+      return;
+    }
+    setActionStatus(
+      t("{count} files are uploading to {name}.")
+        .replace("{count}", String(dropped.length))
+        .replace("{name}", group.customerName || t("this order"))
+    );
   }
 
   async function handleRename(file: ClientFileListItem) {
@@ -707,8 +810,17 @@ export default function FilesPage() {
       ) : null}
 
       {workspace && canUseClientFiles ? (
-        <section className="card" style={{ padding: 22, marginBottom: 18 }}>
+        <section
+          className="card files-drop-zone"
+          style={{ padding: 22, marginBottom: 18 }}
+          {...(canUploadClientFiles ? dropZoneProps("upload", stageDroppedFiles) : {})}
+        >
           <CardTitle icon="files" eyebrow={t("Upload")} title={t("Add a client file")} />
+          {canUploadClientFiles ? (
+            <p className="muted-copy files-drop-hint" style={{ margin: "0 0 12px" }}>
+              {t("Drop several files here, or onto an order below to upload straight to it.")}
+            </p>
+          ) : null}
 
           {canUploadClientFiles ? (
             <>
@@ -788,6 +900,16 @@ export default function FilesPage() {
             </p>
           )}
 
+          {selectedFiles.length > 0 && !uploading ? (
+            <ul className="files-staged-list" aria-label={t("Files ready to upload")}>
+              {selectedFiles.map(file => (
+                <li key={`${file.name}:${file.size}:${file.lastModified}`}>
+                  <strong>{file.name}</strong> <span className="muted-copy">{clientFileSizeLabel(file.size)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {dropNotice ? <p style={{ color: "var(--muted)", margin: "10px 0 0", fontWeight: 700 }}>{dropNotice}</p> : null}
           {uploadStatus ? <p style={{ color: "var(--muted)", margin: "14px 0 0", fontWeight: 800 }}>{t(uploadStatus)}</p> : null}
           {uploadError ? <p style={{ color: "var(--danger)", margin: "14px 0 0", fontWeight: 800 }}>{t(uploadError)}</p> : null}
           <UploadQueuePanel
@@ -834,10 +956,35 @@ export default function FilesPage() {
           </div>
         </div>
 
+        {canDeleteClientFiles && filteredSortedFiles.length > 0 ? (
+          <label className="files-select-shown">
+            <input
+              type="checkbox"
+              checked={shownSelectionScope === "all"}
+              ref={element => { if (element) element.indeterminate = shownSelectionScope === "some"; }}
+              disabled={deletingSelection}
+              onChange={() => setSelection(previous => toggleAllShown(previous, shownFileIds))}
+            />
+            <span>
+              {fileSearch.trim()
+                ? t("Select all {count} files matching the search").replace("{count}", String(shownFileIds.length))
+                : t("Select all {count} files in this list").replace("{count}", String(shownFileIds.length))}
+            </span>
+          </label>
+        ) : null}
+
         {canDeleteClientFiles && (selectedCount > 0 || selectionFailures.length > 0) ? (
-          <div className="files-selection-bar" role="region" aria-label={t("Selected files")}>
+          <div className="files-selection-bar" role="region" aria-label={t("Selected files")} aria-live="polite">
             <div className="files-selection-bar-row">
               <strong>{t("{count} selected").replace("{count}", String(selectedCount))}</strong>
+              <span className="muted-copy files-selection-scope">
+                {fileSearch.trim()
+                  ? t("Only files shown by the current search are included.")
+                  : t("Across {orders} orders in this workspace.").replace(
+                      "{orders}",
+                      String(new Set(selectedRows(selection, filteredSortedFiles).map(file => file.orderId)).size)
+                    )}
+              </span>
               <span style={{ flex: 1 }} />
               <button
                 className="button"
@@ -872,7 +1019,15 @@ export default function FilesPage() {
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
             {groupedFiles.map(group => (
-              <div key={group.orderId}>
+              <div
+                key={group.orderId}
+                className="files-order-group"
+                role="group"
+                {...(canUploadClientFiles ? dropZoneProps(group.orderId, dropped => uploadDroppedFilesToOrder(group, dropped)) : {})}
+                aria-label={canUploadClientFiles
+                  ? t("Files for {name}. Drop files here to upload them to this order.").replace("{name}", group.customerName || t("Order"))
+                  : undefined}
+              >
                 <div
                   style={{
                     display: "flex",
