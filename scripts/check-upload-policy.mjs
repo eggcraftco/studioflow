@@ -318,7 +318,7 @@ expect("preview image object: same stamp keys", orders.includes("...uploadPolicy
 // ---------------------------------------------------------------------------
 const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português",
   "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
-const tables = ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "trackingEmailTranslations", "screenGapTranslations"]
+const tables = ["language", ...[...fs.readFileSync(path.join(root, "lib/studioflow/language.ts"), "utf8").matchAll(/from "\.\/([A-Za-z]+)"/g)].map((m) => m[1])] /* every table language.ts merges; the fixed list went stale (22 Oct 2026) */
   .filter((name) => exists(`lib/studioflow/${name}.ts`));
 for (const name of tables) compile(`lib/studioflow/${name}.ts`, name);
 const { studioT } = await import(pathToFileURL(path.join(tmp, "language.mjs")).href);

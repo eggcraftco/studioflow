@@ -20,7 +20,8 @@ const here = path.dirname(new URL(import.meta.url).pathname);
 const webRoot = path.resolve(here, "..");
 const repoRoot = path.resolve(webRoot, "..");
 const mirror = path.join(webRoot, "lib", "studioflow", "financeEngine.ts");
-const vectorsPath = path.join(repoRoot, "functions", "finance", "vectors.json");
+// FINANCE_VECTORS points at the server's vectors.json when the web tree is checked out alone (22 Oct 2026).
+const vectorsPath = process.env.FINANCE_VECTORS || path.join(repoRoot, "functions", "finance", "vectors.json");
 
 const outDir = mkdtempSync(path.join(tmpdir(), "nivadesk-finance-"));
 try {

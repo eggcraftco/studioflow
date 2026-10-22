@@ -36,7 +36,7 @@ const LABEL = optionMatch?.[1] ?? "", DESCRIPTION = (optionMatch?.[2] ?? "").rep
 check("label is Team Schedule", LABEL === "Team Schedule");
 check("permission matrix row", /\{ key: "teamSchedule", label: "Team Schedule", value: column =>/.test(settings));
 check("matrix workflow column: teamSchedule false", /access\.schedule = true;\n\s*access\.teamSchedule = false;/.test(settings));
-check("client role defaults: workflow → false", /function defaultWorkspaceAccessForRole[\s\S]{0,600}access\.teamSchedule = false;/.test(firestore));
+check("client role defaults: workflow → false", /function defaultWorkspaceAccessForRole[\s\S]{0,600}=== "workflow"\) \{[\s\S]{0,900}?access\.teamSchedule = false;/.test(firestore));
 check("client assigned-only scope helper used on member + custom role paths", (firestore.match(/enforceTeamScheduleScope\(/g) || []).length >= 3);
 check("editor: turning Assigned Projects Only on turns Team Schedule off", editor.includes('key === "assignedProjectsOnly" && !currentValue ? { teamSchedule: false } : {}'));
 

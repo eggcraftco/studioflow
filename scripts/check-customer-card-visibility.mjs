@@ -86,10 +86,15 @@ expect("a repair-type layout hid it", layoutFromWorkspaceSettings(typeHid, "memb
 const screen = fs.readFileSync(path.join(root, "app/orders/OrderDetailContent.tsx"), "utf8");
 const has = (name, re) => { checks += 1; if (!re.test(screen)) failures.push(`OrderDetailContent.tsx: ${name}`); };
 const count = (re) => (screen.match(re) || []).length;
-has("Customer, Invoice Items and Customer Portal must ride cardCustomer",
-  /customerPortal: "cardCustomer",[\s\S]{0,80}customer: "cardCustomer",\s*invoiceItems: "cardCustomer",/);
+// 8 Oct 2026: the card -> access-key map moved to lib/studioflow/orderActionCards.ts (one map
+// for the order screen, the Actions menu and Customize); the gate itself is unchanged.
+{
+  const cards = fs.readFileSync(path.join(root, "lib/studioflow/orderActionCards.ts"), "utf8");
+  checks += 1;
+  if (!/customerPortal: \["cardCustomer"\],[\s\S]{0,80}customer: \["cardCustomer"\],\s*invoiceItems: \["cardCustomer"\],/.test(cards)) failures.push("orderActionCards.ts: Customer, Invoice Items and Customer Portal must ride cardCustomer");
+}
 has("canShowOrderCard must ask the card's access key before anything else",
-  /function canShowOrderCard\(cardId: OrderDetailCardId\) \{\s*if \(!workspaceAccessAllows\(workspace\.memberAccess, CARD_ACCESS_KEYS\[cardId\]\)\) return false;\s*if \(cardId === "financial"\) return canSeeFinance;/);
+  /function canShowOrderCard\(cardId: OrderDetailCardId\) \{[\s\S]{0,400}?if \(!orderActionCardVisible\(workspace\.memberAccess, cardId\)\) return false;\s*if \(cardId === "financial"\) return canSeeFinance;/);
 has("the Invoice Items editor must hide prices without Financial Info", /showMoney=\{canSeeFinance\}\s*onSave=\{items => saveDetailsPatch\(\{ lineItems: items \}, "Invoice items"\)\}/);
 has("the Invoice Items card's Invoice PDF button must be inside canSeeFinance",
   /\{canSeeFinance \? \(\s*<button\s*type="button"\s*onClick=\{\(\) => void handleExportInvoice\(\)\}/);

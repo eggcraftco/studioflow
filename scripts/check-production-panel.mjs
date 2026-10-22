@@ -169,17 +169,11 @@ for (const [file, source] of [["ProductionContent.tsx panel", panel], ["[orderId
     }
   }
 }
-const importsFixed = (js) => js
-  .replace(/from "\.\/macTranslations"/g, 'from "./macTranslations.mjs"')
-  .replace(/from "\.\/settingsContentTranslations"/g, 'from "./settingsContentTranslations.mjs"')
-  .replace(/from "\.\/shippingTranslations"/g, 'from "./shippingTranslations.mjs"')
-  .replace(/from "\.\/trackingEmailTranslations"/g, 'from "./trackingEmailTranslations.mjs"')
-  .replace(/from "\.\/screenGapTranslations"/g, 'from "./screenGapTranslations.mjs"');
-compile("lib/studioflow/macTranslations.ts", "macTranslations.mjs", importsFixed);
-compile("lib/studioflow/settingsContentTranslations.ts", "settingsContentTranslations.mjs", importsFixed);
-compile("lib/studioflow/shippingTranslations.ts", "shippingTranslations.mjs", importsFixed);
-compile("lib/studioflow/trackingEmailTranslations.ts", "trackingEmailTranslations.mjs", importsFixed);
-compile("lib/studioflow/screenGapTranslations.ts", "screenGapTranslations.mjs", importsFixed);
+// Every table language.ts merges, read from language.ts itself (the fixed list went stale, 22 Oct 2026).
+const importsFixed = (js) => js.replace(/from "\.\/([A-Za-z]+)"/g, 'from "./$1.mjs"');
+for (const m of fs.readFileSync(path.join(root, "lib/studioflow/language.ts"), "utf8").matchAll(/from "\.\/([A-Za-z]+)"/g)) {
+  compile(`lib/studioflow/${m[1]}.ts`, `${m[1]}.mjs`, importsFixed);
+}
 const languageFile = compile("lib/studioflow/language.ts", "language.mjs", importsFixed);
 const { studioT } = await import(pathToFileURL(languageFile).href);
 expect("studioT answers English as is", studioT("Open order", "English"), "Open order");

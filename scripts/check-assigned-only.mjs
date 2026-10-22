@@ -106,7 +106,8 @@ ok("Quick actions card renders every size from the filtered list", (bodies.match
 // No other create surface: the quick-action event has exactly these raisers and one listener.
 const raisers = ["app/home/page.tsx", "app/schedule/page.tsx", "app/orders/page.tsx"];
 for (const rel of raisers) ok(`${rel} raises the order quick action (funnelled into handleAddOrder)`, read(rel).includes('dispatchQuickAction("order"'));
-ok("AppShell is the only listener for the order quick action", shell.includes('useQuickActionEvent("order", (payload) => handleAddOrder(payload))'));
+// N08 (Oct 2026): the listener holds a request that arrives before the workspace and opens it once it loads; still handleAddOrder.
+ok("AppShell is the only listener for the order quick action", /useQuickActionEvent\("order", \(payload\) => \{[\s\S]{0,200}?handleAddOrder\(payload\);/.test(shell) && /pendingQuickCreate\.current = null;\s*handleAddOrder\(payload\);/.test(shell));
 function walk(dir, out = []) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
@@ -129,7 +130,7 @@ ok("Created Date row is read-only without canEditDates", detail.includes('disabl
 ok("details write refuses a date patch without canEditDates", detail.includes("if (!canEditDates && (patch.paymentDate !== undefined || patch.deliveryTime !== undefined || patch.deliveryDueDate !== undefined)) {\n      setInlineError(ASSIGNED_ONLY_CANNOT_CHANGE_DATES_MESSAGE);"));
 ok("edit modal due-date input is disabled without canEditOrderDates", detail.includes("disabled={saving || !canEditOrderDates(workspace)}"));
 ok("edit modal strips deliveryDueDate from the payload without canEditOrderDates", detail.includes("...(canEditOrderDates(workspace) ? {} : { deliveryDueDate: undefined }),"));
-ok("InlineValueRow keeps the lock styling for a disabled row", detail.includes('title={disabled ? "This field is read-only for your role." : "Click to edit"}') && detail.includes("disabled={disabled || saving}"));
+ok("InlineValueRow keeps the lock styling for a disabled row", detail.includes('title={t(disabled ? "This field is read-only for your role." : "Click to edit")}') && detail.includes("disabled={disabled || saving}"));
 ok("Schedule drag (paymentDate + deliveryTime) is gated by canEditOrderDates", schedule.includes("canEditSchedule = Boolean(workspace && canEditOrderStatusForRole(workspace.role) && canEditOrderDates(workspace))"));
 
 // 4. Server reasons → translated sentences.

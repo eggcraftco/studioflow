@@ -31,7 +31,7 @@ const compile = (rel, name) => {
   fs.writeFileSync(path.join(tmp, `${name}.mjs`), js);
 };
 compile("lib/studioflow/planOrderUsage.ts", "planOrderUsage");
-for (const name of ["language", "macTranslations", "settingsContentTranslations", "shippingTranslations", "trackingEmailTranslations", "screenGapTranslations"]) compile(`lib/studioflow/${name}.ts`, name);
+for (const name of ["language", ...[...fs.readFileSync(path.join(root, "lib/studioflow/language.ts"), "utf8").matchAll(/from "\.\/([A-Za-z]+)"/g)].map((m) => m[1])] /* every table language.ts merges; the fixed list went stale (22 Oct 2026) */) compile(`lib/studioflow/${name}.ts`, name);
 const usage = await import(pathToFileURL(path.join(tmp, "planOrderUsage.mjs")).href);
 const { studioT } = await import(pathToFileURL(path.join(tmp, "language.mjs")).href);
 const { isPlanActiveOrder, tallyPlanOrders, combinePlanOrderCounts, formatActiveOrdersLine, formatTotalOrdersLine, planOrderUsagePercent, PLAN_ORDER_RULE_HINT } = usage;

@@ -67,7 +67,7 @@ check("page imports the helper", /import \{ orderActionCardVisible, visibleActio
 check("canShowOrderCard uses the helper", /function canShowOrderCard\(cardId: OrderDetailCardId\) \{[\s\S]{0,400}if \(!orderActionCardVisible\(workspace\.memberAccess, cardId\)\) return false;/.test(page));
 check("Customize list is built from visibleActionCardsFor", /const customizeCardOrder = visibleActionCardsFor\(workspace\.memberAccess, isNarrowLayout \? cardLayout\.mobileCardOrder : cardLayout\.cardOrder\)/.test(page));
 check("no local CARD_ACCESS_KEYS map remains", !page.includes("CARD_ACCESS_KEYS"));
-check("Invoice PDF stays behind canSeeFinance", /\{canSeeFinance \? \(\s*<button[\s\S]{0,400}Invoice PDF\s*<\/button>\s*\) : null\}/.test(page));
+check("Invoice PDF stays behind canSeeFinance", /\{canSeeFinance \? \(\s*<button[\s\S]{0,400}\{t\("Invoice PDF"\)\}\s*<\/button>\s*\) : null\}/.test(page));
 check("Order Value header toggle stays behind canSeeFinance", /\.\.\.\(canSeeFinance \? \[\{\s*label: t\("Order Value"\)/.test(page));
 
 // Vectors against the compiled helper.

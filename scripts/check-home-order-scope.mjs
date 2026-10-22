@@ -76,6 +76,7 @@ const compile = (rel) => {
   js = js.replace(/from "([^"]+)"/g, (whole, spec) => {
     if (FAKES[spec]) return `from "./${spec.replace(/[^a-z]/gi, "_")}.mjs"`;
     if (spec.startsWith("@/lib/studioflow/")) return `from "./${spec.slice("@/lib/studioflow/".length)}.mjs"`;
+    if (/^\.\/[A-Za-z]+$/.test(spec)) return `from "${spec}.mjs"`; // a sibling in lib/studioflow (bootTrace, 22 Oct 2026)
     return whole;
   });
   const out = path.join(tmp, `${path.basename(rel, ".ts")}.mjs`);
