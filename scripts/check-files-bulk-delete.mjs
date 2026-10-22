@@ -77,8 +77,8 @@ check("handler refuses without canDeleteClientFiles", /async function handleDele
 
 // 3. Confirm before the call; per-row Delete and Delete all untouched; failures listed.
 const handler = page.slice(page.indexOf("async function handleDeleteSelection()"), page.indexOf("async function handleDeleteOrderGroup("));
-check("confirm dialog uses the {count} sentence", handler.includes('window.confirm(') && handler.includes('t("Delete {count} files? This cannot be undone.")'));
-check("confirm comes before the batch call", handler.indexOf("window.confirm(") < handler.indexOf("deleteClientFilesBatchForOrders("));
+check("confirm dialog uses the {count} sentence", handler.includes('await askConfirm(') && !handler.includes('window.confirm(') && handler.includes('t("Delete {count} files? This cannot be undone.")'));
+check("confirm comes before the batch call", handler.indexOf("askConfirm(") > -1 && handler.indexOf("askConfirm(") < handler.indexOf("deleteClientFilesBatchForOrders("));
 check("a declined confirm returns before the call", /if \(!confirmed\) return;\s*\n\s*setDeletingSelection\(true\);/.test(handler));
 check("failed rows kept in state and rendered per row", handler.includes("setSelectionFailures(failedRows)") && /selectionFailures\.map\(row => \(/.test(page) && page.includes("row.fileName || row.fileId"));
 check("the selection keeps only the rows that failed", handler.includes("filter(id => failedIds.has(id))"));

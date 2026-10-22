@@ -738,7 +738,7 @@ export default function CustomersPage() {
             <div>
               <p className="orders-kicker">{t("Customers")}</p>
               <h1>{studioCountLabel(customers.length, "customer", language)}</h1>
-              <p>{workspace ? `${workspace.name} - ${workspace.roleLabel}` : t("Loading workspace...")}</p>
+              <p>{workspace ? `${workspace.name} - ${t(workspace.roleLabel)}` : t("Loading workspace...")}</p>
             </div>
             <div className="customers-toolbar-actions">
               {workspace ? <span className="studio-pill">{workspace.billingPlanName}</span> : null}

@@ -4639,7 +4639,7 @@ function AccountSection({
           </div>
           <div className="settings-identity-item">
             <span>{t("Role")}</span>
-            <strong>{workspace.roleLabel}</strong>
+            <strong>{t(workspace.roleLabel)}</strong>
           </div>
           <div className="settings-identity-item">
             <span>{t("User ID")}</span>
@@ -7301,7 +7301,7 @@ function TeamAccessSection({
           <span className="team-access-icon team-access-icon-owner" aria-hidden="true">{option.role === "owner" ? "♛" : "◉"}</span>
           <div>
             <strong>{option.name}</strong>
-            <small>{option.roleLabel}</small>
+            <small>{t(option.roleLabel)}</small>
           </div>
           {option.isCurrent ? (
             <span className="studio-pill success">{t("Current")}</span>
@@ -7506,7 +7506,7 @@ function TeamAccessSection({
                 <span className="settings-member-avatar" aria-hidden="true">{option.role === "owner" ? "♛" : "◉"}</span>
                 <div className="settings-member-copy">
                   <strong>{option.name}</strong>
-                  <small>{option.roleLabel}</small>
+                  <small>{t(option.roleLabel)}</small>
                 </div>
                 <div className="settings-member-actions">
                   {option.isCurrent ? (
@@ -7550,10 +7550,10 @@ function TeamAccessSection({
     return (
       <div className="settings-card-stack settings-team-page">
         <section className="card app-card">
-          <SettingsCardHead title={t("Team workspace membership")} subtitle={`${t("You have joined this workspace as")} ${workspace.roleLabel}.`} />
+          <SettingsCardHead title={t("Team workspace membership")} subtitle={`${t("You have joined this workspace as")} ${t(workspace.roleLabel)}.`} />
           <div className="settings-chip-row">
             <span className="settings-chip">{workspace.billingPlanName}</span>
-            <span className="settings-chip">{workspace.roleLabel}</span>
+            <span className="settings-chip">{t(workspace.roleLabel)}</span>
             <span className="settings-chip">{t("Shared with you")}</span>
           </div>
           <p className="settings-field-hint">{t("You can use the areas permitted by your assigned role. Workspace members, roles, join requests and billing are managed by the owner.")}</p>
@@ -7568,7 +7568,7 @@ function TeamAccessSection({
                 <span className="settings-member-avatar" aria-hidden="true">{option.role === "owner" ? "♛" : "◉"}</span>
                 <div className="settings-member-copy">
                   <strong>{option.name}</strong>
-                  <small>{option.roleLabel}</small>
+                  <small>{t(option.roleLabel)}</small>
                 </div>
                 <div className="settings-member-actions">
                   {option.isCurrent ? (
@@ -7639,7 +7639,7 @@ function TeamAccessSection({
             <div>
               <strong>{workspace.name || "NivaDesk"}</strong>
               <span className="settings-chip-row">
-                <span className="settings-tag">{workspace.roleLabel}</span>
+                <span className="settings-tag">{t(workspace.roleLabel)}</span>
                 <span className="settings-tag is-muted">{t("Current")}</span>
               </span>
             </div>
@@ -7803,7 +7803,7 @@ function TeamAccessSection({
                   <small>{member.email || member.id}</small>
                 </div>
                 <span className="settings-chip-row settings-member-tags">
-                  {member.isOwner ? <span className="settings-tag">{t("Owner")}</span> : <span className="settings-tag is-muted">{member.roleLabel}</span>}
+                  {member.isOwner ? <span className="settings-tag">{t("Owner")}</span> : <span className="settings-tag is-muted">{t(member.roleLabel)}</span>}
                   {user && member.id === user.uid ? <span className="settings-tag is-muted">{t("You")}</span> : null}
                   {actioning === changingKey ? <span className="settings-tag is-muted">{t("Updating...")}</span> : null}
                 </span>
@@ -7946,7 +7946,7 @@ function TeamAccessSection({
                 <span className="settings-member-avatar" aria-hidden="true">{option.role === "owner" ? "♛" : "◉"}</span>
                 <div className="settings-member-copy">
                   <strong>{option.name}</strong>
-                  <small>{option.roleLabel}</small>
+                  <small>{t(option.roleLabel)}</small>
                 </div>
                 <div className="settings-member-actions">
                   {option.isCurrent ? (
@@ -8722,7 +8722,7 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
     const lines = [
       `NivaDesk ${CHANGELOG[0]?.version ?? ""} (${CHANGELOG[0]?.date ?? ""})`,
       `Workspace: ${workspace.name} (${workspace.id})`,
-      `Role: ${workspace.roleLabel}`,
+      `Role: ${t(workspace.roleLabel)}`,
       `Plan: ${workspace.billingPlanName} · ${workspace.billingStatus}`,
       `Language: ${language}`,
       typeof navigator !== "undefined" ? `Browser: ${navigator.userAgent}` : ""

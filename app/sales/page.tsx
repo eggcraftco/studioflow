@@ -218,7 +218,7 @@ export default function SalesPage() {
       {tab === "sales" ? (
         <section className="card app-card">
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-            <select className="app-input" value={channelFilter} onChange={(event) => setChannelFilter(event.target.value)} aria-label={t("Channel")}>
+            <select className="app-input sales-filter-select" value={channelFilter} onChange={(event) => setChannelFilter(event.target.value)} aria-label={t("Channel")}>
               <option value="">{t("Every channel")}</option>
               {["shopify", "etsy", "woocommerce", "square", "ebay", "amazon", "inbound", "manual"].map((id) => (
                 <option key={id} value={id}>{salesChannelName(id)}</option>

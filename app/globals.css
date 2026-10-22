@@ -35038,3 +35038,72 @@ body[data-studio-theme="dark"] .note-avatars-list { background: rgba(255, 255, 2
   .app-sidebar-settings-shortcut:hover { background: rgba(37, 99, 235, 0.07); }
   .app-sidebar-settings-shortcut:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
 }
+
+/* Sales filters (22 Oct 2026, same rule as the MC-2 branch): the <select>s had no rule of
+   their own, so they kept the browser's light field in dark mode. Theme tokens only. */
+.sales-filter-select {
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.sales-filter-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.sales-filter-select:disabled { opacity: 0.6; }
+.sales-filter-select option {
+  background: var(--surface);
+  color: var(--text);
+}
+body[data-studio-theme="dark"] .sales-filter-select {
+  color-scheme: dark;
+  background: var(--surface-strong);
+}
+
+/* Phone Orders list in the dark theme (22 Oct 2026): the < 640 px header and band were
+   fixed light colours (#fff / #efefef), so the white "Orders" title vanished on them. */
+body[data-studio-theme="dark"] .orders-mobile-list {
+  background: var(--background);
+}
+body[data-studio-theme="dark"] .orders-mobile-header {
+  background: var(--surface);
+  border-bottom-color: var(--border);
+  color: var(--text);
+}
+
+/* Inventory on a phone (22 Oct 2026): the heading sat against the screen edge and the
+   two head buttons ran over it. */
+@media (max-width: 640px) {
+  .inventory-head {
+    flex-wrap: wrap;
+    padding-inline: 12px;
+  }
+}
+
+/* The app's own confirm dialog (components/AppConfirmDialog.tsx, 22 Oct 2026). */
+.app-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(15, 23, 42, 0.45);
+}
+.app-confirm-dialog {
+  width: min(440px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-strong);
+  color: var(--text);
+  padding: 20px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
+}
+.app-confirm-dialog h2 { margin: 0 0 8px; font-size: 17px; font-weight: 800; }
+.app-confirm-dialog p { margin: 0 0 16px; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.app-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.app-confirm-danger { background: #c62828; border-color: #c62828; color: #fff; }

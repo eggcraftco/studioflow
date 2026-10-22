@@ -6,6 +6,7 @@
 
 import { type DragEvent as ReactDragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useAppConfirm } from "@/components/AppConfirmDialog";
 import { studioT } from "@/lib/studioflow/language";
 import {
   addLibraryFileVersion,
@@ -85,6 +86,7 @@ export function FilesLibraryView({
 }) {
   const { language, user } = useAuth();
   const t = useCallback((text: string) => studioT(text, language), [language]);
+  const [askConfirm, confirmDialog] = useAppConfirm(t);
 
   const [files, setFiles] = useState<LibraryFile[] | null>(null);
   const [selectedId, setSelectedId] = useState("");
@@ -181,11 +183,13 @@ export function FilesLibraryView({
       const linked = rows.filter(file => file.links.length > 1).length;
       const question = t("Move {count} files to trash? They are hidden everywhere until restored.").replace("{count}", count) +
         (linked > 0 ? "\n" + t("{linked} of them are linked to more than one record.").replace("{linked}", String(linked)) : "");
-      if (!window.confirm(question)) return;
+      if (!(await askConfirm({ message: question, confirmLabel: t("Move to trash"), danger: true }))) return;
     }
-    if (kind === "delete" && !window.confirm(
-      t("Delete {count} file records permanently? Files uploaded through the library are also removed from storage; indexed files keep their original storage.").replace("{count}", count)
-    )) return;
+    if (kind === "delete" && !(await askConfirm({
+      message: t("Delete {count} file records permanently? Files uploaded through the library are also removed from storage; indexed files keep their original storage.").replace("{count}", count),
+      confirmLabel: t("Delete permanently"),
+      danger: true
+    }))) return;
     setBusy(true);
     setNotice("");
     setBulkFailures([]);
@@ -292,6 +296,7 @@ export function FilesLibraryView({
 
   return (
     <div className={selected ? "library-body has-panel" : "library-body"}>
+      {confirmDialog}
       <div className="card library-list files-drop-zone" style={{ padding: 18 }} {...dropProps()}>
         <div className="library-toolbar">
           <input
@@ -584,10 +589,12 @@ export function FilesLibraryView({
                     type="button"
                     className="inventory-secondary"
                     disabled={busy}
-                    onClick={() => {
-                      if (selected.links.length > 1 && !window.confirm(
-                        `${t("This file is linked to")} ${selected.links.length} ${t("records. Moving it to trash hides it everywhere. Continue?")}`
-                      )) return;
+                    onClick={async () => {
+                      if (selected.links.length > 1 && !(await askConfirm({
+                        message: `${t("This file is linked to")} ${selected.links.length} ${t("records. Moving it to trash hides it everywhere. Continue?")}`,
+                        confirmLabel: t("Move to trash"),
+                        danger: true
+                      }))) return;
                       void run(() => trashLibraryFile(workspace, selected.id), "The file could not be moved to trash.");
                     }}
                   >
@@ -610,8 +617,12 @@ export function FilesLibraryView({
                     type="button"
                     className="inventory-secondary"
                     disabled={busy}
-                    onClick={() => {
-                      if (!window.confirm(t("Delete this file record permanently? Files uploaded through the library are also removed from storage; indexed files keep their original storage."))) return;
+                    onClick={async () => {
+                      if (!(await askConfirm({
+                        message: t("Delete this file record permanently? Files uploaded through the library are also removed from storage; indexed files keep their original storage."),
+                        confirmLabel: t("Delete permanently"),
+                        danger: true
+                      }))) return;
                       void run(async () => {
                         await deleteLibraryFile(workspace, selected.id);
                         setSelectedId("");

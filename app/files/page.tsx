@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
+import { useAppConfirm } from "@/components/AppConfirmDialog";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
@@ -219,6 +220,8 @@ export default function FilesPage() {
   const router = useRouter();
   const { user, loading, language } = useAuth();
   const t = (text: string) => studioT(text, language);
+  // The app's own question, not window.confirm (themed, translated, testable).
+  const [askConfirm, confirmDialog] = useAppConfirm(t);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [uploadSafetySettings, setUploadSafetySettings] = useState<WorkspaceSettingsOverview | null>(null);
   // Acceptance is per workspace AND per policy version (lib/studioflow/uploadPolicy.ts).
@@ -347,12 +350,11 @@ export default function FilesPage() {
     const chosen = selectedRows(selection, filteredSortedFiles);
     if (chosen.length === 0) return;
     const orderCount = new Set(chosen.map(file => file.orderId)).size;
-    const confirmed = window.confirm(
+    const confirmed = await askConfirm({ message:
       t("Delete {count} files? This cannot be undone.").replace("{count}", String(chosen.length)) +
         "\n" + t("From {orders} orders in {workspace}.")
           .replace("{orders}", String(orderCount))
-          .replace("{workspace}", workspace.name || t("this workspace"))
-    );
+          .replace("{workspace}", workspace.name || t("this workspace")), confirmLabel: t("Delete"), danger: true });
     if (!confirmed) return;
 
     setDeletingSelection(true);
@@ -402,11 +404,10 @@ export default function FilesPage() {
       return;
     }
     const label = group.customerName || "this order";
-    const confirmed = window.confirm(
+    const confirmed = await askConfirm({ message:
       t("Delete all {count} files for {name}? This cannot be undone.")
         .replace("{count}", String(group.files.length))
-        .replace("{name}", label)
-    );
+        .replace("{name}", label), confirmLabel: t("Delete"), danger: true });
     if (!confirmed) return;
 
     setDeletingOrderId(group.orderId);
@@ -728,9 +729,8 @@ export default function FilesPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      t("Delete \"{name}\" from this order? This cannot be undone.").replace("{name}", file.fileName)
-    );
+    const confirmed = await askConfirm({ message:
+      t("Delete \"{name}\" from this order? This cannot be undone.").replace("{name}", file.fileName), confirmLabel: t("Delete"), danger: true });
     if (!confirmed) return;
 
     setActioningFileId(file.id);
@@ -758,6 +758,7 @@ export default function FilesPage() {
 
   return (
     <AppShell>
+      {confirmDialog}
       {loadingFiles ? <LoadingScreen /> : null}
 
       <section className="card" style={{ padding: 24, marginBottom: 18 }}>

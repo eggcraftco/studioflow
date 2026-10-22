@@ -2149,9 +2149,12 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     user?.displayName?.trim() ||
     (user?.email ?? "").split("@")[0] ||
     t("Account");
-  const sidebarUserRole =
-    workspace?.roleLabel?.trim() ||
+  // The role label is stored in English ("Member", "Workflow Only"…) or is a custom
+  // role's own name; t() translates the built-in names and leaves a custom name as typed.
+  const workspaceRoleText =
+    (workspace?.roleLabel?.trim() ? t(workspace.roleLabel.trim()) : "") ||
     (normalizeWorkspaceRole(workspace?.role) === "workflow" ? t("Workflow Only") : t("Member"));
+  const sidebarUserRole = workspaceRoleText;
   const sidebarUserTitle = [sidebarUserName, sidebarUserRole, workspace?.name?.trim()].filter(Boolean).join(" · ");
   // Days left in the trial, counted from the explicit end the server wrote.
   // Rounded up so the last partial day still reads as a day rather than zero.
@@ -2987,7 +2990,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                 <div className="toolbar-role-strip" aria-label={t("Workspace role")}>
                   {/* An empty label used to read "Workflow Only", which is a
                       specific role — a member with no label is simply a member. */}
-                  <span>{workspace?.roleLabel?.trim() || (normalizeWorkspaceRole(workspace?.role) === "workflow" ? t("Workflow Only") : t("Member"))}</span>
+                  <span>{workspaceRoleText}</span>
                 </div>
               )}
             </div>
