@@ -15,16 +15,20 @@ import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import {
   TRACKING_KEYS,
   TRACKING_TONES,
+  carrierLookupFor,
+  carrierUnknownSentence,
   currentTrackingValues,
   formatTrackingDate,
   trackingDisplayStatus,
   trackingFieldsFromCustomFields,
+  trackingCarrier,
   trackingOpenUrl,
   trackingProvider,
   trackingStatusLabel,
   trackingSupportLabel,
   trackingSupportMessage,
   trackingTone,
+  sourceCarrierFor,
   type TrackingValues
 } from "@/lib/studioflow/liveTracking";
 
@@ -52,7 +56,9 @@ export function OrderLiveTrackingPanel({
   language,
   canRefresh,
   syncing,
-  onCheckAgain
+  onCheckAgain,
+  canRegisterNew = false,
+  onRegisterNew
 }: {
   companyId: string;
   orderId: string;
@@ -63,18 +69,28 @@ export function OrderLiveTrackingPanel({
   canRefresh: boolean;
   syncing: boolean;
   onCheckAgain: () => void;
+  /** GN-13: the workspace owner may register a number explicitly when automatic registration is off. */
+  canRegisterNew?: boolean;
+  onRegisterNew?: () => void;
 }) {
   const t = (text: string) => studioT(text, language);
   const [live, setLive] = useState<TrackingValues | null>(null);
+  // GN-13: the server's background carrier lookup and the shop's carrier words, on the same row.
+  const [rowExtra, setRowExtra] = useState<{ carrierLookup?: unknown; sourceCarrier?: unknown }>({});
 
   useEffect(() => {
     setLive(null);
+    setRowExtra({});
     if (!companyId || !orderId) return;
     // A refusal or a network failure reads as "no row": the order's own fields still show.
     return onSnapshot(
       doc(db, "companies", companyId, "trackingResults", orderId),
-      snapshot => setLive(rowValues(snapshot.data())),
-      () => setLive(null)
+      snapshot => {
+        const data = snapshot.data();
+        setLive(rowValues(data));
+        setRowExtra({ carrierLookup: data?.carrierLookup, sourceCarrier: data?.sourceCarrier });
+      },
+      () => { setLive(null); setRowExtra({}); }
     );
   }, [companyId, orderId]);
 
@@ -85,7 +101,11 @@ export function OrderLiveTrackingPanel({
   const supportLabel = trackingSupportLabel(supportStatus);
   const tone = trackingTone(status, supportStatus);
   const locale = studioLocaleTag(language);
-  const carrier = [values.carrier, courier].map(value => String(value || "").trim()).find(value => value && value !== "Auto Detect") || "-";
+  const sourceCarrier = sourceCarrierFor(rowExtra.sourceCarrier, trackingNumber);
+  const carrierEntry = trackingCarrier(values, courier, sourceCarrier);
+  const openUrl = trackingOpenUrl(values, trackingNumber, courier, sourceCarrier);
+  const lookup = carrierLookupFor(rowExtra.carrierLookup, trackingNumber);
+  const carrier = carrierEntry?.label || [values.carrier, courier].map(value => String(value || "").trim()).find(value => value && value !== "Auto Detect") || "-";
   const checkpoint = [values.checkpoint, values.location].map(value => String(value || "").trim()).filter(Boolean).join(" · ");
   const supportMessage = trackingSupportMessage(values.supportMessage || "", values.supportMessageKey || "");
   const lastChecked = formatTrackingDate(values.lastCheckedAt, locale);
@@ -126,13 +146,28 @@ export function OrderLiveTrackingPanel({
       {supportMessage ? <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: tone }}>{t(supportMessage)}</p> : null}
       {values.error ? <p role="alert" style={{ margin: 0, fontSize: 12, fontWeight: 600, color: TRACKING_TONES.red, overflowWrap: "anywhere" }}>{t(values.error)}</p> : null}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <a className="button secondary" href={trackingOpenUrl(values, trackingNumber)} target="_blank" rel="noopener noreferrer">{t("Open Tracking")}</a>
+        {openUrl ? (
+          <a className="button secondary" href={openUrl} target="_blank" rel="noopener noreferrer">{t("Open Tracking")}</a>
+        ) : (
+          <p className="shipment-muted" role="status" data-carrier-lookup={lookup?.state || "none"} style={{ margin: 0, fontSize: 12, flexBasis: "100%" }}>
+            {t(carrierUnknownSentence(lookup))}
+          </p>
+        )}
         {canRefresh ? (
           <button type="button" className="button secondary" disabled={syncing} onClick={onCheckAgain}>
             {syncing ? t("Checking tracking…") : t("Check Again")}
           </button>
         ) : null}
+        {canRegisterNew && onRegisterNew && supportStatus === "registration_required" ? (
+          <button type="button" className="button" data-testid="register-with-17track" disabled={syncing} onClick={onRegisterNew}
+                  title={t("Registering uses one of the workspace's 17TRACK registrations.")}>
+            {t("Register with 17TRACK")}
+          </button>
+        ) : null}
       </div>
+      {canRegisterNew && onRegisterNew && supportStatus === "registration_required" ? (
+        <p className="shipment-muted" style={{ margin: 0, fontSize: 11.5 }}>{t("Registering uses one of the workspace's 17TRACK registrations.")}</p>
+      ) : null}
     </div>
   );
 }

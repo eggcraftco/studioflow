@@ -79,7 +79,9 @@ expect("the section never calls the sending function", /sendOrderTrackingEmail\(
 expect("the card never calls the sending function", /sendOrderTrackingEmail\(/.test(detail), false);
 expect("the dialog previews before anything is sent", /previewOrderTrackingEmail\(workspace, \{ orderId, language \}\)/.test(dialog), true);
 expect("the dialog sends only from send()", (dialog.match(/sendOrderTrackingEmail\(workspace, /g) || []).length, 1);
-expect("Send is a submit button the member presses", /type="submit"[^>]*disabled=\{sending \|\| !toValid\}/.test(dialog), true);
+expect("Send is a submit button the member presses", /type="submit"[^>]*disabled=\{sending \|\| !toValid \|\| deadLink\}/.test(dialog), true);
+expect("GN-13: a link that would 404 is never e-mailed (Send refused on an older server's dead link)", /const deadLink = preview\?\.linkKind === "dead"/.test(dialog) && /!toValid \|\| deadLink\) return/.test(dialog), true);
+expect("GN-13: no link while the carrier is unknown is said plainly", /No link yet: the carrier of this number is not identified\./.test(dialog) && /without a link/.test(dialog), true);
 expect("the preview call carries preview: true", /preview: true/.test(client), true);
 expect("the client sends no link, url or trackingUrl", /\b(link|url|trackingUrl):\s/.test(client.slice(client.indexOf("export async function sendOrderTrackingEmail"))), false);
 expect("the section reads the server's row first", /doc\(db, "companies", workspace\.id, "trackingResults", orderId\)/.test(section), true);

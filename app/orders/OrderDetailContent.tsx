@@ -4615,19 +4615,22 @@ export function OrderDetailContent({
    * "Refresh Live Status". The answer lands in the order and its trackingResults row, which the
    * panel is listening to, so nothing here copies the reply onto the screen.
    */
-  async function requestLiveTracking(trackingNumber: string, courier: string, isManual: boolean) {
+  async function requestLiveTracking(trackingNumber: string, courier: string, isManual: boolean, confirmNewRegistration = false) {
     const cleaned = cleanTrackingNumber(trackingNumber);
     if (!cleaned) return;
     setTrackingSyncing(true);
     setTrackingNotice(isManual ? { tone: "status", text: "Checking tracking…" } : null);
     try {
-      await registerOrderTrackingFromWeb(workspace, {
+      const answer = await registerOrderTrackingFromWeb(workspace, {
         orderId: order.id,
         trackingNumber: cleaned,
         courier: courier || "Auto Detect",
-        language: detailLanguage
+        language: detailLanguage,
+        confirmNewRegistration
       });
-      setTrackingNotice(isManual ? { tone: "status", text: "Tracking updated." } : null);
+      // GN-13: "not registered now" is not an update; the panel shows the server's reason.
+      const deferred = (answer as { registrationDeferred?: boolean }).registrationDeferred === true;
+      setTrackingNotice(isManual && !deferred ? { tone: "status", text: "Tracking updated." } : null);
     } catch {
       setTrackingNotice({ tone: "error", text: "Could not refresh live tracking." });
     } finally {
@@ -7657,6 +7660,8 @@ export function OrderDetailContent({
                   canRefresh={canEditWorkflowFields}
                   syncing={trackingSyncing}
                   onCheckAgain={() => void requestLiveTracking(order.trackingNumber, order.courier || "Auto Detect", true)}
+                  canRegisterNew={viewerIsOwner}
+                  onRegisterNew={() => void requestLiveTracking(order.trackingNumber, order.courier || "Auto Detect", true, true)}
                 />
               ) : (
                 <p className="layout-status finance-inline-message" style={{ marginTop: 8 }}>

@@ -45,7 +45,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
 // "dhl" is not in INTEGRATION_PROVIDERS: DHL Express is shown only where the server
 // has opened it for the workspace, and never on the public integrations page.
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "claude" | "dhl" | "whatsapp" | "instagram" | "stripe";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "claude" | "dhl" | "whatsapp" | "instagram" | "stripe" | "tracking";
 
 export type IntegrationProvider = {
   id: string;

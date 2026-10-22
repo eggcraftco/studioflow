@@ -191,7 +191,7 @@ export function EbayOrderStock({ workspace, currencySymbol = "", order, language
                             {busy === `track:${pkg.trackingNumber}` ? t("Following…") : t("Follow in NivaDesk")}
                           </button>
                         ) : null}
-                        {pkg.trackingNumber ? <a className="inventory-link" href={`https://www.17track.net/en/track-details?nums=${encodeURIComponent(pkg.trackingNumber)}`} target="_blank" rel="noopener noreferrer">{t("Open on 17TRACK")} ↗</a> : null}
+                        {pkg.trackingNumber ? <a className="inventory-link" href={`https://t.17track.net/en#nums=${encodeURIComponent(pkg.trackingNumber)}`} target="_blank" rel="noopener noreferrer">{t("Open on 17TRACK")} ↗</a> : null}
                       </div>
                     </li>
                   ))}
