@@ -423,7 +423,10 @@ export function OrderListCard({
             </div>
           ) : null}
           {canSeeFinance ? (
-            <strong className={order.status.trim().toLowerCase().includes("cancel") ? "order-list-amount muted" : (outstandingAmount > 0.009 ? "order-list-amount outstanding" : "order-list-amount")}>
+            <strong
+              className={order.status.trim().toLowerCase().includes("cancel") ? "order-list-amount muted" : (outstandingAmount > 0.009 ? "order-list-amount outstanding" : "order-list-amount")}
+              title={studioT("Order value: paid + outstanding", displayLanguage)}
+            >
               {money(order.paidAmount + outstandingAmount, hideNumbers, moneySettings)}
             </strong>
           ) : null}

@@ -155,6 +155,17 @@ ok("Dashboard: Revenue is the same block's revenue as the profit", dashboardSrc.
 ok("Home: the money card carries the note and the fee row label", homeSrc.includes("estimatedFeeSummary(blocks, data.settings)")
   && (homeSrc.match(/\{footnote\}/g) || []).length === 2 && homeSrc.includes('platformFeeTotalLabel(feeSummary, t, "Platform fees")'));
 
+// Gate follow-up: Order Value (paid + outstanding, net of refunds) is a different
+// concept from revenue — the number stays, the definition is shown.
+ok("Order list amount and customer order table say what the figure is (Order value: paid + outstanding)",
+  read("components/OrderListCard.tsx").includes('title={studioT("Order value: paid + outstanding", displayLanguage)}')
+  && read("app/customers/page.tsx").includes('title={t("Order value: paid + outstanding")}')
+  && read("components/OrderListCard.tsx").includes("money(order.paidAmount + outstandingAmount"));
+ok("the definition is translated (TR: Sipariş tutarı: ödenen + kalan; all 11 languages)",
+  tr("Order value: paid + outstanding") === "Sipariş tutarı: ödenen + kalan"
+  && ["Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"]
+    .every((lang) => studioT("Order value: paid + outstanding", lang) !== "Order value: paid + outstanding"));
+
 if (failures.length) {
   console.log(`\n❌ GN-12 ORDER FINANCE: ${failures.length} of ${checks} failed`);
   process.exit(1);

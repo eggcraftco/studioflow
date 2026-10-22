@@ -9145,6 +9145,14 @@ mergeIntoTranslations({
   "Includes estimated platform fees": { "Türkçe": "Tahmini platform ücretlerini içerir", "Deutsch": "Enthält geschätzte Plattformgebühren", "Français": "Inclut des frais de plateforme estimés", "Italiano": "Include commissioni della piattaforma stimate", "Español (Spanish)": "Incluye comisiones de plataforma estimadas", "Português": "Inclui taxas de plataforma estimadas", "Русский (Russian)": "Включает расчётные комиссии платформ", "日本語 (Japanese)": "推定のプラットフォーム手数料を含みます", "中文 (Chinese)": "包含估算的平台费用", "العربية (Arabic)": "يشمل رسوم منصات تقديرية", "हिन्दी (Hindi)": "अनुमानित प्लेटफ़ॉर्म शुल्क शामिल हैं" }
 });
 
+// GN-12 gate follow-up (22 Oct 2026): the order list amount is the ORDER VALUE —
+// what the customer is charged, net of refunds (paid + outstanding) — not the
+// engine's revenue (the sale for profit, before refunds, invoice lines as a
+// floor). Different concepts, so the number stays; the definition is shown.
+mergeIntoTranslations({
+  "Order value: paid + outstanding": { "Türkçe": "Sipariş tutarı: ödenen + kalan", "Deutsch": "Auftragswert: bezahlt + offen", "Français": "Valeur de la commande : payé + restant dû", "Italiano": "Valore dell'ordine: pagato + da saldare", "Español (Spanish)": "Valor del pedido: pagado + pendiente", "Português": "Valor da encomenda: pago + em aberto", "Русский (Russian)": "Сумма заказа: оплачено + к оплате", "日本語 (Japanese)": "注文金額：支払済み＋未払い", "中文 (Chinese)": "订单金额：已付 + 未付", "العربية (Arabic)": "قيمة الطلب: المدفوع + المتبقي", "हिन्दी (Hindi)": "ऑर्डर मूल्य: भुगतान + बकाया" }
+});
+
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {
   return Object.keys(TRANSLATIONS);
