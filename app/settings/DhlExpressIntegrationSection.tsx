@@ -9,7 +9,8 @@
 // - The owner or an admin keeps the sender details. Other members see whether
 //   DHL is connected, nothing more.
 // - The tile and this screen exist only where the server has opened DHL for the
-//   workspace (appConfig/shipping); the public integrations page does not list it.
+//   workspace (appConfig/shipping). The public integrations page lists DHL Express
+//   as "Limited access" with the same scope and status sentences as below.
 import { useCallback, useEffect, useState } from "react";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
@@ -238,6 +239,15 @@ export function DhlExpressIntegrationSection({ workspace, language = "English" }
     </div>
   );
 
+  // Where DHL stands, in the same words as the public integrations card.
+  const accessStatus = (
+    <p className="muted-copy" data-testid="dhl-access-status">
+      <strong>{t("Limited access")}</strong>{" · "}
+      {t("NivaDesk's label and commercial invoice tests in DHL's test environment are complete. Sample documents have been sent to DHL for verification. DHL verification and production access for real shipments are not yet complete.")}{" "}
+      {t("Each business connects its own DHL Express account and MyDHL API credentials.")}
+    </p>
+  );
+
   return (
     <div className="settings-card-stack">
       {notice ? <p className="settings-notice" style={{ color: "#16a34a", fontWeight: 600 }}>{notice}</p> : null}
@@ -246,12 +256,14 @@ export function DhlExpressIntegrationSection({ workspace, language = "English" }
         <section className="settings-card">
           <CardTitle icon="bolt" eyebrow="DHL Express" title={t("Not available yet")} />
           <p className="muted-copy">{t("DHL Express is not available for this workspace yet.")}</p>
+          {accessStatus}
         </section>
       ) : (
         <>
           <section className="settings-card">
             <CardTitle icon="bolt" eyebrow="DHL Express" title={view.connected ? t("Connected") : t("Connect your DHL Express account")} />
-            <p className="muted-copy">{t("Create DHL Express labels from an order, with the customs declaration, and follow each parcel.")} {t("NivaDesk never books a pickup, and never marks an order dispatched before DHL scans the parcel.")}</p>
+            <p className="muted-copy">{t("See the DHL Express services for an order's route, create the label with the commercial invoice where customs needs one, and follow each parcel.")} {t("NivaDesk never books a pickup, and never marks an order dispatched before DHL scans the parcel.")}</p>
+            {accessStatus}
             {view.connected ? (
               <>
                 <ul className="settings-facts">
