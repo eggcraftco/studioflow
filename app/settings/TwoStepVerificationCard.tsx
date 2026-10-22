@@ -252,7 +252,7 @@ export function TwoStepVerificationCard({ language = "English" }: { language?: s
       {step.kind === "idle" && factors.length > 0 ? (
         <div className="settings-action-row settings-action-row-split">
           <button className="button secondary" type="button" disabled={busy} onClick={() => void newCodes()}>
-            {t("Make new recovery codes")}{remaining !== null ? ` (${remaining} ${t("left")})` : ""}
+            {t("Make new recovery codes")}{remaining !== null ? ` (${t("{count} left").replace("{count}", String(remaining))})` : ""}
           </button>
           <button className="button secondary" type="button" disabled={busy} onClick={() => void endOtherSessions()}>{t("Sign out everywhere")}</button>
         </div>

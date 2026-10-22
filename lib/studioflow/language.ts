@@ -12,6 +12,7 @@ import { SALES_STORES_TRANSLATIONS } from "./salesStoresTranslations";
 import { WOO_STORES_TRANSLATIONS } from "./wooStoresTranslations";
 import { ETSY_ROUND_TWO_TRANSLATIONS } from "./etsyRoundTwoTranslations";
 import { ETSY_COMPLIANCE_TRANSLATIONS } from "./etsyComplianceTranslations";
+import { SECOND_FACTOR_TRANSLATIONS } from "./secondFactorTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -9259,6 +9260,9 @@ mergeIntoTranslations(ETSY_ROUND_TWO_TRANSLATIONS);
 
 // Etsy API Terms compliance (24 Oct 2026): Etsy-order notes and the Etsy settings footer. After r2.
 mergeIntoTranslations(ETSY_COMPLIANCE_TRANSLATIONS);
+
+// GN-10 two-step verification (22 Oct 2026). Merged last on purpose.
+mergeIntoTranslations(SECOND_FACTOR_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {
