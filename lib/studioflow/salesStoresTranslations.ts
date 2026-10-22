@@ -137,5 +137,18 @@ export const SALES_STORES_TRANSLATIONS: Record<string, Partial<Record<StudioLang
     "Türkçe": "Kaydedilemedi.", "Deutsch": "Konnte nicht gespeichert werden.", "Français": "Impossible d'enregistrer.", "Italiano": "Impossibile salvare.",
     "Español (Spanish)": "No se pudo guardar.", "Português": "Não foi possível guardar.", "Русский (Russian)": "Не удалось сохранить.",
     "日本語 (Japanese)": "保存できませんでした。", "中文 (Chinese)": "无法保存。", "العربية (Arabic)": "تعذّر الحفظ.", "हिन्दी (Hindi)": "सहेजा नहीं जा सका।"
+  },
+  "Connected means the channel is linked to this workspace. It does not mean orders have arrived from it. Channel orders are read-only here; where a channel supports it, product and stock links are managed per channel in Inventory.": {
+    "Türkçe": "Bağlı, kanalın bu çalışma alanına bağlandığı anlamına gelir; oradan sipariş geldiği anlamına gelmez. Kanal siparişleri burada salt okunurdur; kanal destekliyorsa ürün ve stok bağlantıları Envanter'de kanal bazında yönetilir.",
+    "Deutsch": "Verbunden heißt, der Kanal ist mit diesem Arbeitsbereich verknüpft – nicht, dass von dort schon Aufträge eingetroffen sind. Kanalaufträge sind hier schreibgeschützt; wo ein Kanal es unterstützt, werden Produkt- und Bestandsverknüpfungen pro Kanal unter Bestand verwaltet.",
+    "Français": "Connecté signifie que le canal est relié à cet espace de travail, pas que des commandes en sont déjà arrivées. Les commandes des canaux sont ici en lecture seule ; quand un canal le permet, les liens produits et stock se gèrent canal par canal dans Inventaire.",
+    "Italiano": "Collegato significa che il canale è associato a questo spazio di lavoro, non che siano già arrivati ordini. Qui gli ordini dei canali sono in sola lettura; dove un canale lo supporta, i collegamenti di prodotti e giacenze si gestiscono per canale in Inventario.",
+    "Español (Spanish)": "Conectado significa que el canal está vinculado a este espacio de trabajo, no que ya hayan llegado pedidos de él. Aquí los pedidos de los canales son de solo lectura; cuando un canal lo permite, los vínculos de productos y stock se gestionan por canal en Inventario.",
+    "Português": "Ligado significa que o canal está associado a este espaço de trabalho, não que já tenham chegado encomendas dele. Aqui as encomendas dos canais são apenas de leitura; quando um canal o permite, as ligações de produtos e stock gerem-se por canal em Inventário.",
+    "Русский (Russian)": "«Подключено» означает, что канал связан с этой рабочей областью, а не то, что из него уже пришли заказы. Заказы из каналов здесь только для чтения; если канал это поддерживает, связи товаров и остатков настраиваются для каждого канала в разделе «Инвентарь».",
+    "日本語 (Japanese)": "「接続済み」はチャネルがこのワークスペースに連携されていることを示し、注文がすでに届いたという意味ではありません。チャネルの注文はここでは読み取り専用です。対応しているチャネルでは、商品と在庫の連携を「在庫」でチャネルごとに管理します。",
+    "中文 (Chinese)": "“已连接”表示该渠道已关联到此工作区，并不表示已有订单到达。渠道订单在此处为只读；渠道支持时，可在“库存”中按渠道管理产品和库存关联。",
+    "العربية (Arabic)": "«متصل» تعني أن القناة مرتبطة بمساحة العمل هذه، ولا تعني أن طلبات قد وصلت منها. طلبات القنوات هنا للقراءة فقط؛ وحيث تدعم القناة ذلك، تُدار روابط المنتجات والمخزون لكل قناة في المخزون.",
+    "हिन्दी (Hindi)": "“कनेक्टेड” का अर्थ है कि चैनल इस वर्कस्पेस से जुड़ा है, यह नहीं कि वहाँ से ऑर्डर आ चुके हैं। चैनल के ऑर्डर यहाँ केवल-पठन हैं; जहाँ चैनल इसका समर्थन करता है, उत्पाद और स्टॉक के लिंक इन्वेंटरी में हर चैनल के लिए अलग से प्रबंधित होते हैं।"
   }
 };

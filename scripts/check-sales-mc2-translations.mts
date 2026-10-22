@@ -24,6 +24,17 @@ for (const map of page.matchAll(/_LABELS: Record<string, string> = \{([^}]+)\}/g
   for (const value of map[1].matchAll(/:\s*"([^"]+)"/g)) if (!KEYS.includes(value[1])) KEYS.push(value[1]);
 }
 
+// The Channels note must not claim nothing syncs (MC-3 Woo inventory, eBay E4), and every
+// Sales <select> carries the themed class (it stayed light in dark mode without one).
+const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+const layoutProblems: string[] = [];
+if (/not synced from any channel/.test(page)) layoutProblems.push("Channels note still says products and stock are not synced from any channel");
+const selects = [...page.matchAll(/<select[\s\S]*?className="([^"]*)"/g)].map((m) => m[1]);
+if (!selects.length || selects.some((c) => !c.split(" ").includes("sales-filter-select"))) layoutProblems.push(`a Sales <select> without sales-filter-select: ${JSON.stringify(selects)}`);
+if (!/\.sales-filter-select\s*\{[^}]*var\(--surface\)[^}]*var\(--text\)/.test(css)) layoutProblems.push("app/globals.css has no themed .sales-filter-select rule");
+for (const line of layoutProblems) console.log(`PROBLEM ${line}`);
+if (layoutProblems.length) process.exit(1);
+
 const others = SUPPORTED_STUDIO_LANGUAGES.filter((lang) => lang !== "English");
 const missing: string[] = [];
 for (const key of KEYS) for (const lang of others) if (studioT(key, lang) === key && !studioTranslationRow(key)?.[lang]) missing.push(`${key} [${lang}]`);

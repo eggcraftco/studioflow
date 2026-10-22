@@ -288,7 +288,7 @@ export default function SalesPage() {
               ))}
             </select>
             {stores.length > 1 ? (
-              <select className="app-input" value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)} aria-label={t("Store")}>
+              <select className="app-input sales-filter-select" value={storeFilter} onChange={(event) => setStoreFilter(event.target.value)} aria-label={t("Store")}>
                 <option value="">{t("Every store")}</option>
                 {stores.map((store) => (
                   <option key={store.storeKey} value={store.storeKey}>{salesStoreLabel(store, t)}</option>
@@ -296,7 +296,7 @@ export default function SalesPage() {
               </select>
             ) : null}
             {brands.length > 0 ? (
-              <select className="app-input" value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)} aria-label={t("Brand")}>
+              <select className="app-input sales-filter-select" value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)} aria-label={t("Brand")}>
                 <option value="">{t("Every brand")}</option>
                 {brands.map((brand) => <option key={brand.brandId} value={brand.brandId}>{brand.name}</option>)}
                 <option value={UNASSIGNED}>{t("No brand")}</option>
@@ -362,7 +362,7 @@ export default function SalesPage() {
                         <td>
                           {canManage && brands.length > 0 ? (
                             <select
-                              className="app-input"
+                              className="app-input sales-filter-select"
                               style={{ minWidth: 120 }}
                               disabled={manageBusy}
                               aria-label={t("Brand")}
@@ -442,7 +442,7 @@ export default function SalesPage() {
             <>
               <p className="muted-copy">{t("Where your sales come from. Connect or disconnect a channel in Settings → Integrations.")}</p>
               <p className="muted-copy" style={{ marginTop: 4, fontSize: 12.5 }}>
-                {t("Connected means the channel is linked to this workspace. It does not mean orders have arrived from it, and products and stock are not synced from any channel yet.")}
+                {t("Connected means the channel is linked to this workspace. It does not mean orders have arrived from it. Channel orders are read-only here; where a channel supports it, product and stock links are managed per channel in Inventory.")}
               </p>
               <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
                 {channels.map((channel) => (
