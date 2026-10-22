@@ -9133,10 +9133,6 @@ mergeIntoTranslations({
   "Choose how": { "Türkçe": "Yolunu seçin", "Deutsch": "Weg wählen", "Français": "Choisir comment", "Italiano": "Scegli come", "Español (Spanish)": "Elige cómo", "Português": "Escolher como", "Русский (Russian)": "Выбрать способ", "日本語 (Japanese)": "方法を選ぶ", "中文 (Chinese)": "选择方式", "العربية (Arabic)": "اختر الطريقة", "हिन्दी (Hindi)": "तरीका चुनें" }
 });
 
-// Web small fixes (17 Oct 2026): Team seat breakdown, the matrix's owner-approval
-// cell, the phone Schedule's Calendar File line. Merged last on purpose.
-mergeIntoTranslations(WEB_SMALL_FIXES_TRANSLATIONS);
-
 // GN-05 / GN-06 (22 Oct 2026): the setup checklist's real destinations and
 // plan notes, and the update check / "NivaDesk updated" notice. The same
 // words are in Apple GN0506Translations.swift and Android
@@ -9180,6 +9176,10 @@ mergeIntoTranslations({
   "Web app · build {build}": { "Türkçe": "Web uygulaması · derleme {build}", "Deutsch": "Web-App · Build {build}", "Français": "Application web · build {build}", "Italiano": "App web · build {build}", "Español (Spanish)": "Aplicación web · compilación {build}", "Português": "Aplicação web · compilação {build}", "Русский (Russian)": "Веб-приложение · сборка {build}", "日本語 (Japanese)": "Web アプリ · ビルド {build}", "中文 (Chinese)": "网页版 · 构建 {build}", "العربية (Arabic)": "تطبيق الويب · الإصدار الداخلي {build}", "हिन्दी (Hindi)": "वेब ऐप · बिल्ड {build}" },
   "Open a job, reserve an item in its Materials & Inventory card, then press “Use on the job”.": { "Türkçe": "Bir işi açın, Malzemeler ve Envanter kartında bir kalem ayırın, sonra “İşte kullan”a basın.", "Deutsch": "Öffnen Sie einen Auftrag, reservieren Sie in der Karte „Materialien & Bestand“ einen Artikel und tippen Sie dann auf „Im Auftrag verwenden“.", "Français": "Ouvrez une commande, réservez un article dans sa carte « Matériaux et stock », puis appuyez sur « Utiliser pour ce travail ».", "Italiano": "Apri un lavoro, riserva un articolo nella scheda “Materiali e inventario”, poi premi “Usa per il lavoro”.", "Español (Spanish)": "Abre un trabajo, reserva un artículo en su tarjeta «Materiales e inventario» y pulsa «Usar en el trabajo».", "Português": "Abra um trabalho, reserve um artigo no cartão “Materiais e estoque” e toque em “Usar no trabalho”.", "Русский (Russian)": "Откройте работу, зарезервируйте позицию в карточке «Материалы и запасы», затем нажмите «Использовать в работе».", "日本語 (Japanese)": "仕事を開き、「資材と在庫」カードでアイテムを予約してから「この作業で使用」を押します。", "中文 (Chinese)": "打开一项工作，在“材料与库存”卡片中预留一个物品，然后点按“用于此工单”。", "العربية (Arabic)": "افتح عملاً، واحجز عنصراً في بطاقة «المواد والمخزون»، ثم اضغط «استخدام في العمل».", "हिन्दी (Hindi)": "कोई काम खोलें, उसके “सामग्री और इन्वेंटरी” कार्ड में एक आइटम आरक्षित करें, फिर “जॉब में उपयोग करें” दबाएँ।" },
 });
+
+// Web small fixes (17 Oct 2026): Team seat breakdown, the matrix's owner-approval
+// cell, the phone Schedule's Calendar File line. Merged last on purpose.
+mergeIntoTranslations(WEB_SMALL_FIXES_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {
