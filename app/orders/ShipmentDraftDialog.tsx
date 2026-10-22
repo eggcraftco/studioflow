@@ -26,6 +26,7 @@ import {
   confirmOrderShipmentCustoms,
   createOrderShipment,
   getShippingConnection,
+  listOrderShipments,
   listShipmentProducts,
   needsCustomsChoice,
   saveOrderShipmentDraft,
@@ -39,7 +40,7 @@ import {
   type ShippingAbilities,
   type ShippingConnectionView
 } from "@/lib/studioflow/shipping";
-import { senderDifferences, senderFromProfile } from "@/lib/studioflow/shippingSender";
+import { senderFromProfile, senderWarningLabels } from "@/lib/studioflow/shippingSender";
 
 type PieceInput = { weight: string; length: string; width: string; height: string };
 type ItemInput = {
@@ -159,7 +160,24 @@ export function ShipmentDraftDialog({
       .catch(() => { /* keep the card's copy */ });
     return () => { active = false; };
   }, [companyId]);
-  const senderChanged = useMemo(() => senderDifferences(shipper, latestProfile), [shipper, latestProfile]);
+  // The server's reading of this draft's sender (field names only), for every role: a member never reads the
+  // profile, so only the server can tell them. Re-read on opening for the same reason as the profile above.
+  // Absent (a server from before 22 Oct 2026): the owner/admin compare below, as before.
+  const [serverOutdated, setServerOutdated] = useState<string[] | undefined>(shipment.senderOutdated);
+  useEffect(() => {
+    let active = true;
+    listOrderShipments(companyId, orderId)
+      .then(result => {
+        const row = (result.shipments ?? []).find(s => s.id === shipment.id);
+        if (active && row && Array.isArray(row.senderOutdated)) setServerOutdated(row.senderOutdated);
+      })
+      .catch(() => { /* keep the card's copy */ });
+    return () => { active = false; };
+  }, [companyId, orderId, shipment.id]);
+  const senderChanged = useMemo(
+    () => senderWarningLabels({ serverFields: serverOutdated, draftShipper: shipper, profile: latestProfile, manager: can.senderPaysDuties }),
+    [serverOutdated, shipper, latestProfile, can.senderPaysDuties]
+  );
   // Another country, or Great Britain ↔ Northern Ireland (a BT postcode): DHL treats both as customs routes.
   const international = needsCustomsChoice(fromCountry, String(shipper.address?.postalCode ?? ""), recipient.countryCode, recipient.postalCode);
   const declaring = international && declarable === true;
@@ -282,6 +300,8 @@ export function ShipmentDraftDialog({
       const next = senderFromProfile(profile);
       const { issues: pending } = await saveOrderShipmentDraft(companyId, orderId, shipment.id, { shipper: next });
       setShipper(next);
+      // The draft now carries the profile: the warning is cleared here, and the card's list is read again on close.
+      setServerOutdated(current => (Array.isArray(current) ? [] : current));
       takeIssues(pending);
       setMessage(t("The sender details from Settings are now on this shipment."));
     });

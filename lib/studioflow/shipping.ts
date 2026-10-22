@@ -134,6 +134,8 @@ export type OrderShipment = {
   documents: { type: ShipmentDocumentType | string; available: boolean; sizeBytes: number }[];
   draft?: ShipmentDraftView | null;
   issues?: ShipmentIssue[];
+  /** Names of the sender fields that differ from Settings now (editable drafts, preparers; server 22 Oct 2026+). Absent from older servers. */
+  senderOutdated?: string[];
 };
 
 export type ShippingAbilities = {
