@@ -40,7 +40,15 @@ export function WooCommerceIntegrationSection({ workspace, language = "English" 
   const [preview, setPreview] = useState<WooImportPreview | null>(null);
   const [imported, setImported] = useState<WooImportResult | null>(null);
   const [audit, setAudit] = useState<WooAuditReport | null>(null);
-  const connection = connections.find((row) => row.status === "connected") || connections.find((row) => row.status !== "disconnected") || connections[0] || null;
+  // Several stores can live in one workspace (two brands of one business, for
+  // example). Every action below works on the store chosen here, never on
+  // "the" store; the default is the first connected one, as before.
+  const [selectedId, setSelectedId] = useState("");
+  const [adding, setAdding] = useState(false);
+  const liveConnections = connections.filter((row) => row.status !== "disconnected");
+  const connection = liveConnections.find((row) => row.id === selectedId)
+    || connections.find((row) => row.status === "connected") || liveConnections[0] || null;
+  const workspaceName = (workspace.name || "").trim() || t("This workspace");
 
   const refresh = useCallback(async (keepError = false) => {
     if (!companyId) return;
@@ -71,7 +79,10 @@ export function WooCommerceIntegrationSection({ workspace, language = "English" 
     setBusy("finish");
     finishWooConnect(companyId, state)
       .then((result) => {
-        if (result.status === "connected") setNotice(t("WooCommerce store connected."));
+        if (result.status === "connected") {
+          setNotice(t("WooCommerce store connected."));
+          if (result.connection?.id) setSelectedId(result.connection.id);
+        }
         else setError(result.message || t("The store has not sent its keys yet. If you cancelled at the store, start again."));
       })
       .catch((err) => setError(err instanceof Error ? err.message : t("The WooCommerce connection could not be completed. Try connecting again.")))
@@ -93,11 +104,15 @@ export function WooCommerceIntegrationSection({ workspace, language = "English" 
 
   if (loading) return stack(<p className="muted-copy">{t("Loading…")}</p>);
 
-  if (!connection || connection.status === "disconnected") {
-    return stack(
+  // Which business the store joins, said before the merchant leaves for the
+  // store: the workspace is the legal business (its finance, stock, members and
+  // subscription). A brand chosen later is only a label on the sales.
+  const connectCard = (another: boolean) => (
       <section className="card app-card quick-reply-settings-card">
-        <CardTitle icon="orders" eyebrow={t("WooCommerce")} title={t("Connect your store")} />
+        <CardTitle icon="orders" eyebrow={t("WooCommerce")} title={another ? t("Add another store") : t("Connect your store")} />
         <p className="muted-copy">{t("Enter your store's address and approve NivaDesk at your WooCommerce site. Orders, customers and status changes then sync automatically, and NivaDesk checks the store every fifteen minutes for anything a webhook missed.")}</p>
+        <p data-testid="woo-target-workspace">{t("The store is added to this workspace (business):")} <strong>{workspaceName}</strong></p>
+        <p className="muted-copy">{t("Stores of the same business, for example a second brand, belong in one workspace. Connecting another store never creates a new company or a second subscription. A separate company should use its own workspace.")}</p>
         <label style={{ display: "grid", gap: 6, maxWidth: 480 }}>
           <span className="muted-copy">{t("Store address")}</span>
           <input type="url" value={siteUrl} placeholder="https://your-store.com" onChange={(e) => setSiteUrl(e.target.value)} disabled={!isOwner || busy === "connect"}
@@ -111,10 +126,54 @@ export function WooCommerceIntegrationSection({ workspace, language = "English" 
             })}>
             {busy === "connect" ? t("Opening your store…") : t("Connect WooCommerce")}
           </button>
+          {another ? <button type="button" className="button secondary" disabled={busy === "connect"} onClick={() => { setAdding(false); setSiteUrl(""); }}>{t("Cancel")}</button> : null}
         </div>
         <p className="muted-copy">{isOwner ? t("Approve NivaDesk at your store, then you will be sent back here.") : t("Only the workspace owner can connect a store.")}</p>
+        <p className="muted-copy">{t("Choosing a brand for a store later only labels its sales. It does not change the business, the subscription or who owns the workspace.")}</p>
       </section>
-    );
+  );
+
+  // Every store of this workspace, connected or not, so the owner sees what is
+  // already here before adding one more (and can reconnect a disconnected one
+  // under the same address, which keeps its orders on the same ids).
+  const storesCard = connections.length ? (
+    <section className="card app-card quick-reply-settings-card" data-testid="woo-stores">
+      <CardTitle icon="orders" eyebrow={workspaceName} title={t("Stores in this workspace")} />
+      <ul className="settings-rule-list">
+        {connections.map((row) => {
+          const isDisconnected = row.status === "disconnected";
+          const isSelected = !isDisconnected && connection?.id === row.id;
+          return (
+            <li key={row.id}>
+              <span>
+                <strong>{row.storeName || row.host}</strong>
+                {row.storeName && row.host ? <span className="muted-copy"> · {row.host}</span> : null}
+              </span>
+              <span className="settings-action-row">
+                <span className={`studio-pill${row.status === "connected" ? " success" : ""}`}>{isDisconnected ? t("Disconnected") : (row.status === "connected" ? t("Connected") : t("Needs attention"))}</span>
+                {isDisconnected ? (isOwner ? (
+                  <button type="button" className="button secondary" onClick={() => { setSiteUrl(row.siteUrl || `https://${row.host}`); setAdding(true); }}>{t("Reconnect")}</button>
+                ) : null) : (
+                  <button type="button" className={`button${isSelected ? "" : " secondary"}`} aria-pressed={isSelected} disabled={isSelected}
+                    onClick={() => { setSelectedId(row.id); setPreview(null); setImported(null); setAudit(null); setConfirmDisconnect(false); }}>
+                    {isSelected ? t("Selected") : t("Select")}
+                  </button>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+      {isOwner && !adding ? (
+        <div className="settings-action-row">
+          <button type="button" className="button secondary" onClick={() => { setSiteUrl(""); setAdding(true); }}>{t("Add another store")}</button>
+        </div>
+      ) : null}
+    </section>
+  ) : null;
+
+  if (!connection) {
+    return stack(<>{storesCard}{connectCard(false)}</>);
   }
 
   const healthy = connection.status === "connected" && connection.webhooksHealthy;
@@ -122,6 +181,8 @@ export function WooCommerceIntegrationSection({ workspace, language = "English" 
 
   return stack(
     <>
+      {storesCard}
+      {adding ? connectCard(true) : null}
       <section className="card app-card quick-reply-settings-card">
         <h3>{connection.storeName || connection.host}</h3>
         <p className="muted-copy">{connection.siteUrl}{connection.permissions ? ` · ${t("Permissions")}: ${connection.permissions}` : ""}</p>
@@ -219,7 +280,7 @@ export function WooCommerceIntegrationSection({ workspace, language = "English" 
 
       {isOwner ? (
         <section className="card app-card quick-reply-settings-card">
-          <h3>{t("Disconnect WooCommerce")}</h3>
+          <h3>{t("Disconnect WooCommerce")} · {connection.storeName || connection.host}</h3>
           {confirmDisconnect ? (
             <>
               <p className="muted-copy">{t("Disconnect this store? New orders stop arriving. Orders already imported stay in this workspace.")}</p>
