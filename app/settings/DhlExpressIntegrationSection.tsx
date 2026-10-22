@@ -31,13 +31,15 @@ import {
 type Props = { workspace: WorkspaceContext; language?: string };
 
 const EMPTY_PROFILE: ShipperProfile = {
-  companyName: "", contactName: "", phone: "", email: "", addressLine1: "", addressLine2: "", city: "", postalCode: "",
+  companyName: "", contactName: "", contactTitle: "", phone: "", email: "", addressLine1: "", addressLine2: "", city: "", postalCode: "",
   provinceCode: "", countryCode: "", timeZone: "Europe/London", registrationNumbers: []
 };
 
-const PROFILE_FIELDS: { key: keyof ShipperProfile; label: string }[] = [
+const PROFILE_FIELDS: { key: keyof ShipperProfile; label: string; maxLength?: number; hint?: string }[] = [
   { key: "companyName", label: "Business name" },
   { key: "contactName", label: "Contact name" },
+  // The server keeps it as contactTitle and prints it beside the signature on a commercial invoice (DHL limit 35).
+  { key: "contactTitle", label: "Title / Position (optional)", maxLength: 35, hint: "Printed beside your name as the signatory on DHL commercial invoices, e.g. Director." },
   { key: "phone", label: "Phone" },
   { key: "email", label: "Email" },
   { key: "addressLine1", label: "Street address" },
@@ -177,8 +179,10 @@ export function DhlExpressIntegrationSection({ workspace, language = "English" }
                 className="input"
                 value={String(profile[field.key] ?? "")}
                 onChange={e => setProfile(current => ({ ...current, [field.key]: e.target.value }))}
+                maxLength={field.maxLength}
                 aria-invalid={problem ? true : undefined}
               />
+              {field.hint ? <small className="shipment-muted">{t(field.hint)}</small> : null}
               {problem ? <small className="app-inline-error">{problemText(problem.code)}</small> : null}
             </label>
           );

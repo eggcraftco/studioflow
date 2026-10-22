@@ -20,6 +20,8 @@ export type ShipperRegistration = { typeCode: string; number: string; issuerCoun
 export type ShipperProfile = {
   companyName: string;
   contactName: string;
+  /** Printed beside the signature on a DHL commercial invoice (server limit 35). Optional. */
+  contactTitle?: string;
   phone: string;
   email: string;
   addressLine1: string;
