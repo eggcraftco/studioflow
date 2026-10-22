@@ -19,6 +19,7 @@
     "test:inbox-translations": "node scripts/check-inbox-translations.mjs",
     "test:inbox-react-out": "node scripts/check-inbox-react-out.mjs",
     "test:inbox-empty-state": "node scripts/check-inbox-empty-state.mjs",
+    "test:inbox-push-link": "node scripts/check-inbox-push-link.mjs",
     "test:ui-workspace-translations": "node scripts/check-ui-workspace-translations.mjs",
     "test:live-tracking": "node scripts/check-live-tracking.mjs",
     "test:tracking-email": "node scripts/check-tracking-email.mjs",

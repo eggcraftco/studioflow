@@ -30,7 +30,13 @@ export default function InboxPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!authLoading && !user) router.replace("/login");
+    // GN-07: a notification's link (/inbox?conversation=…) survives the sign-in:
+    // the login page honours a same-site ?next=, and the conversation is opened
+    // once the person is back — the server still decides whether they may read it.
+    if (!authLoading && !user) {
+      const back = typeof window === "undefined" ? "" : `${window.location.pathname}${window.location.search}`;
+      router.replace(back.startsWith("/inbox") ? `/login?next=${encodeURIComponent(back)}` : "/login");
+    }
   }, [authLoading, user, router]);
 
   useEffect(() => {

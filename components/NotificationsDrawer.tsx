@@ -242,7 +242,11 @@ export function NotificationsDrawer({
       // The row carries nothing about the customer; the server decides again,
       // when the thread is read, whether this person may see it.
       const conversationId = n.conversationId.trim();
-      router.push(conversationId ? `/inbox?conversation=${encodeURIComponent(conversationId)}` : "/inbox");
+      // GN-07: the row's own workspace rides along, like the push's.
+      const rowWorkspace = String(n.companyId || "").trim();
+      router.push(conversationId
+        ? `/inbox?conversation=${encodeURIComponent(conversationId)}${rowWorkspace ? `&workspace=${encodeURIComponent(rowWorkspace)}` : ""}`
+        : "/inbox");
       onClose();
     } else if (route === "messagethread" || n.threadId.trim()) {
       router.push("/messages");

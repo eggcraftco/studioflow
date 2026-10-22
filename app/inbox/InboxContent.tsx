@@ -578,13 +578,18 @@ export function InboxContent({
   // does for a click in the list.
   const searchParams = useSearchParams();
   const linkedConversation = String(searchParams?.get("conversation") || "");
+  // GN-07: the workspace the push named. A link for another workspace than the
+  // one open opens nothing and says so — it is not "no longer exists".
+  const linkedWorkspace = String(searchParams?.get("workspace") || "").trim();
+  const linkForOtherWorkspace = linkedConversation !== "" && linkedWorkspace !== "" && linkedWorkspace !== workspace.id;
   const linkHandled = useRef("");
   useEffect(() => {
     if (rows === null || !/^[A-Za-z0-9_-]{8,160}$/.test(linkedConversation)) return;
+    if (linkForOtherWorkspace) return;
     if (linkHandled.current === linkedConversation) return;
     linkHandled.current = linkedConversation;
     void openThread(linkedConversation);
-  }, [rows, linkedConversation, openThread]);
+  }, [rows, linkedConversation, linkForOtherWorkspace, openThread]);
 
   /**
    * The records this workspace can offer.
@@ -1177,6 +1182,12 @@ export function InboxContent({
               </button>
             ) : null}
           </div>
+          {linkForOtherWorkspace ? (
+            // GN-07: names nothing about the customer or the other workspace.
+            <p className="inbox-notice" role="status" data-testid="inbox-other-workspace">
+              {t("This message is for another workspace. Switch to that workspace to open it.")}
+            </p>
+          ) : null}
           {listError ? (
             // A refused read is not an empty list, so the empty state below does
             // not render underneath this.
@@ -1330,6 +1341,7 @@ export function InboxContent({
                               messageId={entry.message.messageId}
                               messageType={entry.message.messageType}
                               media={entry.message.media}
+                              channel={thread.channelMedium || ""}
                               t={t}
                             />
                           ) : null}
@@ -1345,6 +1357,7 @@ export function InboxContent({
                               messageId={entry.message.messageId}
                               messageType={entry.message.messageType}
                               media={entry.message.media}
+                              channel={thread.channelMedium || ""}
                               t={t}
                             />
                           ) : null}
