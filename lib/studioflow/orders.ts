@@ -428,7 +428,7 @@ export type OrderTrackingResult = {
  */
 export async function registerOrderTrackingFromWeb(
   workspace: WorkspaceContext,
-  input: { orderId: string; trackingNumber: string; courier: string; language: string; confirmNewRegistration?: boolean }
+  input: { orderId: string; trackingNumber: string; courier: string; language: string }
 ): Promise<OrderTrackingResult> {
   const callable = httpsCallable<Record<string, unknown>, OrderTrackingResult>(functions, "registerTracking");
   const response = await callable({
@@ -436,9 +436,7 @@ export async function registerOrderTrackingFromWeb(
     orderId: input.orderId,
     trackingNumber: input.trackingNumber.trim(),
     courier: input.courier.trim() || "Auto Detect",
-    language: input.language || "English",
-    // GN-13: only the owner's explicit "Register with 17TRACK" sends it; the server counts it.
-    ...(input.confirmNewRegistration === true ? { confirmNewRegistration: true } : {})
+    language: input.language || "English"
   });
   return response.data ?? {};
 }
