@@ -16,6 +16,9 @@ export type SalesCapability = {
   canSeeMoney: boolean;
   scope: "assigned" | "workspace";
   reason: "flag_off" | "no_access" | "workspace_off" | "ok";
+  // Owner or admin (functions/sales/capability.js) — the only people
+  // setSalesVisibility accepts. Optional so an older answer still type-checks.
+  canManageVisibility?: boolean;
 };
 
 export type SalesRow = {
@@ -103,6 +106,22 @@ export async function fetchSalesCapability(companyId: string): Promise<SalesCapa
   const call = httpsCallable<{ companyId: string }, SalesCapability>(functions, "getSalesCapability");
   return (await call({ companyId })).data;
 }
+
+/**
+ * S-2 (23 Oct 2026): the workspace's menu preference. The live callable
+ * (setSalesVisibility, functions/sales/index.js) takes `{ companyId, visible }`
+ * with `visible` a real boolean and answers `{ ok, companyId, visibility }`
+ * ("on" | "off"). It refuses with failed-precondition when the workspace is not
+ * in the Sales pilot and permission-denied for anybody but the owner or an
+ * admin. Hiding the menu entry is not a lock: the page keeps its own check.
+ */
+export async function setSalesVisibility(companyId: string, visible: boolean) {
+  const call = httpsCallable<{ companyId: string; visible: boolean }, { ok: boolean; companyId: string; visibility: string }>(functions, "setSalesVisibility");
+  return (await call({ companyId, visible })).data;
+}
+
+/** Raised after the preference changes, so the menu asks the server again without a reload. */
+export const SALES_VISIBILITY_CHANGED_EVENT = "studioflow-sales-visibility-changed";
 
 export async function fetchSalesRows(request: SalesRowsRequest): Promise<SalesRowsPage> {
   const call = httpsCallable<SalesRowsRequest, SalesRowsPage>(functions, "listSalesRows");

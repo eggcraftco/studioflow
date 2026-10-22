@@ -48,7 +48,7 @@ import {
 } from "@/lib/studioflow/firestore";
 import { orderGrossMargin } from "@/lib/studioflow/finance";
 import { WorkspaceAccessLostError } from "@/lib/studioflow/workspaceResolution";
-import { fetchSalesCapability } from "@/lib/studioflow/sales";
+import { fetchSalesCapability, SALES_VISIBILITY_CHANGED_EVENT } from "@/lib/studioflow/sales";
 import { notificationVisibleForAccess } from "@/lib/studioflow/notificationAccess";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import { studioLanguageDir, studioLanguageLocale } from "@/lib/studioflow/languageDirection";
@@ -1281,6 +1281,14 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [salesMenu, setSalesMenu] = useState<{ companyId: string; showInMenu: boolean } | null>(() =>
     cachedShellMatchesUser ? cachedSalesMenu : null,
   );
+  // S-2: Settings → Sales raises an event after the owner/admin changes the
+  // preference; the menu asks the server again for the workspace on screen.
+  const [salesMenuVersion, setSalesMenuVersion] = useState(0);
+  useEffect(() => {
+    const onChanged = () => setSalesMenuVersion((value) => value + 1);
+    window.addEventListener(SALES_VISIBILITY_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(SALES_VISIBILITY_CHANGED_EVENT, onChanged);
+  }, []);
   // Set when the workspace could not be resolved and no cached copy stood in:
   // the shell shows the message with a Retry instead of a silent loading state.
   const [workspaceLoadError, setWorkspaceLoadError] = useState("");
@@ -2306,7 +2314,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [workspace?.id, user?.uid]);
+  }, [workspace?.id, user?.uid, salesMenuVersion]);
 
   /**
    * When the wizard takes over the whole screen.

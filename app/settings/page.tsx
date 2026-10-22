@@ -55,6 +55,8 @@ import { SettingsPageHeader, SettingsHeaderActionsContext, SettingsCardHead, use
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import { ClientDomainSection } from "./ClientDomainSection";
 import { SmsNotificationsSection } from "./SmsNotificationsSection";
+import { SalesSettingsSection } from "./SalesSettingsSection";
+import { fetchSalesCapability } from "@/lib/studioflow/sales";
 import { CustomerChannelPanel } from "./CustomerChannelPanel";
 import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, sendTestIntegrationWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
@@ -167,7 +169,8 @@ type SettingsSectionId =
   | "sms-notifications"
   | "support-tickets"
   | "getting-started"
-  | "client-domain";
+  | "client-domain"
+  | "sales";
 
 type SettingsGroup =
   | "personal"
@@ -265,6 +268,8 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "pdf", title: "PDF Export Settings", appKey: "PDF", description: "Invoice and PDF export options.", icon: "pdf", group: "design" },
   { id: "workflow", title: "Workflow Steps", appKey: "Workflow", description: "Order steps and custom fields.", icon: "workflow", group: "workflowGroup" },
   { id: "quick-reply", title: "AI Reply Settings", appKey: "Quick Reply", description: "Reply engine, tone and company knowledge.", icon: "reply", group: "workflowGroup" },
+  // S-2 (23 Oct 2026): owner/admin only, and only for a workspace in the Sales pilot.
+  { id: "sales", title: "Sales", appKey: "Sales", description: "Show or hide Sales in the main menu.", icon: "cart", group: "workflowGroup" },
   { id: "sms-notifications", title: "Customer SMS", appKey: "Customer SMS", description: "Text updates to customers: sender ID, what triggers a message, this month's usage.", icon: "reply", group: "workflowGroup" },
   { id: "financial", title: "Financial Settings", appKey: "Financial", description: "Fees, tax and calculations.", icon: "financial", group: "finance" },
   { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team", group: "team" },
@@ -291,6 +296,7 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
   pdf: "invoice pdf export vat eori job sheet preview",
   workflow: "status steps template material headings badges",
   "quick-reply": "ai reply openai api key knowledge tone quick",
+  sales: "sales menu sold store brand channel pilot show hide",
   "sms-notifications": "sms text message texts sender id twilio notification trigger calling code customer updates mobile",
   financial: "vat tax fee currency corporation margin recalculate decimal",
   "team-access": "role member permission invite seat join request",
@@ -505,7 +511,20 @@ function uploadPolicySettingsAccessFor(workspace: WorkspaceContext) {
   });
 }
 
-function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: SettingsSectionId) {
+/**
+ * Settings → Sales is listed only for the owner or an admin of a workspace the
+ * server says is in the Sales pilot (getSalesCapability.pilotEnabled). "unknown"
+ * = the answer has not arrived yet; the section stays out of the list until it
+ * does, and a ?section=sales link is not bounced away while it is pending.
+ */
+type SalesSectionState = "unknown" | "open" | "closed";
+
+function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: SettingsSectionId, salesSection: SalesSectionState = "closed") {
+  if (sectionId === "sales") {
+    if (!workspace) return false;
+    const role = normalizeWorkspaceRole(workspace.role);
+    return (role === "owner" || role === "admin") && salesSection === "open";
+  }
   if (!workspace) return true;
   // Message Settings only exists on plans with the Messages feature — hidden from
   // everyone (owners included) otherwise, matching the Messages nav gate and Mac/Android.
@@ -579,6 +598,7 @@ export default function SettingsPage() {
   const [teamDataLoadFailed, setTeamDataLoadFailed] = useState(false);
   const [supportUnreadCount, setSupportUnreadCount] = useState(0);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("profile-security");
+  const [salesSection, setSalesSection] = useState<SalesSectionState>("unknown");
   const [sectionSearch, setSectionSearch] = useState("");
   // The page header's action group, registered by the section that owns it.
   const [headerActions, setHeaderActions] = useState<ReactNode>(null);
@@ -712,13 +732,33 @@ export default function SettingsPage() {
   // first visible section instead of triggering a Firestore permission error.
   useEffect(() => {
     if (!workspace) return;
-    if (!canSeeSettingsSection(workspace, activeSection)) {
-      const firstVisible = SETTINGS_SECTIONS.find(section => canSeeSettingsSection(workspace, section.id));
+    // Settings → Sales waits for the server's pilot answer before it is judged.
+    if (activeSection === "sales" && salesSection === "unknown") return;
+    if (!canSeeSettingsSection(workspace, activeSection, salesSection)) {
+      const firstVisible = SETTINGS_SECTIONS.find(section => canSeeSettingsSection(workspace, section.id, salesSection));
       if (firstVisible && firstVisible.id !== activeSection) {
         setActiveSection(firstVisible.id);
       }
     }
-  }, [workspace, activeSection]);
+  }, [workspace, activeSection, salesSection]);
+
+  // S-2: is this workspace in the Sales pilot? Asked only for the owner or an
+  // admin (nobody else is offered the section) and once per workspace; the
+  // answer is stamped with the workspace it belongs to.
+  useEffect(() => {
+    const companyId = workspace?.id ?? "";
+    const role = normalizeWorkspaceRole(workspace?.role);
+    if (!companyId || (role !== "owner" && role !== "admin")) {
+      setSalesSection(companyId ? "closed" : "unknown");
+      return;
+    }
+    let cancelled = false;
+    setSalesSection("unknown");
+    fetchSalesCapability(companyId)
+      .then(answer => { if (!cancelled) setSalesSection(answer.companyId === companyId && answer.pilotEnabled === true ? "open" : "closed"); })
+      .catch(() => { if (!cancelled) setSalesSection("closed"); });
+    return () => { cancelled = true; };
+  }, [workspace?.id, workspace?.role]);
 
   useEffect(() => {
     if (!user) return;
@@ -842,8 +882,8 @@ export default function SettingsPage() {
   }, []);
 
   const visibleSections = useMemo(
-    () => SETTINGS_SECTIONS.filter(section => canSeeSettingsSection(workspace, section.id)),
-    [workspace]
+    () => SETTINGS_SECTIONS.filter(section => canSeeSettingsSection(workspace, section.id, salesSection)),
+    [workspace, salesSection]
   );
   const selectedSection = useMemo(
     () => visibleSections.find(section => section.id === activeSection) ?? visibleSections[0] ?? SETTINGS_SECTIONS.find(section => section.id === "profile-security") ?? SETTINGS_SECTIONS[0],
@@ -1251,6 +1291,8 @@ function renderSettingsSection({
       return <MessageSettingsSection workspace={workspace} language={language} />;
     case "sms-notifications":
       return <SmsNotificationsSection workspace={workspace} language={language} />;
+    case "sales":
+      return <SalesSettingsSection workspace={workspace} language={language} />;
     case "support-tickets":
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "about":

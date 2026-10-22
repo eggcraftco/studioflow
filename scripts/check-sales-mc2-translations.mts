@@ -20,6 +20,16 @@ const KEYS = [
 import { readFileSync } from "fs";
 const page = readFileSync(new URL("../app/sales/page.tsx", import.meta.url), "utf8");
 for (const match of page.matchAll(/\bt\("([^"]+)"\)/g)) if (!KEYS.includes(match[1])) KEYS.push(match[1]);
+// S-2 (23 Oct 2026): Settings → Sales, its section entry, and the friendlyError
+// sentences both Sales screens can show.
+const settingsSection = readFileSync(new URL("../app/settings/SalesSettingsSection.tsx", import.meta.url), "utf8");
+for (const match of settingsSection.matchAll(/\bt\("([^"]+)"\)/g)) if (!KEYS.includes(match[1])) KEYS.push(match[1]);
+const settingsPage = readFileSync(new URL("../app/settings/page.tsx", import.meta.url), "utf8");
+const salesEntry = settingsPage.match(/\{ id: "sales", title: "([^"]+)", appKey: "[^"]+", description: "([^"]+)"/);
+if (!salesEntry) { console.log("PROBLEM Settings has no Sales section entry"); process.exit(1); }
+for (const text of [salesEntry[1], salesEntry[2]]) if (!KEYS.includes(text)) KEYS.push(text);
+const friendly = readFileSync(new URL("../lib/studioflow/friendlyError.ts", import.meta.url), "utf8");
+for (const match of friendly.matchAll(/"functions\/[a-z-]+": "([^"]+)"/g)) if (!KEYS.includes(match[1])) KEYS.push(match[1]);
 for (const map of page.matchAll(/_LABELS: Record<string, string> = \{([^}]+)\}/g)) {
   for (const value of map[1].matchAll(/:\s*"([^"]+)"/g)) if (!KEYS.includes(value[1])) KEYS.push(value[1]);
 }
