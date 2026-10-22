@@ -1882,8 +1882,12 @@ function measuredCardMinimumHeight(cardId: OrderDetailCardId, frame: Element | n
 // list and, in the Payment Links pilot, one row (and a row of buttons) per link. Capped at 1200 px like the others,
 // on a phone it ran out of room and the card below was drawn over its last rows (found in the S2 screens at 375 px:
 // Copy link / Show link / Cancel hidden under Priority / Risk). It may grow to fit what it holds.
+// Shipping & Tracking (22 Oct 2026): one row per DHL shipment, and at 390–450 px an order with
+// seven shipments (QA #89) passed 1200 px; the rest — "+ Prepare a DHL shipment" with it — ran
+// under the History / Log card and could not be clicked. Same rule as Financial.
 const MEASURED_CARD_MAXIMUMS: Partial<Record<OrderDetailCardId, number>> = {
-  financial: 4800
+  financial: 4800,
+  shipping: 4800
 };
 
 function elementOuterHeight(element: HTMLElement | null) {

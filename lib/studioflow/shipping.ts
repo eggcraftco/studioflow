@@ -54,8 +54,11 @@ export type ShipmentAddress = {
 
 export type ShipmentParty = {
   fullName?: string; companyName?: string; phone?: string; email?: string; address?: ShipmentAddress;
+  /** Sender only: printed beside the signature on a commercial invoice. */
+  contactTitle?: string;
   registrationNumbers?: ShipperRegistration[];
 };
+
 
 export type ShipmentPiece = { weight: number | null; length: number | null; width: number | null; height: number | null };
 

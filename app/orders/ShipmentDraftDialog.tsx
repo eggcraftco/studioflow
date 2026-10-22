@@ -25,6 +25,7 @@ import {
   checkShipmentDutiesPaid,
   confirmOrderShipmentCustoms,
   createOrderShipment,
+  getShippingConnection,
   listShipmentProducts,
   needsCustomsChoice,
   saveOrderShipmentDraft,
@@ -38,6 +39,7 @@ import {
   type ShippingAbilities,
   type ShippingConnectionView
 } from "@/lib/studioflow/shipping";
+import { senderDifferences, senderFromProfile } from "@/lib/studioflow/shippingSender";
 
 type PieceInput = { weight: string; length: string; width: string; height: string };
 type ItemInput = {
@@ -147,6 +149,17 @@ export function ShipmentDraftDialog({
   }
 
   const fromCountry = String(shipper.address?.countryCode ?? "").toUpperCase();
+  // The profile as Settings holds it NOW: the card's connection may have been read before an edit in
+  // Settings, so the dialog asks once more on opening (the same owner/admin-only read; no server change).
+  const [latestProfile, setLatestProfile] = useState(connection.shipperProfile ?? null);
+  useEffect(() => {
+    let active = true;
+    getShippingConnection(companyId, { fresh: true })
+      .then(view => { if (active && view.shipperProfile !== undefined) setLatestProfile(view.shipperProfile ?? null); })
+      .catch(() => { /* keep the card's copy */ });
+    return () => { active = false; };
+  }, [companyId]);
+  const senderChanged = useMemo(() => senderDifferences(shipper, latestProfile), [shipper, latestProfile]);
   // Another country, or Great Britain ↔ Northern Ireland (a BT postcode): DHL treats both as customs routes.
   const international = needsCustomsChoice(fromCountry, String(shipper.address?.postalCode ?? ""), recipient.countryCode, recipient.postalCode);
   const declaring = international && declarable === true;
@@ -261,17 +274,12 @@ export function ShipmentDraftDialog({
   }
 
   async function useSenderFromSettings() {
-    const profile = connection.shipperProfile;
+    const profile = latestProfile ?? connection.shipperProfile;
     if (!profile) return;
     await guard("sender", async () => {
-      const next = {
-        companyName: profile.companyName, fullName: profile.contactName, phone: profile.phone, email: profile.email,
-        address: {
-          line1: profile.addressLine1, line2: profile.addressLine2, city: profile.city, postalCode: profile.postalCode,
-          provinceCode: profile.provinceCode, countryCode: profile.countryCode
-        },
-        registrationNumbers: profile.registrationNumbers
-      };
+      // The whole sender block, contactTitle included (it was left out before, so a title added
+      // in Settings never reached a draft opened earlier).
+      const next = senderFromProfile(profile);
       const { issues: pending } = await saveOrderShipmentDraft(companyId, orderId, shipment.id, { shipper: next });
       setShipper(next);
       takeIssues(pending);
@@ -370,7 +378,19 @@ export function ShipmentDraftDialog({
           <p className="shipment-muted">
             {[shipper.companyName, shipper.address?.line1, shipper.address?.city, fromCountry ? dhlCountryName(fromCountry, locale) : ""].filter(Boolean).join(" · ") || t("Not set")}
           </p>
-          {can.senderPaysDuties && connection.shipperProfile ? (
+          {senderChanged.length > 0 ? (
+            // A draft keeps the sender as it was when the shipment was opened; Settings changed since.
+            // Only this not-yet-created draft is offered the update — created labels and invoices are history.
+            <div className="shipment-banner" data-tone="warn" role="status" data-testid="sender-outdated">
+              <p><strong>{t("The sender details in Settings have changed since this shipment was opened.")}</strong></p>
+              <p className="shipment-muted">{t("Different now:")} {senderChanged.map(label => t(label)).join(", ")}</p>
+              {can.senderPaysDuties ? (
+                <button type="button" className="inventory-primary" disabled={Boolean(busy)} onClick={() => void useSenderFromSettings()}>{t("Use updated sender details")}</button>
+              ) : (
+                <p className="shipment-muted">{t("An owner or admin can update them.")}</p>
+              )}
+            </div>
+          ) : can.senderPaysDuties && (latestProfile ?? connection.shipperProfile) ? (
             <button type="button" className="inventory-link" disabled={Boolean(busy)} onClick={() => void useSenderFromSettings()}>{t("Use the sender details from Settings")}</button>
           ) : null}
         </section>
