@@ -12,33 +12,57 @@ const headers = {
   "Content-Type": "application/json; charset=utf-8"
 };
 
-function logReviewRequest(method: string, request?: Request) {
-  const safeHeaders: Record<string, string> = {};
+// SEC-ABUSE-01 G3 (privacy): this route used to log the full request URL (query
+// string included), the client address headers and every header value except
+// authorization/cookie, so an mcp-session-id, an API key or a token put in a
+// query string landed in the host's logs. It now logs ONE safe event per
+// request, after the response is known: route name, HTTP method, the JSON-RPC
+// method only when it is one this route knows, the response status, a request
+// id generated here, an error class, and a coarse client family. Never the URL,
+// the query, an address, a header value or the request body.
+const REVIEW_ROUTE = "chatgptMcpReview";
+const KNOWN_RPC_METHODS = new Set(["initialize", "ping", "tools/list", "notifications"]);
 
-  if (request) {
-    for (const [key, value] of request.headers.entries()) {
-      const lowerKey = key.toLowerCase();
+function reviewClientFamily(userAgent: string | null): string {
+  const ua = (userAgent || "").toLowerCase();
+  if (!ua) return "none";
+  if (/openai|chatgpt/.test(ua)) return "openai";
+  if (/claude|anthropic/.test(ua)) return "anthropic";
+  if (/python|curl|wget|go-http|node|axios|undici/.test(ua)) return "script";
+  if (/mozilla/.test(ua)) return "browser";
+  return "other";
+}
 
-      if (lowerKey === "authorization" || lowerKey === "cookie") {
-        safeHeaders[key] = "[redacted]";
-      } else {
-        safeHeaders[key] = value;
-      }
-    }
+function reviewRequestId(): string {
+  try {
+    return globalThis.crypto.randomUUID();
+  } catch {
+    return `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   }
+}
 
+function logReviewEvent(
+  method: string,
+  request: Request | undefined,
+  response: Response,
+  { rpcMethod = "", errorClass = null }: { rpcMethod?: string; errorClass?: string | null } = {}
+): Response {
+  const rpc = rpcMethod.startsWith("notifications/") ? "notifications" : rpcMethod;
   console.log(
-    "[OpenAI MCP Review Scan]",
+    "[MCP Review]",
     JSON.stringify({
+      event: "mcp_review_request",
+      route: REVIEW_ROUTE,
       method,
-      url: request?.url ?? null,
-      userAgent: request?.headers.get("user-agent") ?? null,
-      xForwardedFor: request?.headers.get("x-forwarded-for") ?? null,
-      xRealIp: request?.headers.get("x-real-ip") ?? null,
-      headers: safeHeaders,
+      rpcMethod: rpc ? (KNOWN_RPC_METHODS.has(rpc) ? rpc : "unknown") : null,
+      status: response.status,
+      requestId: reviewRequestId(),
+      errorClass,
+      client: reviewClientFamily(request?.headers.get("user-agent") ?? null),
       timestamp: new Date().toISOString()
     })
   );
+  return response;
 }
 
 function mcpMethodNotAllowedResponse() {
@@ -101,12 +125,12 @@ const reviewTools = [
   }
 ];
 
-async function readMcpPayload(request: Request) {
+async function readMcpPayload(request: Request): Promise<{ payload: Record<string, unknown>; invalidJson: boolean }> {
   try {
     const payload = await request.json();
-    return payload && typeof payload === "object" ? payload : {};
+    return { payload: payload && typeof payload === "object" ? payload : {}, invalidJson: false };
   } catch {
-    return {};
+    return { payload: {}, invalidJson: true };
   }
 }
 
@@ -154,13 +178,11 @@ function negotiatedProtocolVersion(payload: Record<string, unknown>) {
 }
 
 export function GET(request: Request) {
-  logReviewRequest("GET", request);
-
   if ((request.headers.get("accept") ?? "").includes("text/event-stream")) {
-    return mcpMethodNotAllowedResponse();
+    return logReviewEvent("GET", request, mcpMethodNotAllowedResponse(), { errorClass: "sse_not_supported" });
   }
 
-  return Response.json(
+  return logReviewEvent("GET", request, Response.json(
     {
       name: "NivaDesk MCP Review",
       server: "NivaDesk",
@@ -172,42 +194,40 @@ export function GET(request: Request) {
       status: 200,
       headers
     }
-  );
+  ));
 }
 
 export function HEAD(request: Request) {
-  logReviewRequest("HEAD", request);
-
-  return new Response(null, {
+  return logReviewEvent("HEAD", request, new Response(null, {
     status: 200,
     headers
-  });
+  }));
 }
 
 export function OPTIONS(request: Request) {
-  logReviewRequest("OPTIONS", request);
-  return new Response(null, {
+  return logReviewEvent("OPTIONS", request, new Response(null, {
     status: 204,
     headers
-  });
+  }));
 }
 
 export async function POST(request: Request) {
-  logReviewRequest("POST", request);
-  const payload = await readMcpPayload(request);
+  const { payload, invalidJson } = await readMcpPayload(request);
   const id = "id" in payload ? payload.id : null;
   const method = typeof payload.method === "string" ? payload.method : "";
+  const done = (response: Response, errorClass: string | null = null) =>
+    logReviewEvent("POST", request, response, { rpcMethod: method, errorClass: invalidJson ? "invalid_json" : errorClass });
 
   if (method.startsWith("notifications/")) {
-    return new Response(null, {
+    return done(new Response(null, {
       status: 202,
       headers
-    });
+    }));
   }
 
   switch (method) {
     case "initialize":
-      return mcpResult(id, {
+      return done(mcpResult(id, {
         protocolVersion: negotiatedProtocolVersion(payload),
         serverInfo: {
           name: "NivaDesk MCP Review",
@@ -217,17 +237,17 @@ export async function POST(request: Request) {
           tools: {}
         },
         instructions: "Temporary no-auth MCP review endpoint for OpenAI Apps dashboard tool scanning."
-      });
+      }));
 
     case "ping":
-      return mcpResult(id, {});
+      return done(mcpResult(id, {}));
 
     case "tools/list":
-      return mcpResult(id, {
+      return done(mcpResult(id, {
         tools: reviewTools
-      });
+      }));
 
     default:
-      return mcpError(id, -32601, `Method not found: ${method || "(empty)"}`);
+      return done(mcpError(id, -32601, `Method not found: ${method || "(empty)"}`), "method_not_found");
   }
 }
