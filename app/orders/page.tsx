@@ -289,7 +289,11 @@ export default function OrdersPage() {
         setSelectedOrderId(current => {
           const requested = requestedOrderIdRef.current;
           if (requested && loadedOrders.some(order => order.id === requested)) return requested;
-          return current || loadedOrders[0]?.id || "";
+          // GN-11: nothing picked yet → leave it to the guard below, which opens the
+          // first row of the list as drawn (filtered, sorted). The newest order by
+          // date sits ~1,000 rows down a Smart-sorted 1,500-order list, and opening
+          // it made the list view mount every row above it on arrival.
+          return current;
         });
       } catch (loadError) {
         if (!cancelled) {

@@ -5,6 +5,7 @@
 // moves through the result. Both only change what is drawn: search, the filters, the counts
 // and every total keep reading the whole list (lib/studioflow/orderListView.ts).
 import { useEffect, useRef } from "react";
+import { normalizeStudioLanguage, studioLocaleTag } from "@/lib/studioflow/language";
 import {
   ORDER_LIST_PAGE_SIZES,
   ORDER_LIST_VIEW_MODES,
@@ -62,7 +63,8 @@ export function OrderListViewControl({
 
 function formatCount(value: number, language: string) {
   try {
-    return new Intl.NumberFormat(language === "English" ? "en-GB" : undefined).format(value);
+    // The app language's own digits and grouping ("1.449" in German), not the browser's.
+    return new Intl.NumberFormat(studioLocaleTag(normalizeStudioLanguage(language))).format(value);
   } catch {
     return String(value);
   }

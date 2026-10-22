@@ -34847,16 +34847,19 @@ body[data-studio-theme="dark"] .schedule-agenda-calendar {
   padding: 5px 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: transparent;
-  color: inherit;
+  /* Own colours, not inherited: the phone list's band behind this row stays light in
+     the dark theme, and inherited light text vanished on it (seen 22 Oct, 375 px, dark). */
+  background: var(--surface-strong);
+  color: var(--text);
   font: inherit;
   font-weight: 700;
 }
-body[data-studio-theme="dark"] .orders-view-control-field select option {
-  background: #1f1f1f;
-}
 .orders-mobile-list > .orders-view-control {
-  padding: 0 14px 6px;
+  margin: 0 10px 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
 }
 .orders-list-pager {
   display: grid;
