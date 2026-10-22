@@ -1373,7 +1373,7 @@ function CustomerDetail({
                     <th>{t("Project")}</th>
                     <th>{t("Date")}</th>
                     <th>{t("Status")}</th>
-                    <th className="ta-right">{t("Amount")}</th>
+                    <th className="ta-right" title={t("Order value: paid + outstanding")}>{t("Amount")}</th>
                     <th aria-hidden="true" />
                   </tr>
                 </thead>

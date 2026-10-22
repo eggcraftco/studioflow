@@ -31,8 +31,12 @@ import {
   customExpenseTotal,
   customPendingTotal,
   dashboardCostTotal,
+  ESTIMATED_PLATFORM_FEES_FOOTNOTE,
+  estimatedFeeSummary,
   orderFinanceBlock,
-  orderSalesTotal
+  orderSalesTotal,
+  platformFeeLabel,
+  platformFeeTotalLabel
 } from "@/lib/studioflow/finance";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
@@ -388,7 +392,7 @@ function totalsForOrders(
     received: totals.received + order.paidAmount,
     baseCost: totals.baseCost + order.watchPurchasePrice,
     basicBalance: totals.basicBalance + order.paidAmount - order.watchPurchasePrice,
-    revenue: totals.revenue + orderSalesTotal(order),
+    revenue: totals.revenue + block.revenue,
     pending: totals.pending + order.remainingAmount + customPendingTotal(order, settings),
     cost: totals.cost + dashboardCostTotal(order, settings, {
       showFee: visibility.fee,
@@ -759,12 +763,24 @@ export default function DashboardPage() {
     const excluded = filteredFinanceOrders.filter(order => order.countsTowardBalance === false);
     return {
       count: excluded.length,
-      amount: excluded.reduce((total, order) => total + orderSalesTotal(order), 0)
+      amount: excluded.reduce((total, order) => total + orderSalesTotal(order, settings), 0)
     };
-  }, [filteredFinanceOrders]);
+  }, [filteredFinanceOrders, settings]);
   const totals = useMemo(
     () => totalsForOrders(filteredCountingOrders, settings, dashboardVisibility),
     [dashboardVisibility, filteredCountingOrders, settings]
+  );
+  // GN-12 gate: a fee the shop did not report is the workspace's estimate.
+  // The range's fee total says "(estimate, 3%)" when all of it is one; any
+  // profit with an estimated fee inside carries the footnote. The chart and the
+  // year summary read every counting order, so they get their own summary.
+  const rangeFeeSummary = useMemo(
+    () => estimatedFeeSummary(filteredCountingOrders.map(order => orderFinanceBlock(order, settings)), settings),
+    [filteredCountingOrders, settings]
+  );
+  const allTimeFeeSummary = useMemo(
+    () => estimatedFeeSummary(countingFinanceOrders.map(order => orderFinanceBlock(order, settings)), settings),
+    [countingFinanceOrders, settings]
   );
   const workspaceCurrencyIso = DASHBOARD_SYMBOL_TO_ISO[(settings?.selectedCurrency || "£").trim()] || "";
   const foreignCurrencies = useMemo(() => {
@@ -774,12 +790,12 @@ export default function DashboardPage() {
       const code = dashboardOrderCurrency(order);
       if (!code || code === workspaceCurrencyIso) continue;
       const row = map.get(code) ?? { amount: 0, count: 0 };
-      row.amount += orderSalesTotal(order);
+      row.amount += orderSalesTotal(order, settings);
       row.count += 1;
       map.set(code, row);
     }
     return [...map.entries()].sort((a, b) => b[1].amount - a[1].amount);
-  }, [filteredCountingOrders, workspaceCurrencyIso]);
+  }, [filteredCountingOrders, settings, workspaceCurrencyIso]);
   // Average order value and the new/returning split follow the same
   // exclusions as Revenue: cancelled/refunded orders are out, foreign-currency
   // orders count at face value (the card's hint already discloses that).
@@ -1111,12 +1127,12 @@ export default function DashboardPage() {
                     {dashboardVisibility.revenue ? <DashboardSummaryCard icon="check" title={t("Payments Received")} hint={t("Money actually collected on these orders (cash basis).")} value={money(totals.received, hideNumbers, settings)} tone="blue" /> : null}
                     {dashboardVisibility.pending ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.pending.icon} title={t("Outstanding Balance")} hint={t("What customers still owe on orders in this range — cancelled and refunded orders owe nothing.")} value={money(totals.pending, hideNumbers, settings)} tone="orange" /> : null}
                     {dashboardVisibility.cost ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.cost.icon} title={t("Cost")} hint={t("Base cost + extra spending, plus any fee/shipping/VAT cards you have hidden.")} value={money(totals.cost, hideNumbers, settings)} tone="red" /> : null}
-                    {dashboardVisibility.fee ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.fee.icon} title={t("Platform Fee")} value={money(totals.fee, hideNumbers, settings)} tone="red" /> : null}
+                    {dashboardVisibility.fee ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.fee.icon} title={platformFeeTotalLabel(rangeFeeSummary, t)} sub={rangeFeeSummary.footnote ? t(ESTIMATED_PLATFORM_FEES_FOOTNOTE) : undefined} value={money(totals.fee, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.shipping ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.shipping.icon} title={t("Shipping")} value={money(totals.shipping, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.tax ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.tax.icon} title={t("VAT Amount")} hint={t("VAT recorded on these orders and set aside — not yet paid to HMRC.")} value={money(totals.tax, hideNumbers, settings)} tone="red" /> : null}
-                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t(settings?.corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit")} hint={t("Revenue − base cost − extra spending − platform fee − shipping − VAT − refunds.")} value={money(totals.netProfit, hideNumbers, settings)} tone="green" /> : null}
-                    {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="plan" title={`${t("Corporation Tax")} (${Math.round(settings.corporationTaxRate ?? 19)}%)`} value={money(totals.corporationTax, hideNumbers, settings)} tone="red" /> : null}
-                    {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="check" title={t("Profit after CT")} value={money(totals.netProfit - totals.corporationTax, hideNumbers, settings)} tone="green" /> : null}
+                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t(settings?.corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit")} hint={t("Revenue − base cost − extra spending − platform fee − shipping − VAT − refunds.")} sub={rangeFeeSummary.footnote ? t(ESTIMATED_PLATFORM_FEES_FOOTNOTE) : undefined} value={money(totals.netProfit, hideNumbers, settings)} tone="green" /> : null}
+                    {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="plan" title={`${t("Corporation Tax")} (${Math.round(settings.corporationTaxRate ?? 19)}%)`} sub={rangeFeeSummary.footnote ? t(ESTIMATED_PLATFORM_FEES_FOOTNOTE) : undefined} value={money(totals.corporationTax, hideNumbers, settings)} tone="red" /> : null}
+                    {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="check" title={t("Profit after CT")} sub={rangeFeeSummary.footnote ? t(ESTIMATED_PLATFORM_FEES_FOOTNOTE) : undefined} value={money(totals.netProfit - totals.corporationTax, hideNumbers, settings)} tone="green" /> : null}
                   </>
                 ) : (
                   <>
@@ -1185,7 +1201,7 @@ export default function DashboardPage() {
                       />
                       <BreakdownRow label={t("Base Cost")} amount={totals.breakdownBaseCost} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
                       <BreakdownRow label={t("Extra Spending")} amount={totals.expenses} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
-                      <BreakdownRow label={t("Platform Fee")} amount={totals.fee} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
+                      <BreakdownRow label={platformFeeTotalLabel(rangeFeeSummary, t)} amount={totals.fee} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
                       <BreakdownRow label={t("Shipping")} amount={totals.shipping} negative tone="red" hideNumbers={hideNumbers} settings={settings} />
                     </div>
                     <div className="financial-breakdown-col">
@@ -1227,6 +1243,11 @@ export default function DashboardPage() {
                       <p className="muted-copy" style={{ margin: "4px 0 0", fontSize: 11.5 }}>
                         {t("New means the customer's first order falls inside this range — counted across all sales channels.")}
                       </p>
+                      {rangeFeeSummary.footnote ? (
+                        <p className="muted-copy dashboard-estimate-footnote" style={{ margin: "4px 0 0", fontSize: 11.5 }}>
+                          {t(ESTIMATED_PLATFORM_FEES_FOOTNOTE)}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 </section>
@@ -1262,6 +1283,11 @@ export default function DashboardPage() {
                     setRange("custom");
                   } : undefined}
                 />
+                {canSeeAdvancedFinance && allTimeFeeSummary.footnote ? (
+                  <p className="muted-copy dashboard-estimate-footnote" style={{ margin: "6px 0 0", fontSize: 11.5 }}>
+                    {t(ESTIMATED_PLATFORM_FEES_FOOTNOTE)}
+                  </p>
+                ) : null}
                 {!canSeeAdvancedFinance ? (
                   <div className="dashboard-chart-locked">
                     <p className="muted-copy">{t("Received minus Base Cost only. Detailed profit and year comparisons are available on Pro.")}</p>
@@ -1293,6 +1319,11 @@ export default function DashboardPage() {
                     </>
                   )}
                 </div>
+                {canSeeAdvancedFinance && allTimeFeeSummary.footnote ? (
+                  <p className="muted-copy dashboard-estimate-footnote" style={{ margin: "6px 0 0", fontSize: 11.5 }}>
+                    {t(ESTIMATED_PLATFORM_FEES_FOOTNOTE)}
+                  </p>
+                ) : null}
               </section>
 
             </>
@@ -1563,11 +1594,14 @@ function TaxSetAsideCard({ orders, settings, bankTransactions, isOwner, t, hideN
 
     let vatYtd = 0;
     let ctYtd = 0;
+    // GN-12 gate: Corporation Tax is a share of a profit that may hold an estimated fee.
+    const ctBlocks: ReturnType<typeof orderFinanceBlock>[] = [];
     let vatMonth = 0;
     let ctMonth = 0;
     for (const order of orders) {
       if (!order.paymentDate || order.paymentDate.getFullYear() !== year) continue;
       const ct = ctEnabled ? Math.round(Math.max(0, adjustedDashboardNetProfit(order, settings)) * ctRate) / 100 : 0;
+      if (ctEnabled) ctBlocks.push(orderFinanceBlock(order, settings));
       // VAT due from the engine, the figure the VAT card shows — not the
       // stored taxAmount, which can hold a shop's tax that is not the studio's.
       const vatDue = orderFinanceBlock(order, settings).vatDue;
@@ -1612,7 +1646,8 @@ function TaxSetAsideCard({ orders, settings, bankTransactions, isOwner, t, hideN
       monthTotal: netVatMonth + ctMonth,
       paidYtd,
       ctEnabled,
-      ctRate
+      ctRate,
+      ctIncludesEstimatedFees: estimatedFeeSummary(ctBlocks, settings).footnote
     };
   }, [orders, settings, bankTransactions]);
 
@@ -1658,6 +1693,7 @@ function TaxSetAsideCard({ orders, settings, bankTransactions, isOwner, t, hideN
               <>{t("VAT Amount")}: {showMoney(summary.vatYtd)}</>
             )}
             {summary.ctEnabled ? <> · {t("Corporation Tax")} ({Math.round(summary.ctRate)}%): {showMoney(summary.ctYtd)}</> : null}
+            {summary.ctEnabled && summary.ctIncludesEstimatedFees ? <> · {t(ESTIMATED_PLATFORM_FEES_FOOTNOTE)}</> : null}
           </span>
         </div>
         <div>
@@ -2125,7 +2161,8 @@ function ExtraSpendingSection({
       const block = orderFinanceBlock(o, settings);
       if (incBase) push(t("Base Cost"), t("Purchase price"), block.directCost);
       if (incShipping) push(t("Shipping"), t("Delivery cost"), block.deliveryCost);
-      if (incFee) push(t("Platform Fee"), t("Payment fee"), block.platformFee);
+      // GN-12 gate: "Platform Fee (estimate, 3%)" when the shop reported none.
+      if (incFee) push(platformFeeLabel(block, t, settings), t("Payment fee"), block.platformFee);
       if (incTax) push(t("Tax"), t("VAT / Tax"), block.vatDue);
       // Per-order spending headings (this order's own list, else workspace template).
       const orderExpenseRaw = (o.customFields["orderExpenseItemsJSON"] ?? "").trim();

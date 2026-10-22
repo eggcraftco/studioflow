@@ -29932,6 +29932,8 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
 .home-margin-strip { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; }
 .home-margin-strip .home-progress { flex: 1 1 auto; }
 .home-margin-strip b { font-variant-numeric: tabular-nums; font-weight: 800; font-size: 13px; }
+/* GN-12 gate: a profit or fee total with a workspace-estimated platform fee inside says so. */
+.home-estimate-footnote { margin: 6px 0 0; font-size: 11px; line-height: 1.35; opacity: 0.75; }
 
 /* ---- Quick actions --------------------------------------------------- */
 /* Each action carries its own colour. It is decoration only: the label always

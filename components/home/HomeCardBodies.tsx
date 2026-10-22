@@ -10,8 +10,11 @@ import {
   adjustedDashboardNetProfit,
   baseCostTotal,
   customExpenseTotal,
+  ESTIMATED_PLATFORM_FEES_FOOTNOTE,
+  estimatedFeeSummary,
   orderFinanceBlock,
   orderSalesTotal,
+  platformFeeTotalLabel,
 } from "@/lib/studioflow/finance";
 import type { HomeData } from "@/lib/studioflow/useHomeData";
 import type { CustomerDirectoryItem, ScheduleOrderItem } from "@/lib/studioflow/firestore";
@@ -117,7 +120,7 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
   if (orders.length === 0) return null;
 
   const money = (value: number) => cash(value, hideNumbers, moneySettings);
-  const revenue = orders.reduce((sum, o) => sum + orderSalesTotal(o), 0);
+  const revenue = orders.reduce((sum, o) => sum + orderSalesTotal(o, data.settings), 0);
   const received = orders.reduce((sum, o) => sum + o.paidAmount, 0);
   const outstanding = orders.reduce((sum, o) => sum + o.remainingAmount, 0);
   // The Dashboard's rule, not a second one: base cost only when the workspace
@@ -134,6 +137,12 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
   const vat = blocks.reduce((sum, b) => sum + b.vatDue, 0);
   const refunds = blocks.reduce((sum, b) => sum + (b.refunded || 0), 0);
   const profit = orders.reduce((sum, o) => sum + adjustedDashboardNetProfit(o, data.settings), 0);
+  // GN-12 gate: fees the shops did not report are the workspace's estimate.
+  // The profit says it includes them; the fee row says "(estimate, 3%)" when
+  // every fee in the window is that one estimate.
+  const feeSummary = estimatedFeeSummary(blocks, data.settings);
+  const estimateNote = feeSummary.footnote ? t(ESTIMATED_PLATFORM_FEES_FOOTNOTE) : "";
+  const footnote = estimateNote ? <p className="home-estimate-footnote muted-copy">{estimateNote}</p> : null;
 
   // 1x1: the one number, the two that qualify it, and how much of revenue the
   // costs eat — never the bank feed's transactions (§7).
@@ -141,7 +150,8 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
     const costShare = revenue > 0 ? Math.min(100, (costs / revenue) * 100) : 0;
     return (
       <div className="home-money">
-        <p className="home-metric-label">{t("Net profit")}</p>
+        {/* The square has no room for a line of its own; the label carries the note. */}
+        <p className="home-metric-label" title={estimateNote || undefined}>{t("Net profit")}{estimateNote ? <span aria-label={estimateNote}> *</span> : null}</p>
         <strong className={`home-metric-value ${profit >= 0 ? "is-positive" : "is-negative"}`}
                 style={figureFit(money(profit))}>{money(profit)}</strong>
         <div className="home-split-pair">
@@ -165,13 +175,13 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
   // each other. The Dashboard keeps its own wording — a summary card there has
   // the room and the context to be explicit.
   const deductions = [
-    { label: "Costs", value: costs },
-    { label: "Platform fees", value: fees },
-    { label: "Shipping", value: shipping },
-    { label: "VAT", value: vat },
+    { label: "Costs", text: t("Costs"), value: costs },
+    { label: "Platform fees", text: platformFeeTotalLabel(feeSummary, t, "Platform fees"), value: fees },
+    { label: "Shipping", text: t("Shipping"), value: shipping },
+    { label: "VAT", text: t("VAT"), value: vat },
     // Net profit has always deducted refunds; without the row the waterfall
     // did not add up whenever an order had one.
-    ...(refunds > 0.005 ? [{ label: "Refunds", value: refunds }] : []),
+    ...(refunds > 0.005 ? [{ label: "Refunds", text: t("Refunds"), value: refunds }] : []),
   ];
 
   // 2x1: the four headline figures, then how revenue becomes profit.
@@ -193,13 +203,14 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
           <li className="home-waterfall-arrow" aria-hidden="true">→</li>
           {deductions.map((entry) => (
             <li key={entry.label} className="is-deduction">
-              <em><span className="home-minus" aria-hidden="true">−</span><span>{t(entry.label)}</span></em>
+              <em><span className="home-minus" aria-hidden="true">−</span><span>{entry.text}</span></em>
               <b>{money(entry.value)}</b>
             </li>
           ))}
           <li className="home-waterfall-arrow" aria-hidden="true">→</li>
           <li className="is-end"><em>{t("Net profit")}</em><b className="is-positive">{money(profit)}</b></li>
         </ol>
+        {footnote}
       </div>
     );
   }
@@ -234,7 +245,7 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
                 <span className={`home-cost-dot tone-${index}`} aria-hidden="true">
                   <HomeTileIcon name={COST_ICONS[index] ?? "percent"} />
                 </span>
-                <em>{t(entry.label)}</em>
+                <em>{entry.text}</em>
                 <b>{money(entry.value)}</b>
               </li>
             ))}
@@ -246,6 +257,7 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
         <span className="home-progress"><span style={{ width: `${margin}%` }} /></span>
         <b>{margin.toFixed(0)}%</b>
       </div>
+      {footnote}
     </div>
   );
 }
@@ -307,7 +319,7 @@ function RevenueProfitChart({ orders, settings, t, moneySettings }: {
     const bucket = buckets[weeks - 1 - weeksAgo];
     // The engine's revenue and Net Profit — the card's own headline figures —
     // not a third formula that skipped extra spending, refunds and receivables.
-    bucket.revenue += orderSalesTotal(order);
+    bucket.revenue += orderSalesTotal(order, settings);
     bucket.profit += adjustedDashboardNetProfit(order, settings);
   }
 

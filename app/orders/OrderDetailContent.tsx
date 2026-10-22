@@ -143,7 +143,7 @@ import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
 import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
-import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, type FinancialItemWithId } from "@/lib/studioflow/finance";
+import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, orderDetailFinance, platformFeeLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
 
@@ -820,11 +820,14 @@ function orderPdfHtml(
     financeRows.push({ title: "", value: "__divider__" });
   }
   if (showFinInternal) {
-    financeRows.push({ title: "Platform Fee", value: formatMoney(order.paymentFee), tone: "red" });
-    financeRows.push({ title: "Watch Cost", value: formatMoney(order.watchPurchasePrice), tone: "red" });
-    financeRows.push({ title: "Shipping Cost", value: formatMoney(order.deliveryCost), tone: "red" });
-    financeRows.push({ title: `Tax Amount (${taxRuleName})`, value: formatMoney(order.taxAmount), tone: "red" });
-    const profitAfterVat = order.netProfit;
+    // The engine's figures (GN-12), so the rows add up to the profit printed under them.
+    const pdfFinance = orderDetailFinance(order, settings);
+    // GN-12 gate: a fee the shop did not report is the workspace estimate and says so.
+    financeRows.push({ title: platformFeeLabel(pdfFinance, undefined, settings), value: formatMoney(pdfFinance.platformFee), tone: "red" });
+    financeRows.push({ title: "Watch Cost", value: formatMoney(pdfFinance.directCost), tone: "red" });
+    financeRows.push({ title: "Shipping Cost", value: formatMoney(pdfFinance.deliveryCost), tone: "red" });
+    financeRows.push({ title: `Tax Amount (${taxRuleName})`, value: formatMoney(pdfFinance.vatDue), tone: "red" });
+    const profitAfterVat = pdfFinance.netProfit;
     if (settings?.corporationTaxEnabled) {
       const ctRate = settings?.corporationTaxRate ?? 19;
       const corporationTax = Math.round(Math.max(0, profitAfterVat) * ctRate) / 100;
@@ -2493,8 +2496,10 @@ export function OrderDetailContent({
   const money = (value: number, hidden = false) => orderMoney(value, hidden, moneySettings);
   const corporationTaxEnabled = Boolean(moneySettings?.corporationTaxEnabled);
   const corporationTaxRate = moneySettings?.corporationTaxRate ?? 19;
-  const corporationTaxAmount = corporationTaxEnabled ? Math.round(Math.max(0, order.netProfit) * corporationTaxRate) / 100 : 0;
-  const netProfitAfterCT = order.netProfit - corporationTaxAmount;
+  // GN-12: the card's money figures are the Finance Engine's, like every other screen and platform.
+  const orderFinance = orderDetailFinance(order, moneySettings);
+  const corporationTaxAmount = corporationTaxEnabled ? Math.round(Math.max(0, orderFinance.netProfit) * corporationTaxRate) / 100 : 0;
+  const netProfitAfterCT = orderFinance.netProfit - corporationTaxAmount;
   const canInlineEditFinance = Boolean(canSeeFinance && canEditOrderFully);
   const canInlineEditFullDetails = canEditOrderDetailsForRole(workspace.role);
   // Timeline & Delivery: the created date (paymentDate) and the due setting
@@ -4144,7 +4149,6 @@ export function OrderDetailContent({
       taxRate,
       taxType
     });
-    const netProfit = paidAmount + remainingAmount + customRemainingTotal - watchPurchasePrice - customExpenseTotalLocal - paymentFee - deliveryCost - taxAmount;
 
     let payments = order.payments;
     if (patch.recordPayment && typeof patch.recordPayment.amount === "number" && patch.recordPayment.amount > 0) {
@@ -4237,7 +4241,8 @@ export function OrderDetailContent({
       taxRate,
       taxType,
       taxAmount,
-      netProfit,
+      // A rate the person just typed is a stated rate from now on.
+      taxRateStated: order.taxRateStated || typeof patch.taxRate === "number",
       paymentMethod,
       payments,
       customFields
@@ -7396,9 +7401,9 @@ export function OrderDetailContent({
                       </button>
                     ) : null}
                     <FinanceInlineRow
-                      label={t("Platform Fee")}
-                      displayValue={money(order.paymentFee, hideNumbers)}
-                      value={order.paymentFee}
+                      label={platformFeeLabel(orderFinance, t, moneySettings)}
+                      displayValue={money(orderFinance.platformFee, hideNumbers)}
+                      value={orderFinance.platformFee}
                       tone="negative-soft"
                       disabled={!canInlineEditFinance}
                       saving={savingFinanceField === "Platform Fee"}
@@ -7433,20 +7438,20 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "VAT Rate (%)"}
                       onSave={value => saveMoneyFinanceValue("taxRate", value, "VAT Rate (%)")}
                     />
-                    <DetailRow label={t("VAT Amount")} value={money(order.taxAmount, hideNumbers)} tone="negative-soft" />
+                    <DetailRow label={t("VAT Amount")} value={money(orderFinance.vatDue, hideNumbers)} tone="negative-soft" />
                     <div className="app-card-divider" />
                     <div className="detail-row order-value-row">
                       <span>{t("Order Value")}</span>
-                      <strong>{money(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers)}</strong>
+                      <strong>{money(orderFinance.revenue, hideNumbers)}</strong>
                     </div>
                     {corporationTaxEnabled ? (
                       <>
-                        <DetailRow label={t("Profit before Corporation Tax")} value={money(order.netProfit, hideNumbers)} />
+                        <DetailRow label={t("Profit before Corporation Tax")} value={money(orderFinance.netProfit, hideNumbers)} />
                         <DetailRow label={`Corporation Tax (${Math.round(corporationTaxRate)}%, est.)`} value={money(corporationTaxAmount, hideNumbers)} tone="negative" />
                         <DetailRow label={t("Net Profit (after CT)")} value={money(netProfitAfterCT, hideNumbers)} tone="positive" emphasis />
                       </>
                     ) : (
-                      <DetailRow label={t("Final Profit")} value={money(order.netProfit, hideNumbers)} tone="positive" emphasis />
+                      <DetailRow label={t("Final Profit")} value={money(orderFinance.netProfit, hideNumbers)} tone="positive" emphasis />
                     )}
                   </>
                 ) : (
@@ -11980,7 +11985,11 @@ export function pdfPreviewSampleOrder(): OrderDetail {
     taxType: "Revenue",
     taxRate: 20,
     taxAmount: 200,
-    netProfit: 447.75,
+    platformFeeKnown: false,
+    taxAmountKnown: false,
+    taxResponsibility: "",
+    taxIncludedInPrice: null,
+    taxRateStated: true,
     emailAddress: "alex@example.com",
     instagramUsername: "@alexcarter",
     whatsappNumber: "+44 7700 900123",
