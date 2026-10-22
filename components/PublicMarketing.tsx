@@ -29,7 +29,9 @@ import type { PublicSiteTranslationKey } from "@/lib/publicSite/translations";
 import {
   CHANGELOG,
   CHANGELOG_LAST_UPDATED,
+  changelogAnchor,
   getChangelogLabels,
+  isLatestForPlatform,
   type ChangeTag
 } from "@/lib/publicSite/changelog";
 import {
@@ -4550,13 +4552,17 @@ function PublicChangelogPageContent() {
 
       <section className="public-section">
         <div className="public-shell changelog-list">
-          {CHANGELOG.map((entry, index) => (
-            <article key={`${entry.version}-${entry.platform ?? "all"}`} className="changelog-entry">
+          {CHANGELOG.map((entry) => (
+            // The anchor the apps' "NivaDesk updated — see what's new" opens
+            // (#apple-2.1, #android-2.1). scroll-margin keeps it below the header.
+            <article key={changelogAnchor(entry)} id={changelogAnchor(entry)} className="changelog-entry" style={{ scrollMarginTop: 96 }}>
               <header className="changelog-entry-head">
                 <div className="changelog-version">
                   <span className="changelog-version-number">{labels.versionWord} {entry.version}</span>
                   {entry.platform ? <span className="changelog-platform-pill">{entry.platform}</span> : null}
-                  {index === 0 ? <span className="changelog-latest-pill">{labels.latest}</span> : null}
+                  {/* Each platform's newest release is "Latest": iPhone/Mac and
+                      Android ship on their own dates. */}
+                  {isLatestForPlatform(entry) ? <span className="changelog-latest-pill">{labels.latest}</span> : null}
                 </div>
                 <time className="changelog-date">{entry.date}</time>
               </header>

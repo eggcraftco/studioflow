@@ -1,7 +1,8 @@
 "use client";
 
 import { GettingStartedChecklist } from "@/components/home/GettingStartedChecklist";
-import { CHANGELOG } from "@/lib/publicSite/changelog";
+import WebAboutVersion from "@/components/WebAboutVersion";
+import { WEB_BUILD_ID } from "@/lib/studioflow/webBuild";
 import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
@@ -8720,7 +8721,7 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
   // which browser. Nothing here is secret — it is the same data the screen shows.
   function copyDiagnostics() {
     const lines = [
-      `NivaDesk ${CHANGELOG[0]?.version ?? ""} (${CHANGELOG[0]?.date ?? ""})`,
+      `NivaDesk web, build ${WEB_BUILD_ID || "unknown"}`,
       `Workspace: ${workspace.name} (${workspace.id})`,
       `Role: ${workspace.roleLabel}`,
       `Plan: ${workspace.billingPlanName} · ${workspace.billingStatus}`,
@@ -8740,22 +8741,16 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
           <div className="settings-about-copy">
             <strong>NivaDesk</strong>
             <p className="muted-copy">{t("An EGGcraft brand for studio workspace management.")}</p>
-            <p className="settings-about-version">
-              {t("Version")} {CHANGELOG[0]?.version ?? ""}
-              {CHANGELOG[0]?.date ? ` · ${CHANGELOG[0].date}` : ""}
-              {" · "}
-              {isLocal ? t("Local") : t("Web")}
-            </p>
+            {/* GN-06: the build this tab runs and a real update check. The
+                web has no app version; the old line showed the newest
+                iPhone/Mac release's number, and an "Up to date" pill that no
+                check stood behind sat next to it. */}
+            <WebAboutVersion t={t} isLocal={isLocal} />
             <div className="settings-button-row">
               <Link className="button secondary" href="/guide" target="_blank" rel="noopener noreferrer">{t("User guide")}</Link>
               <Link className="button secondary" href="/changelog" target="_blank" rel="noopener noreferrer">{t("What's new")}</Link>
             </div>
           </div>
-          {/* The web build is the release: what is running is what is published. */}
-          <span className="settings-status-pill is-saved" title={t("The web app always runs the latest release.")}>
-            <span className="settings-status-pill-mark" aria-hidden="true">✓</span>
-            {t("Up to date")}
-          </span>
         </div>
       </section>
 

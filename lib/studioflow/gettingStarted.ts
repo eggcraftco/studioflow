@@ -43,6 +43,12 @@ export type GettingStartedStep = {
   href: string;
   /** True when the button opens the "Bring in your orders" sheet rather than a page. */
   opensBringIn: boolean;
+  /** True when the button opens the in-app help assistant (the "How do I…?"
+   *  panel every signed-in screen carries) rather than a page (GN-05). */
+  opensHelp?: boolean;
+  /** True when the destination must be a full page load: the setup questions
+   *  are read from the address when the app shell mounts (?setup=continue). */
+  fullLoad?: boolean;
   cta: string;
   done: boolean;
 };
@@ -54,10 +60,45 @@ export type ServerSetupStep = {
   detail: string;
   action: string;
   done: boolean;
-  target?: { orderId?: string };
+  target?: { orderId?: string; transactionId?: string };
+  /** The real step that has to come first, when the server looked (GN-05):
+   *  "bank_connection", "bank_transactions", "inventory_item", "reservation".
+   *  An older server sends none; the default destination then applies. */
+  need?: string;
 };
 
-type StepCopy = { label?: string; blurb?: string; href: string; cta: string; opensBringIn?: boolean };
+/**
+ * What the person on screen may do, for the steps that depend on it (GN-05).
+ * Getting started is the owner's (canSeeGettingStarted), so this is mostly the
+ * PLAN: a Free workspace is told what the step needs instead of being sent to
+ * a screen that refuses it. Absent = no gate (the old behaviour, and tests).
+ */
+export type GettingStartedAccess = {
+  /** May answer the setup questions (the owner, with Settings access). */
+  canSetUpWorkspace: boolean;
+  /** The plan includes the bank feed (Pro, Team). */
+  canUseBank: boolean;
+  /** The plan includes the Materials & Inventory card (Starter and up). */
+  canUseStockOnJobs: boolean;
+  /** The plan includes the in-app help assistant (Starter and up). */
+  canAskHelpAssistant: boolean;
+};
+
+/** The plan screen, where a plan-gated step points. */
+export const PLAN_ACCESS_HREF = "/settings?section=plan-access";
+/** The setup questions, re-opened (AppShell honours ?setup=continue while setup is unfinished). */
+export const SETUP_QUESTIONS_HREF = "/home?setup=continue";
+/** The help assistant, opened on arrival (components/AppHelpAssistant.tsx reads ?help=open). */
+export const HELP_ASSISTANT_HREF = "/home?help=open";
+/** The window event that opens the help assistant without leaving the page. */
+export const OPEN_HELP_ASSISTANT_EVENT = "nivadesk-open-help-assistant";
+
+export function openHelpAssistant() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(OPEN_HELP_ASSISTANT_EVENT));
+}
+
+type StepCopy = { label?: string; blurb?: string; href: string; cta: string; opensBringIn?: boolean; opensHelp?: boolean };
 
 /**
  * Every step the server can name (functions/lifecycle/checklist.js: STEP_COPY,
@@ -69,7 +110,13 @@ type StepCopy = { label?: string; blurb?: string; href: string; cta: string; ope
  * meaning; otherwise the server's (already translated) words stand.
  */
 const SERVER_STEPS: Record<string, StepCopy> = {
-  onboarding: { href: "", cta: "" },
+  // The setup questions (GN-05). Until answered this line goes to them; once
+  // answered it is a ticked statement (resolveServerStep drops the href).
+  onboarding: {
+    blurb: "Four short questions about your work. Your answers set up your board and these steps.",
+    href: SETUP_QUESTIONS_HREF,
+    cta: "Answer the questions",
+  },
   // The server's line names "Shopify, Etsy, WooCommerce or Square", and the
   // shops the app can bring orders in from are not that list (Square is a
   // till; eBay and Amazon come and go by workspace): words that name none of
@@ -89,11 +136,36 @@ const SERVER_STEPS: Record<string, StepCopy> = {
   order_created: { href: "/orders?new=1", cta: "Create order" },
   customer_created: { href: "/customers?new=1", cta: "Add customer" },
   bank_connected: { href: "/bank", cta: "Connect bank" },
-  bank_match_completed: { href: "/bank", cta: "Continue" },
+  // GN-05: not the Banking overview — the transactions list with the newest
+  // transaction that has no job opened in its drawer (app/bank/page.tsx reads
+  // ?match=next, or ?tx=<id> when the server named one). resolveServerStep
+  // changes this when the server says what has to come first.
+  bank_match_completed: {
+    blurb: "Open a transaction that has no job yet and choose the order it paid for.",
+    href: "/bank?tab=transactions&match=next",
+    cta: "Match a transaction",
+  },
   inventory_item_created: { href: "/inventory?new=1", cta: "Add item" },
-  inventory_consumed_by_order: { href: "/inventory", cta: "Continue" },
-  grounded_ai_answer: { href: "/chatgpt", cta: "Continue" },
-  ai_business_data_connected: { href: "/chatgpt", cta: "Continue" },
+  // GN-05: stock is used on a job from the order's Materials & Inventory card
+  // (reserve, then "Use on the job"); the server names the order that already
+  // holds stock when there is one.
+  inventory_consumed_by_order: {
+    blurb: "Open a job, reserve an item in its Materials & Inventory card, then press “Use on the job”.",
+    href: "/orders",
+    cta: "Open",
+  },
+  // GN-05: the in-app help assistant ("How do I…?"), which answers from the
+  // guide. It used to open /chatgpt — the public ChatGPT marketing page.
+  grounded_ai_answer: {
+    label: "Ask the help assistant a question",
+    blurb: "Ask how something in NivaDesk works. It answers from the guide, not from your data.",
+    href: HELP_ASSISTANT_HREF,
+    cta: "Ask a question",
+    opensHelp: true,
+  },
+  // Giving an assistant the workspace's data IS the ChatGPT / Claude
+  // connection: Settings ▸ Integrations, where those two cards live.
+  ai_business_data_connected: { href: "/settings?section=integrations&category=automation", cta: "Connect" },
   // QuickBooks and Xero live under Banking & accounting, not under the shops.
   accounting_connected: { href: "/settings?section=integrations&category=banking", cta: "Connect" },
 };
@@ -115,12 +187,14 @@ export const SETUP_STEPS = [
 ] as const;
 
 /** Where a server step's button goes on the web. */
-export function serverStepHref(key: string, action: string, target?: { orderId?: string }): string {
+export function serverStepHref(key: string, action: string, target?: { orderId?: string; transactionId?: string }, need?: string): string {
   // A started-but-empty first order: that order, or nothing to open.
   if (action === "open_order") {
     const orderId = String(target?.orderId || "").trim();
     return orderId ? `/orders?orderId=${encodeURIComponent(orderId)}` : "";
   }
+  const hinted = hintedStep(key, target, need);
+  if (hinted) return hinted.href;
   const copy = SERVER_STEPS[key];
   if (copy) return copy.href;
   // A step this build has not met: the server's action, mapped the old way.
@@ -131,10 +205,122 @@ const LEGACY_ACTION_HREFS: Record<string, string> = {
   integrations: CONNECT_SHOP_HREF,
   new_order: "/orders?new=1",
   new_customer: "/customers?new=1",
-  bank: "/bank",
-  inventory: "/inventory",
-  assistant: "/chatgpt",
+  bank: "/bank?tab=transactions&match=next",
+  inventory: "/orders",
+  assistant: HELP_ASSISTANT_HREF,
+  setup: SETUP_QUESTIONS_HREF,
 };
+
+/**
+ * The destination when the server said what has to come first, or named the
+ * record to open (GN-05). Null = the step's default.
+ */
+function hintedStep(
+  key: string,
+  target?: { orderId?: string; transactionId?: string },
+  need?: string,
+): { href: string; cta: string; blurb: string } | null {
+  const orderId = String(target?.orderId || "").trim();
+  const transactionId = String(target?.transactionId || "").trim();
+  if (key === "bank_match_completed") {
+    if (transactionId) {
+      return {
+        href: `/bank?tab=transactions&tx=${encodeURIComponent(transactionId)}`,
+        cta: "Match a transaction",
+        blurb: "Open a transaction that has no job yet and choose the order it paid for.",
+      };
+    }
+    if (need === "bank_connection") {
+      return { href: "/bank", cta: "Connect bank", blurb: "Connect your bank first. Then link a payment to the job it paid for." };
+    }
+    if (need === "bank_transactions") {
+      return { href: "/bank?tab=transactions", cta: "Open", blurb: "Your bank is connected. When the first transactions arrive, link one to the job it paid for." };
+    }
+  }
+  if (key === "inventory_consumed_by_order") {
+    if (orderId) {
+      return {
+        href: `/orders?orderId=${encodeURIComponent(orderId)}&focus=stock`,
+        cta: "Open the job",
+        blurb: "This job has stock reserved. Press “Use on the job” when it goes into the work.",
+      };
+    }
+    if (need === "inventory_item") {
+      return { href: "/inventory?new=1", cta: "Add item", blurb: "Add an item to Inventory first. Then reserve it on a job and press “Use on the job”." };
+    }
+  }
+  return null;
+}
+
+/**
+ * One server step, on this build, for this person (GN-05). Plan gates first —
+ * a step the plan does not include says so and goes to the plan screen (or,
+ * for the help assistant, nowhere: on Free the guide's answers come from the
+ * website chat) — then the server's hint, then the step's own default.
+ */
+function resolveServerStep(step: ServerSetupStep, hasOrder: boolean, access?: GettingStartedAccess): GettingStartedStep {
+  const copy = SERVER_STEPS[step.key];
+  const shell = step.action === "open_order";
+  const done = serverStepDone(step.key, step.done, hasOrder);
+  const base: GettingStartedStep = {
+    id: step.key,
+    label: (!shell && copy?.label) || step.title,
+    blurb: (!shell && copy?.blurb) || step.detail,
+    href: serverStepHref(step.key, step.action, step.target, step.need),
+    opensBringIn: !shell && copy?.opensBringIn === true,
+    opensHelp: !shell && copy?.opensHelp === true,
+    cta: shell ? "Continue" : (copy?.cta || "Continue"),
+    // Bringing in the first order is done by ANY order — imported or typed
+    // in — which is what the sheet offers. The server's own tick (an
+    // imported order) still counts.
+    done,
+  };
+  const hinted = !shell && !done ? hintedStep(step.key, step.target, step.need) : null;
+  if (hinted) {
+    base.cta = hinted.cta;
+    base.blurb = hinted.blurb;
+  }
+  if (step.key === "onboarding") {
+    // Answered: a ticked statement. Unanswered by somebody who may not set the
+    // workspace up: the words stay, the button goes.
+    if (done || (access && !access.canSetUpWorkspace)) return { ...base, href: "", cta: "", fullLoad: false };
+    return { ...base, fullLoad: true };
+  }
+  if (!access || done) return base;
+  if (step.key === "bank_match_completed" && !access.canUseBank) {
+    return { ...base, href: PLAN_ACCESS_HREF, cta: "See plans", blurb: "Bank matching is part of NivaDesk Pro and Team.", opensHelp: false };
+  }
+  if (step.key === "inventory_consumed_by_order" && !access.canUseStockOnJobs) {
+    return { ...base, href: PLAN_ACCESS_HREF, cta: "See plans", blurb: "Using stock on jobs is part of NivaDesk Starter, Pro and Team.", opensHelp: false };
+  }
+  if (step.key === "grounded_ai_answer" && !access.canAskHelpAssistant) {
+    return {
+      ...base,
+      href: "",
+      cta: "",
+      opensHelp: false,
+      blurb: "The help assistant is part of Starter, Pro and Team. On the Free plan, ask us from the chat on nivadesk.app.",
+    };
+  }
+  return base;
+}
+
+/** The access gates for one workspace on screen (see GettingStartedAccess). */
+export function gettingStartedAccess(input: {
+  role: string;
+  billingPlan: string;
+  canOpenSettings: boolean;
+}): GettingStartedAccess {
+  const plan = String(input.billingPlan || "demo");
+  const paid = plan !== "demo";
+  const owner = String(input.role || "").trim().toLowerCase() === "owner";
+  return {
+    canSetUpWorkspace: owner && input.canOpenSettings,
+    canUseBank: plan === "pro_monthly" || plan === "team_monthly",
+    canUseStockOnJobs: paid,
+    canAskHelpAssistant: paid,
+  };
+}
 
 /** A server step's words on this build: ours where the step changed meaning, the server's otherwise. */
 export function serverStepLabel(key: string, action: string, title: string): string {
@@ -164,24 +350,10 @@ export type FallbackFacts = {
 export function resolveGettingStartedSteps(
   serverSteps: ServerSetupStep[] | null | undefined,
   facts: FallbackFacts,
+  access?: GettingStartedAccess,
 ): GettingStartedStep[] {
   if (serverSteps && serverSteps.length > 0) {
-    return serverSteps.map((step) => {
-      const copy = SERVER_STEPS[step.key];
-      const shell = step.action === "open_order";
-      return {
-        id: step.key,
-        label: (!shell && copy?.label) || step.title,
-        blurb: (!shell && copy?.blurb) || step.detail,
-        href: serverStepHref(step.key, step.action, step.target),
-        opensBringIn: !shell && copy?.opensBringIn === true,
-        cta: shell ? "Continue" : (copy?.cta || "Continue"),
-        // Bringing in the first order is done by ANY order — imported or typed
-        // in — which is what the sheet offers. The server's own tick (an
-        // imported order) still counts.
-        done: serverStepDone(step.key, step.done, facts.hasOrder),
-      };
-    });
+    return serverSteps.map((step) => resolveServerStep(step, facts.hasOrder, access));
   }
   return SETUP_STEPS.map((step) => ({
     ...step,

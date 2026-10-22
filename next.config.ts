@@ -44,8 +44,16 @@ const SECURITY_HEADERS = [
   { key: "Cross-Origin-Resource-Policy", value: "same-origin" }
 ];
 
+// Which build this is (GN-06). Fixed into every bundle at build time, so an
+// open tab carries the build it loaded and /api/app-build answers with the
+// build the server is running now; when they differ, a newer web release is
+// out and the tab offers a reload — it never forces one (drafts, uploads).
+// NV_BUILD_ID can be set by the build; otherwise the build's UTC minute.
+const NV_BUILD_ID = (process.env.NV_BUILD_ID || new Date().toISOString().replace(/\D/g, "").slice(0, 12)).slice(0, 40);
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  env: { NEXT_PUBLIC_NV_BUILD_ID: NV_BUILD_ID },
   // "x-powered-by: Next.js" tells an attacker which framework to look up.
   poweredByHeader: false,
   async rewrites() {

@@ -163,7 +163,7 @@ function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
         // (lib/studioflow/gettingStarted.ts): "Bring in your first order" opens
         // the sheet that explains how, and any order ticks it.
         labelKey: serverStepLabel(step.key, step.action, step.title),
-        href: setupStepHref(step.action, step.target, step.key),
+        href: setupStepHref(step.action, step.target, step.key, step.need),
         done: serverStepDone(step.key, step.done, orderCount > 0)
       }))
     : GETTING_STARTED_STEPS.map(step => ({

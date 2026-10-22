@@ -89,12 +89,15 @@ const facts = (hasOrder: boolean) => ({
   });
   await check("1c the Dashboard card's link for that step is the sheet too", () => {
     assert.equal(setupChecklist.setupStepHref("integrations", undefined, "external_order_imported"), "/settings?section=getting-started&sheet=orders");
-    assert.ok(read("app/dashboard/page.tsx").includes("setupStepHref(step.action, step.target, step.key)"), "dashboard passes the step key");
+    assert.ok(read("app/dashboard/page.tsx").includes("setupStepHref(step.action, step.target, step.key, step.need)"), "dashboard passes the step key and its need");
   });
-  await check("1d every server step has a destination (only the 'onboarding' statement has none)", () => {
+  await check("1d every server step has a destination — the unanswered setup line too (GN-05)", () => {
     const steps = need().resolveGettingStartedSteps(SERVER_KEYS.map((key) => server(key)), facts(false));
     const without = steps.filter((step) => !step.href).map((step) => step.id);
-    assert.deepEqual(without, ["onboarding"]);
+    assert.deepEqual(without, []);
+    // Answered, it is a ticked statement with nowhere to go.
+    const [answered] = need().resolveGettingStartedSteps([server("onboarding", true)], facts(false));
+    assert.equal(answered.href, "");
     assert.deepEqual([...need().SERVER_STEP_KEYS].sort(), [...SERVER_KEYS].sort(), "the client knows exactly the server's keys");
   });
   await check("1e each step opens the screen that completes it", () => {
@@ -104,7 +107,10 @@ const facts = (hasOrder: boolean) => ({
     assert.equal(href("customer_created"), "/customers?new=1");
     assert.equal(href("inventory_item_created"), "/inventory?new=1");
     assert.equal(href("bank_connected"), "/bank");
-    assert.equal(href("grounded_ai_answer"), "/chatgpt");
+    // GN-05: the in-app help assistant, not /chatgpt (the public ChatGPT page).
+    assert.equal(href("grounded_ai_answer"), "/home?help=open");
+    assert.equal(href("bank_match_completed"), "/bank?tab=transactions&match=next");
+    assert.equal(href("onboarding"), "/home?setup=continue");
     assert.equal(href("accounting_connected"), "/settings?section=integrations&category=banking");
     assert.equal(need().serverStepHref("order_created", "open_order", { orderId: "o 1" }), "/orders?orderId=o%201");
   });

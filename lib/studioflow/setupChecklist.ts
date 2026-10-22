@@ -25,7 +25,9 @@ export type SetupChecklistStep = {
   done: boolean;
   /** Where an `open_order` step points: the order the person started and left
    *  (functions/lifecycle/substantiveOrder.js decides which). Absent otherwise. */
-  target?: { orderId?: string };
+  target?: { orderId?: string; transactionId?: string };
+  /** What has to come first, when the server looked (GN-05); see gettingStarted.ts. */
+  need?: string;
 };
 
 export type SetupChecklist = {
@@ -52,20 +54,24 @@ export const SETUP_STEP_HREFS: Record<string, string> = {
   // page should not open on an empty list and wait for a second press.
   new_order: "/orders?new=1",
   new_customer: "/customers?new=1",
-  bank: "/bank",
-  inventory: "/inventory",
-  assistant: "/chatgpt",
+  // GN-05: the transactions with the newest unmatched one open, the orders
+  // (stock is used from an order's Materials card), and the in-app help
+  // assistant — /chatgpt was the public ChatGPT marketing page.
+  bank: "/bank?tab=transactions&match=next",
+  inventory: "/orders",
+  assistant: "/home?help=open",
+  setup: "/home?setup=continue",
   // The way back to a started-but-empty first order. The orders page reads
   // `orderId` from the query and opens that order; without an id there is
   // nothing to open, so the step stays a statement rather than a dead button.
   open_order: "/orders",
 };
 
-export function setupStepHref(action: string, target?: { orderId?: string }, stepKey?: string) {
+export function setupStepHref(action: string, target?: { orderId?: string; transactionId?: string }, stepKey?: string, need?: string) {
   // By the step's own key when the caller has it (16 Oct 2026): the server says
   // "integrations" for importing the first order too, and that step now opens
   // the "Bring in your orders" sheet rather than the Integrations hub.
-  if (stepKey) return serverStepHref(stepKey, action, target);
+  if (stepKey) return serverStepHref(stepKey, action, target, need);
   const key = String(action || "").trim();
   if (key === "open_order") {
     const orderId = String(target?.orderId || "").trim();
@@ -138,7 +144,15 @@ export async function loadSetupChecklist(companyId: string): Promise<SetupCheckl
         };
         // The id of the order a shell step points back at, when the server sent one.
         const orderId = String(step?.target?.orderId ?? "").trim();
-        if (orderId) mapped.target = { orderId };
+        const transactionId = String(step?.target?.transactionId ?? "").trim();
+        if (orderId || transactionId) {
+          mapped.target = {};
+          if (orderId) mapped.target.orderId = orderId;
+          if (transactionId) mapped.target.transactionId = transactionId;
+        }
+        // GN-05: what has to come first. Only a plain word; anything else is dropped.
+        const need = String(step?.need ?? "").trim();
+        if (/^[a-z_]{1,40}$/.test(need)) mapped.need = need;
         return mapped;
       })
       .filter((step): step is SetupChecklistStep => step !== null);

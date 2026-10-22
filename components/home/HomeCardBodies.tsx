@@ -20,7 +20,7 @@ import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney, moneySymbol } from "@/lib/studioflow/money";
 import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { type SetupChecklist } from "@/lib/studioflow/setupChecklist";
-import { nextGettingStartedStep, resolveGettingStartedSteps, type GettingStartedStep } from "@/lib/studioflow/gettingStarted";
+import { nextGettingStartedStep, openHelpAssistant, resolveGettingStartedSteps, type GettingStartedAccess, type GettingStartedStep } from "@/lib/studioflow/gettingStarted";
 
 /**
  * The eleven card bodies.
@@ -2230,8 +2230,11 @@ export function QuickActionsCardBody({ size, t, onQuickAction, canCreateOrders }
  * what "Skip for now doesn't work" was.
  */
 export function GettingStartedCardBody({
-  size, data, t, checklist, setupFinished = false, onSkipCard, onOpenBringIn,
+  size, data, t, checklist, setupFinished = false, onSkipCard, onOpenBringIn, access,
 }: CardBodyProps & {
+  /** What this workspace's plan and this person may do (GN-05): a step the
+   *  plan does not include says so instead of opening a screen that refuses. */
+  access?: GettingStartedAccess;
   /** This workspace's own steps. Null while the call is in flight, and null for
    *  good if it failed — the six fallback steps are then what the card draws. */
   checklist?: SetupChecklist | null;
@@ -2253,7 +2256,7 @@ export function GettingStartedCardBody({
       Boolean(order.customFields?.["Shopify Status"] || order.customFields?.["WooCommerce Status"])),
     hasInventory: (data.inventory?.uniqueCount ?? 0) + (data.inventory?.quantityCount ?? 0) > 0,
     hasBankTransaction: data.bankTransactions.length > 0,
-  });
+  }, access);
   const complete = steps.filter((step) => step.done).length;
   const next = nextGettingStartedStep(steps);
   const done = steps.filter((step) => step.done);
@@ -2408,6 +2411,19 @@ function NextStepPanel({
                   onClick={(event) => { event.stopPropagation(); onOpenBringIn(); }}>
             {label}
           </button>
+        ) : step.opensHelp ? (
+          // The help assistant is a panel over every screen, not a page: open
+          // it where the person already is (GN-05).
+          <button type="button" className="home-next-button"
+                  onClick={(event) => { event.stopPropagation(); openHelpAssistant(); }}>
+            {label}
+          </button>
+        ) : step.href && step.fullLoad ? (
+          // The setup questions are read from the address when the app shell
+          // mounts; a client-side push to the same route would not reach it.
+          <a className="home-next-button" href={step.href}>
+            {label}
+          </a>
         ) : step.href ? (
           <Link className="home-next-button" href={step.href}>
             {label}
