@@ -36,6 +36,7 @@
     "test:inventory-notes": "node scripts/check-inventory-notes.mjs",
     "test:plan-order-usage": "node scripts/check-plan-order-usage.mjs",
     "test:count-labels": "npx tsx scripts/check-count-labels.ts",
+    "test:order-list-view": "npx tsx scripts/check-order-list-view.ts",
     "test:claude-mcp-route": "npx tsx scripts/check-claude-mcp-route.ts",
     "test:oauth-loopback": "node scripts/check-oauth-loopback-proxy.mts",
     "test:i18n-gaps": "npx tsx scripts/i18n-gap-report.ts --fail-on-placeholders",

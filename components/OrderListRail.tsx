@@ -9,7 +9,7 @@
 // list with the arrows and selects with Enter or Space. The full list stays
 // mounted behind it, so the filters, the search and the selection are the
 // page's own state and survive the fold untouched.
-import { useEffect, useRef, type KeyboardEvent, type SyntheticEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent, type ReactNode, type SyntheticEvent } from "react";
 import { orderRailFallbackText, orderRailImageUrl, orderRailTone, orderRailTooltip, type OrderRailItem } from "@/lib/studioflow/orderRail";
 
 export function OrderListRail<T extends OrderRailItem>({
@@ -20,6 +20,7 @@ export function OrderListRail<T extends OrderRailItem>({
   label,
   statusText,
   idPrefix,
+  footer,
 }: {
   orders: T[];
   selectedId: string;
@@ -30,6 +31,8 @@ export function OrderListRail<T extends OrderRailItem>({
   /** The status in the reader's language, for the tooltip. */
   statusText: (status: string) => string;
   idPrefix: string;
+  /** GN-11: the list view's compact pager (Orders); Schedule passes none. */
+  footer?: ReactNode;
 }) {
   const railRef = useRef<HTMLDivElement | null>(null);
 
@@ -98,6 +101,7 @@ export function OrderListRail<T extends OrderRailItem>({
           </button>
         );
       })}
+      {footer}
     </div>
   );
 }

@@ -158,7 +158,8 @@ const ordersPage = read("app/orders/page.tsx");
 const schedulePage = read("app/schedule/page.tsx");
 for (const [name, src, prefix] of [["orders", ordersPage, "orders-rail-order"], ["schedule", schedulePage, "schedule-rail-order"]]) {
   expect(`${name}: the rail renders while the list is folded`, src.includes("{sidebar.collapsed ? (\n            <OrderListRail") && src.includes(`idPrefix="${prefix}"`), true);
-  expect(`${name}: the rail shows the filtered list and the page's selection`, src.includes("orders={filteredOrders}") && src.includes("selectedId={selectedOrderId}"), true);
+  // GN-11: on Orders the rail shows the list view's window (the same rows as the list), on Schedule the filtered list.
+  expect(`${name}: the rail shows the filtered list and the page's selection`, src.includes(name === "orders" ? "orders={windowOrders}" : "orders={filteredOrders}") && src.includes("selectedId={selectedOrderId}"), true);
   expect(`${name}: the list's scroll offset is kept across the fold`, src.includes("ScrollTopRef.current = event.currentTarget.scrollTop") && src.includes("}, [sidebar.collapsed]);"), true);
   expect(`${name}: the rail's name is translated`, src.includes('label={t("Collapsed order list")}'), true);
 }

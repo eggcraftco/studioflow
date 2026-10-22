@@ -269,6 +269,7 @@ for (const [name, expected, call] of HANDLERS) {
       t: (value) => value,
       displayOrderTitle: (value) => value || "Order",
       loadRecentOrders: async () => [],
+      loadOrderListsWithTrash: async () => ({ orders: [], trashed: [] }),
       requestWorkflowOrderDeletionFromWeb: async () => { calls.push("request"); return {}; },
       deleteOrderFromWeb: async () => { calls.push("delete"); return {}; },
       purgeOrdersFromWeb: async () => { calls.push("purge"); return {}; },

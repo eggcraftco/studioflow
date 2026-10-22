@@ -15,6 +15,7 @@ import {
 } from "@/lib/studioflow/blockHeadings";
 import {
   loadOrderDetail,
+  loadOrderListsWithTrash,
   loadRecentOrders,
   loadTeamAccessData,
   loadWorkspaceContext,
@@ -62,6 +63,21 @@ import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import { OrderListRail } from "@/components/OrderListRail";
+import { OrderListPager, OrderListViewControl } from "@/components/OrderListViewControl";
+import {
+  DEFAULT_ORDER_LIST_VIEW,
+  ORDER_LIST_ALL_CHUNK,
+  advanceOrderListWindow,
+  initialOrderListWindow,
+  loadOrderListViewPreference,
+  orderListWindow,
+  resizeOrderListWindow,
+  retreatOrderListWindow,
+  revealOrderListIndex,
+  saveOrderListViewPreference,
+  type OrderListViewPreference,
+  type OrderListWindowState
+} from "@/lib/studioflow/orderListView";
 import { OrderDetailContent } from "./OrderDetailContent";
 import { projectAssigneeOptions } from "@/lib/studioflow/projectAssignees";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
@@ -256,14 +272,16 @@ export default function OrdersPage() {
         }
         setWorkspace(loadedWorkspace);
 
-        const [loadedOrders, loadedBlockHeadings, loadedMoneySettings] = await Promise.all([
-          loadRecentOrders(loadedWorkspace.id, loadedWorkspace, uid),
+        const [loadedLists, loadedBlockHeadings, loadedMoneySettings] = await Promise.all([
+          loadOrderListsWithTrash(loadedWorkspace.id, loadedWorkspace, uid),
           loadWorkspaceBlockHeadings(loadedWorkspace).catch(() => null),
           loadWorkspaceSettingsOverview(loadedWorkspace.id).catch(() => null)
         ]);
         const loadedTeamMembers = await loadTeamAccessData(loadedWorkspace).then(data => data.members).catch(() => []);
         if (cancelled) return;
+        const loadedOrders = loadedLists.orders;
         setOrders(loadedOrders);
+        setDeletedOrders(loadedLists.trashed);
         setTeamMembers(loadedTeamMembers);
         setBlockHeadingSettings(loadedBlockHeadings);
         setMoneySettings(loadedMoneySettings);
@@ -370,9 +388,10 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (!selectedOrderId) return;
-    window.requestAnimationFrame(() => {
+    // Two frames: the list view may first have to draw the selected row's page.
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
       document.getElementById(`orders-sidebar-order-${selectedOrderId}`)?.scrollIntoView({ block: "nearest" });
-    });
+    }));
   }, [selectedOrderId]);
 
   // The parked queue only exists for a workspace with a limit, so this is a
@@ -397,10 +416,14 @@ export default function OrdersPage() {
       : orders,
     [orders, user, workspace]
   );
+  // GN-11: the Trash arrives with the list (one read, above). It used to be read
+  // again on every quick-filter click — the whole order scope each time — and is
+  // now refreshed only when the person opens the Trash itself.
+  const viewingTrash = orderFilter === "trash";
   useEffect(() => {
-    if (!workspace) return;
-    loadRecentOrders(workspace.id, workspace, user?.uid ?? "", true).then(setDeletedOrders).catch(() => undefined);
-  }, [orderFilter, workspace, user]);
+    if (!workspace || !viewingTrash) return;
+    loadOrderListsWithTrash(workspace.id, workspace, user?.uid ?? "").then(applyOrderLists).catch(() => undefined);
+  }, [viewingTrash, workspace, user]);
   const filteredOrders = useMemo(
     () => filterAndSortOrders(orderFilter === "trash" ? deletedOrders : visibleOrders, orderSearch, orderFilter, orderSortMode, orderSource),
     [orderFilter, orderSearch, orderSortMode, orderSource, visibleOrders, deletedOrders]
@@ -417,6 +440,69 @@ export default function OrdersPage() {
     if (selectedOrderId && filteredOrders.some(order => order.id === selectedOrderId)) return;
     setSelectedOrderId(filteredOrders[0]?.id || "");
   }, [filteredOrders, loadingOrders, resolvingRequestedOrder, selectedOrderId]);
+
+  // GN-11: the list view. The person's choice (per signed-in user on this
+  // device) says how much of the filtered, sorted result is drawn; the window
+  // says where they are in it. Only drawing is paged — `filteredOrders` above
+  // stays the whole result, so the count, the filter badges, Select/Shift-range
+  // and every total still see every order (lib/studioflow/orderListView.ts).
+  const [listView, setListView] = useState<OrderListViewPreference>(DEFAULT_ORDER_LIST_VIEW);
+  const [listWindowState, setListWindowState] = useState<OrderListWindowState>(() => initialOrderListWindow(DEFAULT_ORDER_LIST_VIEW));
+  const listViewRef = useRef<OrderListViewPreference>(DEFAULT_ORDER_LIST_VIEW);
+  const viewUid = user?.uid ?? "";
+  useEffect(() => {
+    if (!viewUid) return;
+    const stored = loadOrderListViewPreference(viewUid);
+    listViewRef.current = stored;
+    setListView(stored);
+    setListWindowState(initialOrderListWindow(stored));
+  }, [viewUid]);
+  // A new search, filter, sort, source or workspace starts at the top. The
+  // selection is not moved by this — the open order stays open.
+  const workspaceKey = workspace?.id ?? "";
+  useEffect(() => {
+    setListWindowState(initialOrderListWindow(listViewRef.current));
+  }, [orderFilter, orderSearch, orderSortMode, orderSource, workspaceKey]);
+  const listWindow = useMemo(
+    () => orderListWindow(filteredOrders.length, listView, listWindowState),
+    [filteredOrders.length, listView, listWindowState]
+  );
+  const windowOrders = useMemo(
+    () => filteredOrders.slice(listWindow.start, listWindow.end),
+    [filteredOrders, listWindow.end, listWindow.start]
+  );
+  // A selection made from outside the list (a link, a notification, a new
+  // order, the rail) is brought on screen: its page, or enough rows mounted.
+  // Deliberately not re-run when the filter changes, so typing in Search does
+  // not jump pages.
+  const filteredOrdersRef = useRef<OrderListItem[]>([]);
+  filteredOrdersRef.current = filteredOrders;
+  useEffect(() => {
+    if (!selectedOrderId || loadingOrders) return;
+    const index = filteredOrdersRef.current.findIndex(order => order.id === selectedOrderId);
+    if (index < 0) return;
+    setListWindowState(current => revealOrderListIndex(listViewRef.current, current, index));
+  }, [loadingOrders, selectedOrderId]);
+
+  function changeListView(next: OrderListViewPreference) {
+    const previous = listViewRef.current;
+    listViewRef.current = next;
+    setListView(next);
+    setListWindowState(current => resizeOrderListWindow(previous, next, current, filteredOrdersRef.current.length));
+    saveOrderListViewPreference(viewUid, next);
+  }
+
+  function showNextOrders() {
+    setListWindowState(current => advanceOrderListWindow(listViewRef.current, current, filteredOrdersRef.current.length));
+    if (listViewRef.current.mode === "paged") ordersListRef.current?.scrollTo({ top: 0 });
+  }
+
+  function showPreviousOrders() {
+    setListWindowState(current => retreatOrderListWindow(listViewRef.current, current, filteredOrdersRef.current.length));
+    ordersListRef.current?.scrollTo({ top: 0 });
+  }
+
+  const listStep = listView.mode === "all" ? ORDER_LIST_ALL_CHUNK : listView.pageSize;
 
   useEffect(() => {
     if (!workspace || !user) return;
@@ -508,6 +594,11 @@ export default function OrdersPage() {
       .then(setOrders)
       .catch(() => undefined);
     await Promise.all([detail, list]);
+  }
+
+  function applyOrderLists(lists: { orders: OrderListItem[]; trashed: OrderListItem[] }) {
+    setOrders(lists.orders);
+    setDeletedOrders(lists.trashed);
   }
 
   function applyOptimisticOrderPatch(patch: Partial<OrderDetail>) {
@@ -632,7 +723,7 @@ export default function OrdersPage() {
     } catch (purgeError) {
       setOrderActionStatus(null);
       setOrderActionError(purgeError instanceof Error ? purgeError.message : "Could not delete these orders.");
-      loadRecentOrders(workspace.id, workspace, user?.uid ?? "", true).then(setDeletedOrders).catch(() => undefined);
+      loadOrderListsWithTrash(workspace.id, workspace, user?.uid ?? "").then(applyOrderLists).catch(() => undefined);
     }
   }
 
@@ -673,7 +764,7 @@ export default function OrdersPage() {
     } catch (deleteError) {
       setOrderActionStatus(null);
       setOrderActionError(deleteError instanceof Error ? deleteError.message : "Could not delete the selected orders.");
-      loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
+      loadOrderListsWithTrash(workspace.id, workspace, uid).then(applyOrderLists).catch(() => undefined);
     }
   }
 
@@ -707,7 +798,7 @@ export default function OrdersPage() {
       setMergeModalOpen(false);
       setSelectedOrderId(primaryId);
       setOrderActionStatus(result.message || "Orders merged.");
-      loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
+      loadOrderListsWithTrash(workspace.id, workspace, uid).then(applyOrderLists).catch(() => undefined);
     } catch (mergeError) {
       setOrderActionError(mergeError instanceof Error ? mergeError.message : "Could not merge the selected orders.");
     } finally {
@@ -763,7 +854,7 @@ export default function OrdersPage() {
       if (workspace && selectedOrderId === order.id) {
         await refreshSelectedOrder().catch(() => undefined);
       } else {
-        loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
+        loadOrderListsWithTrash(workspace.id, workspace, uid).then(applyOrderLists).catch(() => undefined);
       }
     }
   }
@@ -821,7 +912,7 @@ export default function OrdersPage() {
     } catch (deleteError) {
       setOrderActionStatus(null);
       setOrderActionError(deleteError instanceof Error ? deleteError.message : "Could not delete this order.");
-      loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
+      loadOrderListsWithTrash(workspace.id, workspace, uid).then(applyOrderLists).catch(() => undefined);
     }
   }
 
@@ -833,11 +924,11 @@ export default function OrdersPage() {
     try {
       await restoreOrderFromWeb(workspace, order.id);
       setOrderActionStatus("Order restored.");
-      loadRecentOrders(workspace.id, workspace, user?.uid ?? "").then(setOrders).catch(() => undefined);
+      loadOrderListsWithTrash(workspace.id, workspace, user?.uid ?? "").then(applyOrderLists).catch(() => undefined);
     } catch (restoreError) {
       setOrderActionStatus(null);
       setOrderActionError(restoreError instanceof Error ? restoreError.message : "Could not restore this order.");
-      loadRecentOrders(workspace.id, workspace, user?.uid ?? "", true).then(setDeletedOrders).catch(() => undefined);
+      loadOrderListsWithTrash(workspace.id, workspace, user?.uid ?? "").then(applyOrderLists).catch(() => undefined);
     }
   }
 
@@ -885,7 +976,7 @@ export default function OrdersPage() {
     } catch (assignError) {
       setOrderActionStatus(null);
       setOrderActionError(assignError instanceof Error ? assignError.message : "Could not update project assignment.");
-      loadRecentOrders(workspace.id, workspace, uid).then(setOrders).catch(() => undefined);
+      loadOrderListsWithTrash(workspace.id, workspace, uid).then(applyOrderLists).catch(() => undefined);
       if (selectedOrderId === order.id) refreshSelectedOrder().catch(() => undefined);
     }
   }
@@ -1094,6 +1185,9 @@ export default function OrdersPage() {
               source={orderSource}
               onSourceChange={setOrderSource}
             />
+            {workspaceHasNoOrders ? null : (
+              <OrderListViewControl preference={listView} onChange={changeListView} t={t} idPrefix="orders-view" />
+            )}
           </div>
 
           {error ? (
@@ -1138,12 +1232,13 @@ export default function OrdersPage() {
             </div>
           ) : null}
           <div
-            className="orders-list"
+            className={listView.mode === "all" ? "orders-list is-view-all" : "orders-list"}
             data-order-delete-access={canDeleteOrders ? "delete" : canRequestOrderDeletion ? "request" : "none"}
+            data-orders-window={`${listWindow.start}-${listWindow.end}/${listWindow.total}`}
             ref={ordersListRef}
             onScroll={event => { ordersListScrollTopRef.current = event.currentTarget.scrollTop; }}
           >
-            {filteredOrders.map(order => (
+            {windowOrders.map(order => (
               <div
                 key={order.id}
                 id={`orders-sidebar-order-${order.id}`}
@@ -1172,15 +1267,36 @@ export default function OrdersPage() {
                 ) : null}
               </div>
             ))}
+            <OrderListPager
+              mode={listView.mode}
+              window={listWindow}
+              onNext={showNextOrders}
+              onPrevious={showPreviousOrders}
+              t={t}
+              language={language}
+              step={listStep}
+            />
           </div>
           {sidebar.collapsed ? (
             <OrderListRail
-              orders={filteredOrders}
+              orders={windowOrders}
               selectedId={selectedOrderId}
               onSelect={order => handleOrderCardClick(order)}
               label={t("Collapsed order list")}
               statusText={status => t(status)}
               idPrefix="orders-rail-order"
+              footer={
+                <OrderListPager
+                  mode={listView.mode}
+                  window={listWindow}
+                  onNext={showNextOrders}
+                  onPrevious={showPreviousOrders}
+                  t={t}
+                  language={language}
+                  step={listStep}
+                  compact
+                />
+              }
             />
           ) : null}
 
@@ -1503,7 +1619,7 @@ export default function OrdersPage() {
               <p>{studioCountLabel(filteredOrders.length, "order", language)}</p>
             </div>
             <OrderQuickFilterBar
-              orders={orders}
+              orders={visibleOrders}
               filter={orderFilter}
               sortMode={orderSortMode}
               onFilterChange={setOrderFilter}
@@ -1538,9 +1654,11 @@ export default function OrdersPage() {
           {orderFilter === "trash" ? (
             <div className="orders-trash-banner">⚠ {t("Items in Trash are permanently deleted after 30 days.")}</div>
           ) : null}
-          {workspaceHasNoOrders ? <div className="orders-mobile-first-run">{firstRunCard}</div> : null}
-          <div className="orders-list">
-            {filteredOrders.map(order => (
+          {workspaceHasNoOrders ? <div className="orders-mobile-first-run">{firstRunCard}</div> : (
+            <OrderListViewControl preference={listView} onChange={changeListView} t={t} idPrefix="orders-mobile-view" />
+          )}
+          <div className={listView.mode === "all" ? "orders-list is-view-all" : "orders-list"}>
+            {windowOrders.map(order => (
               <OrderListCard
                 key={order.id}
                 order={order}
@@ -1556,6 +1674,15 @@ export default function OrdersPage() {
                 mobileHref={`/orders/${order.id}`}
               />
             ))}
+            <OrderListPager
+              mode={listView.mode}
+              window={listWindow}
+              onNext={() => { showNextOrders(); if (listViewRef.current.mode === "paged") window.scrollTo({ top: 0 }); }}
+              onPrevious={() => { showPreviousOrders(); window.scrollTo({ top: 0 }); }}
+              t={t}
+              language={language}
+              step={listStep}
+            />
           </div>
         </section>
       </section>
