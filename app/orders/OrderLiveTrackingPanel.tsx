@@ -9,6 +9,8 @@
 // confused: 17TRACK follows any number the merchant types, DHL Express follows its own waybills.
 
 import { useEffect, useState } from "react";
+import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { getTrackingRegistrationSettings, type TrackingRegistrationSettings } from "@/lib/studioflow/trackingRegistration";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
@@ -31,6 +33,10 @@ import {
   sourceCarrierFor,
   type TrackingValues
 } from "@/lib/studioflow/liveTracking";
+
+function cleanNumber(value: string): string {
+  return value.replace(/\s+/g, "").toUpperCase();
+}
 
 function rowValues(data: Record<string, unknown> | undefined): TrackingValues | null {
   if (!data) return null;
@@ -57,8 +63,7 @@ export function OrderLiveTrackingPanel({
   canRefresh,
   syncing,
   onCheckAgain,
-  canRegisterNew = false,
-  onRegisterNew
+  workspace
 }: {
   companyId: string;
   orderId: string;
@@ -69,14 +74,14 @@ export function OrderLiveTrackingPanel({
   canRefresh: boolean;
   syncing: boolean;
   onCheckAgain: () => void;
-  /** GN-13: the workspace owner may register a number explicitly when automatic registration is off. */
-  canRegisterNew?: boolean;
-  onRegisterNew?: () => void;
+  /** GN-13: to read the workspace's 17TRACK allowance when a number could not be registered. */
+  workspace?: WorkspaceContext;
 }) {
   const t = (text: string) => studioT(text, language);
   const [live, setLive] = useState<TrackingValues | null>(null);
   // GN-13: the server's background carrier lookup and the shop's carrier words, on the same row.
-  const [rowExtra, setRowExtra] = useState<{ carrierLookup?: unknown; sourceCarrier?: unknown }>({});
+  const [rowExtra, setRowExtra] = useState<{ carrierLookup?: unknown; sourceCarrier?: unknown; registration?: unknown }>({});
+  const [allowance, setAllowance] = useState<TrackingRegistrationSettings | null>(null);
 
   useEffect(() => {
     setLive(null);
@@ -88,7 +93,7 @@ export function OrderLiveTrackingPanel({
       snapshot => {
         const data = snapshot.data();
         setLive(rowValues(data));
-        setRowExtra({ carrierLookup: data?.carrierLookup, sourceCarrier: data?.sourceCarrier });
+        setRowExtra({ carrierLookup: data?.carrierLookup, sourceCarrier: data?.sourceCarrier, registration: data?.registration });
       },
       () => { setLive(null); setRowExtra({}); }
     );
@@ -109,6 +114,17 @@ export function OrderLiveTrackingPanel({
   const checkpoint = [values.checkpoint, values.location].map(value => String(value || "").trim()).filter(Boolean).join(" · ");
   const supportMessage = trackingSupportMessage(values.supportMessage || "", values.supportMessageKey || "");
   const lastChecked = formatTrackingDate(values.lastCheckedAt, locale);
+  // GN-13: why this number is registered with 17TRACK (this number only), and — when it could not
+  // be registered — how much of the workspace's 17TRACK allowance is used.
+  const registration = rowExtra.registration as { trackingNumber?: unknown; via?: unknown } | undefined;
+  const registeredVia = registration && cleanNumber(String(registration.trackingNumber ?? "")) === cleanNumber(trackingNumber) ? String(registration.via ?? "") : "";
+  const needsRegistration = supportStatus === "registration_required";
+  useEffect(() => {
+    if (!needsRegistration || !workspace) { setAllowance(null); return; }
+    let alive = true;
+    getTrackingRegistrationSettings(workspace).then((v) => { if (alive) setAllowance(v); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [needsRegistration, workspace]);
   const rows: Array<[string, string]> = [
     ...(supportLabel ? [["Tracking Support", t(supportLabel)] as [string, string]] : []),
     ["Carrier", carrier],
@@ -158,15 +174,16 @@ export function OrderLiveTrackingPanel({
             {syncing ? t("Checking tracking…") : t("Check Again")}
           </button>
         ) : null}
-        {canRegisterNew && onRegisterNew && supportStatus === "registration_required" ? (
-          <button type="button" className="button" data-testid="register-with-17track" disabled={syncing} onClick={onRegisterNew}
-                  title={t("Registering uses one of the workspace's 17TRACK registrations.")}>
-            {t("Register with 17TRACK")}
-          </button>
-        ) : null}
       </div>
-      {canRegisterNew && onRegisterNew && supportStatus === "registration_required" ? (
-        <p className="shipment-muted" style={{ margin: 0, fontSize: 11.5 }}>{t("Registering uses one of the workspace's 17TRACK registrations.")}</p>
+      {registeredVia === "member" ? <p className="shipment-muted" data-registered-via="member" style={{ margin: 0, fontSize: 11.5 }}>{t("Registered with 17TRACK because it was added to this order.")}</p> : null}
+      {registeredVia === "automatic" ? <p className="shipment-muted" data-registered-via="automatic" style={{ margin: 0, fontSize: 11.5 }}>{t("Registered with 17TRACK automatically (shop import).")}</p> : null}
+      {needsRegistration && allowance ? (
+        <p className="shipment-muted" data-testid="tracking-allowance" style={{ margin: 0, fontSize: 11.5 }}>
+          {t("17TRACK registrations used: today {today} of {daily}, this month {month} of {monthly}.")
+            .replace("{today}", String(allowance.used.today)).replace("{daily}", String(allowance.caps.daily))
+            .replace("{month}", String(allowance.used.month)).replace("{monthly}", String(allowance.caps.monthly))}
+          {" "}<a href="/settings?section=tracking">{t("17TRACK settings")}</a>
+        </p>
       ) : null}
     </div>
   );

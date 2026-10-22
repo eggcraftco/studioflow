@@ -3,10 +3,10 @@
 // 1. The rules (lib/studioflow/trackingRegistrationRules.ts), compiled and run: the setting is off
 //    unless the server says `true`; missing numbers are 0; the usage line fills in.
 // 2. The screens, from the source: Settings ▸ Integrations has the 17TRACK tile and screen; the switch
-//    is disabled unless the server says the viewer may change it (owner); the screen says that a
-//    registration uses the allowance and shows used/limit for today and the month; the order panel
-//    offers "Register with 17TRACK" only to the owner and only when the row says registration_required;
-//    the explicit flag reaches the callable only from that button.
+//    is disabled unless the server says the viewer may change it (owner); the screen tells apart numbers
+//    a person adds (registered when asked, no switch needed) from shop-import numbers (the switch) and
+//    shows used/limit for today and the month; the order panel says why a number is registered and,
+//    when it could not be, the allowance used (owner follow-up 22 Oct).
 // 3. Every sentence these screens print, and every fixed refusal sentence the server sends
 //    (functions/orders/trackingRegistrations.js decisionMessage), has all eleven translations.
 //
@@ -53,11 +53,9 @@ const orders = read("lib/studioflow/orders.ts");
 expect("settings: tile + screen wired", [/TRACK17_TILE/.test(page), /managing === "tracking" \? <TrackingRegistrationSection/.test(page), /rawRequested === "tracking"/.test(page)], [true, true, true]);
 expect("settings: the switch is disabled unless the server allows the change", /disabled=\{!view\.canChange \|\| busy\}/.test(section), true);
 expect("settings: only the owner-only save callable writes it (no direct Firestore write)", [/saveTrackingRegistrationSettings\(workspace, next\)/.test(section), /firebase\/firestore|setDoc|updateDoc/.test(section)], [true, false]);
-expect("settings: says it uses the allowance; shows used/limit today and month", [/uses one registration from a limited allowance/.test(section), /view\.used\.today, view\.caps\.daily/.test(section), /view\.used\.month, view\.caps\.monthly/.test(section)], [true, true, true]);
-expect("panel: Register button only for the owner and only on registration_required", /canRegisterNew && onRegisterNew && supportStatus === "registration_required"/.test(panel), true);
-expect("detail: the owner flag and the explicit request", [/canRegisterNew=\{viewerIsOwner\}/.test(detail), /requestLiveTracking\(order\.trackingNumber, order\.courier \|\| "Auto Detect", true, true\)/.test(detail)], [true, true]);
-expect("detail: Check again never sends the explicit flag", /onCheckAgain=\{\(\) => void requestLiveTracking\(order\.trackingNumber, order\.courier \|\| "Auto Detect", true\)\}/.test(detail), true);
-expect("orders.ts: the flag is sent only when true", /input\.confirmNewRegistration === true \? \{ confirmNewRegistration: true \} : \{\}/.test(orders), true);
+expect("settings: two kinds told apart; shows used/limit today and month", [/are registered with 17TRACK when you ask; this switch is not needed for them/.test(section), /numbers nobody added by hand/.test(section), /view\.used\.today, view\.caps\.daily/.test(section), /view\.used\.month, view\.caps\.monthly/.test(section)], [true, true, true, true]);
+expect("panel: why registered (this number only), allowance when not registered, link to settings", [/registeredVia === "member"/.test(panel), /registeredVia === "automatic"/.test(panel), /cleanNumber\(String\(registration\.trackingNumber/.test(panel), /needsRegistration && allowance/.test(panel), /\/settings\?section=tracking/.test(panel)], [true, true, true, true, true]);
+expect("panel/detail: no owner-only register button any more (a person's request needs no setting)", [/Register with 17TRACK/.test(panel), /canRegisterNew/.test(detail), /confirmNewRegistration/.test(orders + detail)], [false, false, false]);
 
 // ---- 3. translations
 for (const m of read("lib/studioflow/language.ts").matchAll(/from "\.\/([A-Za-z]+)"/g)) compile(`lib/studioflow/${m[1]}.ts`, `${m[1]}.mjs`);
@@ -65,8 +63,8 @@ const { studioT } = await import(pathToFileURL(compile("lib/studioflow/language.
 const LANGS = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
 const literal = (src) => [...src.matchAll(/\bt\("((?:[^"\\]|\\.)+)"\)/g)].map((m) => JSON.parse(`"${m[1]}"`));
 const SERVER = [
-  "17TRACK registration is off for this workspace. As the owner you can register this number now; it uses one of the workspace's 17TRACK registrations.",
-  "17TRACK registration is off for this workspace. Ask the workspace owner to register this number, or choose the courier.",
+  "Not registered: today's 17TRACK limit is reached", "Not registered: this month's 17TRACK limit is reached", "Not registered: too many new numbers this hour",
+  "Not registered: 17TRACK registrations are paused", "Registering with 17TRACK", "Not registered: 17TRACK refused it recently",
   "The workspace's 17TRACK registrations for today are used up. Try again tomorrow, or choose the courier.",
   "The workspace's 17TRACK registrations for this month are used up. Choose the courier.",
   "Too many new 17TRACK registrations in the last hour. Try again later.",
@@ -77,12 +75,14 @@ const SERVER = [
   "Registration needed"
 ];
 const sentences = new Set([...literal(section).filter((s) => !["Loading...", "Saved."].includes(s)), "Saved.", "Could not load the 17TRACK settings.", "Could not save the 17TRACK settings.",
-  "Register with 17TRACK", "Registering uses one of the workspace's 17TRACK registrations.", "17TRACK tracking", "Follow any courier's tracking number through 17TRACK.", ...SERVER]);
+  "Registered with 17TRACK because it was added to this order.", "Registered with 17TRACK automatically (shop import).",
+  "17TRACK registrations used: today {today} of {daily}, this month {month} of {monthly}.", "17TRACK settings", "17TRACK tracking", "Follow any courier's tracking number through 17TRACK.", ...SERVER]);
 for (const sentence of sentences) {
   const missing = LANGS.filter((lang) => studioT(sentence, lang) === sentence);
   expect(`translated in all eleven: ${sentence.slice(0, 60)}`, missing, []);
 }
 for (const placeholder of ["{used}", "{limit}"]) expect(`placeholder survives: ${placeholder}`, LANGS.filter((l) => !studioT("{used} of {limit}", l).includes(placeholder)), []);
+for (const placeholder of ["{today}", "{daily}", "{month}", "{monthly}"]) expect(`placeholder survives: ${placeholder}`, LANGS.filter((l) => !studioT("17TRACK registrations used: today {today} of {daily}, this month {month} of {monthly}.", l).includes(placeholder)), []);
 
 if (failures.length) { console.error(failures.join("\n")); console.error(`check-tracking-registration: ${failures.length} of ${checks} checks FAILED`); process.exit(1); }
 console.log(`check-tracking-registration: ${checks} checks passed (${sentences.size} sentences in all twelve languages).`);

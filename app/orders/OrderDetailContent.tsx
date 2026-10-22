@@ -4615,7 +4615,7 @@ export function OrderDetailContent({
    * "Refresh Live Status". The answer lands in the order and its trackingResults row, which the
    * panel is listening to, so nothing here copies the reply onto the screen.
    */
-  async function requestLiveTracking(trackingNumber: string, courier: string, isManual: boolean, confirmNewRegistration = false) {
+  async function requestLiveTracking(trackingNumber: string, courier: string, isManual: boolean) {
     const cleaned = cleanTrackingNumber(trackingNumber);
     if (!cleaned) return;
     setTrackingSyncing(true);
@@ -4625,8 +4625,7 @@ export function OrderDetailContent({
         orderId: order.id,
         trackingNumber: cleaned,
         courier: courier || "Auto Detect",
-        language: detailLanguage,
-        confirmNewRegistration
+        language: detailLanguage
       });
       // GN-13: "not registered now" is not an update; the panel shows the server's reason.
       const deferred = (answer as { registrationDeferred?: boolean }).registrationDeferred === true;
@@ -7660,8 +7659,7 @@ export function OrderDetailContent({
                   canRefresh={canEditWorkflowFields}
                   syncing={trackingSyncing}
                   onCheckAgain={() => void requestLiveTracking(order.trackingNumber, order.courier || "Auto Detect", true)}
-                  canRegisterNew={viewerIsOwner}
-                  onRegisterNew={() => void requestLiveTracking(order.trackingNumber, order.courier || "Auto Detect", true, true)}
+                  workspace={workspace}
                 />
               ) : (
                 <p className="layout-status finance-inline-message" style={{ marginTop: 8 }}>

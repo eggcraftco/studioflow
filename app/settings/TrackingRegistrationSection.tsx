@@ -2,10 +2,12 @@
 
 // 17TRACK tracking in Settings ▸ Integrations (GN-13, owner decisions 22 Oct 2026).
 //
-// - Says plainly that registering a new number with 17TRACK uses one registration from a
-//   limited allowance, and shows the workspace's use against its daily and monthly limit.
-// - Automatic registration is OFF until the owner turns it on; only the owner sees a working
-//   switch (the server refuses everyone else as well). Numbers already registered keep updating.
+// - Two kinds of registration, said plainly (owner, 22 Oct follow-up):
+//   a number a person ADDS to an order (web or app) or asks about with Check again is registered
+//   when they ask — no setting needed; a number nobody added by hand (a shop import whose carrier
+//   is unknown) is registered only if the owner turns on the switch here (default off).
+// - Both use the same limited allowance; the screen shows today's and this month's use.
+// - Only the owner sees a working switch (the server refuses everyone else as well).
 import { useCallback, useEffect, useState } from "react";
 import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
@@ -55,14 +57,17 @@ export function TrackingRegistrationSection({ workspace, language = "English" }:
       <section className="card app-card">
         <SettingsCardHead title={t("Automatic 17TRACK registration")} subtitle={t("Follow any courier's tracking number through 17TRACK.")} />
         <p className="settings-field-hint">
-          {t("Every new tracking number registered with 17TRACK uses one registration from a limited allowance. When this is on, NivaDesk registers new numbers by itself (shop imports and Check again). When it is off, nothing is registered on its own; the owner can still register a single number from the order.")}
+          {t("Numbers you or your team add to an order — on the web or in the apps — and Check again are registered with 17TRACK when you ask; this switch is not needed for them. Each new number uses one registration from the workspace allowance below.")}
+        </p>
+        <p className="settings-field-hint">
+          {t("This switch decides only whether NivaDesk also registers, on its own, numbers nobody added by hand: a shop import's tracking number whose carrier is unknown.")}
         </p>
         <p className="settings-field-hint">{t("Numbers already registered keep updating either way.")}</p>
         {view ? (
           <div className="settings-switch-list">
             <label className="settings-switch-line">
               <span className="settings-switch-line-copy">
-                <strong>{t("Register new numbers automatically")}</strong>
+                <strong>{t("Register shop-import numbers automatically")}</strong>
                 <small>{view.canChange ? t("Uses the workspace's 17TRACK allowance.") : t("Only the workspace owner can change this.")}</small>
               </span>
               <input
@@ -79,7 +84,7 @@ export function TrackingRegistrationSection({ workspace, language = "English" }:
       </section>
       {view ? (
         <section className="card app-card">
-          <SettingsCardHead title={t("17TRACK allowance")} subtitle={t("New registrations for this workspace. The limits apply to automatic registration and to Check again alike.")} />
+          <SettingsCardHead title={t("17TRACK allowance")} subtitle={t("New registrations for this workspace, added by a person or automatic. The limits apply to both.")} />
           <div className="settings-two-col">
             <div className="settings-subpanel" data-testid="tracking-used-today">
               <span className="settings-field-label">{t("Used today")}</span>
