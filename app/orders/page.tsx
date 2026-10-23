@@ -1072,6 +1072,60 @@ export default function OrdersPage() {
 
   if (loading || !user) return <LoadingScreen />;
 
+  // ETSY-E2E (24 Oct 2026): the parked-orders banner was only in the desktop list, so on a phone a demo
+  // workspace that had just imported 8 of 40 Etsy orders saw 8 and nothing about the other 32.
+  const heldBanner = heldOrders && (heldOrders.heldCount ?? 0) > 0 && canCreateFirstOrder ? (
+            <div className="orders-held-banner" role="status">
+              <strong>
+                {heldOrders.heldCount} {(heldOrders.heldCount ?? 0) === 1
+                  ? t("store order is waiting")
+                  : t("store orders are waiting")}
+              </strong>
+              <span>
+                {(heldOrders.roomAvailable ?? 0) > 0
+                  ? t("There is room on your plan now. Import the waiting orders when you are ready.")
+                  : t("Your plan is full, so new store orders are being kept safe rather than imported. Mark finished work delivered to make room, or choose a plan.")}
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={releasingHeld || (heldOrders.roomAvailable ?? 0) === 0}
+                onClick={() => {
+                  if (!workspace) return;
+                  const currentWorkspace = workspace;
+                  setReleasingHeld(true);
+                  void (async () => {
+                    try {
+                      const result = await releaseHeldIntegrationOrders(currentWorkspace);
+                      // eBay orders are handed to their own worker rather than
+                      // imported inside the call, so they are on their way in
+                      // rather than in — saying "0 imported" would be wrong.
+                      const importedNow = result?.imported ?? 0;
+                      const onTheWay = result?.queued ?? 0;
+                      dispatchStudioToast({
+                        message: onTheWay > 0
+                          ? `${importedNow + onTheWay} ${t("orders are being imported")}`
+                          : `${importedNow} ${t("orders imported")}`,
+                      });
+                      setHeldOrders(await listHeldIntegrationOrders(currentWorkspace).catch(() => null));
+                      setOrders(await loadRecentOrders(currentWorkspace.id, currentWorkspace, user?.uid ?? ""));
+                    } catch (failure) {
+                      dispatchStudioToast({
+                        message: failure instanceof Error ? failure.message : t("Could not import the waiting orders."),
+                      });
+                    } finally {
+                      setReleasingHeld(false);
+                    }
+                  })();
+                }}
+              >
+                {(heldOrders.roomAvailable ?? 0) === 0
+                  ? t("No room yet")
+                  : `${t("Import")} ${Math.min(heldOrders.roomAvailable ?? 0, heldOrders.heldCount ?? 0)}`}
+              </button>
+            </div>
+  ) : null;
+
   return (
     <AppShell>
       {loadingOrders ? <LoadingScreen /> : null}
@@ -1120,55 +1174,7 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          {heldOrders && (heldOrders.heldCount ?? 0) > 0 && canCreateFirstOrder ? (
-            <div className="orders-held-banner" role="status">
-              <strong>
-                {heldOrders.heldCount} {(heldOrders.heldCount ?? 0) === 1
-                  ? t("store order is waiting")
-                  : t("store orders are waiting")}
-              </strong>
-              <span>
-                {t("Your plan is full, so new store orders are being kept safe rather than imported. Mark finished work delivered to make room, or choose a plan.")}
-              </span>
-              <button
-                type="button"
-                className="btn btn-sm"
-                disabled={releasingHeld || (heldOrders.roomAvailable ?? 0) === 0}
-                onClick={() => {
-                  if (!workspace) return;
-                  const currentWorkspace = workspace;
-                  setReleasingHeld(true);
-                  void (async () => {
-                    try {
-                      const result = await releaseHeldIntegrationOrders(currentWorkspace);
-                      // eBay orders are handed to their own worker rather than
-                      // imported inside the call, so they are on their way in
-                      // rather than in — saying "0 imported" would be wrong.
-                      const importedNow = result?.imported ?? 0;
-                      const onTheWay = result?.queued ?? 0;
-                      dispatchStudioToast({
-                        message: onTheWay > 0
-                          ? `${importedNow + onTheWay} ${t("orders are being imported")}`
-                          : `${importedNow} ${t("orders imported")}`,
-                      });
-                      setHeldOrders(await listHeldIntegrationOrders(currentWorkspace).catch(() => null));
-                      setOrders(await loadRecentOrders(currentWorkspace.id, currentWorkspace, user?.uid ?? ""));
-                    } catch (failure) {
-                      dispatchStudioToast({
-                        message: failure instanceof Error ? failure.message : t("Could not import the waiting orders."),
-                      });
-                    } finally {
-                      setReleasingHeld(false);
-                    }
-                  })();
-                }}
-              >
-                {(heldOrders.roomAvailable ?? 0) === 0
-                  ? t("No room yet")
-                  : `${t("Import")} ${Math.min(heldOrders.roomAvailable ?? 0, heldOrders.heldCount ?? 0)}`}
-              </button>
-            </div>
-          ) : null}
+          {heldBanner}
           <div className="orders-sidebar-controls">
             <label className="orders-search">
               <span aria-hidden="true">⌕</span>
@@ -1207,7 +1213,7 @@ export default function OrdersPage() {
           {workspaceHasNoOrders ? (
             firstRunCard
           ) : filteredOrders.length === 0 && !loadingOrders ? (
-            <p className="muted-copy" style={{ padding: "0 14px 14px" }}>{t("No orders found for this workspace yet.")}</p>
+            <p className="muted-copy" style={{ padding: "0 14px 14px" }}>{orderSearch.trim() ? t("No orders match your search.") : t("No orders found for this workspace yet.")}</p>
           ) : null}
 
           {orderFilter === "trash" ? (
@@ -1658,6 +1664,7 @@ export default function OrdersPage() {
           {orderFilter === "trash" ? (
             <div className="orders-trash-banner">⚠ {t("Items in Trash are permanently deleted after 30 days.")}</div>
           ) : null}
+          {heldBanner}
           {workspaceHasNoOrders ? <div className="orders-mobile-first-run">{firstRunCard}</div> : (
             <OrderListViewControl preference={listView} onChange={changeListView} t={t} idPrefix="orders-mobile-view" />
           )}

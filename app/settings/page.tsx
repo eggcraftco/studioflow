@@ -650,7 +650,9 @@ export default function SettingsPage() {
   }, []);
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
+    // Keep where the person was going: Etsy's approval returns here in whatever browser
+    // the phone opens, often signed out, and "/login" alone dropped ?etsy=connected.
+    if (!loading && !user) router.replace(`/login?next=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`);
   }, [loading, router, user]);
 
   // The Integrations hub reads three things out of the URL: which provider an
@@ -703,6 +705,9 @@ export default function SettingsPage() {
     if (params.get("etsy")) {
       setIntegrationProvider("etsy");
       setActiveSection("integrations");
+      // ETSY-E2E (24 Oct 2026): on a phone the page opens on the section LIST, so the
+      // seller came back from Etsy to a menu and never saw "Choose what to import".
+      setMobileDetail(true);
     }
     // eBay does carry section=ebay, but a redirect is not a promise: the
     // outcome parameter is the one thing that must open the panel, because the
@@ -723,6 +728,9 @@ export default function SettingsPage() {
     const requested = (SETTINGS_SECTION_ALIASES[rawRequested] ?? rawRequested) as SettingsSectionId;
     if (SETTINGS_SECTIONS.some(section => section.id === requested)) {
       setActiveSection(requested);
+      // A link that names a section (the setup wizard's "Connect Etsy" tab, a provider's
+      // return) means that section — not the list — on a phone too.
+      setMobileDetail(true);
     }
   }, []);
 

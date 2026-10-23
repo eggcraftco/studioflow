@@ -85,6 +85,16 @@ export function orderSourceLink(input: OrderSourceLinkInput): OrderSourceLink {
 
   // Shopify's legacy import stamped the store domain and the order id, and the
   // admin lives on one constant host: build it, do not read it.
+  // ETSY-E2E (24 Oct 2026): Etsy orders carry no commerce stamp, so the detail said "Order link not
+  // available". The receipt id is enough: Etsy's sold-orders page opens one receipt by id (the same
+  // address the server stores as etsySource.viewOnEtsyUrl). Digits only, fixed host.
+  if (provider === "etsy" && !stamp?.externalAdminUrl) {
+    const receipt = (cf["Etsy Receipt ID"] || "").trim();
+    return /^\d{1,20}$/.test(receipt)
+      ? { kind: "link", href: `https://www.etsy.com/your/orders/sold?order_id=${receipt}`, provider, source }
+      : none("no-address", provider, source);
+  }
+
   if (provider === "shopify" && !stamp?.externalAdminUrl) {
     const handle = (cf["Shopify Domain"] || "").trim().toLowerCase().replace(/\.myshopify\.com$/, "");
     const id = (cf["Shopify Order ID"] || "").trim();

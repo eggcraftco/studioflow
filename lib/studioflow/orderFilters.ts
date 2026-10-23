@@ -276,7 +276,12 @@ export function orderMatchesSearch(order: FilterableOrder, query: string) {
     order.instagramUsername,
     order.whatsappNumber,
     order.status,
-    order.designStatus
+    order.designStatus,
+    // ETSY-E2E (24 Oct 2026): the shop's own order number. A seller looking up Etsy receipt 3200000203 typed it
+    // and got "No orders"; the number lives only in customFields ("Etsy Receipt ID", "Shopify Order Number", …).
+    ...Object.entries(order.customFields || {})
+      .filter(([key]) => /(receipt id|order id|order number)$/i.test(key))
+      .map(([, value]) => value)
   ].some(value => String(value ?? "").toLowerCase().includes(cleaned));
 }
 

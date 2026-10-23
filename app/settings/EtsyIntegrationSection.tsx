@@ -14,7 +14,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
-import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 import {
   beginEtsyConnect,
   disconnectEtsyShop,
@@ -32,7 +31,8 @@ import {
   type EtsyPreview,
   type EtsyPreviewRow
 } from "@/lib/studioflow/etsy";
-import { shouldAutoPreviewEtsy } from "@/lib/studioflow/etsyFirstImport";
+import { etsyActionErrorText, etsyCanPreview, etsyImportNotice, etsyPersonalisationLine, shouldAutoPreviewEtsy } from "@/lib/studioflow/etsyFirstImport";
+import { workspaceAccessAllows } from "@/lib/studioflow/firestore";
 
 type Props = { workspace: WorkspaceContext; language?: string };
 
@@ -92,6 +92,14 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
   // action", which is not what the member pressed and not a thing they can act
   // on. Mac and Android have hidden them from members all along.
   const isOwner = workspace.role === "owner";
+  // ETSY-E2E (24 Oct 2026): the preview is refused on the server (previewEtsyImport, H16) to anyone but
+  // the owner or an admin/member with Orders + Customers + Financial Info and no assigned-projects limit,
+  // and the import is owner-only. The buttons follow the server instead of failing after the press.
+  const canPreview = etsyCanPreview({
+    role: workspace.role,
+    access: (area) => workspaceAccessAllows(workspace.memberAccess, area),
+    assignedProjectsOnly: Boolean((workspace.memberAccess as Record<string, unknown> | undefined)?.assignedProjectsOnly)
+  });
 
   const [loading, setLoading] = useState(true);
   const [configured, setConfigured] = useState(true);
@@ -156,13 +164,18 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     void refresh();
   }, [refresh]);
 
-  const checkConnection = useCallback(async () => {
+  const checkConnection = useCallback(async (quiet = false) => {
     const current = connections.find((row) => row.id === selectedId) || connections[0];
     if (!current) return;
     const result = await verifyEtsyConnection(companyId, current.id);
     if (result?.healthy) {
       setLiveCheck("healthy");
-      setNotice(t("Etsy answered. This connection is working."));
+      // On arrival the line above the panel already says what to do next
+      // ("Etsy shop connected. Choose what to import."); replacing it with
+      // "This connection is working" took that instruction away.
+      if (!quiet) setNotice(t("Etsy answered. This connection is working."));
+      // The check stamped lastSuccessAt; without a reload the row kept saying "Connection checked: Never".
+      await refresh(true);
       return;
     }
     setLiveCheck("unhealthy");
@@ -173,7 +186,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     // The stored status may now disagree with what Etsy just said. Keep the
     // message: the reload is not evidence the failure went away.
     await refresh(true);
-  }, [companyId, connections, refresh, t]);
+  }, [companyId, connections, refresh, selectedId, t]);
 
   // The OAuth callback sends the seller back with ?etsy=connected|cancelled|error.
   // Read it once, say what happened in words, then clean the address bar so a
@@ -227,7 +240,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
   useEffect(() => {
     if (!autoPreviewPending) return;
     if (!connection) return;
-    if (!shouldAutoPreviewEtsy({ arrived: true, connection, previewOpen: Boolean(preview), busy })) {
+    if (!canPreview || !shouldAutoPreviewEtsy({ arrived: true, connection, previewOpen: Boolean(preview), busy })) {
       if (connection.importState !== "none" || preview) setAutoPreviewPending(false);
       return;
     }
@@ -236,10 +249,10 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     void previewEtsyImport(companyId, connection.id, rules)
       .then((result) => { setPreview(result); setExcluded(new Set()); })
       .catch((previewError) => {
-        setError(previewError instanceof Error ? previewError.message : t("Something went wrong. Try again."));
+        setError(etsyActionErrorText(previewError, t));
       })
       .finally(() => setBusy(""));
-  }, [autoPreviewPending, connection, preview, busy, companyId, rules, t]);
+  }, [autoPreviewPending, canPreview, connection, preview, busy, companyId, rules, t]);
 
   // The screen promises to verify on return. Do it once, as soon as the
   // connection this callback created has actually loaded.
@@ -247,7 +260,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     if (!checkOnArrival || !connections[0]) return;
     setCheckOnArrival(false);
     setBusy("verify");
-    void checkConnection().catch(() => {}).finally(() => setBusy(""));
+    void checkConnection(true).catch(() => {}).finally(() => setBusy(""));
   }, [checkOnArrival, connections, checkConnection]);
 
   async function guard(key: string, run: () => Promise<void>) {
@@ -260,7 +273,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     try {
       await run();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : t("Something went wrong. Try again."));
+      setError(etsyActionErrorText(actionError, t));
     } finally {
       setBusy("");
     }
@@ -282,7 +295,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
 
   if (!configured) {
     return (
-      <section className="card app-card quick-reply-settings-card">
+      <section className="card app-card quick-reply-settings-card" data-etsy-card="">
         <h3>{t("Etsy")}</h3>
         <p className="muted-copy">{t("Etsy is not set up on this server yet. Contact support and we will enable it.")}</p>
       </section>
@@ -291,7 +304,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
 
   const shopPicker =
     connections.length > 1 ? (
-      <section className="card app-card quick-reply-settings-card">
+      <section className="card app-card quick-reply-settings-card" data-etsy-card="">
         <h4 className="quick-reply-settings-label">{t("Connected shops")}</h4>
         <div className="settings-action-row">
           {connections.map((row) => (
@@ -323,7 +336,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
       <div className="settings-card-stack">
         {notice ? <p className="success-copy">{notice}</p> : null}
         {error ? <p className="layout-error">{error}</p> : null}
-        <section className="card app-card quick-reply-settings-card">
+        <section className="card app-card quick-reply-settings-card" data-etsy-card="">
           <h3>{t("Secure Etsy connection")}</h3>
           <p className="muted-copy">{t("Your Etsy password is never shared with NivaDesk.")}</p>
           <ul className="settings-rule-list">
@@ -381,6 +394,46 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     );
   }
 
+  function renderPreviewActions() {
+    if (!connection) return null;
+    return (
+      <>
+            <div className="settings-action-row">
+              <button type="button" className="button secondary" onClick={() => setPreview(null)}>
+                {t("Back")}
+              </button>
+              {isOwner ? (
+              <button
+                type="button"
+                className="button"
+                disabled={busy === "import" || !selectedIds.length}
+                onClick={() =>
+                  guard("import", async () => {
+                    const result = await runEtsyImport(companyId, connection.id, rules, selectedIds);
+                    // A silent cap reads as "that was everything". It is not:
+                    // there are older orders this run never asked for.
+                    if (result?.truncated) {
+                      setError(t("Not every order fitted in one run. Import again to bring in the rest."));
+                    }
+                    // `held` used to be dropped here: a demo workspace imported 8 of 40 and
+                    // was told "8 imported", with 32 parked out of sight on the Orders screen.
+                    setNotice(etsyImportNotice(result?.outcome, t));
+                    setPreview(null);
+                    await refresh();
+                  })
+                }
+              >
+                {busy === "import"
+                  ? t("Importing…")
+                  : `${t("Import")} ${selectedIds.length} ${t("selected orders")}`}
+              </button>
+              ) : null}
+            </div>
+            {!isOwner ? <p className="muted-copy">{t("Only the workspace owner can import Etsy orders.")}</p> : null}
+      </>
+    );
+  }
+
   // What the server knows, which is what Reconnect exists for.
   const storedNeedsReconnect = connection.needsReconnect || connection.status === "needs_reconnect";
   // What the row says, which also reflects a live check that just failed.
@@ -400,10 +453,9 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
 
       {shopPicker}
 
-      <CommerceSyncHealthCard workspace={workspace} language={language} provider="etsy" />
 
       {/* ── Screen 3 · Connected shop header ─────────────────────────────── */}
-      <section className="card app-card quick-reply-settings-card">
+      <section className="card app-card quick-reply-settings-card" data-etsy-card="">
         <h3>{connection.shopName || t("Etsy shop")}</h3>
         <p className="muted-copy">
           {`${t("Shop ID")} ${connection.shopId}`}
@@ -423,7 +475,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
                   type="button"
                   className="button secondary"
                   disabled={busy === "verify"}
-                  onClick={() => guard("verify", checkConnection)}
+                  onClick={() => guard("verify", () => checkConnection())}
                 >
                   {busy === "verify" ? t("Checking Etsy…") : t("Check now")}
                 </button>
@@ -471,9 +523,8 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
 
       {/* ── Screen 7 · Error recovery ────────────────────────────────────── */}
       {needsAttention ? (
-        <section className="card app-card quick-reply-settings-card">
+        <section className="card app-card quick-reply-settings-card" data-etsy-card="">
           <h3>{t("Connection needs attention")}</h3>
-          <p>{t("We could not refresh this Etsy connection.")}</p>
           <p className="muted-copy">
             {etsyErrorText(connection.lastErrorCode, t) ||
               t("The shop owner may have revoked access, or Etsy may require authorisation again. Existing NivaDesk orders are safe.")}
@@ -543,7 +594,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
 
       {/* ── Screen 4 · First import, and Screen 5 · Sync centre ──────────── */}
       {!preview ? (
-        <section className="card app-card quick-reply-settings-card">
+        <section className="card app-card quick-reply-settings-card" data-etsy-card="">
           <h3>{connection.importState === "none" ? t("Choose what to import") : t("Etsy sync")}</h3>
 
           {/* The log is shown before the first import too: a delivery Etsy
@@ -600,6 +651,11 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
             />
             <span>{t("Completed orders")}</span>
           </label>
+          {/* ETSY-E2E: a 12-month import with this ticked brought 80+ long-shipped orders in as open work,
+              each "100+ days late". Say what they will look like before the seller asks for them. */}
+          {rules.includeCompleted ? (
+            <p className="muted-copy">{t("Completed orders are already shipped on Etsy. They come in marked as dispatched and count as open work until you mark them delivered.")}</p>
+          ) : null}
           <label className="settings-toggle-row">
             <input
               type="checkbox"
@@ -626,6 +682,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
           </label>
 
           <div className="settings-action-row">
+            {canPreview ? (
             <button
               type="button"
               className="button"
@@ -640,6 +697,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
             >
               {busy === "preview" ? t("Checking Etsy…") : t("Preview")}
             </button>
+            ) : null}
             {connection.importState !== "none" ? (
               <button
                 type="button"
@@ -677,9 +735,26 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
 
       {/* ── Import preview ───────────────────────────────────────────────── */}
       {preview ? (
-        <section className="card app-card quick-reply-settings-card">
+        <section className="card app-card quick-reply-settings-card" data-etsy-card="">
           <h3>{t("Review Etsy orders")}</h3>
           <p className="muted-copy">{t("Nothing is imported until the workspace owner confirms this list.")}</p>
+          {/* ETSY-E2E: the preview opens by itself on the return from Etsy, and the date range and the
+              Completed / Cancelled switches were only on the card behind "Back" — a seller asked to "switch on
+              Completed orders" could not find it. Say what this list includes and offer the way to change it. */}
+          <div className="settings-action-row" style={{ alignItems: "center" }}>
+            <span className="muted-copy" style={{ flex: "1 1 260px" }}>
+              {`${t("Included")}: ${t(DATE_RANGES.find((range) => range.days === rules.sinceDays)?.label || "Last 90 days")} · ${[
+                t("Paid and open orders"),
+                rules.includeCompleted ? t("Completed orders") : "",
+                rules.includeUnpaid ? t("Orders not paid yet") : "",
+                rules.includeCancelled ? t("Cancelled orders") : "",
+                rules.includeDigital ? t("Digital-only orders") : ""
+              ].filter(Boolean).join(", ")}`}
+            </span>
+            <button type="button" className="button secondary" onClick={() => setPreview(null)}>
+              {t("Change what to include")}
+            </button>
+          </div>
 
           <div className="settings-impact-grid">
             <div>
@@ -709,6 +784,10 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
             <p className="muted-copy">{t("Only the most recent orders are shown. Import these first, then run the preview again.")}</p>
           ) : null}
 
+          {/* ETSY-E2E: the same buttons above the list. With 40+ orders the only Import button sat
+              thousands of pixels down on a phone, under every row. */}
+          {preview.rows.length > 6 ? renderPreviewActions() : null}
+
           <label className="settings-toggle-row">
             <input type="checkbox" checked={onlyReview} onChange={(event) => setOnlyReview(event.target.checked)} />
             <span>{t("Only needs review")}</span>
@@ -719,7 +798,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
               const isExcluded = excluded.has(row.receiptId);
               const supported = row.outcome !== "unsupported";
               return (
-                <li key={row.receiptId} style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                <li key={row.receiptId} data-etsy-row="">
                   <div className="settings-action-row" style={{ justifyContent: "space-between", margin: 0 }}>
                     <label className="settings-toggle-row" style={{ margin: 0 }}>
                       <input
@@ -743,7 +822,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
                     </label>
                     <span>
                       {money(row.total, row.currency)}{" "}
-                      <span className="studio-pill">
+                      <span className="studio-pill" data-outcome={row.outcome}>
                         {row.outcome === "ready"
                           ? t("Ready")
                           : row.outcome === "review"
@@ -755,7 +834,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
 
                   {row.personalization.length ? (
                     <p className="muted-copy" style={{ margin: 0 }}>
-                      {`${t("Personalisation")}: ${row.personalization.join(" · ")}`}
+                      {`${t("Personalisation")}: ${row.personalization.map(etsyPersonalisationLine).join(" · ")}`}
                     </p>
                   ) : null}
 
@@ -853,45 +932,12 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
 
           <p className="muted-copy">{t("Selected orders use Etsy receipt ID as the permanent external identity.")}</p>
 
-          <div className="settings-action-row">
-            <button type="button" className="button secondary" onClick={() => setPreview(null)}>
-              {t("Back")}
-            </button>
-            <button
-              type="button"
-              className="button"
-              disabled={busy === "import" || !selectedIds.length}
-              onClick={() =>
-                guard("import", async () => {
-                  const result = await runEtsyImport(companyId, connection.id, rules, selectedIds);
-                  const created = Number(result?.outcome?.created || 0);
-                  const updated = Number(result?.outcome?.updated || 0);
-                  const failed = Number(result?.outcome?.failed || 0);
-                  // A silent cap reads as "that was everything". It is not:
-                  // there are older orders this run never asked for.
-                  if (result?.truncated) {
-                    setError(t("Not every order fitted in one run. Import again to bring in the rest."));
-                  }
-                  setNotice(
-                    failed
-                      ? `${created} ${t("imported")} · ${failed} ${t("need review. No records were lost; you can run the preview again.")}`
-                      : `${created} ${t("imported")}${updated ? ` · ${updated} ${t("updated")}` : ""}`
-                  );
-                  setPreview(null);
-                  await refresh();
-                })
-              }
-            >
-              {busy === "import"
-                ? t("Importing…")
-                : `${t("Import")} ${selectedIds.length} ${t("selected orders")}`}
-            </button>
-          </div>
+          {renderPreviewActions()}
         </section>
       ) : null}
 
       {/* ── Screen 8 · Disconnect ────────────────────────────────────────── */}
-      <section className="card app-card quick-reply-settings-card">
+      <section className="card app-card quick-reply-settings-card" data-etsy-card="">
         <h3>{t("Disconnect Etsy")}</h3>
         <h4 className="quick-reply-settings-label">{t("What happens next?")}</h4>
         <ul className="settings-rule-list">
@@ -912,7 +958,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
             server side of it is not built yet. Shown as planned rather than as
             a control that quietly does nothing. */}
         <p className="muted-copy">
-          {t("Deleting imported Etsy source data is a separate request and is not available yet. Disconnecting never deletes anything from Etsy.")}
+          {t("Disconnecting also removes Etsy's copy of the order details and the remembered buyer matches from NivaDesk. Your orders, notes and production work stay. Nothing is deleted on Etsy.")}
         </p>
         {confirmDisconnect ? (
           <div className="settings-action-row">

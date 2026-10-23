@@ -34195,6 +34195,142 @@ body[data-studio-theme="dark"] .order-detail-tab-soon {
   min-width: 0;
 }
 
+/* ETSY-E2E (24 Oct 2026): the Etsy panel's own layout. The shared .settings-rule-list has no row layout
+   (only the eBay card styled it), so the Etsy cards rendered browser bullets with label and value run
+   together ("Connection checkedNever"), the preview rows as grey toggle boxes with the checkbox at one
+   edge and the order at the other, and long item names widened the page until the app's left rail
+   wrapped. Theme variables only (light and dark follow the app); logical properties (Arabic mirrors). */
+[data-etsy-card] { min-width: 0; }
+[data-etsy-card] h3 { margin: 0 0 4px; }
+[data-etsy-card] .settings-rule-list {
+  list-style: none;
+  margin: 10px 0 4px;
+  padding: 0;
+  gap: 0;
+}
+[data-etsy-card] .settings-rule-list > li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+[data-etsy-card] .settings-rule-list > li:last-child { border-bottom: 0; }
+[data-etsy-card] .settings-rule-list > li > span:first-child {
+  color: var(--muted);
+  font-size: 13px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+[data-etsy-card] .settings-rule-list > li > span:last-child {
+  text-align: end;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+[data-etsy-card] .settings-rule-list > li > .settings-action-row { justify-content: flex-end; }
+[data-etsy-card] .settings-action-row { justify-content: flex-start; margin-top: 10px; }
+[data-etsy-card] .settings-action-row:last-child { margin-bottom: 0; }
+[data-etsy-card] > .settings-toggle-row {
+  justify-content: flex-start;
+  margin: 6px 0 0;
+  padding: 9px 12px;
+}
+[data-etsy-card] .settings-toggle-row span { min-width: 0; display: inline; }
+[data-etsy-card] .quick-reply-settings-label { margin: 16px 0 6px; }
+/* Import preview: summary as four tiles, then one row per order. */
+[data-etsy-card] .settings-impact-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  margin: 12px 0;
+}
+[data-etsy-card] .settings-impact-grid > div {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+[data-etsy-card] .settings-impact-grid strong { text-align: start; font-size: 20px; }
+[data-etsy-card] .settings-rule-list > li[data-etsy-row] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+[data-etsy-card] li[data-etsy-row] > .settings-action-row {
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  margin: 0;
+}
+[data-etsy-card] li[data-etsy-row] .settings-toggle-row {
+  padding: 0;
+  border: 0;
+  background: none;
+  justify-content: flex-start;
+  align-items: flex-start;
+  flex-wrap: nowrap;
+  min-width: 0;
+  gap: 10px;
+}
+[data-etsy-card] li[data-etsy-row] .settings-toggle-row > span { overflow-wrap: anywhere; min-width: 0; }
+[data-etsy-card] li[data-etsy-row] > .settings-action-row > span:last-child {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+[data-etsy-card] li[data-etsy-row] > p { padding-inline-start: 26px; overflow-wrap: anywhere; }
+[data-etsy-card] li[data-etsy-row] > div { padding-inline-start: 26px; }
+[data-etsy-card] .studio-pill[data-outcome="ready"] { color: var(--success, #15803d); }
+[data-etsy-card] .studio-pill[data-outcome="review"],
+[data-etsy-card] .studio-pill[data-outcome="unsupported"] { color: var(--warning-text, #b45309); }
+@media (max-width: 640px) {
+  [data-etsy-card] .settings-impact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  [data-etsy-card] li[data-etsy-row] > .settings-action-row { flex-wrap: wrap; }
+}
+
+/* ETSY-E2E (24 Oct 2026): the read-only Etsy order panel under the channel strip (app/orders/EtsySourcePanel.tsx). */
+.etsy-source-panel {
+  margin: 8px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface, rgba(255, 255, 255, 0.9));
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-size: 13.5px;
+}
+.etsy-source-panel__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.etsy-source-panel__head strong { font-size: 14.5px; }
+.etsy-source-panel__items { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.etsy-source-panel__items > li { padding: 8px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+.etsy-source-panel__items > li:last-child { border-bottom: 0; }
+.etsy-source-panel__line { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.etsy-source-panel__title { flex: 1 1 auto; min-width: 0; font-weight: 650; overflow-wrap: anywhere; }
+.etsy-source-panel__qty { flex: 0 0 auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.etsy-source-panel__price { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.etsy-source-panel__options,
+.etsy-source-panel__personalisation,
+.etsy-source-panel__note { margin: 3px 0 0; color: var(--text); overflow-wrap: anywhere; white-space: pre-line; line-height: 1.45; }
+.etsy-source-panel__options { color: var(--muted); }
+.etsy-source-panel__personalisation > span:first-child,
+.etsy-source-panel__note > span:first-child { color: var(--muted); font-weight: 650; }
+.etsy-source-panel__money { margin: 0; display: grid; gap: 2px; }
+.etsy-source-panel__money > div { display: flex; justify-content: space-between; gap: 12px; }
+.etsy-source-panel__money dt { color: var(--muted); }
+.etsy-source-panel__money dd { margin: 0; font-variant-numeric: tabular-nums; }
+.etsy-source-panel__money .is-total dt, .etsy-source-panel__money .is-total dd { color: var(--text); font-weight: 750; }
+.etsy-source-panel__foot { margin: 0; color: var(--muted); font-size: 12px; }
+.etsy-source-panel__differs { padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.1); display: grid; gap: 2px; }
+.etsy-source-panel__differs p { margin: 0; overflow-wrap: anywhere; }
+body[data-studio-theme="dark"] .etsy-source-panel { background: rgba(255, 255, 255, 0.04); }
+
 body[data-studio-theme="dark"] .ebay-order-block {
   background: rgba(96, 165, 250, 0.12);
 }

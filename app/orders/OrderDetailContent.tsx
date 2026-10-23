@@ -139,6 +139,7 @@ import { EbayOrderRefreshButton } from "./EbayOrderRefreshButton";
 import { EbayOrderStock } from "./EbayOrderStock";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
+import { EtsySourcePanel } from "./EtsySourcePanel";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
@@ -7450,6 +7451,13 @@ export function OrderDetailContent({
                         <DetailRow label={`Corporation Tax (${Math.round(corporationTaxRate)}%, est.)`} value={money(corporationTaxAmount, hideNumbers)} tone="negative" />
                         <DetailRow label={t("Net Profit (after CT)")} value={money(netProfitAfterCT, hideNumbers)} tone="positive" emphasis />
                       </>
+                    ) : orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? (
+                      // ETSY-E2E (24 Oct 2026): with no cost entered the "profit" is the sale minus an estimated fee — not
+                      // a final number. An imported Etsy order showed a green "Final Profit" equal to almost the whole sale.
+                      <>
+                        <DetailRow label={t("Estimated profit")} value={money(orderFinance.netProfit, hideNumbers)} emphasis />
+                        <p className="muted-copy" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
+                      </>
                     ) : (
                       <DetailRow label={t("Final Profit")} value={money(orderFinance.netProfit, hideNumbers)} tone="positive" emphasis />
                     )}
@@ -9788,6 +9796,9 @@ export function OrderDetailContent({
 
       <ShopifySourceStrip order={order} workspaceCurrency={moneySettings?.selectedCurrency} />
       <ChannelSourceStrip order={order} showMoney={canSeeFinance} />
+      {String(order.customFields?.["Source"] || "") === "Etsy" ? (
+        <EtsySourcePanel orderId={order.id} language={detailLanguage} showMoney={canSeeFinance} />
+      ) : null}
       <EbayOrderBlock stamp={order.commerce} canSeeFinance={canSeeFinance} language={detailLanguage} />
       <RestrictedBuyerAddress order={order} canReveal={normalizeWorkspaceRole(workspace.role) === "owner"} />
       <EbayOrderRefreshButton order={order} language={detailLanguage} />

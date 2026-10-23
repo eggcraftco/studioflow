@@ -56,3 +56,67 @@ export function etsyShopsAwaitingFirstImport(
 ): number {
   return shops.filter((shop) => shop.status !== "disconnected" && String(shop.importState || "none") === "none").length;
 }
+
+// ── ETSY-E2E (24 Oct 2026): rules found by the end-to-end acceptance ──────────
+
+/**
+ * Mirrors the server's previewEtsyImport gate (H16): the owner, or an admin/member
+ * with Orders, Customers and Financial Info and no assigned-projects limit. Everyone
+ * else was shown a Preview button the server then refused.
+ */
+export function etsyCanPreview(input: {
+  role: string | null | undefined;
+  access: (area: "orders" | "customers" | "financialInfo") => boolean;
+  assignedProjectsOnly?: boolean;
+}): boolean {
+  const role = String(input.role || "").toLowerCase();
+  if (role === "owner") return true;
+  if (role !== "admin" && role !== "member") return false;
+  if (input.assignedProjectsOnly) return false;
+  return input.access("orders") && input.access("customers") && input.access("financialInfo");
+}
+
+/** What an import did, in one line — including the orders parked for room on the plan. */
+export function etsyImportNotice(
+  outcome: { created?: number; updated?: number; held?: number; failed?: number } | null | undefined,
+  t: (text: string) => string
+): string {
+  const created = Number(outcome?.created || 0);
+  const updated = Number(outcome?.updated || 0);
+  const held = Number(outcome?.held || 0);
+  const failed = Number(outcome?.failed || 0);
+  const parts = [`${created} ${t("imported")}`];
+  if (updated) parts.push(`${updated} ${t("updated")}`);
+  if (held) parts.push(`${held} ${t("are waiting for room on your plan.")} ${t("They are kept safe on the Orders screen.")}`);
+  if (failed) parts.push(`${failed} ${t("need review. No records were lost; you can run the preview again.")}`);
+  return parts.join(" · ");
+}
+
+/**
+ * A failed Etsy action, in words. A callable that throws something other than an
+ * HttpsError reaches the browser as the bare code "INTERNAL" — which is what a
+ * seller saw when Etsy kept answering 429. Codes never reach the screen.
+ */
+export function etsyActionErrorText(error: unknown, t: (text: string) => string): string {
+  const code = String((error as { code?: unknown } | null)?.code || "");
+  const message = error instanceof Error ? error.message : "";
+  // The server names Etsy's failure in details.code (rate_limited, upstream, network, auth_expired);
+  // the sentence is this app's own, in the seller's language.
+  const detail = String(((error as { details?: { code?: unknown } } | null)?.details || {}).code || "");
+  if (detail === "rate_limited") return t("Etsy is temporarily limiting requests. NivaDesk will continue automatically; no action is needed.");
+  if (detail === "upstream" || detail === "network") return t("Etsy could not be reached. NivaDesk will try again automatically.");
+  if (detail === "auth_expired") return t("We could not refresh this Etsy connection. Existing NivaDesk orders are safe. Reconnect Etsy to continue receiving updates.");
+  if (detail === "token_unreadable") return t("The stored Etsy access could not be read. Reconnect the shop to continue.");
+  if (code === "functions/internal" || code === "functions/unavailable" || code === "functions/deadline-exceeded" || /^(INTERNAL|internal|UNAVAILABLE)$/.test(message.trim())) {
+    return t("Etsy could not be reached. NivaDesk will try again automatically.");
+  }
+  if (code === "functions/resource-exhausted" && /rate|limit/i.test(message) && !/allowance/i.test(message)) {
+    return t("Etsy is temporarily limiting requests. NivaDesk will continue automatically; no action is needed.");
+  }
+  return message || t("Something went wrong. Try again.");
+}
+
+/** Etsy's own label for a personalisation answer is "Personalization"; the row already says "Personalisation". */
+export function etsyPersonalisationLine(line: string): string {
+  return String(line || "").replace(/^\s*personali[sz]ation\s*:\s*/i, "");
+}
