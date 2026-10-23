@@ -111,30 +111,32 @@ export const WEB_SMALL_FIXES_TRANSLATIONS: Record<string, Partial<Record<StudioL
     "हिन्दी (Hindi)": "कैलेंडर फ़ाइल: किसी प्रोजेक्ट को अपने कैलेंडर में जोड़ने के लिए उसके कैलेंडर बटन का उपयोग करें।"
   },
   // Settings menu group headings (23 Oct 2026): three had no row, so every language showed English.
+  // Same words as the iOS/Android group headings (DilMotoru.swift / StudioTranslations.kt), except
+  // German "Workflow", which stays a translated word here so the heading is not English.
   "Workflow": {
     "Türkçe": "İş Akışı",
     "Deutsch": "Abläufe",
     "Français": "Flux de travail",
     "Italiano": "Flusso di lavoro",
     "Español (Spanish)": "Flujo de trabajo",
-    "Português": "Fluxo de trabalho",
+    "Português": "Fluxo de Trabalho",
     "Русский (Russian)": "Рабочий процесс",
     "日本語 (Japanese)": "ワークフロー",
     "中文 (Chinese)": "工作流",
     "العربية (Arabic)": "سير العمل",
-    "हिन्दी (Hindi)": "कार्यप्रवाह"
+    "हिन्दी (Hindi)": "वर्कफ़्लो"
   },
   "Team & Permissions": {
-    "Türkçe": "Ekip ve Yetkiler",
+    "Türkçe": "Ekip ve İzinler",
     "Deutsch": "Team & Berechtigungen",
     "Français": "Équipe et autorisations",
     "Italiano": "Team e autorizzazioni",
     "Español (Spanish)": "Equipo y permisos",
-    "Português": "Equipa e permissões",
+    "Português": "Equipe e Permissões",
     "Русский (Russian)": "Команда и права доступа",
     "日本語 (Japanese)": "チームと権限",
     "中文 (Chinese)": "团队与权限",
-    "العربية (Arabic)": "الفريق والصلاحيات",
+    "العربية (Arabic)": "الفريق والأذونات",
     "हिन्दी (Hindi)": "टीम और अनुमतियाँ"
   },
   "Data & Backups": {
@@ -143,7 +145,7 @@ export const WEB_SMALL_FIXES_TRANSLATIONS: Record<string, Partial<Record<StudioL
     "Français": "Données et sauvegardes",
     "Italiano": "Dati e backup",
     "Español (Spanish)": "Datos y copias de seguridad",
-    "Português": "Dados e cópias de segurança",
+    "Português": "Dados e Backups",
     "Русский (Russian)": "Данные и резервные копии",
     "日本語 (Japanese)": "データとバックアップ",
     "中文 (Chinese)": "数据与备份",
