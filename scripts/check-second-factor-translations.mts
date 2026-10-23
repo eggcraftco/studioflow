@@ -13,6 +13,10 @@ for (const rel of ["app/settings/TwoStepVerificationCard.tsx", "components/Secon
   for (const m of read(rel).matchAll(/(?<![\w.])t\(\s*"((?:[^"\\\n]|\\.)*)"\s*\)/g)) keys.add(m[1]);
 }
 for (const m of read("lib/auth/secondFactor.ts").matchAll(/"([A-Z][^"]{12,}[.?!])"/g)) keys.add(m[1]);
+// The server's own recovery replies (mfaRecovery.js GENERIC_FAIL / success) reach the prompt and
+// the login error line through t() as they are.
+keys.add("That code did not work. Check it, or wait an hour after several tries.");
+keys.add("Two-step verification was removed. Sign in with your password, then turn it on again.");
 
 const others = SUPPORTED_STUDIO_LANGUAGES.filter((lang) => lang !== "English");
 const holes = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join("|");

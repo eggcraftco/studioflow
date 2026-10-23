@@ -2,8 +2,11 @@
 
 // GN-10 — Settings ▸ Profile & Security ▸ Two-step verification (authenticator app, TOTP).
 //
-// Shown when NEXT_PUBLIC_NIVADESK_TOTP_MFA=1, and ALWAYS when the account
-// already has a factor (so nobody is left unable to see or remove one).
+// Shown when NEXT_PUBLIC_NIVADESK_TOTP_MFA=1 AND the active workspace role is owner or
+// admin (owner instruction 23 Oct: optional, owners/admins first), and ALWAYS when the
+// account already has a factor (so nobody is left unable to see or remove one).
+// Enrolment needs a tick that the person's NivaDesk apps are on NATIVE_MFA_MIN_VERSION+:
+// older iOS/Mac/Android builds cannot finish a sign-in that asks for the code.
 // Never logs or stores the secret, the otpauth URL, codes or recovery codes;
 // the secret lives only in this component's state until enrolment ends.
 
@@ -35,6 +38,7 @@ import {
   totpQrUrl,
   withSecondFactor
 } from "@/lib/auth/secondFactor";
+import { NATIVE_MFA_MIN_VERSION, canOfferTotpEnrollment, shouldShowTwoStepCard } from "@/lib/auth/secondFactorPolicy";
 
 type Step =
   | { kind: "idle" }
@@ -44,7 +48,7 @@ type Step =
 
 const code = (error: unknown) => (error as { code?: string } | null)?.code || "";
 
-export function TwoStepVerificationCard({ language = "English" }: { language?: string }) {
+export function TwoStepVerificationCard({ language = "English", workspaceRole = "" }: { language?: string; workspaceRole?: string }) {
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const { user } = useAuth();
   const [factors, setFactors] = useState<MultiFactorInfo[]>([]);
@@ -56,6 +60,7 @@ export function TwoStepVerificationCard({ language = "English" }: { language?: s
   const [otp, setOtp] = useState("");
   const [deviceName, setDeviceName] = useState("");
   const [remaining, setRemaining] = useState<number | null>(null);
+  const [appsUpdated, setAppsUpdated] = useState(false);
 
   const refresh = useCallback(async () => {
     setFactors(enrolledFactors(auth.currentUser));
@@ -75,7 +80,9 @@ export function TwoStepVerificationCard({ language = "English" }: { language?: s
   }, [refresh, user]);
 
   if (!user) return null;
-  if (!TOTP_MFA_UI_ENABLED && factors.length === 0) return null;
+  const policy = { flagOn: TOTP_MFA_UI_ENABLED, role: workspaceRole, factorCount: factors.length };
+  if (!shouldShowTwoStepCard(policy)) return null;
+  const mayEnroll = canOfferTotpEnrollment(policy);
 
   const providerIds = user.providerData.map(p => p.providerId);
   const hasPassword = providerIds.includes("password");
@@ -91,7 +98,7 @@ export function TwoStepVerificationCard({ language = "English" }: { language?: s
   async function beginEnroll() {
     setError("");
     setNotice("");
-    if (!user) return;
+    if (!user || !canOfferTotpEnrollment({ flagOn: TOTP_MFA_UI_ENABLED, role: workspaceRole, factorCount: enrolledFactors(auth.currentUser).length })) return;
     if (!user.emailVerified) {
       setError(t("Verify your email address first. Two-step verification needs a verified email."));
       return;
@@ -238,15 +245,29 @@ export function TwoStepVerificationCard({ language = "English" }: { language?: s
         </div>
       ))}
 
-      {step.kind === "idle" && factors.length === 0 ? (
+      {step.kind === "idle" && mayEnroll ? (
+        <div className="settings-field-stack" data-testid="two-step-native-notice">
+          <p className="muted-copy">{t("Before you turn this on, update NivaDesk on your iPhone, iPad, Mac and Android devices to version {version} or later. Older versions cannot finish a sign-in that asks for a code; devices that are already signed in keep working.").replace("{version}", NATIVE_MFA_MIN_VERSION)}</p>
+          <label className="settings-inline-row">
+            <input type="checkbox" checked={appsUpdated} onChange={e => setAppsUpdated(e.target.checked)} disabled={busy} />
+            <span>{t("My NivaDesk apps are up to date")}</span>
+          </label>
+        </div>
+      ) : null}
+
+      {step.kind === "idle" && mayEnroll ? (
         <div className="settings-action-row">
           {!user.emailVerified ? (
             <button className="button secondary" type="button" disabled={busy} onClick={() => void sendEmailVerification(user, { url: "https://nivadesk.app/settings" }).then(() => setNotice(t("Check your inbox for the verification link.")))}>
               {t("Send verification email")}
             </button>
           ) : null}
-          <button className="button" type="button" disabled={busy} onClick={() => void beginEnroll()}>{t("Set up authenticator app")}</button>
+          <button className="button" type="button" disabled={busy || !appsUpdated} onClick={() => void beginEnroll()}>{t("Set up authenticator app")}</button>
         </div>
+      ) : null}
+
+      {factors.length > 0 ? (
+        <p className="muted-copy" data-testid="two-step-ai-note">{t("ChatGPT and Claude connections you approved before stay connected, also after Sign out everywhere. To end them, use Disconnect on the ChatGPT and Claude cards in Settings › Integrations.")}</p>
       ) : null}
 
       {step.kind === "idle" && factors.length > 0 ? (

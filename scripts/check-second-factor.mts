@@ -26,7 +26,7 @@ import {
 } from "@/lib/auth/secondFactor";
 
 const PROJECT = "demo-nivadesk-gn10";
-const H = "http://127.0.0.1:9399";
+const H = `http://${process.env.FIREBASE_AUTH_EMULATOR_HOST || "127.0.0.1:9399"}`;
 const KEY = "fake-api-key";
 connectAuthEmulator(auth, H, { disableWarnings: true });
 

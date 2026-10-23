@@ -4733,7 +4733,7 @@ function AccountSection({
       </section>
 
       {/* GN-10: authenticator-app two-step verification (flagged; always shown once a factor exists). */}
-      <TwoStepVerificationCard language={accountLanguage} />
+      <TwoStepVerificationCard language={accountLanguage} workspaceRole={normalizeWorkspaceRole(workspace.role)} />
 
       {!hideWorkspaceIdentity ? <section className="card app-card">
         <CardTitle icon="storage" eyebrow={t("Workspace Logo")} title={t("Upload or replace only")} />

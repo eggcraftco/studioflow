@@ -15,6 +15,7 @@
     "test:finance": "node scripts/check-finance-vectors.mjs",
     "test:second-factor": "NEXT_PUBLIC_FIREBASE_API_KEY=fake-api-key NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-nivadesk-gn10 node --experimental-strip-types --no-warnings --import ./scripts/lib/register-alias.mjs scripts/check-second-factor.mts",
     "test:second-factor-translations": "npx tsx scripts/check-second-factor-translations.mts",
+    "test:second-factor-policy": "node --experimental-strip-types --no-warnings scripts/check-second-factor-policy.mts",
     "test:bell-acl": "node scripts/check-bell-acl.mjs",
     "test:meta-signup": "node scripts/check-meta-signup.mjs",
     "test:home-cards": "node scripts/check-home-cards.mjs",

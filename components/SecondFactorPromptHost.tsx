@@ -97,6 +97,7 @@ export function SecondFactorPromptHost() {
           </button>
         </form>
         {request.error ? <p className="session-lock-error" role="alert">{t(request.error)}</p> : null}
+        {useRecovery ? <p className="session-lock-copy" data-testid="second-factor-support">{t("No recovery codes? Email contact@nivadesk.co.uk from your account's email address.")}</p> : null}
         <button className="session-lock-signout" type="button" onClick={() => { setUseRecovery(v => !v); setCode(""); }}>
           {useRecovery ? t("Use my authenticator app instead") : t("Lost your phone? Use a recovery code")}
         </button>
