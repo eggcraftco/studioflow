@@ -68,6 +68,8 @@ export default function SalesPage() {
   // Orders looked at for this filter, and whether the search stopped at its
   // safety cap with orders still unchecked (lib/studioflow/salesListLoader.ts).
   const [searchState, setSearchState] = useState<{ scanned: number; capped: boolean }>({ scanned: 0, capped: false });
+  // While a long search runs: orders looked at so far (0 = nothing to report yet).
+  const [searchProgress, setSearchProgress] = useState(0);
   const [financeVisible, setFinanceVisible] = useState(false);
   const [listBusy, setListBusy] = useState(false);
   const [listError, setListError] = useState("");
@@ -116,20 +118,24 @@ export default function SalesPage() {
   const listLoader = useRef<ReturnType<typeof createSalesListLoader<SalesRow, SalesRowsPage, ListFilter>> | null>(null);
   if (!listLoader.current) {
     listLoader.current = createSalesListLoader<SalesRow, SalesRowsPage, ListFilter>({
-      fetchPage: (filter, nextCursor) => fetchSalesRows({ ...filter, limit: SALES_PAGE_SIZE, cursor: nextCursor }),
+      // One more than a page: the loader keeps a look-ahead row, so "Show more"
+      // only appears when a further sale has really been found.
+      fetchPage: (filter, nextCursor) => fetchSalesRows({ ...filter, limit: SALES_PAGE_SIZE + 1, cursor: nextCursor }),
       // The server filters store/brand inside a scan window, so a filtered page
       // can be short or empty while more orders remain: keep asking (capped).
       pageSize: SALES_PAGE_SIZE,
+      progress: (scanned) => setSearchProgress(scanned),
       apply: (update) => {
         setRows(update.rows);
         setHasMore(update.hasMore);
         setSearchState({ scanned: update.scanned, capped: update.searchCapped });
+        setSearchProgress(0);
         setFinanceVisible(update.page.financeVisible);
         setBrandsExist(update.page.brandsExist === true);
       },
       busy: (value) => setListBusy(value),
       fail: (err) => setListError(friendlyErrorMessage(err, tRef.current)),
-      reset: () => { setRows(null); setHasMore(false); setListError(""); setSearchState({ scanned: 0, capped: false }); },
+      reset: () => { setRows(null); setHasMore(false); setListError(""); setSearchState({ scanned: 0, capped: false }); setSearchProgress(0); },
       rowId: (row) => row.orderId
     });
   }
@@ -284,6 +290,11 @@ export default function SalesPage() {
     ? new Date(ms).toLocaleString(locale, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })
     : t("Never synced"));
 
+  // During a long search the person sees it moving, not a bare "Loading…".
+  const searchingLabel = listBusy && searchProgress > 0
+    ? t("Checking orders… {count} so far").replace("{count}", searchProgress.toLocaleString(locale))
+    : t("Loading…");
+
   const money = (row: SalesRow) => {
     if (!financeVisible) return "—";
     if (row.financeState !== "current" || row.revenue === null) return t("Not calculated");
@@ -352,15 +363,15 @@ export default function SalesPage() {
           {listError ? <p className="layout-error">{listError}</p> : null}
 
           {rows === null ? (
-            <p className="muted-copy">{t("Loading…")}</p>
-          ) : rows.length === 0 && hasMore ? (
+            <p className="muted-copy" data-testid="sales-search-progress">{searchingLabel}</p>
+          ) : rows.length === 0 && searchState.capped ? (
             // Not a verdict: the search stopped at its cap with orders still unchecked.
             <div data-testid="sales-search-capped">
               <p className="muted-copy">
                 {t("Checked {count} orders, no match yet.").replace("{count}", searchState.scanned.toLocaleString(locale))}
               </p>
               <button type="button" className="button secondary" style={{ marginTop: 8 }} disabled={listBusy} onClick={() => listLoader.current?.more()}>
-                {listBusy ? t("Loading…") : t("Keep searching")}
+                {listBusy ? searchingLabel : t("Keep searching")}
               </button>
             </div>
           ) : rows.length === 0 ? (
@@ -439,10 +450,22 @@ export default function SalesPage() {
             </div>
           )}
 
+          {/* "Show more" only when a further sale is already in hand (look-ahead row). */}
           {hasMore && rows && rows.length > 0 ? (
             <button type="button" className="button secondary" style={{ marginTop: 12 }} disabled={listBusy} onClick={() => listLoader.current?.more()}>
-              {listBusy ? t("Loading…") : t("Show more")}
+              {listBusy ? searchingLabel : t("Show more")}
             </button>
+          ) : null}
+          {/* Rows on screen, none further found yet, and the cap stopped the search: say so. */}
+          {!hasMore && searchState.capped && rows && rows.length > 0 ? (
+            <div data-testid="sales-search-capped" style={{ marginTop: 12 }}>
+              <p className="muted-copy">
+                {t("Checked {count} orders so far. Older orders may still match.").replace("{count}", searchState.scanned.toLocaleString(locale))}
+              </p>
+              <button type="button" className="button secondary" style={{ marginTop: 8 }} disabled={listBusy} onClick={() => listLoader.current?.more()}>
+                {listBusy ? searchingLabel : t("Keep searching")}
+              </button>
+            </div>
           ) : null}
         </section>
       ) : null}

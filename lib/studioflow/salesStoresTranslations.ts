@@ -219,5 +219,12 @@ export const SALES_STORES_TRANSLATIONS: Record<string, Partial<Record<StudioLang
   },
   "Keep searching": {
     "Türkçe": "Aramaya devam et", "Deutsch": "Weitersuchen", "Français": "Continuer la recherche", "Italiano": "Continua a cercare", "Español (Spanish)": "Seguir buscando", "Português": "Continuar a procurar", "Русский (Russian)": "Продолжить поиск", "日本語 (Japanese)": "検索を続ける", "中文 (Chinese)": "继续搜索", "العربية (Arabic)": "متابعة البحث", "हिन्दी (Hindi)": "खोज जारी रखें"
+  },
+  // S6c/S6d (23 Oct 2026): rows on screen and the search capped; progress while a long search runs.
+  "Checked {count} orders so far. Older orders may still match.": {
+    "Türkçe": "Şimdiye kadar {count} siparişe bakıldı. Daha eski siparişler de eşleşebilir.", "Deutsch": "Bisher {count} Aufträge geprüft. Ältere Aufträge könnten noch passen.", "Français": "{count} commandes vérifiées jusqu'ici. Des commandes plus anciennes peuvent encore correspondre.", "Italiano": "Finora controllati {count} ordini. Ordini più vecchi potrebbero ancora corrispondere.", "Español (Spanish)": "Hasta ahora se revisaron {count} pedidos. Puede que pedidos más antiguos también coincidan.", "Português": "Até agora foram verificadas {count} encomendas. Encomendas mais antigas ainda podem corresponder.", "Русский (Russian)": "Пока проверено заказов: {count}. Более старые заказы тоже могут подойти.", "日本語 (Japanese)": "これまでに {count} 件の注文を確認しました。さらに古い注文が一致する可能性があります。", "中文 (Chinese)": "目前已检查 {count} 个订单。更早的订单可能仍有匹配。", "العربية (Arabic)": "تم فحص {count} طلب حتى الآن. قد تتطابق طلبات أقدم أيضًا.", "हिन्दी (Hindi)": "अब तक {count} ऑर्डर जाँचे गए। पुराने ऑर्डर भी मेल खा सकते हैं।"
+  },
+  "Checking orders… {count} so far": {
+    "Türkçe": "Siparişlere bakılıyor… şimdiye kadar {count}", "Deutsch": "Aufträge werden geprüft … bisher {count}", "Français": "Vérification des commandes… {count} jusqu'ici", "Italiano": "Controllo degli ordini… finora {count}", "Español (Spanish)": "Revisando pedidos… {count} hasta ahora", "Português": "A verificar encomendas… {count} até agora", "Русский (Russian)": "Проверка заказов… пока {count}", "日本語 (Japanese)": "注文を確認中… これまでに {count} 件", "中文 (Chinese)": "正在检查订单… 已检查 {count} 个", "العربية (Arabic)": "جارٍ فحص الطلبات… {count} حتى الآن", "हिन्दी (Hindi)": "ऑर्डर जाँचे जा रहे हैं… अब तक {count}"
   }
 };
