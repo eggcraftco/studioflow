@@ -17,7 +17,9 @@ import { AppShell } from "@/components/AppShell";
 import { CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { loadWorkspaceContext, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { loadWorkspaceContext, loadWorkspaceSettingsOverview, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
+import { formatStudioMoney } from "@/lib/studioflow/money";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { createSalesListLoader, salesListFilterKey } from "@/lib/studioflow/salesListLoader";
 import {
@@ -52,6 +54,9 @@ export default function SalesPage() {
   const locale = studioLocaleTag(language ?? "English");
 
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
+  // The workspace's decimal separator, so a revenue reads the way the order card,
+  // the Dashboard and the top bar print money (formatStudioMoney). "." until known.
+  const [decimalSeparator, setDecimalSeparator] = useState(".");
   const [capability, setCapability] = useState<SalesCapability | null>(null);
   const [tab, setTab] = useState<Tab>("sales");
   const [error, setError] = useState("");
@@ -115,7 +120,7 @@ export default function SalesPage() {
         setBrandsExist(update.page.brandsExist === true);
       },
       busy: (value) => setListBusy(value),
-      fail: (err) => setListError(err instanceof Error ? err.message : tRef.current("Could not load.")),
+      fail: (err) => setListError(friendlyErrorMessage(err, tRef.current)),
       reset: () => { setRows(null); setHasMore(false); setListError(""); },
       rowId: (row) => row.orderId
     });
@@ -136,12 +141,16 @@ export default function SalesPage() {
         setWorkspace(loaded);
         currentCompany.current = loaded.id;
         listLoader.current?.invalidate();
+        setDecimalSeparator(".");
+        loadWorkspaceSettingsOverview(loaded.id)
+          .then((overview) => { if (!cancelled && ticket === requestId.current) setDecimalSeparator(overview.selectedDecimalSeparator === "," ? "," : "."); })
+          .catch(() => { /* keep "." — the figure itself is the server's */ });
         const cap = await fetchSalesCapability(loaded.id);
         if (cancelled || ticket !== requestId.current) return;
         setCapability(cap);
       } catch (err) {
         if (cancelled || ticket !== requestId.current) return;
-        setError(err instanceof Error ? err.message : t("Could not load."));
+        setError(friendlyErrorMessage(err, t));
       } finally {
         if (!cancelled && ticket === requestId.current) setBooting(false);
       }
@@ -182,7 +191,7 @@ export default function SalesPage() {
         setProductsError("");
       } catch (err) {
         if (ticket !== requestId.current || mine !== productsRequest.current) return;
-        setProductsError(err instanceof Error ? err.message : t("Could not load."));
+        setProductsError(friendlyErrorMessage(err, t));
         setProducts([]);
       }
     })();
@@ -203,7 +212,7 @@ export default function SalesPage() {
         setChannelsError("");
       } catch (err) {
         if (ticket !== requestId.current || mine !== channelsRequest.current) return;
-        setChannelsError(err instanceof Error ? err.message : t("Could not load."));
+        setChannelsError(friendlyErrorMessage(err, t));
         setChannels([]);
       }
     })();
@@ -222,7 +231,7 @@ export default function SalesPage() {
       if (tab === "sales") loadRows();
       return true;
     } catch (err) {
-      setManageError(err instanceof Error ? err.message : t("Could not save."));
+      setManageError(friendlyErrorMessage(err, t));
       return false;
     } finally {
       setManageBusy(false);
@@ -270,7 +279,7 @@ export default function SalesPage() {
   const money = (row: SalesRow) => {
     if (!financeVisible) return "—";
     if (row.financeState !== "current" || row.revenue === null) return t("Not calculated");
-    return `${row.currency || ""}${row.revenue.toFixed(2)}`;
+    return formatStudioMoney(row.revenue, { selectedCurrency: row.currency || "", selectedDecimalSeparator: decimalSeparator });
   };
 
   return (
