@@ -32,6 +32,7 @@ import {
   type EtsyPreview,
   type EtsyPreviewRow
 } from "@/lib/studioflow/etsy";
+import { shouldAutoPreviewEtsy } from "@/lib/studioflow/etsyFirstImport";
 
 type Props = { workspace: WorkspaceContext; language?: string };
 
@@ -185,6 +186,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     if (outcome === "connected") {
       setNotice(t("Etsy shop connected. Choose what to import."));
       setCheckOnArrival(true);
+      setAutoPreviewPending(true);
       // Etsy sends the shop back with the outcome, and this read it only to
       // delete it. In a workspace with more than one shop that meant connecting
       // the second one left the panel showing the first: the seller pressed
@@ -216,6 +218,28 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
     if (row) setSelectedId(row.id);
     setArrivedShopId("");
   }, [arrivedShopId, connections]);
+
+  // ETSY-FIRST-IMPORT (23 Oct 2026): a shop that has just been connected and never
+  // imported opens straight onto the preview — the seller's own recent orders,
+  // with the import button under them — instead of a page of filters above a
+  // Preview button. Read-only: nothing is imported until the owner confirms.
+  const [autoPreviewPending, setAutoPreviewPending] = useState(false);
+  useEffect(() => {
+    if (!autoPreviewPending) return;
+    if (!connection) return;
+    if (!shouldAutoPreviewEtsy({ arrived: true, connection, previewOpen: Boolean(preview), busy })) {
+      if (connection.importState !== "none" || preview) setAutoPreviewPending(false);
+      return;
+    }
+    setAutoPreviewPending(false);
+    setBusy("preview");
+    void previewEtsyImport(companyId, connection.id, rules)
+      .then((result) => { setPreview(result); setExcluded(new Set()); })
+      .catch((previewError) => {
+        setError(previewError instanceof Error ? previewError.message : t("Something went wrong. Try again."));
+      })
+      .finally(() => setBusy(""));
+  }, [autoPreviewPending, connection, preview, busy, companyId, rules, t]);
 
   // The screen promises to verify on return. Do it once, as soon as the
   // connection this callback created has actually loaded.

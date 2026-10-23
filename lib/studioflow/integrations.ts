@@ -299,6 +299,7 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
           shop: row.shopName || row.shopId,
           status: row.status,
           needsReconnect: Boolean(row.needsReconnect),
+          importState: String(row.importState || "none"),
         }))
       : [],
     // A PayPal connection lives in the same collection but is its own card.
@@ -410,7 +411,7 @@ export type IntegrationSignals = {
   /** Real deliveries per webhook channel, and whether the last one failed. */
   channels: Record<string, { lastDeliveryAtMs: number; lastDeliveryOk: boolean; lastDeliveryWasTest: boolean }>;
   /** Connected Etsy shops, and whether each still holds a working authorisation. */
-  etsyShops: { shop: string; status: string; needsReconnect: boolean }[];
+  etsyShops: { shop: string; status: string; needsReconnect: boolean; importState?: string }[];
   bankConnections: number;
   /** Connected WooCommerce stores, and whether one needs the owner's attention. */
   wooConnections: { store: string; status: string; needsAttention: boolean }[];
@@ -527,6 +528,11 @@ function resolveProviderState(
     const live = signals.etsyShops.filter((shop) => shop.status !== "disconnected");
     if (live.length === 0) return { state: "available" };
     const broken = live.filter((shop) => shop.needsReconnect || shop.status === "error").length;
+    // ETSY-FIRST-IMPORT: connected but never imported is not "Connected" — nothing
+    // arrives until the owner confirms a first import, so the card says what to do.
+    // (Same rule as etsyFirstImport.etsyShopsAwaitingFirstImport; inline so this module stays import-free for its test.)
+    const awaiting = live.filter((shop) => String(shop.importState || "none") === "none").length;
+    if (!broken && awaiting > 0) return { state: "attention", detail: "Choose what to import" };
     return {
       state: broken === live.length ? "attention" : "connected",
       detail: live.length === 1 ? live[0].shop : `${live.length} shops`,

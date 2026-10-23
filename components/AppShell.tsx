@@ -54,6 +54,7 @@ import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import { studioLanguageDir, studioLanguageLocale } from "@/lib/studioflow/languageDirection";
 import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
 import { EMPTY_INTEGRATION_SIGNALS, loadIntegrationSignals, type IntegrationSignals } from "@/lib/studioflow/integrations";
+import { setupPassthroughFromUrl } from "@/lib/studioflow/etsyFirstImport";
 import { canEditWorkspaceSettingsForRole, savePersonalInterfaceSettings } from "@/lib/studioflow/settingsActions";
 import {
   businessTypeForWorkKinds,
@@ -2194,9 +2195,13 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   // wizard — so without this the new tab would show a second copy of the wizard
   // and the connection could never be made. Setup is not a security boundary;
   // the flag only says "this tab was sent here to connect something".
+  // ETSY-FIRST-IMPORT (23 Oct 2026): and a provider's return to Settings. Etsy's
+  // OAuth callback comes back WITHOUT fromSetup, so the tab that should have said
+  // "Etsy shop connected. Choose what to import." rendered the wizard instead
+  // (lib/studioflow/etsyFirstImport.ts has the production case).
   const setupPassthrough = useMemo(() => {
     if (typeof window === "undefined") return false;
-    return new URLSearchParams(window.location.search).get("fromSetup") === "1";
+    return setupPassthroughFromUrl(pathname || window.location.pathname, window.location.search);
   }, [pathname]);
 
   // §113's "Continue setup" route. Somebody who left setup half-finished asks

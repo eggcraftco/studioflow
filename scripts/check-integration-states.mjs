@@ -187,6 +187,19 @@ try {
     if (bad.length) console.log("   offenders:", bad.map((row) => row.id).join(", "));
   }
 
+  // --- Etsy: connected is not the same as importing (23 Oct 2026) ---------
+  {
+    const shop = (importState) => ({ shop: "PrimroseLane", status: "connected", needsReconnect: false, importState });
+    const waiting = state("etsy", { etsyShops: [shop("none")] });
+    expect("etsy: connected but never imported asks for attention",
+      waiting.state === "attention" && waiting.detail === "Choose what to import");
+    expect("etsy: imported shop reads 'connected'", state("etsy", { etsyShops: [shop("done")] }).state === "connected");
+    expect("etsy: a stuck 'running' import is not 'never imported'", state("etsy", { etsyShops: [shop("running")] }).state === "connected");
+    expect("etsy: needs-reconnect still wins over first import",
+      state("etsy", { etsyShops: [{ ...shop("none"), needsReconnect: true }] }).detail !== "Choose what to import");
+    expect("etsy: no shop is 'available'", state("etsy", { etsyShops: [] }).state === "available");
+  }
+
   {
     // A card with nothing to manage must never be the reason a button appears.
     const offenders = INTEGRATION_PROVIDERS.filter((row) => row.kind === "planned" && row.manage);

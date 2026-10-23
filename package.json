@@ -67,6 +67,7 @@
     "test:admin-insights": "node scripts/check-admin-insights-metrics.mts",
     "test:order-delete-buttons": "node scripts/check-order-delete-buttons.mjs",
     "test:getting-started": "npx tsx scripts/check-getting-started.mts",
+    "test:etsy-first-import": "npx tsx scripts/check-etsy-first-import.mts",
     "test:web-small-fixes": "npx tsx scripts/check-web-small-fixes.mts",
     "test:claude-guide": "npx tsx scripts/check-claude-guide.mts",
     "test:gn12-order-finance": "npx tsx scripts/check-gn12-order-finance.mts",
