@@ -212,5 +212,12 @@ export const SALES_STORES_TRANSLATIONS: Record<string, Partial<Record<StudioLang
   },
   "Please sign in again.": {
     "Türkçe": "Lütfen tekrar giriş yapın.", "Deutsch": "Bitte melden Sie sich erneut an.", "Français": "Veuillez vous reconnecter.", "Italiano": "Accedi di nuovo.", "Español (Spanish)": "Vuelve a iniciar sesión.", "Português": "Inicie sessão novamente.", "Русский (Russian)": "Пожалуйста, войдите снова.", "日本語 (Japanese)": "もう一度サインインしてください。", "中文 (Chinese)": "请重新登录。", "العربية (Arabic)": "يُرجى تسجيل الدخول مرة أخرى.", "हिन्दी (Hindi)": "कृपया फिर से साइन इन करें।"
+  },
+  // S-5 (23 Oct 2026): a filtered search that stopped at its safety cap (app/sales/page.tsx).
+  "Checked {count} orders, no match yet.": {
+    "Türkçe": "{count} siparişe bakıldı, henüz eşleşme yok.", "Deutsch": "{count} Aufträge geprüft, noch kein Treffer.", "Français": "{count} commandes vérifiées, aucune correspondance pour l'instant.", "Italiano": "{count} ordini controllati, ancora nessuna corrispondenza.", "Español (Spanish)": "Se revisaron {count} pedidos; aún no hay coincidencias.", "Português": "{count} encomendas verificadas, ainda sem correspondência.", "Русский (Russian)": "Проверено заказов: {count}. Совпадений пока нет.", "日本語 (Japanese)": "{count} 件の注文を確認しました。まだ一致するものはありません。", "中文 (Chinese)": "已检查 {count} 个订单，暂无匹配。", "العربية (Arabic)": "تم فحص {count} طلب، ولا توجد نتيجة مطابقة بعد.", "हिन्दी (Hindi)": "{count} ऑर्डर जाँचे गए, अभी तक कोई मेल नहीं।"
+  },
+  "Keep searching": {
+    "Türkçe": "Aramaya devam et", "Deutsch": "Weitersuchen", "Français": "Continuer la recherche", "Italiano": "Continua a cercare", "Español (Spanish)": "Seguir buscando", "Português": "Continuar a procurar", "Русский (Russian)": "Продолжить поиск", "日本語 (Japanese)": "検索を続ける", "中文 (Chinese)": "继续搜索", "العربية (Arabic)": "متابعة البحث", "हिन्दी (Hindi)": "खोज जारी रखें"
   }
 };

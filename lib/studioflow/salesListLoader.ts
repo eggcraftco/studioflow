@@ -13,6 +13,14 @@
 //   * The busy flag belongs to the newest request; a dropped answer cannot
 //     clear it, and neither can its error.
 //
+//   * A filtered page can come back short or EMPTY with hasMore=true: the
+//     server scans a window of orders (limit × 2) and applies the store/brand
+//     filter inside it. With `pageSize` set, one load or "Show more" keeps
+//     asking with the next cursor until it has a page of rows, the server says
+//     there is nothing more, or a safety cap (20 calls / 1000 orders looked at)
+//     is reached — and every step re-checks that its filter is still the one on
+//     screen, so a filter change stops the old search (23 Oct 2026, S-5).
+//
 // No React and no Firebase here, so scripts/check-sales-list-requests.mjs can
 // run it with a fake fetch and controlled delays.
 
@@ -22,7 +30,12 @@ export type SalesListPage<Row> = {
   rows: Row[];
   nextCursor: SalesListCursor;
   hasMore: boolean;
+  /** Orders the server looked at for this page (listSalesRows `scanned`). */
+  scanned?: number;
 };
+
+/** One load or "Show more" never asks more than this before handing back to the person. */
+export const SALES_LIST_SEARCH_CAP = Object.freeze({ calls: 20, scanned: 1000 });
 
 export type SalesListUpdate<Row, Page extends SalesListPage<Row>> = {
   /** The whole list for this filter after this page (first page, or merged). */
@@ -33,6 +46,10 @@ export type SalesListUpdate<Row, Page extends SalesListPage<Row>> = {
   appended: boolean;
   requestId: number;
   filterKey: string;
+  /** Orders looked at for this filter so far (all pages of this generation). */
+  scanned: number;
+  /** The search stopped at the safety cap with more orders left to look at. */
+  searchCapped: boolean;
 };
 
 export type SalesListLoaderDeps<Row, Page extends SalesListPage<Row>, Filter> = {
@@ -43,6 +60,10 @@ export type SalesListLoaderDeps<Row, Page extends SalesListPage<Row>, Filter> = 
   /** Called when a fresh load starts, before its answer: the old list is not this filter's. */
   reset?: () => void;
   rowId: (row: Row) => string;
+  /** Rows wanted per load/"Show more"; set it to keep asking past short filtered pages. */
+  pageSize?: number;
+  /** Override the safety cap (tests). */
+  searchCap?: { calls: number; scanned: number };
 };
 
 /** A stable key for one filter on one workspace. */
@@ -62,6 +83,7 @@ export function createSalesListLoader<Row, Page extends SalesListPage<Row>, Filt
   let cursor: SalesListCursor = null;
   let hasMore = false;
   let busyRequestId = 0;
+  let scannedTotal = 0;
 
   const isCurrent = (requestGeneration: number, key: string) => requestGeneration === generation && key === filterKey;
 
@@ -69,20 +91,39 @@ export function createSalesListLoader<Row, Page extends SalesListPage<Row>, Filt
     busyRequestId = requestId;
     deps.busy(true);
     try {
-      const page = await deps.fetchPage(requestFilter, requestCursor, requestId);
-      if (!isCurrent(requestGeneration, key)) return;                       // another filter or a reload since
-      if (append ? requestId !== appendRequestId : requestId !== freshRequestId) return; // a newer request of this generation
+      const stale = () => !isCurrent(requestGeneration, key)                 // another filter or a reload since
+        || (append ? requestId !== appendRequestId : requestId !== freshRequestId); // a newer request of this generation
+      const cap = deps.searchCap || SALES_LIST_SEARCH_CAP;
+      const wanted = deps.pageSize && deps.pageSize > 0 ? deps.pageSize : 0;
+      let page = await deps.fetchPage(requestFilter, requestCursor, requestId);
+      if (stale()) return;
+      const found: Row[] = [];
+      const seen = new Set((append ? rows : []).map(deps.rowId));
+      const take = (list: Row[]) => { for (const row of list) { const id = deps.rowId(row); if (!seen.has(id)) { seen.add(id); found.push(row); } } };
+      take(page.rows);
+      let calls = 1;
+      let looked = Number(page.scanned) || 0;
+      // A short (or empty) filtered page with more behind it: keep going, same filter, next cursor.
+      while (wanted && found.length < wanted && page.hasMore === true && page.nextCursor && calls < cap.calls && looked < cap.scanned) {
+        page = await deps.fetchPage(requestFilter, page.nextCursor, requestId);
+        if (stale()) return;                                                // the old filter's search stops here
+        take(page.rows);
+        calls += 1;
+        looked += Number(page.scanned) || 0;
+      }
       if (append) {
         appendRequestId = 0;
-        const seen = new Set(rows.map(deps.rowId));
-        rows = [...rows, ...page.rows.filter((row) => !seen.has(deps.rowId(row)))];
+        rows = [...rows, ...found];
       } else {
         firstPageArrived = true;
-        rows = [...page.rows];
+        rows = found;
+        scannedTotal = 0;
       }
+      scannedTotal += looked;
       cursor = page.hasMore ? page.nextCursor : null;
       hasMore = page.hasMore === true && Boolean(page.nextCursor);
-      deps.apply({ rows, cursor, hasMore, page, appended: append, requestId, filterKey: key });
+      const searchCapped = Boolean(wanted) && hasMore && found.length < wanted;
+      deps.apply({ rows, cursor, hasMore, page, appended: append, requestId, filterKey: key, scanned: scannedTotal, searchCapped });
     } catch (error) {
       if (!isCurrent(requestGeneration, key)) return;
       if (append ? requestId !== appendRequestId : requestId !== freshRequestId) return;
@@ -101,7 +142,7 @@ export function createSalesListLoader<Row, Page extends SalesListPage<Row>, Filt
       filter = nextFilter;
       firstPageArrived = false;
       appendRequestId = 0;
-      rows = [];
+      rows = []; scannedTotal = 0;
       cursor = null;
       hasMore = false;
       deps.reset?.();
@@ -130,7 +171,7 @@ export function createSalesListLoader<Row, Page extends SalesListPage<Row>, Filt
       firstPageArrived = false;
       appendRequestId = 0;
       freshRequestId = 0;
-      rows = [];
+      rows = []; scannedTotal = 0;
       cursor = null;
       hasMore = false;
       if (busyRequestId) { busyRequestId = 0; deps.busy(false); }

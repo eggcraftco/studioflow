@@ -47,6 +47,7 @@ const ATTENTION_LABELS: Record<string, string> = {
 const STORE_STATUS_LABELS: Record<string, string> = { connected: "Connected", needs_attention: "Needs attention", disconnected: "Disconnected" };
 const STORE_STATUS_PILL: Record<string, string> = { connected: "due-pill success", needs_attention: "due-pill warning", disconnected: "due-pill" };
 const UNASSIGNED = "unassigned";
+const SALES_PAGE_SIZE = 25;
 
 export default function SalesPage() {
   const { user, loading: authLoading, language } = useAuth();
@@ -64,6 +65,9 @@ export default function SalesPage() {
 
   const [rows, setRows] = useState<SalesRow[] | null>(null);
   const [hasMore, setHasMore] = useState(false);
+  // Orders looked at for this filter, and whether the search stopped at its
+  // safety cap with orders still unchecked (lib/studioflow/salesListLoader.ts).
+  const [searchState, setSearchState] = useState<{ scanned: number; capped: boolean }>({ scanned: 0, capped: false });
   const [financeVisible, setFinanceVisible] = useState(false);
   const [listBusy, setListBusy] = useState(false);
   const [listError, setListError] = useState("");
@@ -112,16 +116,20 @@ export default function SalesPage() {
   const listLoader = useRef<ReturnType<typeof createSalesListLoader<SalesRow, SalesRowsPage, ListFilter>> | null>(null);
   if (!listLoader.current) {
     listLoader.current = createSalesListLoader<SalesRow, SalesRowsPage, ListFilter>({
-      fetchPage: (filter, nextCursor) => fetchSalesRows({ ...filter, limit: 25, cursor: nextCursor }),
+      fetchPage: (filter, nextCursor) => fetchSalesRows({ ...filter, limit: SALES_PAGE_SIZE, cursor: nextCursor }),
+      // The server filters store/brand inside a scan window, so a filtered page
+      // can be short or empty while more orders remain: keep asking (capped).
+      pageSize: SALES_PAGE_SIZE,
       apply: (update) => {
         setRows(update.rows);
         setHasMore(update.hasMore);
+        setSearchState({ scanned: update.scanned, capped: update.searchCapped });
         setFinanceVisible(update.page.financeVisible);
         setBrandsExist(update.page.brandsExist === true);
       },
       busy: (value) => setListBusy(value),
       fail: (err) => setListError(friendlyErrorMessage(err, tRef.current)),
-      reset: () => { setRows(null); setHasMore(false); setListError(""); },
+      reset: () => { setRows(null); setHasMore(false); setListError(""); setSearchState({ scanned: 0, capped: false }); },
       rowId: (row) => row.orderId
     });
   }
@@ -345,6 +353,16 @@ export default function SalesPage() {
 
           {rows === null ? (
             <p className="muted-copy">{t("Loading…")}</p>
+          ) : rows.length === 0 && hasMore ? (
+            // Not a verdict: the search stopped at its cap with orders still unchecked.
+            <div data-testid="sales-search-capped">
+              <p className="muted-copy">
+                {t("Checked {count} orders, no match yet.").replace("{count}", searchState.scanned.toLocaleString(locale))}
+              </p>
+              <button type="button" className="button secondary" style={{ marginTop: 8 }} disabled={listBusy} onClick={() => listLoader.current?.more()}>
+                {listBusy ? t("Loading…") : t("Keep searching")}
+              </button>
+            </div>
           ) : rows.length === 0 ? (
             <p className="muted-copy">
               {needsAttentionOnly || channelFilter || storeFilter || brandFilter || !includeBespoke
@@ -421,7 +439,7 @@ export default function SalesPage() {
             </div>
           )}
 
-          {hasMore ? (
+          {hasMore && rows && rows.length > 0 ? (
             <button type="button" className="button secondary" style={{ marginTop: 12 }} disabled={listBusy} onClick={() => listLoader.current?.more()}>
               {listBusy ? t("Loading…") : t("Show more")}
             </button>
