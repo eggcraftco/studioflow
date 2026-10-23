@@ -50,7 +50,11 @@ if (layoutProblems.length) process.exit(1);
 
 const others = SUPPORTED_STUDIO_LANGUAGES.filter((lang) => lang !== "English");
 const missing: string[] = [];
-for (const key of KEYS) for (const lang of others) if (studioT(key, lang) === key && !studioTranslationRow(key)?.[lang]) missing.push(`${key} [${lang}]`);
+for (const key of KEYS) for (const lang of others) {
+  const shown = studioT(key, lang);
+  // An empty cell paints a blank label; that is missing too (S-2 probe control).
+  if ((shown === key && !studioTranslationRow(key)?.[lang]) || !String(shown).trim()) missing.push(`${key} [${lang}]`);
+}
 const control = "MC2 control key that no table has";
 const controlSeen = others.every((lang) => studioT(control, lang) === control);
 console.log(`keys ${KEYS.length} × languages ${others.length}; missing ${missing.length}; control ${controlSeen ? "ok" : "BROKEN"}`);
