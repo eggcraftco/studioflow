@@ -6474,7 +6474,7 @@ export function OrderDetailContent({
                   {t("Sent when the order's status moves — estimate ready, work started, ready for collection.")}
                 </p>
                 <div className="portal-channels">
-                  <span>Email</span>
+                  <span>{t("Email")}</span>
                   <button
                     type="button"
                     className={`portal-pill ${auto.email ? "is-on" : "is-off"}`}
@@ -8471,7 +8471,7 @@ export function OrderDetailContent({
                                         <span>⚑</span>{t("Priority")}
                                       </button>
                                       <button className="is-danger" type="button" onClick={() => { if (!window.confirm(t("Delete this task? This cannot be undone."))) return; void saveTodoPatch({ action: "delete", taskId: task.id }, "Task deleted"); }}>
-                                        <span>⌫</span>Delete
+                                        <span>⌫</span>{t("Delete")}
                                       </button>
                                     </>
                                   ) : null}
@@ -10077,7 +10077,7 @@ function OrderEditModal({
           {error ? <p className="layout-error">{t(error)}</p> : null}
 
           <div className="add-order-actions">
-            <button className="button secondary" type="button" onClick={onClose} disabled={saving}>Cancel</button>
+            <button className="button secondary" type="button" onClick={onClose} disabled={saving}>{t("Cancel")}</button>
             <button className="button" type="submit" disabled={saving || !canEditStatus}>
               {t(saving ? "Saving..." : "Save Changes")}
             </button>
@@ -10512,7 +10512,7 @@ function BlockHeadingsModal({
                   disabled={saving || !canSave}
                   onClick={() => updateSetting("communicationChannelLabels", [...settings.communicationChannelLabels, "Channel"])}
                 >
-                  Add
+                  {t("Add")}
                 </button>
               </div>
               <div className="block-heading-list">
@@ -11868,7 +11868,7 @@ function ClientFilePreviewModal({
               {t(actioning ? "Working..." : "Use in Preview")}
             </button>
           ) : null}
-          <a className="button secondary" href={maskFileUrl(activeFile.downloadURL, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(activeFile.downloadURL, brandedHost); }}>Open</a>
+          <a className="button secondary" href={maskFileUrl(activeFile.downloadURL, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(activeFile.downloadURL, brandedHost); }}>{t("Open file")}</a>
           <a className="button" href={maskFileUrl(activeFile.downloadURL, brandedHost)} onClick={event => { event.preventDefault(); void downloadSharedFile(activeFile.downloadURL, activeFile.fileName, brandedHost); }}>{t("Download")}</a>
         </footer>
       </section>
