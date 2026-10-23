@@ -143,7 +143,7 @@ export function ExportOrdersPanel({
           >
             {templates.map((tpl) => (
               <option key={tpl.id} value={tpl.id}>
-                {tpl.title}
+                {t(tpl.title)}
               </option>
             ))}
           </select>
@@ -166,7 +166,7 @@ export function ExportOrdersPanel({
         </div>
       </div>
 
-      <p style={{ color: "var(--muted)", fontSize: 13, margin: "10px 0 0" }}>{selected.description}</p>
+      <p style={{ color: "var(--muted)", fontSize: 13, margin: "10px 0 0" }}>{t(selected.description)}</p>
 
       {preset === "custom" ? (
         <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>

@@ -328,7 +328,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
               onChange={event => setEmail(event.target.value)}
               type="email"
               required
-              placeholder="Email"
+              placeholder={t("Email")}
               style={inputStyle}
             />
             <input
@@ -389,7 +389,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
             </div>
 
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", flexWrap: "wrap" }}>
-              <button type="button" onClick={handleCancel} disabled={submitting} style={secondaryButtonStyle}>Cancel</button>
+              <button type="button" onClick={handleCancel} disabled={submitting} style={secondaryButtonStyle}>{t("Cancel")}</button>
               <button type="button" onClick={handleAllow} disabled={submitting || !selectedCompanyId} style={primaryButtonStyle}>
                 {submitting ? "Connecting..." : `Allow ${assistant}`}
               </button>

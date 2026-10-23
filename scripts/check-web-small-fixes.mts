@@ -209,9 +209,44 @@ const oldHide = css.search(/\.schedule-header-actions \{\s*display: none;\s*\}/)
 ok("the old phone rule that hid every header action is overridden later in the file", oldHide > 0 && n15 > oldHide && /@media \(max-width: 640px\) \{\s*\.schedule-header-actions \{\s*display: flex;/.test(css.slice(n15)));
 ok("Team Schedule hides the selection actions where its agenda shows (900 px)", /@media \(max-width: 900px\) \{\s*\.schedule-main-pane\.is-team \.schedule-header-selection-action \{ display: none; \}/.test(css.slice(n15)));
 
+// ---------------------------------------------------------------- 6. visible English (23 Oct 2026)
+// Settings menu group headings, the order-detail buttons drawn without t(), production blocked
+// reasons, export report choices and the sign-in / error texts that had no row in any language.
+const lang = await import(pathToFileURL(path.join(root, "lib/studioflow/language.ts")).href);
+const NON_EN: string[] = lang.SUPPORTED_STUDIO_LANGUAGES.filter((l: string) => l !== "English");
+const okSame: Record<string, string[]> = JSON.parse(read("scripts/i18n-same-as-english-ok.json"));
+const translatedEverywhere = (key: string) => NON_EN.every((l) => lang.studioT(key, l) !== key || (okSame[key] ?? []).includes(l));
+const settingsSrc = read("app/settings/page.tsx");
+const between = (src: string, start: string, end: string) => { const i = src.indexOf(start); return i < 0 ? "" : src.slice(i, src.indexOf(end, i)); };
+const groupLabels = [...between(settingsSrc, "const SETTINGS_GROUP_LABELS", "};").matchAll(/:\s*"([^"]+)"/g)].map((m) => m[1]);
+const sectionTexts = [...between(settingsSrc, "const SETTINGS_SECTIONS", "];").matchAll(/(?:title|description):\s*"([^"]+)"/g)].map((m) => m[1]);
+ok("Settings: group labels found (10)", groupLabels.length === 10);
+for (const key of groupLabels) ok(`Settings group heading "${key}" is translated in every language`, translatedEverywhere(key));
+for (const key of sectionTexts) ok(`Settings section text "${key}" is translated in every language`, translatedEverywhere(key));
+const blockerLabels = [...between(read("lib/studioflow/production.ts"), "export const PRODUCTION_BLOCKER_REASONS", "] as const").matchAll(/label:\s*"([^"]+)"/g)].map((m) => m[1]);
+ok("Production: five blocked reasons found", blockerLabels.length === 5);
+for (const label of blockerLabels) ok(`Production blocked reason "${label}" is translated`, translatedEverywhere(label));
+const exportPanel = read("components/ExportOrdersPanel.tsx");
+const templateTexts = [...between(exportPanel, "const TEMPLATES", "];").matchAll(/(?:title|description):\s*"([^"]+)"/g)].map((m) => m[1]);
+ok("Export panel: four report choices found", templateTexts.length === 8);
+for (const key of templateTexts) ok(`Export report text "${key}" is translated`, translatedEverywhere(key));
+ok("Export panel draws the report title and description through t()", /\{t\(tpl\.title\)\}/.test(exportPanel) && /\{t\(selected\.description\)\}/.test(exportPanel));
+for (const key of ["Open file", "Delete", "Add", "Email", "Cancel", "Sign in", "Could not sign in.", "Could not sign in with Google.", "Could not update the password.",
+  "You don't have permission for this.", "Please sign in again.", "The server is busy. Please try again.", "Could not prepare export data."]) {
+  ok(`"${key}" is translated in every language`, translatedEverywhere(key));
+}
+ok("AppHelpAssistant intro is translated", translatedEverywhere("Ask how something in NivaDesk works — where a button lives, what a card is for, how to set something up. This assistant reads the guide, not your workspace, so it never sees your orders or figures."));
+ok("Order detail: task menu Delete goes through t()", /<span>⌫<\/span>\{t\("Delete"\)\}/.test(detail));
+ok("Order detail: channel labels Add goes through t()", /"Channel"\]\)\}\s*>\s*\{t\("Add"\)\}/.test(detail));
+ok("Order detail: file viewer Open is the verb key", /openSharedFile\(activeFile\.downloadURL, brandedHost\); \}\}>\{t\("Open file"\)\}<\/a>/.test(detail) && !/brandedHost\); \}\}>Open<\/a>/.test(detail));
+ok("Order detail: portal channel Email goes through t()", /<div className="portal-channels">\s*<span>\{t\("Email"\)\}<\/span>/.test(detail));
+ok("Order detail: status dialog Cancel goes through t()", /onClick=\{onClose\} disabled=\{saving\}>\{t\("Cancel"\)\}<\/button>/.test(detail));
+const gptConnect = read("app/chatgpt/connect/ChatGPTConnectClient.tsx");
+ok("ChatGPT connect: email placeholder and Cancel go through t()", /placeholder=\{t\("Email"\)\}/.test(gptConnect) && /secondaryButtonStyle\}>\{t\("Cancel"\)\}<\/button>/.test(gptConnect));
+
 if (failures.length) {
   console.error(`check-web-small-fixes: ${failures.length} of ${checks} checks FAILED`);
   for (const failure of failures) console.error(`  - ${failure}`);
   process.exit(1);
 }
-console.log(`check-web-small-fixes: ${checks}/${checks} checks passed — seats, Delete orders matrix, plan translations, N14, N15`);
+console.log(`check-web-small-fixes: ${checks}/${checks} checks passed — seats, Delete orders matrix, plan translations, N14, N15, visible English (23 Oct)`);
