@@ -5,7 +5,7 @@ import { combinePlanOrderCounts, type PlanOrderUsage } from "@/lib/studioflow/pl
 
 type PlanUsageResponse = {
   ok?: boolean;
-  usage?: { activeOrderCount?: unknown; orderCount?: unknown };
+  usage?: { activeOrderCount?: unknown; orderCount?: unknown; storeHistoryOrderCount?: unknown };
   limits?: { orderLimit?: unknown };
 };
 
@@ -21,8 +21,9 @@ type PlanUsageResponse = {
  *   counted here from four exact count aggregates instead (planOrderUsage.ts
  *   combinePlanOrderCounts). A server field that always carries the real active
  *   count would make this branch unnecessary.
- * - If the callable fails, the client count stands in, so the screen never
- *   shows nothing.
+ * - Limited plan and the callable fails: no active figure (the screen shows
+ *   "—"). The client cannot see the server-only Etsy exemption, so its own
+ *   count would claim a limit the server does not (ET-E3 b2).
  *
  * TOTAL is always the client count: the callable's `orderCount` includes Trash.
  */
@@ -44,8 +45,11 @@ export async function loadPlanOrderUsage(companyId: string, orderLimit: number |
     deletedAndDelivered: both.data().count
   });
 
-  if (orderLimit == null) return { ...local, limit: null, source: "client" };
+  if (orderLimit == null) return { ...local, limit: null, source: "client", storeHistory: null };
 
+  // ET-E3 b2 (24 Oct 2026): on a limited plan the client never shows its own count against the limit. It cannot
+  // see which Etsy orders the server leaves out (server-only rows), so a workspace with 202 past Etsy orders would
+  // read "211 / 10" here while the server says 9. No server answer -> no active figure (the screens show "—").
   try {
     const callable = httpsCallable<{ companyId: string }, PlanUsageResponse>(functions, "getWorkspacePlanUsage");
     const response = await callable({ companyId });
@@ -55,10 +59,14 @@ export async function loadPlanOrderUsage(companyId: string, orderLimit: number |
     // Only trust the active figure when the server also says a limit applies —
     // on an unlimited plan its activeOrderCount is the total.
     if (response.data?.ok !== false && Number.isFinite(serverActive) && serverLimit != null && Number.isFinite(serverLimit)) {
-      return { active: Math.max(0, Math.floor(serverActive)), total: local.total, limit: serverLimit, source: "server" };
+      const history = Number(response.data?.usage?.storeHistoryOrderCount);
+      return {
+        active: Math.max(0, Math.floor(serverActive)), total: local.total, limit: serverLimit, source: "server",
+        storeHistory: Number.isFinite(history) && history >= 0 ? Math.floor(history) : null
+      };
     }
   } catch (error) {
-    console.warn("getWorkspacePlanUsage failed; showing the client count:", error);
+    console.warn("getWorkspacePlanUsage failed; no active figure is shown without the server:", error);
   }
-  return { ...local, limit: orderLimit, source: "client" };
+  throw new Error("The plan's active-order figure comes from the server and is not available right now.");
 }

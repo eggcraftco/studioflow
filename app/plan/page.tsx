@@ -27,7 +27,7 @@ import {
   type StripeBillingItemKey
 } from "@/lib/studioflow/billingActions";
 import { studioT } from "@/lib/studioflow/language";
-import { PLAN_ORDER_RULE_HINT, formatActiveOfLimit, formatTotalOrdersLine, type PlanOrderUsage } from "@/lib/studioflow/planOrderUsage";
+import { PLAN_ORDER_RULE_HINT, formatActiveOfLimit, formatStoreHistoryLine, formatTotalOrdersLine, type PlanOrderUsage } from "@/lib/studioflow/planOrderUsage";
 import { loadPlanOrderUsage } from "@/lib/studioflow/planOrderUsageLoader";
 
 const FEATURE_LABELS: Record<FeatureKey, string> = {
@@ -326,7 +326,7 @@ export default function PlanPage() {
                 <MiniMetric
                   title={t("Active orders")}
                   value={orderUsage ? (orderUsage.limit == null ? `${orderUsage.active} (${t("no limit")})` : formatActiveOfLimit(orderUsage.active, orderUsage.limit)) : "—"}
-                  note={`${orderUsage ? formatTotalOrdersLine(orderUsage.total, t) : `${t("Total orders")}: —`}. ${t(PLAN_ORDER_RULE_HINT)}`}
+                  note={`${orderUsage ? formatTotalOrdersLine(orderUsage.total, t) : `${t("Total orders")}: —`}.${orderUsage && orderUsage.storeHistory ? ` ${formatStoreHistoryLine(orderUsage.storeHistory, t)}.` : ""} ${t(PLAN_ORDER_RULE_HINT)}`}
                 />
                 <MiniMetric
                   title={workspace.entitlements.features.team_access ? "Current seat allowance" : "Users"}

@@ -3,7 +3,9 @@
 // ACTIVE orders are what a limited plan is measured against, and the rule here
 // is the server's, word for word (functions/index.js countActiveOrders, read by
 // createWebOrder / createSwiftOrder's assertOrderSlotInTransaction): an order is
-// active unless `isDeleted === true` (in Trash) or `isDelivered === true`.
+// active unless `isDeleted === true` (in Trash) or `isDelivered === true`, or it is an
+// Etsy order Etsy had already finished (server-only data — the client cannot see it,
+// so on a limited plan only the server's figure is shown; see planOrderUsageLoader.ts).
 // Status is NOT read — a Cancelled order that is neither delivered nor deleted
 // still takes a slot. Restoring an order from Trash sets isDeleted back to false,
 // so it counts again.
@@ -20,12 +22,22 @@ export type PlanOrderUsage = {
   total: number;
   /** The plan's active-order limit; null = no limit. */
   limit: number | null;
-  /** "server" = getWorkspacePlanUsage's activeOrderCount; "client" = the same rule counted here. */
+  /** "server" = getWorkspacePlanUsage's activeOrderCount; "client" = the same rule counted here (unlimited plans only). */
   source: "server" | "client";
+  /** Etsy orders the server leaves out of the active count (finished at Etsy); null = not reported. */
+  storeHistory: number | null;
 };
 
 export const PLAN_ORDER_RULE_HINT =
-  "Delivered and deleted orders don't count toward the limit; cancelled orders still count until you mark them delivered or delete them.";
+  "Delivered and deleted orders don't count toward the limit, and neither do orders your Etsy shop had already finished (shipped, completed, cancelled or fully refunded there). Other cancelled orders still count until you mark them delivered or delete them.";
+
+/** The server's own figure for the Etsy orders outside the count (getWorkspacePlanUsage usage.storeHistoryOrderCount). */
+export const STORE_HISTORY_LABEL = "Finished Etsy orders (not counted)";
+
+/** "Finished Etsy orders (not counted): 202" — only ever from the server's number. */
+export function formatStoreHistoryLine(count: number, t: (text: string) => string = (text) => text) {
+  return `${t(STORE_HISTORY_LABEL)}: ${Math.max(0, Math.floor(count || 0))}`;
+}
 
 /** The server's predicate (countActiveOrders). Strict `=== true`, like the server. */
 export function isPlanActiveOrder(data: { isDeleted?: unknown; isDelivered?: unknown } | null | undefined): boolean {
