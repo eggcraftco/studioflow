@@ -139,7 +139,9 @@ import { EbayOrderRefreshButton } from "./EbayOrderRefreshButton";
 import { EbayOrderStock } from "./EbayOrderStock";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
-import { EtsySourcePanel } from "./EtsySourcePanel";
+import { EtsySourcePanel, EtsyProductPhoto, useEtsyListingPhotos, useEtsySource } from "./EtsySourcePanel";
+import { EtsyNotePhotoLinks } from "./EtsyText";
+import { etsyCardFold, etsyNoteDisplay } from "@/lib/studioflow/etsyFirstImport";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
@@ -5877,6 +5879,11 @@ export function OrderDetailContent({
   // reads only the fields these flags allow, so internal notes, costs, supplier
   // and profit are not filtered out — they are never read.
   const portal = order.customerPortal;
+  // ETSY-E2E night: Etsy's copy of the order and its product photos, read once per open (never stored).
+  const isEtsyOrder = String(order.customFields?.["Source"] || "") === "Etsy";
+  const etsySource = useEtsySource(order.id, isEtsyOrder);
+  const etsyPhotos = useEtsyListingPhotos(order.id, isEtsyOrder && Boolean(etsySource));
+  const etsyFirstPhoto = etsyPhotos.photos.find((row) => row.url || row.thumbUrl);
   const [portalBusy, setPortalBusy] = useState(false);
   const [portalNotice, setPortalNotice] = useState("");
   const portalUrl = portalUrlForToken(portal.token, workspace.clientPortalHost);
@@ -6647,6 +6654,15 @@ export function OrderDetailContent({
               />
               {order.designLink && isProbablyImageUrl(order.designLink) ? (
                 <img src={order.designLink} alt={order.designName || t("Order preview")} className="app-preview-image" />
+              ) : !order.designLink && etsyFirstPhoto ? (
+                // ETSY-E2E night: Etsy's product photo, fetched when the order opens (API Terms: <= 6 h old, not stored).
+                <figure className="app-preview-etsy">
+                  <EtsyProductPhoto photo={etsyFirstPhoto} size={0} large label={t("Product photo from Etsy")} />
+                  <figcaption>
+                    {t("Product photo from Etsy")}
+                    {etsyFirstPhoto.listingUrl ? <> · <a href={etsyFirstPhoto.listingUrl} target="_blank" rel="noopener noreferrer">{t("View on Etsy")} ↗</a></> : null}
+                  </figcaption>
+                </figure>
               ) : (
                 <div className="app-preview-empty">
                   <span className="app-preview-icon image-placeholder-icon" aria-hidden="true"><CardIconGlyph icon="photo" /></span>
@@ -8750,6 +8766,9 @@ export function OrderDetailContent({
                 const isPrimary = section.id === PRIMARY_SPECIAL_NOTE_ID;
                 const isPerOrderExtra = perOrderExtraIds.has(section.id);
                 const value = isPrimary ? order.notes : specialNoteValue(order.customFields, section.id);
+                // ETSY-E2E night: the lines NivaDesk copied from Etsy fold into one line while the Etsy panel shows
+                // them; a photo link becomes "Photo attached". Display only — the note text is never rewritten.
+                const etsyNote = isPrimary && isEtsyOrder ? etsyNoteDisplay(value, Boolean(etsySource), t("photo attached")) : null;
                 return (
                   <div key={section.id} className="order-notes-section">
                     {isPerOrderExtra && canInlineEditFullDetails && (
@@ -8774,6 +8793,7 @@ export function OrderDetailContent({
                     <InlineNotesField
                       title={isPerOrderExtra ? "" : section.title}
                       value={value}
+                      displayValue={etsyNote ? etsyNote.text : undefined}
                       disabled={!canInlineEditFullDetails}
                       saving={savingInlineField === `Note ${section.id}`}
                       onSave={nextValue => saveDetailsPatch(
@@ -8781,6 +8801,12 @@ export function OrderDetailContent({
                         `Note ${section.id}`
                       )}
                     />
+                    {etsyNote && etsyNote.folded.length ? (
+                      <p className="etsy-note-folded">
+                        {`${t("Copied from Etsy and shown in the Etsy order panel above:")} ${etsyNote.folded.map(kind => t(kind)).join(", ")}`}
+                      </p>
+                    ) : null}
+                    {etsyNote ? <EtsyNotePhotoLinks photos={etsyNote.photos} photoLabel={t("Photo attached")} /> : null}
                   </div>
                 );
               })}
@@ -9797,7 +9823,7 @@ export function OrderDetailContent({
       <ShopifySourceStrip order={order} workspaceCurrency={moneySettings?.selectedCurrency} />
       <ChannelSourceStrip order={order} showMoney={canSeeFinance} />
       {String(order.customFields?.["Source"] || "") === "Etsy" ? (
-        <EtsySourcePanel orderId={order.id} language={detailLanguage} showMoney={canSeeFinance} />
+        <EtsySourcePanel source={etsySource} photos={etsyPhotos} language={detailLanguage} showMoney={canSeeFinance} />
       ) : null}
       <EbayOrderBlock stamp={order.commerce} canSeeFinance={canSeeFinance} language={detailLanguage} />
       <RestrictedBuyerAddress order={order} canReveal={normalizeWorkspaceRole(workspace.role) === "owner"} />
@@ -9884,7 +9910,30 @@ export function OrderDetailContent({
           </div>
 
           <div className="order-detail-mobile-stack">
-            {visibleMobileCards.map(cardId => renderMobileCardFrame(cardId))}
+            {(() => {
+              // ETSY-E2E night: on an Etsy order the cards it does not use yet (preview, repair intake, estimate,
+              // portal) move under one fold at the end. Nothing is removed and the saved layout is not changed.
+              const fold = etsyCardFold(visibleMobileCards, {
+                isEtsy: isEtsyOrder,
+                used: {
+                  preview: Boolean(order.designLink) || etsyPhotos.loading || Boolean(etsyFirstPhoto),
+                  repairIntake: order.orderType === "repair" || Object.values(repairIntake?.fields ?? {}).some(v => String(v ?? "").trim()) || intakePhotos.length > 0,
+                  estimate: Boolean(currentEstimate),
+                  customerPortal: Boolean(portal.active)
+                }
+              });
+              return (
+                <>
+                  {fold.main.map(cardId => renderMobileCardFrame(cardId))}
+                  {fold.folded.length ? (
+                    <details className="order-detail-unused-cards" data-etsy-unused-cards="">
+                      <summary>{`${t("Not used on this order")} (${fold.folded.length}) · ${fold.folded.map(cardId => cardLabel(cardId)).join(", ")}`}</summary>
+                      {fold.folded.map(cardId => renderMobileCardFrame(cardId))}
+                    </details>
+                  ) : null}
+                </>
+              );
+            })()}
           </div>
         </>
       )}
@@ -11213,12 +11262,15 @@ function InlineValueRow({
 function InlineNotesField({
   title,
   value,
+  displayValue,
   disabled,
   saving,
   onSave
 }: {
   title: string;
   value: string;
+  /** What the closed note shows, when it differs from the stored text (ETSY-E2E night: Etsy lines folded). */
+  displayValue?: string;
   disabled: boolean;
   saving: boolean;
   onSave: (value: string) => Promise<void> | void;
@@ -11275,7 +11327,7 @@ function InlineNotesField({
           }}
           title={t(disabled ? "This field is read-only for your role." : "Click to edit")}
         >
-          {saving ? t("Saving...") : (value || t("Add note here..."))}
+          {saving ? t("Saving...") : ((displayValue ?? value) || t("Add note here..."))}
         </button>
       )}
     </div>

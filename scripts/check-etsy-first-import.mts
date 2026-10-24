@@ -146,7 +146,9 @@ check("E10 every new sentence has all eleven translations", () => {
     "Completed orders are already shipped on Etsy. They come in marked as dispatched and count as open work until you mark them delivered.",
     "Change what to include", "Estimated profit", "Changed on Etsy", "Delivery address", "Delivery name", "Design name",
     "Your edit in NivaDesk is kept. Update the order yourself if Etsy's version is right.", "No orders match your search.",
-    "No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate."
+    "No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.",
+    "Photo attached", "photo attached", "Product photo from Etsy", "View on Etsy", "Product photos open on Etsy.", "Not used on this order",
+    "Copied from Etsy and shown in the Etsy order panel above:"
   ]) {
     const at = lang.indexOf(`  ${JSON.stringify(key)}: {`);
     assert.ok(at >= 0, `missing ${key}`);
@@ -159,7 +161,7 @@ check("E10 every new sentence has all eleven translations", () => {
 
 check("E11 an Etsy order shows Etsy's own copy: items, options, personalisation, notes; money only with Financial Info", () => {
   const detail = readFileSync(join(root, "app/orders/OrderDetailContent.tsx"), "utf8");
-  assert.match(detail, /<EtsySourcePanel orderId=\{order\.id\} language=\{detailLanguage\} showMoney=\{canSeeFinance\} \/>/);
+  assert.match(detail, /<EtsySourcePanel source=\{etsySource\} photos=\{etsyPhotos\} language=\{detailLanguage\} showMoney=\{canSeeFinance\} \/>/);
   let panel = "";
   try { panel = readFileSync(join(root, "app/orders/EtsySourcePanel.tsx"), "utf8"); } catch { /* missing */ }
   assert.ok(panel, "EtsySourcePanel.tsx missing");
@@ -201,5 +203,59 @@ check("E17 the order search finds an order by the shop's own number (Etsy receip
   assert.equal(orderMatchesSearch(order, "Etsy"), false, "the Source field is not an order number");
 });
 
+// --- ETSY-E2E night (24 Oct 2026): the coordinator's screen review ---
+const night = await import("../lib/studioflow/etsyFirstImport") as any;
+const PET = "https://i.etsystatic.com/uploads/3200000201/pet.jpg";
+check("E18 a buyer's photo link is split out of the text, never shown as a raw URL", () => {
+  assert.equal(typeof night.etsyTextParts, "function", "etsyTextParts missing");
+  assert.deepEqual(night.etsyTextParts(`Photo of your pet: ${PET}`), [{ text: "Photo of your pet: " }, { photo: PET }]);
+  assert.deepEqual(night.etsyTextParts("Name: ANNA"), [{ text: "Name: ANNA" }]);
+  // only Etsy's upload host becomes a photo link; anything else stays text (no link to an arbitrary site)
+  assert.deepEqual(night.etsyTextParts("see http://evil.example/x.jpg"), [{ text: "see http://evil.example/x.jpg" }]);
+  assert.equal(night.etsyPlainText(`Pet Portrait — Photo of your pet: ${PET}`), "Pet Portrait — Photo of your pet: photo attached");
+});
+check("E19 the import preview, the Etsy panel and the notes render photo links through EtsyText", () => {
+  const section = readFileSync(join(root, "app/settings/EtsyIntegrationSection.tsx"), "utf8");
+  const panel = readFileSync(join(root, "app/orders/EtsySourcePanel.tsx"), "utf8");
+  const detail = readFileSync(join(root, "app/orders/OrderDetailContent.tsx"), "utf8");
+  assert.match(section, /<EtsyText /);
+  assert.doesNotMatch(section, /row\.personalization\.map\(etsyPersonalisationLine\)\.join/);
+  assert.match(panel, /<EtsyText /);
+  assert.match(detail, /<EtsyNotePhotoLinks /);
+});
+check("E20 the notes card folds the lines NivaDesk copied from Etsy while the Etsy panel shows them; the note itself is untouched", () => {
+  assert.equal(typeof night.etsyNoteDisplay, "function", "etsyNoteDisplay missing");
+  const note = `Personalisation — Name: ANNA | Photo of your pet: ${PET}\nBuyer note — Please gift wrap\nSeller: use the oak frame`;
+  const shown = night.etsyNoteDisplay(note, true);
+  assert.equal(shown.text, "Seller: use the oak frame");
+  assert.deepEqual(shown.folded, ["Personalisation", "Buyer note"]);
+  const plain = night.etsyNoteDisplay(note, false);
+  assert.equal(plain.folded.length, 0);
+  assert.ok(!plain.text.includes("https://"), "raw link shown in notes");
+  assert.ok(plain.text.includes("photo attached"));
+  assert.deepEqual(night.etsyNoteDisplay("just my note", true), { text: "just my note", folded: [], photos: [] });
+});
+check("E21 an Etsy order on a phone: unused Preview/Repair/Estimate/Portal cards move under 'Not used on this order', none removed", () => {
+  assert.equal(typeof night.etsyCardFold, "function", "etsyCardFold missing");
+  const order = ["preview", "repairIntake", "estimate", "customerPortal", "summary", "workTime", "notes", "customer", "financial", "status"];
+  const r = night.etsyCardFold(order, { isEtsy: true, used: { preview: false, repairIntake: false, estimate: false, customerPortal: false } });
+  assert.deepEqual(r.main, ["summary", "workTime", "notes", "customer", "financial", "status"]);
+  assert.deepEqual(r.folded, ["preview", "repairIntake", "estimate", "customerPortal"]);
+  assert.equal(r.main.length + r.folded.length, order.length);
+  const used = night.etsyCardFold(order, { isEtsy: true, used: { preview: true, repairIntake: false, estimate: true, customerPortal: false } });
+  assert.deepEqual(used.folded, ["repairIntake", "customerPortal"]);
+  assert.ok(used.main.includes("preview") && used.main.includes("estimate"));
+  const notEtsy = night.etsyCardFold(order, { isEtsy: false, used: {} });
+  assert.deepEqual(notEtsy, { main: order, folded: [] });
+});
+check("E22 the order screen uses the fold on the phone stack and asks Etsy for product photos (never stores them)", () => {
+  const detail = readFileSync(join(root, "app/orders/OrderDetailContent.tsx"), "utf8");
+  const panel = readFileSync(join(root, "app/orders/EtsySourcePanel.tsx"), "utf8");
+  assert.match(detail, /etsyCardFold\(/);
+  assert.match(detail, /Not used on this order/);
+  assert.match(panel, /getEtsyListingPhotos/);
+  assert.doesNotMatch(panel, /setDoc|updateDoc/);
+  assert.match(panel, /onError=/, "a broken Etsy image needs a placeholder");
+});
 console.log(`\n${passed}/${passed + failed} passed`);
 process.exit(failed ? 1 : 0);

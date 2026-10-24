@@ -12,15 +12,72 @@
 //
 // It reads the order document itself (one getDoc) rather than widening the shared order model,
 // so nothing else in the app changes shape.
+//
+// ETSY-E2E night (24 Oct 2026): product photos. Etsy API Terms (Display of Data): listing content shown must not be
+// more than 6 hours older than Etsy's. So the photo is never stored: the server asks Etsy when the order is opened
+// (getEtsyListingPhotos, kept under 6 h in the function's memory) and passes on only Etsy's own image host. A
+// missing or broken image shows a placeholder and the "View on Etsy" link. The buyer's own uploaded photo stays a
+// link ("Photo attached"), not an embedded image.
 
 import { useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase/client";
 import { studioT } from "@/lib/studioflow/language";
 import { etsyPersonalisationLine } from "@/lib/studioflow/etsyFirstImport";
+import { EtsyText } from "./EtsyText";
 
-type EtsyItem = { title?: string; quantity?: number; unitPrice?: number; currency?: string; options?: { name?: string; value?: string }[]; personalization?: { name?: string; value?: string }[] };
-type EtsySource = {
+export type EtsyListingPhoto = { transactionId?: string; listingId?: string; url?: string; thumbUrl?: string; alt?: string; listingUrl?: string };
+export type EtsyPhotosAnswer = { photos: EtsyListingPhoto[]; reason: string; loading: boolean };
+
+/** Etsy's copy of the order (etsySource), read once. null = none (not an Etsy order, or disconnected). */
+export function useEtsySource(orderId: string, enabled: boolean): EtsySource | null {
+  const [source, setSource] = useState<EtsySource | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setSource(null);
+    if (!orderId || !enabled) return;
+    getDoc(doc(db, "siparisler", orderId))
+      .then((snap) => { if (!cancelled) setSource(((snap.data() || {}) as { etsySource?: EtsySource }).etsySource || null); })
+      .catch(() => { if (!cancelled) setSource(null); });
+    return () => { cancelled = true; };
+  }, [orderId, enabled]);
+  return source;
+}
+
+/** Product photos, asked of Etsy (through NivaDesk's server) each time the order is opened. Never written anywhere. */
+export function useEtsyListingPhotos(orderId: string, enabled: boolean): EtsyPhotosAnswer {
+  const [answer, setAnswer] = useState<EtsyPhotosAnswer>({ photos: [], reason: "", loading: false });
+  useEffect(() => {
+    let cancelled = false;
+    if (!orderId || !enabled) { setAnswer({ photos: [], reason: "", loading: false }); return; }
+    setAnswer({ photos: [], reason: "", loading: true });
+    httpsCallable<{ orderId: string }, { photos?: EtsyListingPhoto[]; reason?: string }>(functions, "getEtsyListingPhotos")({ orderId })
+      .then((res) => { if (!cancelled) setAnswer({ photos: res.data?.photos || [], reason: String(res.data?.reason || ""), loading: false }); })
+      .catch(() => { if (!cancelled) setAnswer({ photos: [], reason: "unavailable", loading: false }); });
+    return () => { cancelled = true; };
+  }, [orderId, enabled]);
+  return answer;
+}
+
+/** One Etsy product photo: fixed box, placeholder while loading, when Etsy has none, or when the image breaks. */
+export function EtsyProductPhoto({ photo, size, label, large = false }: { photo?: EtsyListingPhoto; size: number; label: string; large?: boolean }) {
+  const [broken, setBroken] = useState(false);
+  const url = large ? (photo?.url || photo?.thumbUrl) : (photo?.thumbUrl || photo?.url);
+  const ok = Boolean(url) && !broken && /^https:\/\/i\.etsystatic\.com\//.test(String(url));
+  return (
+    <span className={`etsy-product-photo${large ? " is-large" : ""}`} style={large ? undefined : { width: size, height: size }}>
+      {ok ? (
+        <img src={url} alt={photo?.alt || label} loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} />
+      ) : (
+        <span className="etsy-product-photo__empty" aria-label={label} role="img">▢</span>
+      )}
+    </span>
+  );
+}
+
+type EtsyItem = { listingId?: string; title?: string; quantity?: number; unitPrice?: number; currency?: string; options?: { name?: string; value?: string }[]; personalization?: { name?: string; value?: string }[] };
+export type EtsySource = {
   receiptId?: string; status?: string; isPaid?: boolean; isShipped?: boolean; isCancelled?: boolean; isRefunded?: boolean;
   currency?: string; subtotal?: number; discount?: number; shipping?: number; tax?: number; grandTotal?: number;
   buyerNote?: string; giftMessage?: string; items?: EtsyItem[]; fetchedAtMs?: number;
@@ -44,18 +101,10 @@ function isUploadUrl(value: string): boolean {
   return /^https:\/\/i\.etsystatic\.com\//i.test(value.trim());
 }
 
-export function EtsySourcePanel({ orderId, language, showMoney }: { orderId: string; language: string; showMoney: boolean }) {
+export function EtsySourcePanel({ source, photos, language, showMoney }: { source: EtsySource | null; photos: EtsyPhotosAnswer; language: string; showMoney: boolean }) {
   const t = (text: string) => studioT(text, language);
-  const [source, setSource] = useState<EtsySource | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    if (!orderId) return;
-    getDoc(doc(db, "siparisler", orderId))
-      .then((snap) => { if (!cancelled) setSource(((snap.data() || {}) as { etsySource?: EtsySource }).etsySource || null); })
-      .catch(() => { if (!cancelled) setSource(null); });
-    return () => { cancelled = true; };
-  }, [orderId]);
   if (!source || !Array.isArray(source.items)) return null;
+  const photoFor = (item: EtsyItem) => photos.photos.find((row) => row.listingId && row.listingId === String(item.listingId || ""));
   const currency = String(source.currency || "").toUpperCase();
   const state = source.isCancelled ? t("Cancelled") : source.isRefunded ? t("Refunded") : source.isShipped ? t("Shipped") : source.isPaid ? t("Paid") : "";
   const fetched = Number(source.fetchedAtMs || 0);
@@ -67,7 +116,9 @@ export function EtsySourcePanel({ orderId, language, showMoney }: { orderId: str
       </header>
       <ul className="etsy-source-panel__items">
         {source.items.map((item, index) => (
-          <li key={`${item.title}-${index}`}>
+          <li key={`${item.title}-${index}`} className="etsy-source-panel__item">
+            <EtsyProductPhoto photo={photoFor(item)} size={56} label={t("Product photo from Etsy")} />
+            <div className="etsy-source-panel__body">
             <div className="etsy-source-panel__line">
               <span className="etsy-source-panel__title">{item.title || t("Item")}</span>
               <span className="etsy-source-panel__qty">× {Number(item.quantity || 1)}</span>
@@ -80,17 +131,17 @@ export function EtsySourcePanel({ orderId, language, showMoney }: { orderId: str
             ) : null}
             {(item.personalization || []).map((entry, i) => {
               const value = String(entry.value || "");
-              return isUploadUrl(value) ? (
+              return (
                 <p key={i} className="etsy-source-panel__personalisation">
-                  <span>{entry.name || t("Personalisation")}: </span>
-                  <a href={value} target="_blank" rel="noopener noreferrer">{t("Buyer's photo")} ↗</a>
-                </p>
-              ) : (
-                <p key={i} className="etsy-source-panel__personalisation">
-                  <span>{t("Personalisation")}: </span>{etsyPersonalisationLine(value)}
+                  <span>{isUploadUrl(value) ? (entry.name || t("Personalisation")) : t("Personalisation")}: </span>
+                  <EtsyText value={isUploadUrl(value) ? value : etsyPersonalisationLine(value)} photoLabel={t("Photo attached")} />
                 </p>
               );
             })}
+            {photoFor(item)?.listingUrl ? (
+              <a className="etsy-source-panel__listing" href={photoFor(item)?.listingUrl} target="_blank" rel="noopener noreferrer">{t("View on Etsy")} ↗</a>
+            ) : null}
+            </div>
           </li>
         ))}
       </ul>
@@ -115,6 +166,9 @@ export function EtsySourcePanel({ orderId, language, showMoney }: { orderId: str
           {source.tax ? <div><dt>{t("Tax")}</dt><dd>{money(source.tax, currency)}</dd></div> : null}
           <div className="is-total"><dt>{t("Total")}</dt><dd>{money(source.grandTotal, currency)}</dd></div>
         </dl>
+      ) : null}
+      {photos.reason === "not_connected" || photos.reason === "quota" || photos.reason === "unavailable" ? (
+        <p className="etsy-source-panel__foot">{t("Product photos open on Etsy.")}</p>
       ) : null}
       <p className="etsy-source-panel__foot">
         {t("Read-only: this is Etsy's copy of the order. Your own changes go in the cards below.")}

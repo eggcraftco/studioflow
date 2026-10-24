@@ -34330,6 +34330,23 @@ body[data-studio-theme="dark"] .order-detail-tab-soon {
 .etsy-source-panel__differs { padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.1); display: grid; gap: 2px; }
 .etsy-source-panel__differs p { margin: 0; overflow-wrap: anywhere; }
 body[data-studio-theme="dark"] .etsy-source-panel { background: rgba(255, 255, 255, 0.04); }
+/* ETSY-E2E night (24 Oct 2026): product photos (fetched from Etsy on open, never stored), photo links, folds. */
+.etsy-source-panel__items > li.etsy-source-panel__item { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; align-items: start; }
+.etsy-source-panel__body { min-width: 0; }
+.etsy-source-panel__listing { display: inline-block; margin-top: 4px; font-size: 12.5px; font-weight: 650; }
+.etsy-product-photo { display: inline-flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 10px; border: 1px solid var(--border); background: #f1f1f2; flex: 0 0 auto; }
+.etsy-product-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.etsy-product-photo__empty { color: var(--muted); font-size: 18px; line-height: 1; }
+.etsy-product-photo.is-large { width: 100%; height: 100%; min-height: 0; border-radius: 16px; }
+.etsy-product-photo.is-large img { object-fit: contain; }
+.app-preview-etsy { margin: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 6px; width: 100%; height: 100%; min-height: 120px; }
+.app-preview-etsy figcaption { color: var(--muted); font-size: 12px; text-align: center; padding: 0 8px; }
+.etsy-photo-link { font-weight: 650; white-space: nowrap; }
+.etsy-note-folded { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.etsy-note-photos { margin: 4px 0 0; display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; }
+.order-detail-unused-cards { margin: 4px 0 0; display: grid; gap: 12px; }
+.order-detail-unused-cards > summary { cursor: pointer; padding: 12px 14px; border: 1px dashed var(--border); border-radius: 14px; color: var(--muted); font-size: 13px; font-weight: 650; list-style-position: inside; min-height: 44px; box-sizing: border-box; }
+body[data-studio-theme="dark"] .etsy-product-photo { background: #282828; }
 
 body[data-studio-theme="dark"] .ebay-order-block {
   background: rgba(96, 165, 250, 0.12);

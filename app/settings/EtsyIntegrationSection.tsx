@@ -31,6 +31,7 @@ import {
   type EtsyPreview,
   type EtsyPreviewRow
 } from "@/lib/studioflow/etsy";
+import { EtsyText } from "@/app/orders/EtsyText";
 import { etsyActionErrorText, etsyCanPreview, etsyImportNotice, etsyPersonalisationLine, shouldAutoPreviewEtsy } from "@/lib/studioflow/etsyFirstImport";
 import { workspaceAccessAllows } from "@/lib/studioflow/firestore";
 
@@ -834,7 +835,10 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
 
                   {row.personalization.length ? (
                     <p className="muted-copy" style={{ margin: 0 }}>
-                      {`${t("Personalisation")}: ${row.personalization.map(etsyPersonalisationLine).join(" · ")}`}
+                      {`${t("Personalisation")}: `}
+                      {row.personalization.map((line, i) => (
+                        <span key={i}>{i ? " · " : ""}<EtsyText value={etsyPersonalisationLine(line)} photoLabel={t("Photo attached")} /></span>
+                      ))}
                     </p>
                   ) : null}
 

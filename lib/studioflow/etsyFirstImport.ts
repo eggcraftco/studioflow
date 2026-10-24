@@ -120,3 +120,65 @@ export function etsyActionErrorText(error: unknown, t: (text: string) => string)
 export function etsyPersonalisationLine(line: string): string {
   return String(line || "").replace(/^\s*personali[sz]ation\s*:\s*/i, "");
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// ETSY-E2E night (24 Oct 2026) — the coordinator's screen review.
+//
+// A buyer's photo upload arrives as a personalisation answer that is a link on Etsy's upload host
+// (https://i.etsystatic.com/…). It was shown as a raw URL in the import preview, the order's notes and the design
+// name. These helpers split it out so every screen renders a "Photo attached" link instead: a link the seller
+// opens on Etsy — no copy, no <img> of the buyer's upload, nothing stored. Only Etsy's own upload host becomes a
+// link; any other address in a buyer's text stays plain text.
+const ETSY_UPLOAD_LINK = /https:\/\/i\.etsystatic\.com\/[^\s"'<>|]+/gi;
+
+export type EtsyTextPart = { text: string } | { photo: string };
+
+export function etsyTextParts(value: string): EtsyTextPart[] {
+  const text = String(value || "");
+  const parts: EtsyTextPart[] = [];
+  let at = 0;
+  for (const match of text.matchAll(ETSY_UPLOAD_LINK)) {
+    const start = match.index ?? 0;
+    if (start > at) parts.push({ text: text.slice(at, start) });
+    parts.push({ photo: match[0] });
+    at = start + match[0].length;
+  }
+  if (at < text.length) parts.push({ text: text.slice(at) });
+  return parts.length ? parts : [{ text: "" }];
+}
+
+/** The same text with every Etsy upload link replaced by a word (for places that cannot hold a link). */
+export function etsyPlainText(value: string, label = "photo attached"): string {
+  return String(value || "").replace(ETSY_UPLOAD_LINK, label);
+}
+
+// The note lines the server writes for an Etsy order (functions/etsy.js normalizeEtsyReceipt): "Personalisation — …",
+// "Buyer note — …", "Gift message — …". While the Etsy order panel is on screen they are folded into one line that
+// says where they are, so the brief is read in one place. The note itself is never changed: editing it shows every
+// line, and once the Etsy panel is gone (a disconnect removes Etsy's copy) the lines show in full again.
+const ETSY_NOTE_LINE = /^(Personalisation|Buyer note|Gift message) — /;
+
+export function etsyNoteDisplay(notes: string, etsyPanelShown: boolean, photoWord = "photo attached"): { text: string; folded: string[]; photos: string[] } {
+  const lines = String(notes || "").split("\n");
+  const folded: string[] = [];
+  const kept: string[] = [];
+  const photos: string[] = [];
+  for (const line of lines) {
+    const kind = line.match(ETSY_NOTE_LINE)?.[1];
+    if (kind && etsyPanelShown) { if (!folded.includes(kind)) folded.push(kind); continue; }
+    for (const part of etsyTextParts(line)) if ("photo" in part) photos.push(part.photo);
+    kept.push(etsyPlainText(line, photoWord));
+  }
+  return { text: kept.join("\n").trim(), folded, photos };
+}
+
+// The cards an imported Etsy order never uses unless the studio starts using them: a preview photo, a repair intake,
+// an estimate and a customer portal. On a phone they stood first, empty, above the work. They are not removed and
+// the saved layout is not touched: on an Etsy order the unused ones move to the end under "Not used on this order".
+export const ETSY_FOLDABLE_CARDS = ["preview", "repairIntake", "estimate", "customerPortal"] as const;
+
+export function etsyCardFold<T extends string>(cards: T[], input: { isEtsy: boolean; used: Partial<Record<string, boolean>> }): { main: T[]; folded: T[] } {
+  if (!input.isEtsy) return { main: cards, folded: [] };
+  const fold = (id: T) => (ETSY_FOLDABLE_CARDS as readonly string[]).includes(id) && !input.used[id];
+  return { main: cards.filter((id) => !fold(id)), folded: cards.filter(fold) };
+}
