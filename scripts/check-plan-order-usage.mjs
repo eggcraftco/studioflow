@@ -34,7 +34,7 @@ compile("lib/studioflow/planOrderUsage.ts", "planOrderUsage");
 for (const name of ["language", ...[...fs.readFileSync(path.join(root, "lib/studioflow/language.ts"), "utf8").matchAll(/from "\.\/([A-Za-z]+)"/g)].map((m) => m[1])] /* every table language.ts merges; the fixed list went stale (22 Oct 2026) */) compile(`lib/studioflow/${name}.ts`, name);
 const usage = await import(pathToFileURL(path.join(tmp, "planOrderUsage.mjs")).href);
 const { studioT } = await import(pathToFileURL(path.join(tmp, "language.mjs")).href);
-const { isPlanActiveOrder, tallyPlanOrders, combinePlanOrderCounts, formatActiveOrdersLine, formatTotalOrdersLine, planOrderUsagePercent, PLAN_ORDER_RULE_HINT } = usage;
+const { isPlanActiveOrder, tallyPlanOrders, combinePlanOrderCounts, formatActiveOrdersLine, formatTotalOrdersLine, planOrderUsagePercent, PLAN_ORDER_RULE_HINT, STORE_HISTORY_LABEL, formatStoreHistoryLine } = usage;
 
 // 1. The predicate, case by case.
 const open = { status: "Not Yet", isDelivered: false, isDeleted: false };
@@ -91,11 +91,14 @@ expect("total line", formatTotalOrdersLine(12), "Total orders: 12");
 expect("percent", planOrderUsagePercent(7, 10), 70);
 expect("percent caps at 100", planOrderUsagePercent(12, 10), 100);
 expect("percent with no limit", planOrderUsagePercent(12, null), 0);
-expect("hint wording", PLAN_ORDER_RULE_HINT, "Delivered and deleted orders don't count toward the limit; cancelled orders still count until you mark them delivered or delete them.");
+// ET-E3 b2 (24 Oct 2026): Etsy orders finished at Etsy are outside the count (server-only), and the hint says so.
+expect("hint wording", PLAN_ORDER_RULE_HINT, "Delivered and deleted orders don't count toward the limit, and neither do orders your Etsy shop had already finished (shipped, completed, cancelled or fully refunded there). Other cancelled orders still count until you mark them delivered or delete them.");
+expect("hint no longer says every cancelled order counts", /; cancelled orders still count/.test(PLAN_ORDER_RULE_HINT), false);
+expect("store history line", formatStoreHistoryLine(202), "Finished Etsy orders (not counted): 202");
 
 // 5. Every string, every language — through the real studioT.
 const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
-for (const key of ["Active orders", "Total orders", "no limit", PLAN_ORDER_RULE_HINT, "Orders", "Loading..."]) {
+for (const key of ["Active orders", "Total orders", "no limit", PLAN_ORDER_RULE_HINT, STORE_HISTORY_LABEL, "Orders", "Loading..."]) {
   const untranslated = LANGUAGES.filter(language => studioT(key, language) === key);
   expect(`translated in all 11 non-English languages: ${key.slice(0, 40)}`, untranslated, []);
 }
@@ -114,6 +117,12 @@ const loader = read("lib/studioflow/planOrderUsageLoader.ts");
 expect("loader reads the server callable", /"getWorkspacePlanUsage"/.test(loader), true);
 expect("loader counts isDeleted == true", /where\("isDeleted", "==", true\)/.test(loader), true);
 expect("loader counts isDelivered == true", /where\("isDelivered", "==", true\)/.test(loader), true);
+// ET-E3 b2: on a limited plan the client never puts its own count against the limit.
+expect("loader reads storeHistoryOrderCount from the server", /storeHistoryOrderCount/.test(loader), true);
+expect("loader has no client-count fallback on a limited plan", /return \{ \.\.\.local, limit: orderLimit, source: "client" \}/.test(loader), false);
+expect("loader throws (screen shows —) when the server does not answer on a limited plan", /throw new Error\("The plan's active-order figure comes from the server/.test(loader), true);
+expect("Settings shows the server's store-history figure", /formatStoreHistoryLine\(orderUsage\.storeHistory, t\)/.test(settings), true);
+expect("/plan shows the server's store-history figure", /formatStoreHistoryLine\(orderUsage\.storeHistory, t\)/.test(plan), true);
 
 fs.rmSync(tmp, { recursive: true, force: true });
 if (failures.length) { console.log(failures.map((f) => `FAIL  ${f}`).join("\n")); console.log(`\n${failures.length} of ${checks} checks failed`); process.exit(1); }

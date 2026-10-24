@@ -7,7 +7,7 @@ import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCach
 import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { SHOPIFY_APP_STORE_URL } from "@/lib/studioflow/shopifyListing";
-import { PLAN_ORDER_RULE_HINT, formatActiveOrdersLine, formatTotalOrdersLine, planOrderUsagePercent, type PlanOrderUsage } from "@/lib/studioflow/planOrderUsage";
+import { PLAN_ORDER_RULE_HINT, formatActiveOrdersLine, formatStoreHistoryLine, formatTotalOrdersLine, planOrderUsagePercent, type PlanOrderUsage } from "@/lib/studioflow/planOrderUsage";
 import { loadPlanOrderUsage } from "@/lib/studioflow/planOrderUsageLoader";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -7177,6 +7177,7 @@ function PlanAccessSection({
                 {orderUsage ? formatActiveOrdersLine(orderUsage.active, orderUsage.limit, t) : orderUsageFailed ? `${t("Active orders")}: —` : t("Loading...")}
               </strong>
               <em data-testid="plan-total-orders">{orderUsage ? formatTotalOrdersLine(orderUsage.total, t) : `${t("Total orders")}: —`}</em>
+              {orderUsage && orderUsage.storeHistory ? <em data-testid="plan-store-history-orders">{formatStoreHistoryLine(orderUsage.storeHistory, t)}</em> : null}
               {orderUsage && orderUsage.limit != null ? (
                 <div className="settings-progress-track settings-plan-orders-track" aria-hidden="true">
                   <div className="settings-progress-fill" style={{ width: `${planOrderUsagePercent(orderUsage.active, orderUsage.limit)}%` }} />
