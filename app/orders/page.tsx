@@ -151,7 +151,10 @@ function normalizeWorkspaceAssignmentAccess(workspace: WorkspaceContext) {
 
 export default function OrdersPage() {
   const router = useRouter();
-  const { user, loading } = useAuth();
+  // Etsy final round (25 Oct 2026): the page's language came only from the one-off settings read at load, so a
+  // language changed while the page was open (the shell switched at once) left the whole page — the held-orders
+  // band first — in the old language until a reload. AuthProvider's live per-user language is the source now.
+  const { user, loading, language: liveLanguage } = useAuth();
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   // Store orders the plan had no room for. They are parked server-side rather
@@ -181,6 +184,11 @@ export default function OrdersPage() {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [blockHeadingSettings, setBlockHeadingSettings] = useState<BlockHeadingSettings | null>(null);
   const [moneySettings, setMoneySettings] = useState<WorkspaceSettingsOverview | null>(null);
+  // The detail pane and cards read moneySettings.selectedLanguage: keep it on the live language too.
+  useEffect(() => {
+    if (!liveLanguage) return;
+    setMoneySettings(current => (current && current.selectedLanguage !== liveLanguage ? { ...current, selectedLanguage: liveLanguage } : current));
+  }, [liveLanguage, moneySettings?.selectedLanguage]);
   const [orderContextMenu, setOrderContextMenu] = useState<{ orderId: string; x: number; y: number } | null>(null);
   const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
@@ -1024,7 +1032,7 @@ export default function OrdersPage() {
   const canDeleteOrders = canDeleteOrRestoreOrders(workspace);
   const canRequestOrderDeletion = canRequestOrderDeletionApproval(workspace);
   const canAssignOrders = workspace ? normalizeWorkspaceAssignmentAccess(workspace) : false;
-  const language = moneySettings?.selectedLanguage ?? "English";
+  const language = liveLanguage || moneySettings?.selectedLanguage || "English";
   const t = (text: string) => studioT(text, language);
 
   // A genuinely empty workspace — as opposed to a filter that matched nothing,
