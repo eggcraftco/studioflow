@@ -90,7 +90,8 @@ const content = read("app/orders/OrderDetailContent.tsx");
 const firestore = read("lib/studioflow/firestore.ts");
 ok("card: no pre-engine profit formula left in the order screen", !/paidAmount \+ remainingAmount \+ customRemainingTotal - watchPurchasePrice/.test(content));
 ok("mapper: OrderDetail no longer carries a pre-computed netProfit", !/netProfit: paidAmount \+ remainingAmount/.test(firestore) && !/^\s*netProfit: number;\s*$/m.test(firestore.slice(firestore.indexOf("export type OrderDetail = {"), firestore.indexOf("export type OrderDetail = {") + 4000)));
-ok("card: Final Profit and Profit before CT read the engine block", (content.match(/(?:\bmoney|orderValueMoney)\(orderFinance\.netProfit, hideNumbers\)/g) || []).length === 2);
+// ETSY-E2E (24 Oct) added the "Estimated profit" row (no cost entered): three rows read the same block.
+ok("card: Final Profit, Estimated profit and Profit before CT read the engine block", (content.match(/(?:\bmoney|orderValueMoney)\(orderFinance\.netProfit, hideNumbers\)/g) || []).length === 3);
 ok("card: Platform Fee and VAT Amount rows show the engine's figures", /displayValue=\{(?:money|orderValueMoney)\(orderFinance\.platformFee, hideNumbers\)\}/.test(content) && /value=\{(?:money|orderValueMoney)\(orderFinance\.vatDue, hideNumbers\)\}/.test(content));
 ok("PDF: the Financial Info rows and profit come from the engine", content.includes("const pdfFinance = orderDetailFinance(order, settings);") && content.includes("const profitAfterVat = pdfFinance.netProfit;"));
 ok("hidden finance: PDF finance rows still sit behind showFinInternal", /if \(showFinInternal\) \{\s*\/\/ The engine's figures/.test(content));
@@ -144,11 +145,14 @@ const dashboardSrc = read("app/dashboard/page.tsx");
 const homeSrc = read("components/home/HomeCardBodies.tsx");
 ok("card: the Platform Fee row label comes from platformFeeLabel", content.includes("label={platformFeeLabel(orderFinance, t, moneySettings)}"));
 ok("PDF: the Financial Info fee row label comes from platformFeeLabel", content.includes("title: platformFeeLabel(pdfFinance, undefined, settings)"));
+// ETSY-E2E r3: the two profit tiles carry the fee footnote AND the no-cost footnote (profitFootnoteKeys).
 ok("Dashboard: fee tile, profit tile, CT tiles carry the footnote",
-  (dashboardSrc.match(/sub=\{rangeFeeSummary\.footnote \? t\(ESTIMATED_PLATFORM_FEES_FOOTNOTE\) : undefined\}/g) || []).length === 4);
+  (dashboardSrc.match(/sub=\{rangeFeeSummary\.footnote \? t\(ESTIMATED_PLATFORM_FEES_FOOTNOTE\) : undefined\}/g) || []).length === 2
+  && (dashboardSrc.match(/sub=\{profitFootnoteKeys\.length \? profitFootnoteKeys\.map\(key => t\(key\)\)\.join\(" · "\) : undefined\}/g) || []).length === 2
+  && dashboardSrc.includes("rangeFeeSummary.footnote ? ESTIMATED_PLATFORM_FEES_FOOTNOTE"));
 ok("Dashboard: breakdown fee row, breakdown/chart/year footnotes, Extra Spending and Tax set-aside are labelled",
   dashboardSrc.includes("label={platformFeeTotalLabel(rangeFeeSummary, t)}")
-  && (dashboardSrc.match(/dashboard-estimate-footnote/g) || []).length === 3
+  && (dashboardSrc.match(/dashboard-estimate-footnote/g) || []).length === 4
   && dashboardSrc.includes("push(platformFeeLabel(block, t, settings)")
   && dashboardSrc.includes("ctIncludesEstimatedFees"));
 ok("Dashboard: Revenue is the same block's revenue as the profit", dashboardSrc.includes("revenue: totals.revenue + block.revenue,"));

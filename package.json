@@ -68,6 +68,7 @@
     "test:order-delete-buttons": "node scripts/check-order-delete-buttons.mjs",
     "test:getting-started": "npx tsx scripts/check-getting-started.mts",
     "test:etsy-first-import": "npx tsx scripts/check-etsy-first-import.mts",
+    "test:etsy-finance-labels": "npx tsx scripts/check-etsy-finance-labels.mts",
     "test:order-currency": "npx tsx scripts/check-order-currency.mts",
     "test:day-labels": "npx tsx scripts/check-day-labels.mts",
     "test:etsy-fulfilment": "npx tsx scripts/check-etsy-fulfilment.mts",

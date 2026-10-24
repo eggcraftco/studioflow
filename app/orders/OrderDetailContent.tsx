@@ -841,6 +841,9 @@ function orderPdfHtml(
       financeRows.push({ title: "Profit before Corporation Tax", value: formatMoney(profitAfterVat) });
       financeRows.push({ title: `Corporation Tax (${Math.round(ctRate)}%)`, value: formatMoney(corporationTax), tone: "red" });
       financeRows.push({ title: "Net Profit (after CT)", value: formatMoney(profitAfterVat - corporationTax), tone: "green" });
+    } else if (pdfFinance.directCost === 0 && pdfFinance.otherExpenses === 0) {
+      // ETSY-E2E r3: the PDF says what the screen says — no cost entered, so the profit is an estimate.
+      financeRows.push({ title: "Estimated profit", value: formatMoney(profitAfterVat) });
     } else {
       financeRows.push({ title: "Final Profit", value: formatMoney(profitAfterVat), tone: "green" });
     }
@@ -7480,14 +7483,18 @@ export function OrderDetailContent({
                       <>
                         <DetailRow label={t("Profit before Corporation Tax")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} />
                         <DetailRow label={`Corporation Tax (${Math.round(corporationTaxRate)}%, est.)`} value={orderValueMoney(corporationTaxAmount, hideNumbers)} tone="negative" />
-                        <DetailRow label={t("Net Profit (after CT)")} value={orderValueMoney(netProfitAfterCT, hideNumbers)} tone="positive" emphasis />
+                        {/* ETSY-E2E r3: with no cost entered the after-tax figure is an estimate too — not green, and said. */}
+                        <DetailRow label={t("Net Profit (after CT)")} value={orderValueMoney(netProfitAfterCT, hideNumbers)} tone={orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? undefined : "positive"} emphasis />
+                        {orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? (
+                          <p className="muted-copy" data-testid="finance-costs-missing" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
+                        ) : null}
                       </>
                     ) : orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? (
                       // ETSY-E2E (24 Oct 2026): with no cost entered the "profit" is the sale minus an estimated fee — not
                       // a final number. An imported Etsy order showed a green "Final Profit" equal to almost the whole sale.
                       <>
                         <DetailRow label={t("Estimated profit")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} emphasis />
-                        <p className="muted-copy" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
+                        <p className="muted-copy" data-testid="finance-costs-missing" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
                       </>
                     ) : (
                       <DetailRow label={t("Final Profit")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} tone="positive" emphasis />

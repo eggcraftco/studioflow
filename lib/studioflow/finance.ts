@@ -352,6 +352,20 @@ export function estimatedFeeSummary(blocks: Array<CommissionBlock | null | undef
   return { footnote: estimated > 0, estimatedCount: estimated, uniformRate };
 }
 
+/**
+ * ETSY-E2E r3 (finance acceptance): orders whose profit has no cost under it — no direct cost and no other expense on
+ * the engine's block (the order screen's "Estimated profit" rule). A total that holds one is an estimate too.
+ */
+export const COSTS_MISSING_FOOTNOTE = "Some orders have no cost entered — profit is an estimate";
+export function costsMissingCount(blocks: Array<{ directCost?: number; otherExpenses?: number } | null | undefined>): number {
+  let n = 0;
+  for (const block of blocks) {
+    if (!block) continue;
+    if (!(Number(block.directCost) > 0) && !(Number(block.otherExpenses) > 0)) n += 1;
+  }
+  return n;
+}
+
 /** A total's fee label: "(estimate, 3%)" only when all of it is one estimate. */
 export function platformFeeTotalLabel(
   summary: ReturnType<typeof estimatedFeeSummary>,

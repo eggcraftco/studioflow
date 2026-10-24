@@ -33,6 +33,8 @@ import {
   dashboardCostTotal,
   ESTIMATED_PLATFORM_FEES_FOOTNOTE,
   estimatedFeeSummary,
+  COSTS_MISSING_FOOTNOTE,
+  costsMissingCount,
   orderFinanceBlock,
   orderSalesTotal,
   platformFeeLabel,
@@ -758,6 +760,12 @@ export default function DashboardPage() {
     () => estimatedFeeSummary(filteredCountingOrders.map(order => orderFinanceBlock(order, settings)), settings),
     [filteredCountingOrders, settings]
   );
+  // ETSY-E2E r3: a profit total that holds orders with no cost entered is an estimate, and says so.
+  const rangeCostsMissing = useMemo(
+    () => costsMissingCount(filteredCountingOrders.map(order => orderFinanceBlock(order, settings))),
+    [filteredCountingOrders, settings]
+  );
+  const profitFootnoteKeys = [rangeFeeSummary.footnote ? ESTIMATED_PLATFORM_FEES_FOOTNOTE : "", rangeCostsMissing > 0 ? COSTS_MISSING_FOOTNOTE : ""].filter(Boolean);
   const allTimeFeeSummary = useMemo(
     () => estimatedFeeSummary(countingFinanceOrders.map(order => orderFinanceBlock(order, settings)), settings),
     [countingFinanceOrders, settings]
@@ -1109,9 +1117,9 @@ export default function DashboardPage() {
                     {dashboardVisibility.fee ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.fee.icon} title={platformFeeTotalLabel(rangeFeeSummary, t)} sub={rangeFeeSummary.footnote ? t(ESTIMATED_PLATFORM_FEES_FOOTNOTE) : undefined} value={money(totals.fee, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.shipping ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.shipping.icon} title={t("Shipping")} value={money(totals.shipping, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.tax ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.tax.icon} title={t("VAT Amount")} hint={t("VAT recorded on these orders and set aside — not yet paid to HMRC.")} value={money(totals.tax, hideNumbers, settings)} tone="red" /> : null}
-                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t(settings?.corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit")} hint={t("Revenue − base cost − extra spending − platform fee − shipping − VAT − refunds.")} sub={rangeFeeSummary.footnote ? t(ESTIMATED_PLATFORM_FEES_FOOTNOTE) : undefined} value={money(totals.netProfit, hideNumbers, settings)} tone="green" /> : null}
+                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t(settings?.corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit")} hint={t("Revenue − base cost − extra spending − platform fee − shipping − VAT − refunds.")} sub={profitFootnoteKeys.length ? profitFootnoteKeys.map(key => t(key)).join(" · ") : undefined} value={money(totals.netProfit, hideNumbers, settings)} tone={rangeCostsMissing > 0 ? "blue" : "green"} /> : null}
                     {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="plan" title={`${t("Corporation Tax")} (${Math.round(settings.corporationTaxRate ?? 19)}%)`} sub={rangeFeeSummary.footnote ? t(ESTIMATED_PLATFORM_FEES_FOOTNOTE) : undefined} value={money(totals.corporationTax, hideNumbers, settings)} tone="red" /> : null}
-                    {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="check" title={t("Profit after CT")} sub={rangeFeeSummary.footnote ? t(ESTIMATED_PLATFORM_FEES_FOOTNOTE) : undefined} value={money(totals.netProfit - totals.corporationTax, hideNumbers, settings)} tone="green" /> : null}
+                    {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="check" title={t("Profit after CT")} sub={profitFootnoteKeys.length ? profitFootnoteKeys.map(key => t(key)).join(" · ") : undefined} value={money(totals.netProfit - totals.corporationTax, hideNumbers, settings)} tone="green" /> : null}
                   </>
                 ) : (
                   <>
@@ -1230,6 +1238,11 @@ export default function DashboardPage() {
                       {rangeFeeSummary.footnote ? (
                         <p className="muted-copy dashboard-estimate-footnote" style={{ margin: "4px 0 0", fontSize: 11.5 }}>
                           {t(ESTIMATED_PLATFORM_FEES_FOOTNOTE)}
+                        </p>
+                      ) : null}
+                      {rangeCostsMissing > 0 ? (
+                        <p className="muted-copy dashboard-estimate-footnote" data-testid="dashboard-costs-missing" style={{ margin: "4px 0 0", fontSize: 11.5 }}>
+                          {t(COSTS_MISSING_FOOTNOTE)}
                         </p>
                       ) : null}
                     </div>
