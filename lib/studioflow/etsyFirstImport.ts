@@ -11,6 +11,8 @@
 // the shop was still connected, importState "none", and every paid order Etsy
 // sent (63 webhook deliveries in the last 7 days alone) was refused at the
 // first-import gate.
+import { studioImportPhrase } from "./countLabel";
+
 
 /**
  * Whether this tab must show the real page even while setup is unfinished.
@@ -79,16 +81,18 @@ export function etsyCanPreview(input: {
 /** What an import did, in one line — including the orders parked for room on the plan. */
 export function etsyImportNotice(
   outcome: { created?: number; updated?: number; held?: number; failed?: number } | null | undefined,
-  t: (text: string) => string
+  t: (text: string) => string,
+  language: string | null | undefined = "English"
 ): string {
   const created = Number(outcome?.created || 0);
   const updated = Number(outcome?.updated || 0);
   const held = Number(outcome?.held || 0);
   const failed = Number(outcome?.failed || 0);
-  const parts = [`${created} ${t("imported")}`];
-  if (updated) parts.push(`${updated} ${t("updated")}`);
-  if (held) parts.push(`${held} ${t("are waiting for room on your plan.")} ${t("They are kept safe on the Orders screen.")}`);
-  if (failed) parts.push(`${failed} ${t("need review. No records were lost; you can run the preview again.")}`);
+  // ETSY plural pass: each count carries its own sentence in the right plural form ("1 is waiting", "1 needs review").
+  const parts = [studioImportPhrase(created, "importedCount", language)];
+  if (updated) parts.push(studioImportPhrase(updated, "updatedCount", language));
+  if (held) parts.push(`${studioImportPhrase(held, "waitingForRoomOnPlan", language)} ${t("They are kept safe on the Orders screen.")}`);
+  if (failed) parts.push(studioImportPhrase(failed, "needReview", language));
   return parts.join(" · ");
 }
 

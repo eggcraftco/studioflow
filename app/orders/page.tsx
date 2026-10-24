@@ -58,7 +58,7 @@ import {
   type OrderSortMode
 } from "@/lib/studioflow/orderFilters";
 import { studioT } from "@/lib/studioflow/language";
-import { studioCountLabel } from "@/lib/studioflow/countLabel";
+import { studioCountLabel, studioImportPhrase } from "@/lib/studioflow/countLabel";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
@@ -1077,9 +1077,7 @@ export default function OrdersPage() {
   const heldBanner = heldOrders && (heldOrders.heldCount ?? 0) > 0 && canCreateFirstOrder ? (
             <div className="orders-held-banner" role="status">
               <strong>
-                {heldOrders.heldCount} {(heldOrders.heldCount ?? 0) === 1
-                  ? t("store order is waiting")
-                  : t("store orders are waiting")}
+                {studioImportPhrase(heldOrders.heldCount ?? 0, "heldStoreOrdersWaiting", language)}
               </strong>
               <span>
                 {(heldOrders.roomAvailable ?? 0) > 0
@@ -1104,8 +1102,8 @@ export default function OrdersPage() {
                       const onTheWay = result?.queued ?? 0;
                       dispatchStudioToast({
                         message: onTheWay > 0
-                          ? `${importedNow + onTheWay} ${t("orders are being imported")}`
-                          : `${importedNow} ${t("orders imported")}`,
+                          ? studioImportPhrase(importedNow + onTheWay, "ordersBeingImported", language)
+                          : studioImportPhrase(importedNow, "ordersImported", language),
                       });
                       setHeldOrders(await listHeldIntegrationOrders(currentWorkspace).catch(() => null));
                       setOrders(await loadRecentOrders(currentWorkspace.id, currentWorkspace, user?.uid ?? ""));

@@ -1,0 +1,1080 @@
+{
+ "heldStoreOrdersWaiting": {
+  "English": {
+   "0": "0 store orders are waiting",
+   "1": "1 store order is waiting",
+   "2": "2 store orders are waiting",
+   "5": "5 store orders are waiting",
+   "11": "11 store orders are waiting",
+   "21": "21 store orders are waiting"
+  },
+  "Türkçe": {
+   "0": "0 mağaza siparişi bekliyor",
+   "1": "1 mağaza siparişi bekliyor",
+   "2": "2 mağaza siparişi bekliyor",
+   "5": "5 mağaza siparişi bekliyor",
+   "11": "11 mağaza siparişi bekliyor",
+   "21": "21 mağaza siparişi bekliyor"
+  },
+  "Deutsch": {
+   "0": "0 Shop-Bestellungen warten",
+   "1": "1 Shop-Bestellung wartet",
+   "2": "2 Shop-Bestellungen warten",
+   "5": "5 Shop-Bestellungen warten",
+   "11": "11 Shop-Bestellungen warten",
+   "21": "21 Shop-Bestellungen warten"
+  },
+  "Français": {
+   "0": "0 commande de boutique en attente",
+   "1": "1 commande de boutique en attente",
+   "2": "2 commandes de boutique en attente",
+   "5": "5 commandes de boutique en attente",
+   "11": "11 commandes de boutique en attente",
+   "21": "21 commandes de boutique en attente"
+  },
+  "Italiano": {
+   "0": "0 ordini dal negozio in attesa",
+   "1": "1 ordine dal negozio in attesa",
+   "2": "2 ordini dal negozio in attesa",
+   "5": "5 ordini dal negozio in attesa",
+   "11": "11 ordini dal negozio in attesa",
+   "21": "21 ordini dal negozio in attesa"
+  },
+  "Español (Spanish)": {
+   "0": "0 pedidos de la tienda esperando",
+   "1": "1 pedido de la tienda esperando",
+   "2": "2 pedidos de la tienda esperando",
+   "5": "5 pedidos de la tienda esperando",
+   "11": "11 pedidos de la tienda esperando",
+   "21": "21 pedidos de la tienda esperando"
+  },
+  "Português": {
+   "0": "0 encomenda da loja à espera",
+   "1": "1 encomenda da loja à espera",
+   "2": "2 encomendas da loja à espera",
+   "5": "5 encomendas da loja à espera",
+   "11": "11 encomendas da loja à espera",
+   "21": "21 encomendas da loja à espera"
+  },
+  "Русский (Russian)": {
+   "0": "0 заказов из магазина ждут",
+   "1": "1 заказ из магазина ждёт",
+   "2": "2 заказа из магазина ждут",
+   "5": "5 заказов из магазина ждут",
+   "11": "11 заказов из магазина ждут",
+   "21": "21 заказ из магазина ждёт"
+  },
+  "日本語 (Japanese)": {
+   "0": "0 件のストア注文が待機中",
+   "1": "1 件のストア注文が待機中",
+   "2": "2 件のストア注文が待機中",
+   "5": "5 件のストア注文が待機中",
+   "11": "11 件のストア注文が待機中",
+   "21": "21 件のストア注文が待機中"
+  },
+  "中文 (Chinese)": {
+   "0": "0 个店铺订单正在等待",
+   "1": "1 个店铺订单正在等待",
+   "2": "2 个店铺订单正在等待",
+   "5": "5 个店铺订单正在等待",
+   "11": "11 个店铺订单正在等待",
+   "21": "21 个店铺订单正在等待"
+  },
+  "العربية (Arabic)": {
+   "0": "0 طلب متجر بالانتظار",
+   "1": "1 طلب متجر بالانتظار",
+   "2": "2 طلبا متجر بالانتظار",
+   "5": "5 طلبات متجر بالانتظار",
+   "11": "11 طلبًا من المتجر بالانتظار",
+   "21": "21 طلبًا من المتجر بالانتظار"
+  },
+  "हिन्दी (Hindi)": {
+   "0": "0 स्टोर ऑर्डर प्रतीक्षा में",
+   "1": "1 स्टोर ऑर्डर प्रतीक्षा में",
+   "2": "2 स्टोर ऑर्डर प्रतीक्षा में",
+   "5": "5 स्टोर ऑर्डर प्रतीक्षा में",
+   "11": "11 स्टोर ऑर्डर प्रतीक्षा में",
+   "21": "21 स्टोर ऑर्डर प्रतीक्षा में"
+  }
+ },
+ "ordersImported": {
+  "English": {
+   "0": "0 orders imported",
+   "1": "1 order imported",
+   "2": "2 orders imported",
+   "5": "5 orders imported",
+   "11": "11 orders imported",
+   "21": "21 orders imported"
+  },
+  "Türkçe": {
+   "0": "0 sipariş içeri alındı",
+   "1": "1 sipariş içeri alındı",
+   "2": "2 sipariş içeri alındı",
+   "5": "5 sipariş içeri alındı",
+   "11": "11 sipariş içeri alındı",
+   "21": "21 sipariş içeri alındı"
+  },
+  "Deutsch": {
+   "0": "0 Aufträge importiert",
+   "1": "1 Auftrag importiert",
+   "2": "2 Aufträge importiert",
+   "5": "5 Aufträge importiert",
+   "11": "11 Aufträge importiert",
+   "21": "21 Aufträge importiert"
+  },
+  "Français": {
+   "0": "0 commande importée",
+   "1": "1 commande importée",
+   "2": "2 commandes importées",
+   "5": "5 commandes importées",
+   "11": "11 commandes importées",
+   "21": "21 commandes importées"
+  },
+  "Italiano": {
+   "0": "0 ordini importati",
+   "1": "1 ordine importato",
+   "2": "2 ordini importati",
+   "5": "5 ordini importati",
+   "11": "11 ordini importati",
+   "21": "21 ordini importati"
+  },
+  "Español (Spanish)": {
+   "0": "0 pedidos importados",
+   "1": "1 pedido importado",
+   "2": "2 pedidos importados",
+   "5": "5 pedidos importados",
+   "11": "11 pedidos importados",
+   "21": "21 pedidos importados"
+  },
+  "Português": {
+   "0": "0 encomenda importada",
+   "1": "1 encomenda importada",
+   "2": "2 encomendas importadas",
+   "5": "5 encomendas importadas",
+   "11": "11 encomendas importadas",
+   "21": "21 encomendas importadas"
+  },
+  "Русский (Russian)": {
+   "0": "0 заказов импортировано",
+   "1": "1 заказ импортирован",
+   "2": "2 заказа импортировано",
+   "5": "5 заказов импортировано",
+   "11": "11 заказов импортировано",
+   "21": "21 заказ импортирован"
+  },
+  "日本語 (Japanese)": {
+   "0": "0 件の注文を取り込みました",
+   "1": "1 件の注文を取り込みました",
+   "2": "2 件の注文を取り込みました",
+   "5": "5 件の注文を取り込みました",
+   "11": "11 件の注文を取り込みました",
+   "21": "21 件の注文を取り込みました"
+  },
+  "中文 (Chinese)": {
+   "0": "0 个订单已导入",
+   "1": "1 个订单已导入",
+   "2": "2 个订单已导入",
+   "5": "5 个订单已导入",
+   "11": "11 个订单已导入",
+   "21": "21 个订单已导入"
+  },
+  "العربية (Arabic)": {
+   "0": "0 طلب مستورد",
+   "1": "1 طلب مستورد",
+   "2": "2 طلبان مستوردان",
+   "5": "5 طلبات مستوردة",
+   "11": "11 طلبًا مستوردًا",
+   "21": "21 طلبًا مستوردًا"
+  },
+  "हिन्दी (Hindi)": {
+   "0": "0 ऑर्डर आयात हुआ",
+   "1": "1 ऑर्डर आयात हुआ",
+   "2": "2 ऑर्डर आयात हुए",
+   "5": "5 ऑर्डर आयात हुए",
+   "11": "11 ऑर्डर आयात हुए",
+   "21": "21 ऑर्डर आयात हुए"
+  }
+ },
+ "ordersBeingImported": {
+  "English": {
+   "0": "0 orders are being imported",
+   "1": "1 order is being imported",
+   "2": "2 orders are being imported",
+   "5": "5 orders are being imported",
+   "11": "11 orders are being imported",
+   "21": "21 orders are being imported"
+  },
+  "Türkçe": {
+   "0": "0 sipariş içeri alınıyor",
+   "1": "1 sipariş içeri alınıyor",
+   "2": "2 sipariş içeri alınıyor",
+   "5": "5 sipariş içeri alınıyor",
+   "11": "11 sipariş içeri alınıyor",
+   "21": "21 sipariş içeri alınıyor"
+  },
+  "Deutsch": {
+   "0": "0 Aufträge werden importiert",
+   "1": "1 Auftrag wird importiert",
+   "2": "2 Aufträge werden importiert",
+   "5": "5 Aufträge werden importiert",
+   "11": "11 Aufträge werden importiert",
+   "21": "21 Aufträge werden importiert"
+  },
+  "Français": {
+   "0": "0 commande en cours d'importation",
+   "1": "1 commande en cours d'importation",
+   "2": "2 commandes en cours d'importation",
+   "5": "5 commandes en cours d'importation",
+   "11": "11 commandes en cours d'importation",
+   "21": "21 commandes en cours d'importation"
+  },
+  "Italiano": {
+   "0": "0 ordini in fase di importazione",
+   "1": "1 ordine in fase di importazione",
+   "2": "2 ordini in fase di importazione",
+   "5": "5 ordini in fase di importazione",
+   "11": "11 ordini in fase di importazione",
+   "21": "21 ordini in fase di importazione"
+  },
+  "Español (Spanish)": {
+   "0": "0 pedidos en proceso de importación",
+   "1": "1 pedido en proceso de importación",
+   "2": "2 pedidos en proceso de importación",
+   "5": "5 pedidos en proceso de importación",
+   "11": "11 pedidos en proceso de importación",
+   "21": "21 pedidos en proceso de importación"
+  },
+  "Português": {
+   "0": "0 encomenda a ser importada",
+   "1": "1 encomenda a ser importada",
+   "2": "2 encomendas a serem importadas",
+   "5": "5 encomendas a serem importadas",
+   "11": "11 encomendas a serem importadas",
+   "21": "21 encomendas a serem importadas"
+  },
+  "Русский (Russian)": {
+   "0": "0 заказов импортируется",
+   "1": "1 заказ импортируется",
+   "2": "2 заказа импортируются",
+   "5": "5 заказов импортируется",
+   "11": "11 заказов импортируется",
+   "21": "21 заказ импортируется"
+  },
+  "日本語 (Japanese)": {
+   "0": "0 件の注文を取り込んでいます",
+   "1": "1 件の注文を取り込んでいます",
+   "2": "2 件の注文を取り込んでいます",
+   "5": "5 件の注文を取り込んでいます",
+   "11": "11 件の注文を取り込んでいます",
+   "21": "21 件の注文を取り込んでいます"
+  },
+  "中文 (Chinese)": {
+   "0": "0 个订单正在导入",
+   "1": "1 个订单正在导入",
+   "2": "2 个订单正在导入",
+   "5": "5 个订单正在导入",
+   "11": "11 个订单正在导入",
+   "21": "21 个订单正在导入"
+  },
+  "العربية (Arabic)": {
+   "0": "0 طلب قيد الاستيراد",
+   "1": "1 طلب قيد الاستيراد",
+   "2": "2 طلبان قيد الاستيراد",
+   "5": "5 طلبات قيد الاستيراد",
+   "11": "11 طلبًا قيد الاستيراد",
+   "21": "21 طلبًا قيد الاستيراد"
+  },
+  "हिन्दी (Hindi)": {
+   "0": "0 ऑर्डर आयात हो रहा है",
+   "1": "1 ऑर्डर आयात हो रहा है",
+   "2": "2 ऑर्डर आयात हो रहे हैं",
+   "5": "5 ऑर्डर आयात हो रहे हैं",
+   "11": "11 ऑर्डर आयात हो रहे हैं",
+   "21": "21 ऑर्डर आयात हो रहे हैं"
+  }
+ },
+ "importSelectedOrders": {
+  "English": {
+   "0": "Import 0 selected orders",
+   "1": "Import 1 selected order",
+   "2": "Import 2 selected orders",
+   "5": "Import 5 selected orders",
+   "11": "Import 11 selected orders",
+   "21": "Import 21 selected orders"
+  },
+  "Türkçe": {
+   "0": "0 seçili siparişi içe aktar",
+   "1": "1 seçili siparişi içe aktar",
+   "2": "2 seçili siparişi içe aktar",
+   "5": "5 seçili siparişi içe aktar",
+   "11": "11 seçili siparişi içe aktar",
+   "21": "21 seçili siparişi içe aktar"
+  },
+  "Deutsch": {
+   "0": "0 ausgewählte Bestellungen importieren",
+   "1": "1 ausgewählte Bestellung importieren",
+   "2": "2 ausgewählte Bestellungen importieren",
+   "5": "5 ausgewählte Bestellungen importieren",
+   "11": "11 ausgewählte Bestellungen importieren",
+   "21": "21 ausgewählte Bestellungen importieren"
+  },
+  "Français": {
+   "0": "Importer 0 commande sélectionnée",
+   "1": "Importer 1 commande sélectionnée",
+   "2": "Importer 2 commandes sélectionnées",
+   "5": "Importer 5 commandes sélectionnées",
+   "11": "Importer 11 commandes sélectionnées",
+   "21": "Importer 21 commandes sélectionnées"
+  },
+  "Italiano": {
+   "0": "Importa 0 ordini selezionati",
+   "1": "Importa 1 ordine selezionato",
+   "2": "Importa 2 ordini selezionati",
+   "5": "Importa 5 ordini selezionati",
+   "11": "Importa 11 ordini selezionati",
+   "21": "Importa 21 ordini selezionati"
+  },
+  "Español (Spanish)": {
+   "0": "Importar 0 pedidos seleccionados",
+   "1": "Importar 1 pedido seleccionado",
+   "2": "Importar 2 pedidos seleccionados",
+   "5": "Importar 5 pedidos seleccionados",
+   "11": "Importar 11 pedidos seleccionados",
+   "21": "Importar 21 pedidos seleccionados"
+  },
+  "Português": {
+   "0": "Importar 0 encomenda selecionada",
+   "1": "Importar 1 encomenda selecionada",
+   "2": "Importar 2 encomendas selecionadas",
+   "5": "Importar 5 encomendas selecionadas",
+   "11": "Importar 11 encomendas selecionadas",
+   "21": "Importar 21 encomendas selecionadas"
+  },
+  "Русский (Russian)": {
+   "0": "Импортировать 0 выбранных заказов",
+   "1": "Импортировать 1 выбранный заказ",
+   "2": "Импортировать 2 выбранных заказа",
+   "5": "Импортировать 5 выбранных заказов",
+   "11": "Импортировать 11 выбранных заказов",
+   "21": "Импортировать 21 выбранный заказ"
+  },
+  "日本語 (Japanese)": {
+   "0": "選択した 0 件の注文を取り込む",
+   "1": "選択した 1 件の注文を取り込む",
+   "2": "選択した 2 件の注文を取り込む",
+   "5": "選択した 5 件の注文を取り込む",
+   "11": "選択した 11 件の注文を取り込む",
+   "21": "選択した 21 件の注文を取り込む"
+  },
+  "中文 (Chinese)": {
+   "0": "导入 0 个所选订单",
+   "1": "导入 1 个所选订单",
+   "2": "导入 2 个所选订单",
+   "5": "导入 5 个所选订单",
+   "11": "导入 11 个所选订单",
+   "21": "导入 21 个所选订单"
+  },
+  "العربية (Arabic)": {
+   "0": "استيراد 0 طلب محدد",
+   "1": "استيراد 1 طلب محدد",
+   "2": "استيراد 2 طلبين محددين",
+   "5": "استيراد 5 طلبات محددة",
+   "11": "استيراد 11 طلبًا محددًا",
+   "21": "استيراد 21 طلبًا محددًا"
+  },
+  "हिन्दी (Hindi)": {
+   "0": "0 चयनित ऑर्डर आयात करें",
+   "1": "1 चयनित ऑर्डर आयात करें",
+   "2": "2 चयनित ऑर्डर आयात करें",
+   "5": "5 चयनित ऑर्डर आयात करें",
+   "11": "11 चयनित ऑर्डर आयात करें",
+   "21": "21 चयनित ऑर्डर आयात करें"
+  }
+ },
+ "receiptsAwaitingFirstImport": {
+  "English": {
+   "0": "0 receipts are waiting for your first import",
+   "1": "1 receipt is waiting for your first import",
+   "2": "2 receipts are waiting for your first import",
+   "5": "5 receipts are waiting for your first import",
+   "11": "11 receipts are waiting for your first import",
+   "21": "21 receipts are waiting for your first import"
+  },
+  "Türkçe": {
+   "0": "0 makbuz ilk aktarımınızı bekliyor",
+   "1": "1 makbuz ilk aktarımınızı bekliyor",
+   "2": "2 makbuz ilk aktarımınızı bekliyor",
+   "5": "5 makbuz ilk aktarımınızı bekliyor",
+   "11": "11 makbuz ilk aktarımınızı bekliyor",
+   "21": "21 makbuz ilk aktarımınızı bekliyor"
+  },
+  "Deutsch": {
+   "0": "0 Belege warten auf Ihren ersten Import",
+   "1": "1 Beleg wartet auf Ihren ersten Import",
+   "2": "2 Belege warten auf Ihren ersten Import",
+   "5": "5 Belege warten auf Ihren ersten Import",
+   "11": "11 Belege warten auf Ihren ersten Import",
+   "21": "21 Belege warten auf Ihren ersten Import"
+  },
+  "Français": {
+   "0": "0 reçu attend votre premier import",
+   "1": "1 reçu attend votre premier import",
+   "2": "2 reçus attendent votre premier import",
+   "5": "5 reçus attendent votre premier import",
+   "11": "11 reçus attendent votre premier import",
+   "21": "21 reçus attendent votre premier import"
+  },
+  "Italiano": {
+   "0": "0 ricevute attendono la tua prima importazione",
+   "1": "1 ricevuta attende la tua prima importazione",
+   "2": "2 ricevute attendono la tua prima importazione",
+   "5": "5 ricevute attendono la tua prima importazione",
+   "11": "11 ricevute attendono la tua prima importazione",
+   "21": "21 ricevute attendono la tua prima importazione"
+  },
+  "Español (Spanish)": {
+   "0": "0 recibos esperan tu primera importación",
+   "1": "1 recibo espera tu primera importación",
+   "2": "2 recibos esperan tu primera importación",
+   "5": "5 recibos esperan tu primera importación",
+   "11": "11 recibos esperan tu primera importación",
+   "21": "21 recibos esperan tu primera importación"
+  },
+  "Português": {
+   "0": "0 recibo aguarda a sua primeira importação",
+   "1": "1 recibo aguarda a sua primeira importação",
+   "2": "2 recibos aguardam a sua primeira importação",
+   "5": "5 recibos aguardam a sua primeira importação",
+   "11": "11 recibos aguardam a sua primeira importação",
+   "21": "21 recibos aguardam a sua primeira importação"
+  },
+  "Русский (Russian)": {
+   "0": "0 чеков ждут вашего первого импорта",
+   "1": "1 чек ждёт вашего первого импорта",
+   "2": "2 чека ждут вашего первого импорта",
+   "5": "5 чеков ждут вашего первого импорта",
+   "11": "11 чеков ждут вашего первого импорта",
+   "21": "21 чек ждёт вашего первого импорта"
+  },
+  "日本語 (Japanese)": {
+   "0": "0 件の注文が最初の取り込みを待っています",
+   "1": "1 件の注文が最初の取り込みを待っています",
+   "2": "2 件の注文が最初の取り込みを待っています",
+   "5": "5 件の注文が最初の取り込みを待っています",
+   "11": "11 件の注文が最初の取り込みを待っています",
+   "21": "21 件の注文が最初の取り込みを待っています"
+  },
+  "中文 (Chinese)": {
+   "0": "0 张收据正在等待您的首次导入",
+   "1": "1 张收据正在等待您的首次导入",
+   "2": "2 张收据正在等待您的首次导入",
+   "5": "5 张收据正在等待您的首次导入",
+   "11": "11 张收据正在等待您的首次导入",
+   "21": "21 张收据正在等待您的首次导入"
+  },
+  "العربية (Arabic)": {
+   "0": "0 إيصال في انتظار أول استيراد لك",
+   "1": "1 إيصال في انتظار أول استيراد لك",
+   "2": "2 إيصالان في انتظار أول استيراد لك",
+   "5": "5 إيصالات في انتظار أول استيراد لك",
+   "11": "11 إيصالًا في انتظار أول استيراد لك",
+   "21": "21 إيصالًا في انتظار أول استيراد لك"
+  },
+  "हिन्दी (Hindi)": {
+   "0": "0 रसीद आपके पहले आयात की प्रतीक्षा में है",
+   "1": "1 रसीद आपके पहले आयात की प्रतीक्षा में है",
+   "2": "2 रसीदें आपके पहले आयात की प्रतीक्षा में हैं",
+   "5": "5 रसीदें आपके पहले आयात की प्रतीक्षा में हैं",
+   "11": "11 रसीदें आपके पहले आयात की प्रतीक्षा में हैं",
+   "21": "21 रसीदें आपके पहले आयात की प्रतीक्षा में हैं"
+  }
+ },
+ "couldNotBeImported": {
+  "English": {
+   "0": "0 could not be imported. The sync log below says why.",
+   "1": "1 could not be imported. The sync log below says why.",
+   "2": "2 could not be imported. The sync log below says why.",
+   "5": "5 could not be imported. The sync log below says why.",
+   "11": "11 could not be imported. The sync log below says why.",
+   "21": "21 could not be imported. The sync log below says why."
+  },
+  "Türkçe": {
+   "0": "0 tanesi içe aktarılamadı. Nedenini aşağıdaki senkronizasyon kaydı söylüyor.",
+   "1": "1 tanesi içe aktarılamadı. Nedenini aşağıdaki senkronizasyon kaydı söylüyor.",
+   "2": "2 tanesi içe aktarılamadı. Nedenini aşağıdaki senkronizasyon kaydı söylüyor.",
+   "5": "5 tanesi içe aktarılamadı. Nedenini aşağıdaki senkronizasyon kaydı söylüyor.",
+   "11": "11 tanesi içe aktarılamadı. Nedenini aşağıdaki senkronizasyon kaydı söylüyor.",
+   "21": "21 tanesi içe aktarılamadı. Nedenini aşağıdaki senkronizasyon kaydı söylüyor."
+  },
+  "Deutsch": {
+   "0": "0 konnten nicht importiert werden. Warum, steht im Synchronisationsprotokoll unten.",
+   "1": "1 konnte nicht importiert werden. Warum, steht im Synchronisationsprotokoll unten.",
+   "2": "2 konnten nicht importiert werden. Warum, steht im Synchronisationsprotokoll unten.",
+   "5": "5 konnten nicht importiert werden. Warum, steht im Synchronisationsprotokoll unten.",
+   "11": "11 konnten nicht importiert werden. Warum, steht im Synchronisationsprotokoll unten.",
+   "21": "21 konnten nicht importiert werden. Warum, steht im Synchronisationsprotokoll unten."
+  },
+  "Français": {
+   "0": "0 n'a pas pu être importée. Le journal de synchronisation ci-dessous dit pourquoi.",
+   "1": "1 n'a pas pu être importée. Le journal de synchronisation ci-dessous dit pourquoi.",
+   "2": "2 n'ont pas pu être importées. Le journal de synchronisation ci-dessous dit pourquoi.",
+   "5": "5 n'ont pas pu être importées. Le journal de synchronisation ci-dessous dit pourquoi.",
+   "11": "11 n'ont pas pu être importées. Le journal de synchronisation ci-dessous dit pourquoi.",
+   "21": "21 n'ont pas pu être importées. Le journal de synchronisation ci-dessous dit pourquoi."
+  },
+  "Italiano": {
+   "0": "0 non sono stati importati. Il registro di sincronizzazione qui sotto dice perché.",
+   "1": "1 non è stato importato. Il registro di sincronizzazione qui sotto dice perché.",
+   "2": "2 non sono stati importati. Il registro di sincronizzazione qui sotto dice perché.",
+   "5": "5 non sono stati importati. Il registro di sincronizzazione qui sotto dice perché.",
+   "11": "11 non sono stati importati. Il registro di sincronizzazione qui sotto dice perché.",
+   "21": "21 non sono stati importati. Il registro di sincronizzazione qui sotto dice perché."
+  },
+  "Español (Spanish)": {
+   "0": "0 no se pudieron importar. El registro de sincronización de abajo dice por qué.",
+   "1": "1 no se pudo importar. El registro de sincronización de abajo dice por qué.",
+   "2": "2 no se pudieron importar. El registro de sincronización de abajo dice por qué.",
+   "5": "5 no se pudieron importar. El registro de sincronización de abajo dice por qué.",
+   "11": "11 no se pudieron importar. El registro de sincronización de abajo dice por qué.",
+   "21": "21 no se pudieron importar. El registro de sincronización de abajo dice por qué."
+  },
+  "Português": {
+   "0": "0 não pôde ser importada. O registo de sincronização abaixo diz porquê.",
+   "1": "1 não pôde ser importada. O registo de sincronização abaixo diz porquê.",
+   "2": "2 não puderam ser importadas. O registo de sincronização abaixo diz porquê.",
+   "5": "5 não puderam ser importadas. O registo de sincronização abaixo diz porquê.",
+   "11": "11 não puderam ser importadas. O registo de sincronização abaixo diz porquê.",
+   "21": "21 não puderam ser importadas. O registo de sincronização abaixo diz porquê."
+  },
+  "Русский (Russian)": {
+   "0": "0 не удалось импортировать. Почему — в журнале синхронизации ниже.",
+   "1": "1 не удалось импортировать. Почему — в журнале синхронизации ниже.",
+   "2": "2 не удалось импортировать. Почему — в журнале синхронизации ниже.",
+   "5": "5 не удалось импортировать. Почему — в журнале синхронизации ниже.",
+   "11": "11 не удалось импортировать. Почему — в журнале синхронизации ниже.",
+   "21": "21 не удалось импортировать. Почему — в журнале синхронизации ниже."
+  },
+  "日本語 (Japanese)": {
+   "0": "0 件を取り込めませんでした。理由は下の同期ログにあります。",
+   "1": "1 件を取り込めませんでした。理由は下の同期ログにあります。",
+   "2": "2 件を取り込めませんでした。理由は下の同期ログにあります。",
+   "5": "5 件を取り込めませんでした。理由は下の同期ログにあります。",
+   "11": "11 件を取り込めませんでした。理由は下の同期ログにあります。",
+   "21": "21 件を取り込めませんでした。理由は下の同期ログにあります。"
+  },
+  "中文 (Chinese)": {
+   "0": "0 笔无法导入。原因见下方的同步记录。",
+   "1": "1 笔无法导入。原因见下方的同步记录。",
+   "2": "2 笔无法导入。原因见下方的同步记录。",
+   "5": "5 笔无法导入。原因见下方的同步记录。",
+   "11": "11 笔无法导入。原因见下方的同步记录。",
+   "21": "21 笔无法导入。原因见下方的同步记录。"
+  },
+  "العربية (Arabic)": {
+   "0": "0 تعذّر استيرادها. سجل المزامنة أدناه يوضح السبب.",
+   "1": "1 تعذّر استيراده. سجل المزامنة أدناه يوضح السبب.",
+   "2": "2 تعذّر استيرادهما. سجل المزامنة أدناه يوضح السبب.",
+   "5": "5 تعذّر استيرادها. سجل المزامنة أدناه يوضح السبب.",
+   "11": "11 تعذّر استيرادها. سجل المزامنة أدناه يوضح السبب.",
+   "21": "21 تعذّر استيرادها. سجل المزامنة أدناه يوضح السبب."
+  },
+  "हिन्दी (Hindi)": {
+   "0": "0 आयात नहीं हो सका। कारण नीचे दिए सिंक लॉग में है।",
+   "1": "1 आयात नहीं हो सका। कारण नीचे दिए सिंक लॉग में है।",
+   "2": "2 आयात नहीं हो सके। कारण नीचे दिए सिंक लॉग में है।",
+   "5": "5 आयात नहीं हो सके। कारण नीचे दिए सिंक लॉग में है।",
+   "11": "11 आयात नहीं हो सके। कारण नीचे दिए सिंक लॉग में है।",
+   "21": "21 आयात नहीं हो सके। कारण नीचे दिए सिंक लॉग में है।"
+  }
+ },
+ "importedCount": {
+  "English": {
+   "0": "0 imported",
+   "1": "1 imported",
+   "2": "2 imported",
+   "5": "5 imported",
+   "11": "11 imported",
+   "21": "21 imported"
+  },
+  "Türkçe": {
+   "0": "0 içe aktarıldı",
+   "1": "1 içe aktarıldı",
+   "2": "2 içe aktarıldı",
+   "5": "5 içe aktarıldı",
+   "11": "11 içe aktarıldı",
+   "21": "21 içe aktarıldı"
+  },
+  "Deutsch": {
+   "0": "0 importiert",
+   "1": "1 importiert",
+   "2": "2 importiert",
+   "5": "5 importiert",
+   "11": "11 importiert",
+   "21": "21 importiert"
+  },
+  "Français": {
+   "0": "0 importé",
+   "1": "1 importé",
+   "2": "2 importés",
+   "5": "5 importés",
+   "11": "11 importés",
+   "21": "21 importés"
+  },
+  "Italiano": {
+   "0": "0 importati",
+   "1": "1 importato",
+   "2": "2 importati",
+   "5": "5 importati",
+   "11": "11 importati",
+   "21": "21 importati"
+  },
+  "Español (Spanish)": {
+   "0": "0 importados",
+   "1": "1 importado",
+   "2": "2 importados",
+   "5": "5 importados",
+   "11": "11 importados",
+   "21": "21 importados"
+  },
+  "Português": {
+   "0": "0 importado",
+   "1": "1 importado",
+   "2": "2 importados",
+   "5": "5 importados",
+   "11": "11 importados",
+   "21": "21 importados"
+  },
+  "Русский (Russian)": {
+   "0": "0 импортировано",
+   "1": "1 импортирован",
+   "2": "2 импортировано",
+   "5": "5 импортировано",
+   "11": "11 импортировано",
+   "21": "21 импортирован"
+  },
+  "日本語 (Japanese)": {
+   "0": "0 件インポート済み",
+   "1": "1 件インポート済み",
+   "2": "2 件インポート済み",
+   "5": "5 件インポート済み",
+   "11": "11 件インポート済み",
+   "21": "21 件インポート済み"
+  },
+  "中文 (Chinese)": {
+   "0": "0 个已导入",
+   "1": "1 个已导入",
+   "2": "2 个已导入",
+   "5": "5 个已导入",
+   "11": "11 个已导入",
+   "21": "21 个已导入"
+  },
+  "العربية (Arabic)": {
+   "0": "0 تم الاستيراد",
+   "1": "1 تم الاستيراد",
+   "2": "2 تم الاستيراد",
+   "5": "5 تم الاستيراد",
+   "11": "11 تم الاستيراد",
+   "21": "21 تم الاستيراد"
+  },
+  "हिन्दी (Hindi)": {
+   "0": "0 आयात किया गया",
+   "1": "1 आयात किया गया",
+   "2": "2 आयात किए गए",
+   "5": "5 आयात किए गए",
+   "11": "11 आयात किए गए",
+   "21": "21 आयात किए गए"
+  }
+ },
+ "updatedCount": {
+  "English": {
+   "0": "0 updated",
+   "1": "1 updated",
+   "2": "2 updated",
+   "5": "5 updated",
+   "11": "11 updated",
+   "21": "21 updated"
+  },
+  "Türkçe": {
+   "0": "0 güncellendi",
+   "1": "1 güncellendi",
+   "2": "2 güncellendi",
+   "5": "5 güncellendi",
+   "11": "11 güncellendi",
+   "21": "21 güncellendi"
+  },
+  "Deutsch": {
+   "0": "0 aktualisiert",
+   "1": "1 aktualisiert",
+   "2": "2 aktualisiert",
+   "5": "5 aktualisiert",
+   "11": "11 aktualisiert",
+   "21": "21 aktualisiert"
+  },
+  "Français": {
+   "0": "0 mis à jour",
+   "1": "1 mis à jour",
+   "2": "2 mis à jour",
+   "5": "5 mis à jour",
+   "11": "11 mis à jour",
+   "21": "21 mis à jour"
+  },
+  "Italiano": {
+   "0": "0 aggiornati",
+   "1": "1 aggiornato",
+   "2": "2 aggiornati",
+   "5": "5 aggiornati",
+   "11": "11 aggiornati",
+   "21": "21 aggiornati"
+  },
+  "Español (Spanish)": {
+   "0": "0 actualizados",
+   "1": "1 actualizado",
+   "2": "2 actualizados",
+   "5": "5 actualizados",
+   "11": "11 actualizados",
+   "21": "21 actualizados"
+  },
+  "Português": {
+   "0": "0 atualizado",
+   "1": "1 atualizado",
+   "2": "2 atualizados",
+   "5": "5 atualizados",
+   "11": "11 atualizados",
+   "21": "21 atualizados"
+  },
+  "Русский (Russian)": {
+   "0": "0 обновлено",
+   "1": "1 обновлён",
+   "2": "2 обновлено",
+   "5": "5 обновлено",
+   "11": "11 обновлено",
+   "21": "21 обновлён"
+  },
+  "日本語 (Japanese)": {
+   "0": "0 件更新",
+   "1": "1 件更新",
+   "2": "2 件更新",
+   "5": "5 件更新",
+   "11": "11 件更新",
+   "21": "21 件更新"
+  },
+  "中文 (Chinese)": {
+   "0": "0 个已更新",
+   "1": "1 个已更新",
+   "2": "2 个已更新",
+   "5": "5 个已更新",
+   "11": "11 个已更新",
+   "21": "21 个已更新"
+  },
+  "العربية (Arabic)": {
+   "0": "0 تم التحديث",
+   "1": "1 تم التحديث",
+   "2": "2 تم التحديث",
+   "5": "5 تم التحديث",
+   "11": "11 تم التحديث",
+   "21": "21 تم التحديث"
+  },
+  "हिन्दी (Hindi)": {
+   "0": "0 अपडेट हुआ",
+   "1": "1 अपडेट हुआ",
+   "2": "2 अपडेट हुए",
+   "5": "5 अपडेट हुए",
+   "11": "11 अपडेट हुए",
+   "21": "21 अपडेट हुए"
+  }
+ },
+ "waitingForRoomOnPlan": {
+  "English": {
+   "0": "0 are waiting for room on your plan.",
+   "1": "1 is waiting for room on your plan.",
+   "2": "2 are waiting for room on your plan.",
+   "5": "5 are waiting for room on your plan.",
+   "11": "11 are waiting for room on your plan.",
+   "21": "21 are waiting for room on your plan."
+  },
+  "Türkçe": {
+   "0": "0 tanesi planınızda yer açılmasını bekliyor.",
+   "1": "1 tanesi planınızda yer açılmasını bekliyor.",
+   "2": "2 tanesi planınızda yer açılmasını bekliyor.",
+   "5": "5 tanesi planınızda yer açılmasını bekliyor.",
+   "11": "11 tanesi planınızda yer açılmasını bekliyor.",
+   "21": "21 tanesi planınızda yer açılmasını bekliyor."
+  },
+  "Deutsch": {
+   "0": "0 warten auf Platz in Ihrem Tarif.",
+   "1": "1 wartet auf Platz in Ihrem Tarif.",
+   "2": "2 warten auf Platz in Ihrem Tarif.",
+   "5": "5 warten auf Platz in Ihrem Tarif.",
+   "11": "11 warten auf Platz in Ihrem Tarif.",
+   "21": "21 warten auf Platz in Ihrem Tarif."
+  },
+  "Français": {
+   "0": "0 attend de la place dans votre offre.",
+   "1": "1 attend de la place dans votre offre.",
+   "2": "2 attendent de la place dans votre offre.",
+   "5": "5 attendent de la place dans votre offre.",
+   "11": "11 attendent de la place dans votre offre.",
+   "21": "21 attendent de la place dans votre offre."
+  },
+  "Italiano": {
+   "0": "0 sono in attesa di spazio nel tuo piano.",
+   "1": "1 è in attesa di spazio nel tuo piano.",
+   "2": "2 sono in attesa di spazio nel tuo piano.",
+   "5": "5 sono in attesa di spazio nel tuo piano.",
+   "11": "11 sono in attesa di spazio nel tuo piano.",
+   "21": "21 sono in attesa di spazio nel tuo piano."
+  },
+  "Español (Spanish)": {
+   "0": "0 esperan sitio en tu plan.",
+   "1": "1 espera sitio en tu plan.",
+   "2": "2 esperan sitio en tu plan.",
+   "5": "5 esperan sitio en tu plan.",
+   "11": "11 esperan sitio en tu plan.",
+   "21": "21 esperan sitio en tu plan."
+  },
+  "Português": {
+   "0": "0 está à espera de espaço no seu plano.",
+   "1": "1 está à espera de espaço no seu plano.",
+   "2": "2 estão à espera de espaço no seu plano.",
+   "5": "5 estão à espera de espaço no seu plano.",
+   "11": "11 estão à espera de espaço no seu plano.",
+   "21": "21 estão à espera de espaço no seu plano."
+  },
+  "Русский (Russian)": {
+   "0": "0 ждут места в вашем тарифе.",
+   "1": "1 ждёт места в вашем тарифе.",
+   "2": "2 ждут места в вашем тарифе.",
+   "5": "5 ждут места в вашем тарифе.",
+   "11": "11 ждут места в вашем тарифе.",
+   "21": "21 ждёт места в вашем тарифе."
+  },
+  "日本語 (Japanese)": {
+   "0": "0 件がプランの空きを待っています。",
+   "1": "1 件がプランの空きを待っています。",
+   "2": "2 件がプランの空きを待っています。",
+   "5": "5 件がプランの空きを待っています。",
+   "11": "11 件がプランの空きを待っています。",
+   "21": "21 件がプランの空きを待っています。"
+  },
+  "中文 (Chinese)": {
+   "0": "0 笔正在等待您套餐中的空位。",
+   "1": "1 笔正在等待您套餐中的空位。",
+   "2": "2 笔正在等待您套餐中的空位。",
+   "5": "5 笔正在等待您套餐中的空位。",
+   "11": "11 笔正在等待您套餐中的空位。",
+   "21": "21 笔正在等待您套餐中的空位。"
+  },
+  "العربية (Arabic)": {
+   "0": "0 بانتظار مساحة في خطتك.",
+   "1": "1 بانتظار مساحة في خطتك.",
+   "2": "2 بانتظار مساحة في خطتك.",
+   "5": "5 بانتظار مساحة في خطتك.",
+   "11": "11 بانتظار مساحة في خطتك.",
+   "21": "21 بانتظار مساحة في خطتك."
+  },
+  "हिन्दी (Hindi)": {
+   "0": "0 आपके प्लान में जगह का इंतज़ार कर रहा है।",
+   "1": "1 आपके प्लान में जगह का इंतज़ार कर रहा है।",
+   "2": "2 आपके प्लान में जगह का इंतज़ार कर रहे हैं।",
+   "5": "5 आपके प्लान में जगह का इंतज़ार कर रहे हैं।",
+   "11": "11 आपके प्लान में जगह का इंतज़ार कर रहे हैं।",
+   "21": "21 आपके प्लान में जगह का इंतज़ार कर रहे हैं।"
+  }
+ },
+ "needReview": {
+  "English": {
+   "0": "0 need review. No records were lost; you can run the preview again.",
+   "1": "1 needs review. No records were lost; you can run the preview again.",
+   "2": "2 need review. No records were lost; you can run the preview again.",
+   "5": "5 need review. No records were lost; you can run the preview again.",
+   "11": "11 need review. No records were lost; you can run the preview again.",
+   "21": "21 need review. No records were lost; you can run the preview again."
+  },
+  "Türkçe": {
+   "0": "0 tanesi inceleme gerektiriyor. Hiçbir kayıt kaybolmadı; önizlemeyi tekrar çalıştırabilirsiniz.",
+   "1": "1 tanesi inceleme gerektiriyor. Hiçbir kayıt kaybolmadı; önizlemeyi tekrar çalıştırabilirsiniz.",
+   "2": "2 tanesi inceleme gerektiriyor. Hiçbir kayıt kaybolmadı; önizlemeyi tekrar çalıştırabilirsiniz.",
+   "5": "5 tanesi inceleme gerektiriyor. Hiçbir kayıt kaybolmadı; önizlemeyi tekrar çalıştırabilirsiniz.",
+   "11": "11 tanesi inceleme gerektiriyor. Hiçbir kayıt kaybolmadı; önizlemeyi tekrar çalıştırabilirsiniz.",
+   "21": "21 tanesi inceleme gerektiriyor. Hiçbir kayıt kaybolmadı; önizlemeyi tekrar çalıştırabilirsiniz."
+  },
+  "Deutsch": {
+   "0": "0 benötigen eine Prüfung. Es gingen keine Datensätze verloren; Sie können die Vorschau erneut ausführen.",
+   "1": "1 benötigt eine Prüfung. Es gingen keine Datensätze verloren; Sie können die Vorschau erneut ausführen.",
+   "2": "2 benötigen eine Prüfung. Es gingen keine Datensätze verloren; Sie können die Vorschau erneut ausführen.",
+   "5": "5 benötigen eine Prüfung. Es gingen keine Datensätze verloren; Sie können die Vorschau erneut ausführen.",
+   "11": "11 benötigen eine Prüfung. Es gingen keine Datensätze verloren; Sie können die Vorschau erneut ausführen.",
+   "21": "21 benötigen eine Prüfung. Es gingen keine Datensätze verloren; Sie können die Vorschau erneut ausführen."
+  },
+  "Français": {
+   "0": "0 à vérifier. Aucun enregistrement n'a été perdu ; vous pouvez relancer l'aperçu.",
+   "1": "1 à vérifier. Aucun enregistrement n'a été perdu ; vous pouvez relancer l'aperçu.",
+   "2": "2 à vérifier. Aucun enregistrement n'a été perdu ; vous pouvez relancer l'aperçu.",
+   "5": "5 à vérifier. Aucun enregistrement n'a été perdu ; vous pouvez relancer l'aperçu.",
+   "11": "11 à vérifier. Aucun enregistrement n'a été perdu ; vous pouvez relancer l'aperçu.",
+   "21": "21 à vérifier. Aucun enregistrement n'a été perdu ; vous pouvez relancer l'aperçu."
+  },
+  "Italiano": {
+   "0": "0 da rivedere. Nessun record è andato perso; puoi eseguire di nuovo l'anteprima.",
+   "1": "1 da rivedere. Nessun record è andato perso; puoi eseguire di nuovo l'anteprima.",
+   "2": "2 da rivedere. Nessun record è andato perso; puoi eseguire di nuovo l'anteprima.",
+   "5": "5 da rivedere. Nessun record è andato perso; puoi eseguire di nuovo l'anteprima.",
+   "11": "11 da rivedere. Nessun record è andato perso; puoi eseguire di nuovo l'anteprima.",
+   "21": "21 da rivedere. Nessun record è andato perso; puoi eseguire di nuovo l'anteprima."
+  },
+  "Español (Spanish)": {
+   "0": "0 requieren revisión. No se perdió ningún registro; puedes volver a ejecutar la vista previa.",
+   "1": "1 requiere revisión. No se perdió ningún registro; puedes volver a ejecutar la vista previa.",
+   "2": "2 requieren revisión. No se perdió ningún registro; puedes volver a ejecutar la vista previa.",
+   "5": "5 requieren revisión. No se perdió ningún registro; puedes volver a ejecutar la vista previa.",
+   "11": "11 requieren revisión. No se perdió ningún registro; puedes volver a ejecutar la vista previa.",
+   "21": "21 requieren revisión. No se perdió ningún registro; puedes volver a ejecutar la vista previa."
+  },
+  "Português": {
+   "0": "0 precisa de revisão. Não se perdeu nenhum registo; pode voltar a executar a pré-visualização.",
+   "1": "1 precisa de revisão. Não se perdeu nenhum registo; pode voltar a executar a pré-visualização.",
+   "2": "2 precisam de revisão. Não se perdeu nenhum registo; pode voltar a executar a pré-visualização.",
+   "5": "5 precisam de revisão. Não se perdeu nenhum registo; pode voltar a executar a pré-visualização.",
+   "11": "11 precisam de revisão. Não se perdeu nenhum registo; pode voltar a executar a pré-visualização.",
+   "21": "21 precisam de revisão. Não se perdeu nenhum registo; pode voltar a executar a pré-visualização."
+  },
+  "Русский (Russian)": {
+   "0": "0 требуют проверки. Записи не потеряны; предпросмотр можно запустить снова.",
+   "1": "1 требует проверки. Записи не потеряны; предпросмотр можно запустить снова.",
+   "2": "2 требуют проверки. Записи не потеряны; предпросмотр можно запустить снова.",
+   "5": "5 требуют проверки. Записи не потеряны; предпросмотр можно запустить снова.",
+   "11": "11 требуют проверки. Записи не потеряны; предпросмотр можно запустить снова.",
+   "21": "21 требует проверки. Записи не потеряны; предпросмотр можно запустить снова."
+  },
+  "日本語 (Japanese)": {
+   "0": "0 件は確認が必要です。データは失われていません。もう一度プレビューを実行できます。",
+   "1": "1 件は確認が必要です。データは失われていません。もう一度プレビューを実行できます。",
+   "2": "2 件は確認が必要です。データは失われていません。もう一度プレビューを実行できます。",
+   "5": "5 件は確認が必要です。データは失われていません。もう一度プレビューを実行できます。",
+   "11": "11 件は確認が必要です。データは失われていません。もう一度プレビューを実行できます。",
+   "21": "21 件は確認が必要です。データは失われていません。もう一度プレビューを実行できます。"
+  },
+  "中文 (Chinese)": {
+   "0": "0 个需要审核。没有丢失任何记录，您可以重新运行预览。",
+   "1": "1 个需要审核。没有丢失任何记录，您可以重新运行预览。",
+   "2": "2 个需要审核。没有丢失任何记录，您可以重新运行预览。",
+   "5": "5 个需要审核。没有丢失任何记录，您可以重新运行预览。",
+   "11": "11 个需要审核。没有丢失任何记录，您可以重新运行预览。",
+   "21": "21 个需要审核。没有丢失任何记录，您可以重新运行预览。"
+  },
+  "العربية (Arabic)": {
+   "0": "0 تحتاج مراجعة. لم تُفقد أي سجلات؛ يمكنك تشغيل المعاينة مرة أخرى.",
+   "1": "1 يحتاج مراجعة. لم تُفقد أي سجلات؛ يمكنك تشغيل المعاينة مرة أخرى.",
+   "2": "2 يحتاجان مراجعة. لم تُفقد أي سجلات؛ يمكنك تشغيل المعاينة مرة أخرى.",
+   "5": "5 تحتاج مراجعة. لم تُفقد أي سجلات؛ يمكنك تشغيل المعاينة مرة أخرى.",
+   "11": "11 تحتاج مراجعة. لم تُفقد أي سجلات؛ يمكنك تشغيل المعاينة مرة أخرى.",
+   "21": "21 تحتاج مراجعة. لم تُفقد أي سجلات؛ يمكنك تشغيل المعاينة مرة أخرى."
+  },
+  "हिन्दी (Hindi)": {
+   "0": "0 को समीक्षा चाहिए। कोई रिकॉर्ड नहीं खोया; आप पूर्वावलोकन दोबारा चला सकते हैं।",
+   "1": "1 को समीक्षा चाहिए। कोई रिकॉर्ड नहीं खोया; आप पूर्वावलोकन दोबारा चला सकते हैं।",
+   "2": "2 को समीक्षा चाहिए। कोई रिकॉर्ड नहीं खोया; आप पूर्वावलोकन दोबारा चला सकते हैं।",
+   "5": "5 को समीक्षा चाहिए। कोई रिकॉर्ड नहीं खोया; आप पूर्वावलोकन दोबारा चला सकते हैं।",
+   "11": "11 को समीक्षा चाहिए। कोई रिकॉर्ड नहीं खोया; आप पूर्वावलोकन दोबारा चला सकते हैं।",
+   "21": "21 को समीक्षा चाहिए। कोई रिकॉर्ड नहीं खोया; आप पूर्वावलोकन दोबारा चला सकते हैं।"
+  }
+ },
+ "alreadyInNivaDesk": {
+  "English": {
+   "0": "0 of these are already in NivaDesk and will be updated, not duplicated.",
+   "1": "1 of these is already in NivaDesk and will be updated, not duplicated.",
+   "2": "2 of these are already in NivaDesk and will be updated, not duplicated.",
+   "5": "5 of these are already in NivaDesk and will be updated, not duplicated.",
+   "11": "11 of these are already in NivaDesk and will be updated, not duplicated.",
+   "21": "21 of these are already in NivaDesk and will be updated, not duplicated."
+  },
+  "Türkçe": {
+   "0": "0 tanesi zaten NivaDesk'te; kopyalanmadan güncellenecek.",
+   "1": "1 tanesi zaten NivaDesk'te; kopyalanmadan güncellenecek.",
+   "2": "2 tanesi zaten NivaDesk'te; kopyalanmadan güncellenecek.",
+   "5": "5 tanesi zaten NivaDesk'te; kopyalanmadan güncellenecek.",
+   "11": "11 tanesi zaten NivaDesk'te; kopyalanmadan güncellenecek.",
+   "21": "21 tanesi zaten NivaDesk'te; kopyalanmadan güncellenecek."
+  },
+  "Deutsch": {
+   "0": "0 davon sind bereits in NivaDesk und werden aktualisiert, nicht dupliziert.",
+   "1": "1 davon ist bereits in NivaDesk und wird aktualisiert, nicht dupliziert.",
+   "2": "2 davon sind bereits in NivaDesk und werden aktualisiert, nicht dupliziert.",
+   "5": "5 davon sind bereits in NivaDesk und werden aktualisiert, nicht dupliziert.",
+   "11": "11 davon sind bereits in NivaDesk und werden aktualisiert, nicht dupliziert.",
+   "21": "21 davon sind bereits in NivaDesk und werden aktualisiert, nicht dupliziert."
+  },
+  "Français": {
+   "0": "0 d'entre elles est déjà dans NivaDesk et sera mise à jour, sans être dupliquée.",
+   "1": "1 d'entre elles est déjà dans NivaDesk et sera mise à jour, sans être dupliquée.",
+   "2": "2 d'entre elles sont déjà dans NivaDesk et seront mises à jour, sans être dupliquées.",
+   "5": "5 d'entre elles sont déjà dans NivaDesk et seront mises à jour, sans être dupliquées.",
+   "11": "11 d'entre elles sont déjà dans NivaDesk et seront mises à jour, sans être dupliquées.",
+   "21": "21 d'entre elles sont déjà dans NivaDesk et seront mises à jour, sans être dupliquées."
+  },
+  "Italiano": {
+   "0": "0 di questi sono già in NivaDesk e verranno aggiornati, non duplicati.",
+   "1": "1 di questi è già in NivaDesk e verrà aggiornato, non duplicato.",
+   "2": "2 di questi sono già in NivaDesk e verranno aggiornati, non duplicati.",
+   "5": "5 di questi sono già in NivaDesk e verranno aggiornati, non duplicati.",
+   "11": "11 di questi sono già in NivaDesk e verranno aggiornati, non duplicati.",
+   "21": "21 di questi sono già in NivaDesk e verranno aggiornati, non duplicati."
+  },
+  "Español (Spanish)": {
+   "0": "0 de estos ya están en NivaDesk y se actualizarán, no se duplicarán.",
+   "1": "1 de estos ya está en NivaDesk y se actualizará, no se duplicará.",
+   "2": "2 de estos ya están en NivaDesk y se actualizarán, no se duplicarán.",
+   "5": "5 de estos ya están en NivaDesk y se actualizarán, no se duplicarán.",
+   "11": "11 de estos ya están en NivaDesk y se actualizarán, no se duplicarán.",
+   "21": "21 de estos ya están en NivaDesk y se actualizarán, no se duplicarán."
+  },
+  "Português": {
+   "0": "0 destas já está no NivaDesk e será atualizada, não duplicada.",
+   "1": "1 destas já está no NivaDesk e será atualizada, não duplicada.",
+   "2": "2 destas já estão no NivaDesk e serão atualizadas, não duplicadas.",
+   "5": "5 destas já estão no NivaDesk e serão atualizadas, não duplicadas.",
+   "11": "11 destas já estão no NivaDesk e serão atualizadas, não duplicadas.",
+   "21": "21 destas já estão no NivaDesk e serão atualizadas, não duplicadas."
+  },
+  "Русский (Russian)": {
+   "0": "0 из них уже есть в NivaDesk и будут обновлены, а не продублированы.",
+   "1": "1 из них уже есть в NivaDesk и будет обновлён, а не продублирован.",
+   "2": "2 из них уже есть в NivaDesk и будут обновлены, а не продублированы.",
+   "5": "5 из них уже есть в NivaDesk и будут обновлены, а не продублированы.",
+   "11": "11 из них уже есть в NivaDesk и будут обновлены, а не продублированы.",
+   "21": "21 из них уже есть в NivaDesk и будет обновлён, а не продублирован."
+  },
+  "日本語 (Japanese)": {
+   "0": "0 件はすでに NivaDesk にあり、複製ではなく更新されます。",
+   "1": "1 件はすでに NivaDesk にあり、複製ではなく更新されます。",
+   "2": "2 件はすでに NivaDesk にあり、複製ではなく更新されます。",
+   "5": "5 件はすでに NivaDesk にあり、複製ではなく更新されます。",
+   "11": "11 件はすでに NivaDesk にあり、複製ではなく更新されます。",
+   "21": "21 件はすでに NivaDesk にあり、複製ではなく更新されます。"
+  },
+  "中文 (Chinese)": {
+   "0": "0 个已在 NivaDesk 中，将会被更新，而不会重复创建。",
+   "1": "1 个已在 NivaDesk 中，将会被更新，而不会重复创建。",
+   "2": "2 个已在 NivaDesk 中，将会被更新，而不会重复创建。",
+   "5": "5 个已在 NivaDesk 中，将会被更新，而不会重复创建。",
+   "11": "11 个已在 NivaDesk 中，将会被更新，而不会重复创建。",
+   "21": "21 个已在 NivaDesk 中，将会被更新，而不会重复创建。"
+  },
+  "العربية (Arabic)": {
+   "0": "0 منها موجودة بالفعل في NivaDesk وسيتم تحديثها، لا تكرارها.",
+   "1": "1 منها موجود بالفعل في NivaDesk وسيتم تحديثه، لا تكراره.",
+   "2": "2 منها موجودان بالفعل في NivaDesk وسيتم تحديثهما، لا تكرارهما.",
+   "5": "5 منها موجودة بالفعل في NivaDesk وسيتم تحديثها، لا تكرارها.",
+   "11": "11 منها موجودة بالفعل في NivaDesk وسيتم تحديثها، لا تكرارها.",
+   "21": "21 منها موجودة بالفعل في NivaDesk وسيتم تحديثها، لا تكرارها."
+  },
+  "हिन्दी (Hindi)": {
+   "0": "0 पहले से NivaDesk में है और अपडेट होगा, डुप्लिकेट नहीं बनेगा।",
+   "1": "1 पहले से NivaDesk में है और अपडेट होगा, डुप्लिकेट नहीं बनेगा।",
+   "2": "2 पहले से NivaDesk में हैं और अपडेट होंगे, डुप्लिकेट नहीं बनेंगे।",
+   "5": "5 पहले से NivaDesk में हैं और अपडेट होंगे, डुप्लिकेट नहीं बनेंगे।",
+   "11": "11 पहले से NivaDesk में हैं और अपडेट होंगे, डुप्लिकेट नहीं बनेंगे।",
+   "21": "21 पहले से NivaDesk में हैं और अपडेट होंगे, डुप्लिकेट नहीं बनेंगे।"
+  }
+ }
+}

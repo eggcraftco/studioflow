@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { studioT } from "@/lib/studioflow/language";
+import { studioImportPhrase } from "@/lib/studioflow/countLabel";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import {
   beginEtsyConnect,
@@ -453,7 +454,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
                     }
                     // `held` used to be dropped here: a demo workspace imported 8 of 40 and
                     // was told "8 imported", with 32 parked out of sight on the Orders screen.
-                    setNotice(etsyImportNotice(result?.outcome, t));
+                    setNotice(etsyImportNotice(result?.outcome, t, language));
                     setPreview(null);
                     await refresh();
                   })
@@ -461,7 +462,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
               >
                 {busy === "import"
                   ? t("Importing…")
-                  : `${t("Import")} ${selectedIds.length} ${t("selected orders")}`}
+                  : studioImportPhrase(selectedIds.length, "importSelectedOrders", language)}
               </button>
               ) : null}
             </div>
@@ -543,7 +544,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
                 <span>{t("Orders imported")}</span>
                 <span className="muted-copy">
                   {connection.lastSweep && connection.lastSweep.awaitingFirstImport > 0
-                    ? `${t("None yet")} · ${connection.lastSweep.awaitingFirstImport} ${t("receipts are waiting for your first import")}`
+                    ? `${t("None yet")} · ${studioImportPhrase(connection.lastSweep.awaitingFirstImport, "receiptsAwaitingFirstImport", language)}`
                     : t("None yet — choose what to import below")}
                 </span>
               </li>
@@ -608,11 +609,11 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
                   const failed = Number(result?.outcome?.failed || 0);
                   const held = Number(result?.outcome?.held || 0);
                   if (failed) {
-                    setError(`${failed} ${t("could not be imported. The sync log below says why.")}`);
+                    setError(studioImportPhrase(failed, "couldNotBeImported", language));
                   }
                   const good = [
-                    created || updated ? `${created} ${t("imported")} · ${updated} ${t("updated")}` : "",
-                    held ? `${held} ${t("are waiting for room on your plan.")}` : ""
+                    created || updated ? `${studioImportPhrase(created, "importedCount", language)} · ${studioImportPhrase(updated, "updatedCount", language)}` : "",
+                    held ? studioImportPhrase(held, "waitingForRoomOnPlan", language) : ""
                   ].filter(Boolean).join(" · ");
                   if (good) setNotice(good);
                   else if (!failed) setNotice(t("Etsy answered. This connection is working."));
@@ -641,7 +642,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
             <>
               <p className="muted-copy">
                 {`${t("Last checked")} ${relativeTime(connection.lastSyncAtMs, t)}`}
-                {connection.importedOrders ? ` · ${connection.importedOrders} ${t("orders imported")}` : ""}
+                {connection.importedOrders ? ` · ${studioImportPhrase(connection.importedOrders, "ordersImported", language)}` : ""}
               </p>
               {connection.recentEvents && connection.recentEvents.length ? (
                 <ul className="settings-rule-list">
@@ -750,11 +751,11 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
                     // nothing was created or updated — including a run where
                     // every order failed. Report what actually happened.
                     if (failed) {
-                      setError(`${failed} ${t("could not be imported. The sync log below says why.")}`);
+                      setError(studioImportPhrase(failed, "couldNotBeImported", language));
                     }
                     const good = [
-                      created || updated ? `${created} ${t("imported")} · ${updated} ${t("updated")}` : "",
-                      held ? `${held} ${t("are waiting for room on your plan.")}` : ""
+                      created || updated ? `${studioImportPhrase(created, "importedCount", language)} · ${studioImportPhrase(updated, "updatedCount", language)}` : "",
+                      held ? studioImportPhrase(held, "waitingForRoomOnPlan", language) : ""
                     ].filter(Boolean).join(" · ");
                     if (good) setNotice(good);
                     else if (!failed) setNotice(t("Everything is already up to date."));
@@ -813,7 +814,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
 
           {preview.summary.alreadyImported ? (
             <p className="muted-copy">
-              {`${preview.summary.alreadyImported} ${t("of these are already in NivaDesk and will be updated, not duplicated.")}`}
+              {studioImportPhrase(preview.summary.alreadyImported, "alreadyInNivaDesk", language)}
             </p>
           ) : null}
           {preview.truncated ? (

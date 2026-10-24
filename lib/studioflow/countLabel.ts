@@ -1,4 +1,5 @@
 import { normalizeStudioLanguage, studioLocaleTag } from "./language";
+import { IMPORT_COUNT_PHRASE_FORMS, type StudioImportCountPhrase } from "./importCountPhrases";
 
 /**
  * "1 order" / "2 orders", in every app language.
@@ -194,3 +195,17 @@ export function studioDayPhrase(count: number, phrase: StudioDayPhrase, language
 
 /** Every language and plural form of the day phrases, for the check script. */
 export const STUDIO_DAY_PHRASE_FORMS = DAY_PHRASE_FORMS;
+
+/**
+ * ETSY plural pass (24 Oct 2026): "1 orders imported" on the held-orders band. Every counted Etsy / held /
+ * import sentence is one template per plural form (lib/studioflow/importCountPhrases.ts), so the words around
+ * the number agree with it in each app language — never `${count} ${t("orders imported")}`.
+ */
+export function studioImportPhrase(count: number, phrase: StudioImportCountPhrase, language: string | null | undefined): string {
+  const normalized = normalizeStudioLanguage(language);
+  const forms = IMPORT_COUNT_PHRASE_FORMS[phrase][normalized] ?? IMPORT_COUNT_PHRASE_FORMS[phrase]["English"];
+  const template = forms[pluralCategory(count, normalized)] ?? forms.other;
+  return template.replace("{count}", String(count));
+}
+
+export { IMPORT_COUNT_PHRASE_FORMS };
