@@ -7,7 +7,8 @@ import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import type { BlockHeadingSettings, HeadingItem } from "@/lib/studioflow/blockHeadings";
 import { studioT } from "@/lib/studioflow/language";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
-import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
+import { type StudioMoneySettings } from "@/lib/studioflow/money";
+import { formatOrderMoney, orderMoneySymbol } from "@/lib/studioflow/orderCurrency";
 
 export type OrderListCardItem = {
   id: string;
@@ -35,9 +36,11 @@ export type OrderListCardItem = {
 const SCHEDULE_ITEMS_CUSTOM_KEY = "__scheduleAlertItemsV1";
 const SWIFT_REFERENCE_SECONDS = 978307200;
 
-function money(value: number, hidden: boolean, settings: StudioMoneySettings) {
-  if (hidden) return hiddenMoneyLabel(moneySymbol(settings));
-  return formatStudioMoney(value, settings);
+// ETSY-E2E r2: the row shows the order's own currency — "USD 12.50" for a USD
+// order in a £ workspace; same-currency orders keep the workspace format.
+function money(value: number, hidden: boolean, settings: StudioMoneySettings, order: OrderListCardItem) {
+  if (hidden) return hiddenMoneyLabel(orderMoneySymbol(order, settings));
+  return formatOrderMoney(value, order, settings);
 }
 
 function daysRemaining(date: Date | null) {
@@ -427,7 +430,7 @@ export function OrderListCard({
               className={order.status.trim().toLowerCase().includes("cancel") ? "order-list-amount muted" : (outstandingAmount > 0.009 ? "order-list-amount outstanding" : "order-list-amount")}
               title={studioT("Order value: paid + outstanding", displayLanguage)}
             >
-              {money(order.paidAmount + outstandingAmount, hideNumbers, moneySettings)}
+              {money(order.paidAmount + outstandingAmount, hideNumbers, moneySettings, order)}
             </strong>
           ) : null}
         </div>

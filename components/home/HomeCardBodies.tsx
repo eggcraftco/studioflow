@@ -21,7 +21,8 @@ import type { CustomerDirectoryItem, ScheduleOrderItem } from "@/lib/studioflow/
 import type { InventoryItem } from "@/lib/studioflow/inventory";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney, moneySymbol } from "@/lib/studioflow/money";
-import { studioCountLabel } from "@/lib/studioflow/countLabel";
+import { foreignCurrenciesLine, foreignCurrencyTotals, splitOrdersByWorkspaceCurrency } from "@/lib/studioflow/orderCurrency";
+import { studioCountLabel, studioDayPhrase } from "@/lib/studioflow/countLabel";
 import { type SetupChecklist } from "@/lib/studioflow/setupChecklist";
 import { nextGettingStartedStep, openHelpAssistant, resolveGettingStartedSteps, type GettingStartedAccess, type GettingStartedStep } from "@/lib/studioflow/gettingStarted";
 
@@ -110,14 +111,21 @@ function figureFit(text: string): CSSProperties {
   return { "--figure-chars": Math.max(1, text.length) } as CSSProperties;
 }
 
-export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumbers }: CardBodyProps) {
+export function MoneyCardBody({ size, period, data, t, language, moneySettings, hideNumbers }: CardBodyProps) {
   // The header says which window these totals cover, so they have to actually
   // cover it — same rule the Dashboard applies, against the payment date.
   const { start, end } = homePeriodRange(period);
-  const orders = data.financeOrders.filter((order) =>
+  const inPeriod = data.financeOrders.filter((order) =>
     order.countsTowardBalance !== false &&
     order.paymentDate !== null && order.paymentDate >= start && order.paymentDate <= end);
-  if (orders.length === 0) return null;
+  if (inPeriod.length === 0) return null;
+  // ETSY-E2E r2: the totals add only orders in the workspace's currency (or with
+  // none recorded). A USD order in a £ workspace is listed apart, unconverted.
+  const orders = splitOrdersByWorkspaceCurrency(inPeriod, moneySettings).workspace;
+  const foreignLine = foreignCurrenciesLine(
+    foreignCurrencyTotals(inPeriod, moneySettings, (o) => orderSalesTotal(o, data.settings)),
+    moneySettings, language, hideNumbers);
+  const foreignNote = foreignLine ? <p className="home-foreign-currencies muted-copy" data-foreign-currencies="">{foreignLine}</p> : null;
 
   const money = (value: number) => cash(value, hideNumbers, moneySettings);
   const revenue = orders.reduce((sum, o) => sum + orderSalesTotal(o, data.settings), 0);
@@ -142,7 +150,9 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
   // every fee in the window is that one estimate.
   const feeSummary = estimatedFeeSummary(blocks, data.settings);
   const estimateNote = feeSummary.footnote ? t(ESTIMATED_PLATFORM_FEES_FOOTNOTE) : "";
-  const footnote = estimateNote ? <p className="home-estimate-footnote muted-copy">{estimateNote}</p> : null;
+  const footnote = estimateNote || foreignNote
+    ? <>{estimateNote ? <p className="home-estimate-footnote muted-copy">{estimateNote}</p> : null}{foreignNote}</>
+    : null;
 
   // 1x1: the one number, the two that qualify it, and how much of revenue the
   // costs eat — never the bank feed's transactions (§7).
@@ -166,6 +176,7 @@ export function MoneyCardBody({ size, period, data, t, moneySettings, hideNumber
           </span>
           <span className="home-ratio-foot"><b className="is-revenue">{money(revenue)}</b><b className="is-costs">{money(costs)}</b></span>
         </div>
+        {foreignNote}
       </div>
     );
   }
@@ -407,7 +418,7 @@ function compactMoney(value: number, settings: StudioMoneySettings): string {
 
 /* ---------------------------------------------------------------- Banking */
 
-export function BankingCardBody({ size, period, data, t, moneySettings, hideNumbers }: CardBodyProps) {
+export function BankingCardBody({ size, period, data, t, language, moneySettings, hideNumbers }: CardBodyProps) {
   const transactions = data.bankTransactions;
   if (transactions.length === 0) return null;
 
@@ -442,7 +453,7 @@ export function BankingCardBody({ size, period, data, t, moneySettings, hideNumb
   if (size === "1x1") {
     return (
       <div className="home-money">
-        <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} />
+        <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} language={language} />
         <p className="home-metric-label">{t(spentLabel)}</p>
         {/* Spending is not a loss and not an error. It is what a workshop does
             every week, and painting it red with a minus made an ordinary month
@@ -513,7 +524,7 @@ export function BankingCardBody({ size, period, data, t, moneySettings, hideNumb
                 {t("Fixed ≈ {amount}/month").replace("{amount}", money(data.bankMonthlyFixed))}
               </p>
             ) : null}
-            <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} />
+            <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} language={language} />
           </div>
         </div>
       </div>
@@ -527,7 +538,7 @@ export function BankingCardBody({ size, period, data, t, moneySettings, hideNumb
 
   return (
     <div className="home-money is-large">
-      <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} />
+      <SyncLine lastSync={data.bankLastSync} unhealthy={data.bankNeedsAttention} t={t} language={language} />
       {tiles}
       <div className="home-money-panels">
         <div className="home-panel">
@@ -574,7 +585,7 @@ export function BankingCardBody({ size, period, data, t, moneySettings, hideNumb
  * a live snapshot only says the listener fired, not that the bank handed
  * anything over, which is exactly the thing that made "Connected" misleading.
  */
-function SyncLine({ lastSync, unhealthy, t }: { lastSync: Date | null; unhealthy: boolean; t: (text: string) => string }) {
+function SyncLine({ lastSync, unhealthy, t, language }: { lastSync: Date | null; unhealthy: boolean; t: (text: string) => string; language?: string }) {
   if (!lastSync) {
     return (
       <p className={`home-sync-line${unhealthy ? " is-warning" : ""}`}>
@@ -587,7 +598,7 @@ function SyncLine({ lastSync, unhealthy, t }: { lastSync: Date | null; unhealthy
   const hours = Math.floor((Date.now() - lastSync.getTime()) / 3600000);
   const stale = days >= 2 || unhealthy;
   const label =
-    days >= 1 ? t("Last synced {n} days ago").replace("{n}", String(days))
+    days >= 1 ? studioDayPhrase(days, "syncedAgo", language)
     : hours >= 1 ? t("Last synced {n}h ago").replace("{n}", String(hours))
     : t("Last synced just now");
   return (

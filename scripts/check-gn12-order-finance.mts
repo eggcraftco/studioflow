@@ -90,8 +90,8 @@ const content = read("app/orders/OrderDetailContent.tsx");
 const firestore = read("lib/studioflow/firestore.ts");
 ok("card: no pre-engine profit formula left in the order screen", !/paidAmount \+ remainingAmount \+ customRemainingTotal - watchPurchasePrice/.test(content));
 ok("mapper: OrderDetail no longer carries a pre-computed netProfit", !/netProfit: paidAmount \+ remainingAmount/.test(firestore) && !/^\s*netProfit: number;\s*$/m.test(firestore.slice(firestore.indexOf("export type OrderDetail = {"), firestore.indexOf("export type OrderDetail = {") + 4000)));
-ok("card: Final Profit and Profit before CT read the engine block", (content.match(/money\(orderFinance\.netProfit, hideNumbers\)/g) || []).length === 2);
-ok("card: Platform Fee and VAT Amount rows show the engine's figures", content.includes("displayValue={money(orderFinance.platformFee, hideNumbers)}") && content.includes("value={money(orderFinance.vatDue, hideNumbers)}"));
+ok("card: Final Profit and Profit before CT read the engine block", (content.match(/(?:\bmoney|orderValueMoney)\(orderFinance\.netProfit, hideNumbers\)/g) || []).length === 2);
+ok("card: Platform Fee and VAT Amount rows show the engine's figures", /displayValue=\{(?:money|orderValueMoney)\(orderFinance\.platformFee, hideNumbers\)\}/.test(content) && /value=\{(?:money|orderValueMoney)\(orderFinance\.vatDue, hideNumbers\)\}/.test(content));
 ok("PDF: the Financial Info rows and profit come from the engine", content.includes("const pdfFinance = orderDetailFinance(order, settings);") && content.includes("const profitAfterVat = pdfFinance.netProfit;"));
 ok("hidden finance: PDF finance rows still sit behind showFinInternal", /if \(showFinInternal\) \{\s*\/\/ The engine's figures/.test(content));
 

@@ -19,7 +19,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { loadWorkspaceContext, loadWorkspaceSettingsOverview, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
-import { formatStudioMoney } from "@/lib/studioflow/money";
+import { formatAmountInCurrency } from "@/lib/studioflow/orderCurrency";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { createSalesListLoader, salesListFilterKey } from "@/lib/studioflow/salesListLoader";
 import {
@@ -58,6 +58,8 @@ export default function SalesPage() {
   // The workspace's decimal separator, so a revenue reads the way the order card,
   // the Dashboard and the top bar print money (formatStudioMoney). "." until known.
   const [decimalSeparator, setDecimalSeparator] = useState(".");
+  // The workspace's own currency SYMBOL: a row in that currency keeps the workspace format.
+  const [workspaceCurrency, setWorkspaceCurrency] = useState("");
   const [capability, setCapability] = useState<SalesCapability | null>(null);
   const [tab, setTab] = useState<Tab>("sales");
   const [error, setError] = useState("");
@@ -157,7 +159,12 @@ export default function SalesPage() {
         listLoader.current?.invalidate();
         setDecimalSeparator(".");
         loadWorkspaceSettingsOverview(loaded.id)
-          .then((overview) => { if (!cancelled && ticket === requestId.current) setDecimalSeparator(overview.selectedDecimalSeparator === "," ? "," : "."); })
+          .then((overview) => {
+            if (!cancelled && ticket === requestId.current) {
+              setDecimalSeparator(overview.selectedDecimalSeparator === "," ? "," : ".");
+              setWorkspaceCurrency(overview.selectedCurrency || "");
+            }
+          })
           .catch(() => { /* keep "." — the figure itself is the server's */ });
         const cap = await fetchSalesCapability(loaded.id);
         if (cancelled || ticket !== requestId.current) return;
@@ -298,7 +305,8 @@ export default function SalesPage() {
   const money = (row: SalesRow) => {
     if (!financeVisible) return "—";
     if (row.financeState !== "current" || row.revenue === null) return t("Not calculated");
-    return formatStudioMoney(row.revenue, { selectedCurrency: row.currency || "", selectedDecimalSeparator: decimalSeparator });
+    // row.currency is an ISO code ("USD"); passing it as the symbol printed "USD12.50" (ETSY-E2E r2).
+    return formatAmountInCurrency(row.revenue, row.currency || "", { selectedCurrency: workspaceCurrency, selectedDecimalSeparator: decimalSeparator });
   };
 
   return (

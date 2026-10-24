@@ -126,6 +126,9 @@ import {
   canEditOrderDates
 } from "@/lib/studioflow/firestore";
 import { formatStudioMoney, moneySymbol, parseAmountInput, type StudioMoneySettings } from "@/lib/studioflow/money";
+import { studioCountLabel, studioDayPhrase } from "@/lib/studioflow/countLabel";
+import { todoAddPatch, todoAssignPatch } from "@/lib/studioflow/todoPatch";
+import { formatOrderMoney, orderIconSymbol, orderMoneySymbol } from "@/lib/studioflow/orderCurrency";
 import { PDF_FULL_ACCESS, pdfViewerAccess, resolvePdfDocumentOptions, type PdfViewerAccess } from "@/lib/studioflow/pdfDocumentOptions";
 import {
   DEFAULT_PRODUCTION_STAGES,
@@ -139,7 +142,8 @@ import { EbayOrderRefreshButton } from "./EbayOrderRefreshButton";
 import { EbayOrderStock } from "./EbayOrderStock";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
-import { EtsySourcePanel, EtsyProductPhoto, useEtsyListingPhotos, useEtsySource } from "./EtsySourcePanel";
+import { EtsySafe, EtsySourcePanel, EtsyProductPhoto, useEtsyListingPhotos, useEtsySource } from "./EtsySourcePanel";
+import { etsyListingLink, etsyPhotoIsShowable } from "@/lib/studioflow/etsyListingPhotos";
 import { EtsyNotePhotoLinks } from "./EtsyText";
 import { etsyCardFold, etsyNoteDisplay } from "@/lib/studioflow/etsyFirstImport";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
@@ -846,7 +850,7 @@ function orderPdfHtml(
   )).join("")) : "";
 
   const statusRows = [
-    { title: "Delivery Time", value: `${order.deliveryTime || 0} days` },
+    { title: "Delivery Time", value: studioCountLabel(order.deliveryTime || 0, "day", "English") },
     ...options.statusSteps,
     ...options.statusToggles
   ];
@@ -1185,9 +1189,9 @@ function daysRemaining(date: Date | null) {
 function remainingDaysLabel(date: Date | null) {
   const days = daysRemaining(date);
   if (days === null) return "-";
-  if (days > 0) return `${days} days`;
+  if (days > 0) return studioCountLabel(days, "day", "English");
   if (days === 0) return "Due today";
-  return `${Math.abs(days)} days late`;
+  return studioDayPhrase(Math.abs(days), "late", "English");
 }
 
 function summaryDeliveryLabel(order: OrderDetail) {
@@ -1196,21 +1200,22 @@ function summaryDeliveryLabel(order: OrderDetail) {
   if (order.isDispatched) return "Done";
   const days = daysRemaining(order.dueDate);
   if (days === null) return "-";
-  if (days > 0) return `${days} days`;
+  if (days > 0) return studioCountLabel(days, "day", "English");
   if (days === 0) return "Today";
-  return `Late (${Math.abs(days)} days)`;
+  return `Late (${studioCountLabel(Math.abs(days), "day", "English")})`;
 }
 
 // summaryDeliveryLabel builds English ("34 days", "Late (3 days)"); the two
 // places that print it pass the result through this so the number keeps its
 // place and the words follow the language.
-function localizedDeliveryLabel(label: string, t: (text: string) => string) {
-  const days = /^(\d+) days$/.exec(label);
-  if (days) return t("{count} days").replace("{count}", days[1]);
-  const late = /^Late \((\d+) days\)$/.exec(label);
-  if (late) return `${t("Late")} (${t("{count} days").replace("{count}", late[1])})`;
-  const daysLate = /^(\d+) days late$/.exec(label);
-  if (daysLate) return t("{count} days late").replace("{count}", daysLate[1]);
+// The day count goes through the plural helper ("1 day", "5 дней"), never "{count} days".
+function localizedDeliveryLabel(label: string, t: (text: string) => string, language: string) {
+  const days = /^(\d+) days?$/.exec(label);
+  if (days) return studioCountLabel(Number(days[1]), "day", language);
+  const late = /^Late \((\d+) days?\)$/.exec(label);
+  if (late) return `${t("Late")} (${studioCountLabel(Number(late[1]), "day", language)})`;
+  const daysLate = /^(\d+) days? late$/.exec(label);
+  if (daysLate) return studioDayPhrase(Number(daysLate[1]), "late", language);
   return label === "-" ? label : t(label);
 }
 
@@ -3071,7 +3076,7 @@ export function OrderDetailContent({
 
   function renderCardTitle(cardId: OrderDetailCardId) {
     return (
-      <CardTitle icon={cardIcon(cardId)} title={cardLabel(cardId)} iconSymbol={cardId === "financial" ? moneySymbol(moneySettings) : undefined} />
+      <CardTitle icon={cardIcon(cardId)} title={cardLabel(cardId)} iconSymbol={cardId === "financial" ? orderIconSymbol(orderCurrencyRef, moneySettings) : undefined} />
     );
   }
 
@@ -5029,14 +5034,15 @@ export function OrderDetailContent({
       setTodoError("Add a task title first.");
       return;
     }
-    void saveTodoPatch({
-      action: "add",
+    // The assignee keys only with Team: the server refuses any To-do patch carrying them otherwise.
+    void saveTodoPatch(todoAddPatch({
       title,
       priority: newTodoPriority,
       dueDate: newTodoHasDueDate ? newTodoDueDate : "",
-      assignedToUid: canSeeTeamAssignment ? newTodoAssignedToUid : "",
-      assignedToEmail: canSeeTeamAssignment && newTodoAssignedToUid ? newTodoAssignee.email : ""
-    }, "Task");
+      canAssign: canSeeTeamAssignment,
+      assignedToUid: newTodoAssignedToUid,
+      assignedToEmail: newTodoAssignedToUid ? newTodoAssignee.email : ""
+    }), "Task");
   }
 
   function startEditingTodoTitle(task: ToDoDetail) {
@@ -5093,12 +5099,9 @@ export function OrderDetailContent({
   }
 
   function assignTodoTask(task: ToDoDetail, uid: string, email: string) {
-    void saveTodoPatch({
-      action: "update",
-      taskId: task.id,
-      assignedToUid: uid,
-      assignedToEmail: email
-    }, "Task assigned");
+    const patch = todoAssignPatch(task.id, uid, email, canSeeTeamAssignment);
+    if (!patch) return;
+    void saveTodoPatch(patch, "Task assigned");
   }
 
   function setTodoDueDate(task: ToDoDetail, dueDate: string) {
@@ -5883,7 +5886,17 @@ export function OrderDetailContent({
   const isEtsyOrder = String(order.customFields?.["Source"] || "") === "Etsy";
   const etsySource = useEtsySource(order.id, isEtsyOrder);
   const etsyPhotos = useEtsyListingPhotos(order.id, isEtsyOrder && Boolean(etsySource));
-  const etsyFirstPhoto = etsyPhotos.photos.find((row) => row.url || row.thumbUrl);
+  // A fresh photo first (6 h rule); otherwise any row Etsy named, drawn as the placeholder + "View on Etsy".
+  const etsyFirstPhoto = etsyPhotos.photos.find((row) => etsyPhotoIsShowable(row, Date.now(), true))
+    ?? etsyPhotos.photos.find((row) => Boolean(etsyListingLink(row)));
+  const etsyFirstPhotoLink = etsyListingLink(etsyFirstPhoto);
+  // ETSY-E2E r2: this order's money in its own currency. An Etsy order paid in USD
+  // showed "£"; the ISO code is customFields["Etsy Currency"] (kept after a
+  // disconnect) or etsySource.currency. Same-currency orders keep the workspace format.
+  const orderCurrencyRef = { customFields: order.customFields, etsySource };
+  const orderValueMoney = (value: number, hidden = false) => (hidden
+    ? hiddenMoneyLabel(orderMoneySymbol(orderCurrencyRef, moneySettings))
+    : formatOrderMoney(value, orderCurrencyRef, moneySettings));
   const [portalBusy, setPortalBusy] = useState(false);
   const [portalNotice, setPortalNotice] = useState("");
   const portalUrl = portalUrlForToken(portal.token, workspace.clientPortalHost);
@@ -6656,13 +6669,15 @@ export function OrderDetailContent({
                 <img src={order.designLink} alt={order.designName || t("Order preview")} className="app-preview-image" />
               ) : !order.designLink && etsyFirstPhoto ? (
                 // ETSY-E2E night: Etsy's product photo, fetched when the order opens (API Terms: <= 6 h old, not stored).
+                <EtsySafe>
                 <figure className="app-preview-etsy">
-                  <EtsyProductPhoto photo={etsyFirstPhoto} size={0} large label={t("Product photo from Etsy")} />
+                  <EtsyProductPhoto photo={etsyFirstPhoto} size={0} large label={t("Product photo from Etsy")} listingUrl={etsyFirstPhotoLink} linkLabel={t("View on Etsy")} />
                   <figcaption>
                     {t("Product photo from Etsy")}
-                    {etsyFirstPhoto.listingUrl ? <> · <a href={etsyFirstPhoto.listingUrl} target="_blank" rel="noopener noreferrer">{t("View on Etsy")} ↗</a></> : null}
+                    {etsyFirstPhotoLink ? <> · <a href={etsyFirstPhotoLink} target="_blank" rel="noopener noreferrer">{t("View on Etsy")} ↗</a></> : null}
                   </figcaption>
                 </figure>
+                </EtsySafe>
               ) : (
                 <div className="app-preview-empty">
                   <span className="app-preview-icon image-placeholder-icon" aria-hidden="true"><CardIconGlyph icon="photo" /></span>
@@ -6773,7 +6788,7 @@ export function OrderDetailContent({
               <div className="app-summary-top">
                 <div className="app-summary-value">
                   <span>{t("Order Value")}</span>
-                  <strong>{canSeeFinance ? money(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers) : t("Hidden")}</strong>
+                  <strong>{canSeeFinance ? orderValueMoney(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers) : t("Hidden")}</strong>
                 </div>
                 <div className="app-summary-status-list">
                   <div className="app-summary-status-row">
@@ -6814,7 +6829,7 @@ export function OrderDetailContent({
                   <span>{t("Delivery In")}</span>
                   <strong className={`app-summary-delivery ${deliveryTone}`}>
                     <CardIconGlyph icon="historyClock" />
-                    {localizedDeliveryLabel(summaryDeliveryLabel(order), t)}
+                    {localizedDeliveryLabel(summaryDeliveryLabel(order), t, detailLanguage)}
                   </strong>
                 </div>
               </div>
@@ -6963,7 +6978,7 @@ export function OrderDetailContent({
                 <span>◔</span>
                 <div>
                   <strong>{t("Time Remaining")}</strong>
-                  <b>{localizedDeliveryLabel(remainingDaysLabel(order.dueDate), t)}</b>
+                  <b>{localizedDeliveryLabel(remainingDaysLabel(order.dueDate), t, detailLanguage)}</b>
                 </div>
               </div>
               <div className="app-calendar-card">
@@ -6986,7 +7001,7 @@ export function OrderDetailContent({
               <InlineValueRow
                 label={t("Delivery Time")}
                 value={order.deliveryTime > 0 ? String(order.deliveryTime) : ""}
-                displayValue={order.deliveryTime > 0 ? t("{count} days").replace("{count}", String(order.deliveryTime)) : "-"}
+                displayValue={order.deliveryTime > 0 ? studioCountLabel(order.deliveryTime, "day", detailLanguage) : "-"}
                 inputType="number"
                 tone={deliveryValueTone}
                 disabled={!canEditWorkflowFields || !canEditDates}
@@ -7023,7 +7038,7 @@ export function OrderDetailContent({
               <LineItemsEditor
                 items={order.lineItems}
                 disabled={!canInlineEditFullDetails}
-                formatMoney={value => money(value)}
+                formatMoney={value => orderValueMoney(value)}
                 /* The card rides the Customer permission, so a member without
                    financial info can still name the lines — but never sees a
                    price, a line total or the running total here. */
@@ -7178,7 +7193,7 @@ export function OrderDetailContent({
                   <>
                     <FinanceInlineRow
                       label={t("Paid")}
-                      displayValue={money(order.paidAmount, hideNumbers)}
+                      displayValue={orderValueMoney(order.paidAmount, hideNumbers)}
                       value={order.paidAmount}
                       tone="positive"
                       disabled={!canInlineEditFinance}
@@ -7189,7 +7204,7 @@ export function OrderDetailContent({
                       // Money handed back: the sum of the refund and chargeback entries below, kept by the server — read here, never typed.
                       <FinanceInlineRow
                         label={t("Refunded")}
-                        displayValue={money(order.refundedAmount, hideNumbers)}
+                        displayValue={orderValueMoney(order.refundedAmount, hideNumbers)}
                         value={order.refundedAmount}
                         tone="negative"
                         disabled
@@ -7199,7 +7214,7 @@ export function OrderDetailContent({
                     ) : null}
                     <FinanceInlineRow
                       label={t("Remaining")}
-                      displayValue={money(order.remainingAmount, hideNumbers)}
+                      displayValue={orderValueMoney(order.remainingAmount, hideNumbers)}
                       value={order.remainingAmount}
                       tone="positive"
                       disabled={!canInlineEditFinance}
@@ -7217,7 +7232,7 @@ export function OrderDetailContent({
                             labelRaw={item.title}
                             onLabelSave={canInlineEditFinance ? value => renameOrderHeading("orderRemainingItemsJSON", remainingHeadings, item.id, value) : undefined}
                             onRemove={canInlineEditFinance ? () => removeOrderHeading("orderRemainingItemsJSON", remainingHeadings, item.id) : undefined}
-                            displayValue={money(amount, hideNumbers)}
+                            displayValue={orderValueMoney(amount, hideNumbers)}
                             value={amount}
                             tone="positive"
                             disabled={!canInlineEditFinance}
@@ -7288,7 +7303,7 @@ export function OrderDetailContent({
                         <ul className="finance-payments-list">
                           {order.payments.map(payment => (
                             <li key={payment.id} className="finance-payments-item">
-                              <span className="finance-payments-amount" style={payment.amount < 0 ? { color: "#dc2626" } : undefined}>{payment.amount < 0 ? "↩ " : ""}{money(payment.amount, hideNumbers)}</span>
+                              <span className="finance-payments-amount" style={payment.amount < 0 ? { color: "#dc2626" } : undefined}>{payment.amount < 0 ? "↩ " : ""}{orderValueMoney(payment.amount, hideNumbers)}</span>
                               {editingPaymentNoteId === payment.id ? (
                                 <span className="finance-payments-meta" style={{ display: "inline-flex", gap: 6, alignItems: "center", flex: 1 }}>
                                   <input
@@ -7384,7 +7399,7 @@ export function OrderDetailContent({
                       label={orderBaseCostLabel(order, cardLabels.financialBaseCostLabel)}
                       labelRaw={orderBaseCostLabel(order, cardLabels.financialBaseCostLabel)}
                       onLabelSave={canInlineEditFinance ? value => saveOrderBaseCostLabel(value) : undefined}
-                      displayValue={money(order.watchPurchasePrice, hideNumbers)}
+                      displayValue={orderValueMoney(order.watchPurchasePrice, hideNumbers)}
                       value={order.watchPurchasePrice}
                       tone="negative"
                       disabled={!canInlineEditFinance}
@@ -7402,7 +7417,7 @@ export function OrderDetailContent({
                             labelRaw={item.title}
                             onLabelSave={canInlineEditFinance ? value => renameOrderHeading("orderExpenseItemsJSON", expenseHeadings, item.id, value) : undefined}
                             onRemove={canInlineEditFinance ? () => removeOrderHeading("orderExpenseItemsJSON", expenseHeadings, item.id) : undefined}
-                            displayValue={money(amount, hideNumbers)}
+                            displayValue={orderValueMoney(amount, hideNumbers)}
                             value={amount}
                             tone="negative"
                             disabled={!canInlineEditFinance}
@@ -7419,7 +7434,7 @@ export function OrderDetailContent({
                     ) : null}
                     <FinanceInlineRow
                       label={platformFeeLabel(orderFinance, t, moneySettings)}
-                      displayValue={money(orderFinance.platformFee, hideNumbers)}
+                      displayValue={orderValueMoney(orderFinance.platformFee, hideNumbers)}
                       value={orderFinance.platformFee}
                       tone="negative-soft"
                       disabled={!canInlineEditFinance}
@@ -7428,7 +7443,7 @@ export function OrderDetailContent({
                     />
                     <FinanceInlineRow
                       label={t("Shipping Cost")}
-                      displayValue={money(order.deliveryCost, hideNumbers)}
+                      displayValue={orderValueMoney(order.deliveryCost, hideNumbers)}
                       value={order.deliveryCost}
                       tone="negative"
                       disabled={!canInlineEditFinance}
@@ -7455,34 +7470,34 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "VAT Rate (%)"}
                       onSave={value => saveMoneyFinanceValue("taxRate", value, "VAT Rate (%)")}
                     />
-                    <DetailRow label={t("VAT Amount")} value={money(orderFinance.vatDue, hideNumbers)} tone="negative-soft" />
+                    <DetailRow label={t("VAT Amount")} value={orderValueMoney(orderFinance.vatDue, hideNumbers)} tone="negative-soft" />
                     <div className="app-card-divider" />
                     <div className="detail-row order-value-row">
                       <span>{t("Order Value")}</span>
-                      <strong>{money(orderFinance.revenue, hideNumbers)}</strong>
+                      <strong>{orderValueMoney(orderFinance.revenue, hideNumbers)}</strong>
                     </div>
                     {corporationTaxEnabled ? (
                       <>
-                        <DetailRow label={t("Profit before Corporation Tax")} value={money(orderFinance.netProfit, hideNumbers)} />
-                        <DetailRow label={`Corporation Tax (${Math.round(corporationTaxRate)}%, est.)`} value={money(corporationTaxAmount, hideNumbers)} tone="negative" />
-                        <DetailRow label={t("Net Profit (after CT)")} value={money(netProfitAfterCT, hideNumbers)} tone="positive" emphasis />
+                        <DetailRow label={t("Profit before Corporation Tax")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} />
+                        <DetailRow label={`Corporation Tax (${Math.round(corporationTaxRate)}%, est.)`} value={orderValueMoney(corporationTaxAmount, hideNumbers)} tone="negative" />
+                        <DetailRow label={t("Net Profit (after CT)")} value={orderValueMoney(netProfitAfterCT, hideNumbers)} tone="positive" emphasis />
                       </>
                     ) : orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? (
                       // ETSY-E2E (24 Oct 2026): with no cost entered the "profit" is the sale minus an estimated fee — not
                       // a final number. An imported Etsy order showed a green "Final Profit" equal to almost the whole sale.
                       <>
-                        <DetailRow label={t("Estimated profit")} value={money(orderFinance.netProfit, hideNumbers)} emphasis />
+                        <DetailRow label={t("Estimated profit")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} emphasis />
                         <p className="muted-copy" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
                       </>
                     ) : (
-                      <DetailRow label={t("Final Profit")} value={money(orderFinance.netProfit, hideNumbers)} tone="positive" emphasis />
+                      <DetailRow label={t("Final Profit")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} tone="positive" emphasis />
                     )}
                   </>
                 ) : (
                   <>
                     <FinanceInlineRow
                       label={t("Paid / Received")}
-                      displayValue={money(order.paidAmount, hideNumbers)}
+                      displayValue={orderValueMoney(order.paidAmount, hideNumbers)}
                       value={order.paidAmount}
                       tone="positive"
                       disabled={!canInlineEditFinance}
@@ -7493,7 +7508,7 @@ export function OrderDetailContent({
                       // Money handed back: the sum of the refund and chargeback entries below, kept by the server — read here, never typed.
                       <FinanceInlineRow
                         label={t("Refunded")}
-                        displayValue={money(order.refundedAmount, hideNumbers)}
+                        displayValue={orderValueMoney(order.refundedAmount, hideNumbers)}
                         value={order.refundedAmount}
                         tone="negative"
                         disabled
@@ -7503,14 +7518,14 @@ export function OrderDetailContent({
                     ) : null}
                     <FinanceInlineRow
                       label={t("Base Cost")}
-                      displayValue={money(order.watchPurchasePrice, hideNumbers)}
+                      displayValue={orderValueMoney(order.watchPurchasePrice, hideNumbers)}
                       value={order.watchPurchasePrice}
                       tone="negative"
                       disabled={!canInlineEditFinance}
                       saving={savingFinanceField === "Cost (Base)"}
                       onSave={value => saveMoneyFinanceValue("watchPurchasePrice", value, "Cost (Base)")}
                     />
-                    <DetailRow label={t("Basic Balance")} value={money(order.paidAmount - order.watchPurchasePrice, hideNumbers)} tone="positive" emphasis />
+                    <DetailRow label={t("Basic Balance")} value={orderValueMoney(order.paidAmount - order.watchPurchasePrice, hideNumbers)} tone="positive" emphasis />
                     <FinanceUpgradeHint />
                   </>
                   )}
@@ -9279,13 +9294,13 @@ export function OrderDetailContent({
         {headerShowDeliveryTime ? (
           <span className={`order-header-meta-pill ${deliveryTone}`}>
             <CardIconGlyph icon="calendarClock" />
-            {localizedDeliveryLabel(summaryDeliveryLabel(order), t)}
+            {localizedDeliveryLabel(summaryDeliveryLabel(order), t, detailLanguage)}
           </span>
         ) : null}
         {headerShowOrderValue && canSeeFinance ? (
           <span className="order-header-meta-pill green">
-            <CardIconGlyph icon="finance" symbol={moneySymbol(moneySettings)} />
-            {money(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers)}
+            <CardIconGlyph icon="finance" symbol={orderIconSymbol(orderCurrencyRef, moneySettings)} />
+            {orderValueMoney(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers)}
           </span>
         ) : null}
       </div>

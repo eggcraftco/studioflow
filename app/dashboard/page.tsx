@@ -40,6 +40,7 @@ import {
 } from "@/lib/studioflow/finance";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/studioflow/money";
+import { foreignCurrenciesLine, foreignCurrencyTotals, formatCurrencyCodeAmount, isForeignToWorkspace } from "@/lib/studioflow/orderCurrency";
 import { saveDashboardWidgetVisibility } from "@/lib/studioflow/settingsActions";
 import { detectRecurringSpends, monthlyFixedTotal, reclaimableVatForTx } from "@/lib/studioflow/bankInsights";
 import { loadSetupChecklist, setupStepHref, type SetupChecklist } from "@/lib/studioflow/setupChecklist";
@@ -255,33 +256,10 @@ const DASHBOARD_CHANNELS: Array<{ key: DashboardChannel; source: string }> = [
 // Workspace currency is stored as a display symbol; imported orders carry ISO
 // codes. Real conversion needs exchange-rate decisions that belong to the
 // owner (which rate, which date) — until then, foreign-currency orders are
-// SHOWN in their own breakdown rows, never silently converted.
-const DASHBOARD_SYMBOL_TO_ISO: Record<string, string> = {
-  "£": "GBP", "$": "USD", "€": "EUR", "₺": "TRY", "¥": "JPY",
-  "A$": "AUD", "C$": "CAD", "CHF": "CHF", "د.إ": "AED"
-};
-
-function dashboardOrderCurrency(order: DashboardFinanceOrder): string {
-  // Every connector files its currency under its own display name — the same
-  // `${Source} <field>` shape the order-detail channel strip reads — while the
-  // generic inbound webhook writes a plain "Currency". Naming two of those keys
-  // by hand meant an Etsy or Square order returned no code at all, so it never
-  // reached the foreign-currency breakdown and the Revenue card's "some orders
-  // are in other currencies" line stayed silent while the money was shown with
-  // the workspace's own symbol.
-  // Matched the way dashboardOrderChannel matches, case folded. The two used to
-  // disagree: an order whose Source was spelled "etsy" was filed under the Etsy
-  // pill and then found no currency, because the key was built from the raw
-  // spelling. Two helpers reading the same field must read it the same way.
-  const raw = (order.customFields["Source"] || "").trim();
-  const known = DASHBOARD_CHANNELS.find(channel => channel.source.toLowerCase() === raw.toLowerCase());
-  const source = known ? known.source : raw;
-  return (
-    (source ? order.customFields[`${source} Currency`] : "")
-    || order.customFields["Currency"]
-    || ""
-  ).trim().toUpperCase();
-}
+// SHOWN in their own breakdown rows and LEFT OUT of every workspace-currency
+// total, never silently converted or added (ETSY-E2E r2: one shared rule,
+// lib/studioflow/orderCurrency.ts, for this page, Home, the top bar and the
+// order screen).
 
 function dashboardOrderChannel(order: DashboardFinanceOrder): DashboardChannel {
   const source = (order.customFields["Source"] || "").trim().toLowerCase();
@@ -745,22 +723,24 @@ export default function DashboardPage() {
   // from every money aggregate — Revenue, Payments Received, Outstanding,
   // Net, the chart, YoY and the tax set-aside — and surfaced as their own
   // visible line instead, mirroring the customers page.
+  // Money aggregates add only orders in the workspace's currency (or with no
+  // currency recorded); a USD order in a £ workspace is listed apart below.
   const countingFinanceOrders = useMemo(
-    () => channelOrders.filter(order => order.countsTowardBalance !== false),
-    [channelOrders]
+    () => channelOrders.filter(order => order.countsTowardBalance !== false && !isForeignToWorkspace(order, settings)),
+    [channelOrders, settings]
   );
   const filteredFinanceOrders = useMemo(
     () => filterOrdersByWindow(channelOrders, currentWindow.start, currentWindow.end),
     [currentWindow.end, currentWindow.start, channelOrders]
   );
   const filteredCountingOrders = useMemo(
-    () => filteredFinanceOrders.filter(order => order.countsTowardBalance !== false),
-    [filteredFinanceOrders]
+    () => filteredFinanceOrders.filter(order => order.countsTowardBalance !== false && !isForeignToWorkspace(order, settings)),
+    [filteredFinanceOrders, settings]
   );
   // Money sitting on non-counting orders in the visible range — same figure
   // the customers page reports as "cancelled or refunded".
   const cancelledSummary = useMemo(() => {
-    const excluded = filteredFinanceOrders.filter(order => order.countsTowardBalance === false);
+    const excluded = filteredFinanceOrders.filter(order => order.countsTowardBalance === false && !isForeignToWorkspace(order, settings));
     return {
       count: excluded.length,
       amount: excluded.reduce((total, order) => total + orderSalesTotal(order, settings), 0)
@@ -782,23 +762,22 @@ export default function DashboardPage() {
     () => estimatedFeeSummary(countingFinanceOrders.map(order => orderFinanceBlock(order, settings)), settings),
     [countingFinanceOrders, settings]
   );
-  const workspaceCurrencyIso = DASHBOARD_SYMBOL_TO_ISO[(settings?.selectedCurrency || "£").trim()] || "";
-  const foreignCurrencies = useMemo(() => {
-    if (!workspaceCurrencyIso) return [] as Array<[string, { amount: number; count: number }]>;
-    const map = new Map<string, { amount: number; count: number }>();
-    for (const order of filteredCountingOrders) {
-      const code = dashboardOrderCurrency(order);
-      if (!code || code === workspaceCurrencyIso) continue;
-      const row = map.get(code) ?? { amount: 0, count: 0 };
-      row.amount += orderSalesTotal(order, settings);
-      row.count += 1;
-      map.set(code, row);
-    }
-    return [...map.entries()].sort((a, b) => b[1].amount - a[1].amount);
-  }, [filteredCountingOrders, settings, workspaceCurrencyIso]);
+  // Foreign-currency orders in this range, per currency, in their own money.
+  const foreignCurrencies = useMemo(
+    () => foreignCurrencyTotals(filteredFinanceOrders.filter(order => order.countsTowardBalance !== false), settings, order => orderSalesTotal(order, settings)),
+    [filteredFinanceOrders, settings]
+  );
+  // The same for every counting order paid this year (the Year-over-Year card).
+  const foreignCurrenciesThisYear = useMemo(() => {
+    const thisYear = new Date().getFullYear();
+    return foreignCurrencyTotals(
+      channelOrders.filter(order => order.countsTowardBalance !== false && order.paymentDate?.getFullYear() === thisYear),
+      settings,
+      order => orderSalesTotal(order, settings)
+    );
+  }, [channelOrders, settings]);
   // Average order value and the new/returning split follow the same
-  // exclusions as Revenue: cancelled/refunded orders are out, foreign-currency
-  // orders count at face value (the card's hint already discloses that).
+  // exclusions as Revenue: cancelled/refunded and foreign-currency orders are out.
   const averageOrderValue = useMemo(
     () => (filteredCountingOrders.length > 0 ? totals.revenue / filteredCountingOrders.length : 0),
     [filteredCountingOrders.length, totals.revenue]
@@ -1123,7 +1102,7 @@ export default function DashboardPage() {
                     {/* Revenue is invoiced order value; Payments Received is
                         the cash that actually arrived — the report's accrual
                         vs cash split, side by side instead of blended. */}
-                    {dashboardVisibility.revenue ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.revenue.icon} title={t("Revenue")} sub={revenueCardTitle} hint={`${t("Invoiced order value in this range: paid + still owed (accrual basis).")} ${t("Cancelled and refunded orders are not counted.")}${foreignCurrencies.length ? ` ${t("Some orders are in other currencies; the breakdown lists their original amounts without conversion.")}` : ""}`} value={money(totals.revenue, hideNumbers, settings)} tone="blue" /> : null}
+                    {dashboardVisibility.revenue ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.revenue.icon} title={t("Revenue")} sub={revenueCardTitle} hint={`${t("Invoiced order value in this range: paid + still owed (accrual basis).")} ${t("Cancelled and refunded orders are not counted.")}${foreignCurrencies.length ? ` ${foreignCurrenciesLine(foreignCurrencies, settings, language, hideNumbers)}` : ""}`} value={money(totals.revenue, hideNumbers, settings)} tone="blue" /> : null}
                     {dashboardVisibility.revenue ? <DashboardSummaryCard icon="check" title={t("Payments Received")} hint={t("Money actually collected on these orders (cash basis).")} value={money(totals.received, hideNumbers, settings)} tone="blue" /> : null}
                     {dashboardVisibility.pending ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.pending.icon} title={t("Outstanding Balance")} hint={t("What customers still owe on orders in this range — cancelled and refunded orders owe nothing.")} value={money(totals.pending, hideNumbers, settings)} tone="orange" /> : null}
                     {dashboardVisibility.cost ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.cost.icon} title={t("Cost")} hint={t("Base cost + extra spending, plus any fee/shipping/VAT cards you have hidden.")} value={money(totals.cost, hideNumbers, settings)} tone="red" /> : null}
@@ -1142,6 +1121,11 @@ export default function DashboardPage() {
                   </>
                 )}
               </section>
+              {foreignCurrencies.length ? (
+                <p className="muted-copy dashboard-foreign-currencies" data-foreign-currencies="range">
+                  {foreignCurrenciesLine(foreignCurrencies, settings, language, hideNumbers)}
+                </p>
+              ) : null}
 
               <BankSpendingCard
                 transactions={bankTransactions}
@@ -1180,17 +1164,17 @@ export default function DashboardPage() {
                           settings={settings}
                         />
                       ) : null}
-                      {/* Foreign-currency orders stay in the totals numerically
-                          but are surfaced here in their own currency, honest
-                          and unconverted, until real FX rules exist. */}
-                      {foreignCurrencies.map(([code, row]) => (
+                      {/* Foreign-currency orders are NOT in the totals: surfaced
+                          here in their own currency, honest and unconverted,
+                          until real FX rules exist. */}
+                      {foreignCurrencies.map(row => (
                         <BreakdownRow
-                          key={code}
-                          label={`${code} ${t("(not converted)")} (${row.count})`}
+                          key={row.code}
+                          label={`${row.code} ${t("(not converted)")} (${row.count})`}
                           amount={row.amount}
                           hideNumbers={hideNumbers}
                           settings={settings}
-                          valueOverride={hideNumbers ? undefined : `${row.amount.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${code}`}
+                          valueOverride={hideNumbers ? `${row.code} ••••` : formatCurrencyCodeAmount(row.amount, row.code, settings)}
                         />
                       ))}
                       <BreakdownRow
@@ -1288,6 +1272,11 @@ export default function DashboardPage() {
                     {t(ESTIMATED_PLATFORM_FEES_FOOTNOTE)}
                   </p>
                 ) : null}
+                {foreignCurrencies.length ? (
+                  <p className="muted-copy dashboard-foreign-currencies" data-foreign-currencies="chart">
+                    {foreignCurrenciesLine(foreignCurrencies, settings, language, hideNumbers)}
+                  </p>
+                ) : null}
                 {!canSeeAdvancedFinance ? (
                   <div className="dashboard-chart-locked">
                     <p className="muted-copy">{t("Received minus Base Cost only. Detailed profit and year comparisons are available on Pro.")}</p>
@@ -1319,6 +1308,11 @@ export default function DashboardPage() {
                     </>
                   )}
                 </div>
+                {foreignCurrenciesThisYear.length ? (
+                  <p className="muted-copy dashboard-foreign-currencies" data-foreign-currencies="year">
+                    {foreignCurrenciesLine(foreignCurrenciesThisYear, settings, language, hideNumbers)}
+                  </p>
+                ) : null}
                 {canSeeAdvancedFinance && allTimeFeeSummary.footnote ? (
                   <p className="muted-copy dashboard-estimate-footnote" style={{ margin: "6px 0 0", fontSize: 11.5 }}>
                     {t(ESTIMATED_PLATFORM_FEES_FOOTNOTE)}

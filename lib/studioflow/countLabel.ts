@@ -9,7 +9,7 @@ import { normalizeStudioLanguage, studioLocaleTag } from "./language";
  * Intl.PluralRules for the app language; each language lists the forms it
  * uses, and a missing category falls back to "other".
  */
-export type StudioCountNoun = "order" | "customer" | "file" | "item" | "note" | "member";
+export type StudioCountNoun = "order" | "customer" | "file" | "item" | "note" | "member" | "day";
 
 type PluralForms = Partial<Record<Intl.LDMLPluralRule, string>> & { other: string };
 
@@ -97,6 +97,21 @@ const COUNT_FORMS: Record<StudioCountNoun, Record<string, PluralForms>> = {
     "中文 (Chinese)": { other: "{count} 位成员" },
     "العربية (Arabic)": { zero: "{count} عضو", one: "{count} عضو", two: "{count} عضوان", few: "{count} أعضاء", many: "{count} عضوًا", other: "{count} عضو" },
     "हिन्दी (Hindi)": { other: "{count} सदस्य" }
+  },
+  // ETSY-E2E r2 (24 Oct 2026): "1 days" on the order screen, the trial bar and Home.
+  day: {
+    "English": { one: "{count} day", other: "{count} days" },
+    "Türkçe": { other: "{count} gün" },
+    "Deutsch": { one: "{count} Tag", other: "{count} Tage" },
+    "Français": { one: "{count} jour", other: "{count} jours" },
+    "Italiano": { one: "{count} giorno", other: "{count} giorni" },
+    "Español (Spanish)": { one: "{count} día", other: "{count} días" },
+    "Português": { one: "{count} dia", other: "{count} dias" },
+    "Русский (Russian)": { one: "{count} день", few: "{count} дня", many: "{count} дней", other: "{count} дня" },
+    "日本語 (Japanese)": { other: "{count} 日" },
+    "中文 (Chinese)": { other: "{count} 天" },
+    "العربية (Arabic)": { zero: "{count} يوم", one: "{count} يوم", two: "{count} يومان", few: "{count} أيام", many: "{count} يومًا", other: "{count} يوم" },
+    "हिन्दी (Hindi)": { other: "{count} दिन" }
   }
 };
 
@@ -117,3 +132,65 @@ export function studioCountLabel(count: number, noun: StudioCountNoun, language:
 
 /** Every language and plural form, for the check script. */
 export const STUDIO_COUNT_FORMS = COUNT_FORMS;
+
+/**
+ * Whole phrases built around a day count. The words around the number agree
+ * with it too (Russian "остался 1 день" / "осталось 5 дней"), so a phrase is
+ * one template per plural form, never "{count} " + t("days remaining").
+ */
+export type StudioDayPhrase = "remaining" | "late" | "syncedAgo";
+
+const DAY_PHRASE_FORMS: Record<StudioDayPhrase, Record<string, PluralForms>> = {
+  remaining: {
+    "English": { one: "{count} day remaining", other: "{count} days remaining" },
+    "Türkçe": { other: "{count} gün kaldı" },
+    "Deutsch": { one: "{count} Tag übrig", other: "{count} Tage übrig" },
+    "Français": { one: "{count} jour restant", other: "{count} jours restants" },
+    "Italiano": { one: "{count} giorno rimasto", other: "{count} giorni rimasti" },
+    "Español (Spanish)": { one: "{count} día restante", other: "{count} días restantes" },
+    "Português": { one: "{count} dia restante", other: "{count} dias restantes" },
+    "Русский (Russian)": { one: "остался {count} день", few: "осталось {count} дня", many: "осталось {count} дней", other: "осталось {count} дня" },
+    "日本語 (Japanese)": { other: "残り {count} 日" },
+    "中文 (Chinese)": { other: "剩余 {count} 天" },
+    "العربية (Arabic)": { zero: "{count} يوم متبقٍ", one: "{count} يوم متبقٍ", two: "{count} يومان متبقيان", few: "{count} أيام متبقية", many: "{count} يومًا متبقيًا", other: "{count} يوم متبقٍ" },
+    "हिन्दी (Hindi)": { other: "{count} दिन शेष" }
+  },
+  late: {
+    "English": { one: "{count} day late", other: "{count} days late" },
+    "Türkçe": { other: "{count} gün gecikti" },
+    "Deutsch": { one: "{count} Tag überfällig", other: "{count} Tage überfällig" },
+    "Français": { one: "{count} jour de retard", other: "{count} jours de retard" },
+    "Italiano": { one: "{count} giorno di ritardo", other: "{count} giorni di ritardo" },
+    "Español (Spanish)": { one: "{count} día de retraso", other: "{count} días de retraso" },
+    "Português": { one: "{count} dia de atraso", other: "{count} dias de atraso" },
+    "Русский (Russian)": { one: "Просрочено на {count} день", few: "Просрочено на {count} дня", many: "Просрочено на {count} дней", other: "Просрочено на {count} дня" },
+    "日本語 (Japanese)": { other: "{count} 日遅れ" },
+    "中文 (Chinese)": { other: "逾期 {count} 天" },
+    "العربية (Arabic)": { zero: "متأخر {count} يوم", one: "متأخر {count} يوم", two: "متأخر {count} يومين", few: "متأخر {count} أيام", many: "متأخر {count} يومًا", other: "متأخر {count} يوم" },
+    "हिन्दी (Hindi)": { other: "{count} दिन देर से" }
+  },
+  syncedAgo: {
+    "English": { one: "Last synced {count} day ago", other: "Last synced {count} days ago" },
+    "Türkçe": { other: "Son senkron {count} gün önce" },
+    "Deutsch": { one: "Zuletzt vor {count} Tag synchronisiert", other: "Zuletzt vor {count} Tagen synchronisiert" },
+    "Français": { one: "Dernière synchro il y a {count} jour", other: "Dernière synchro il y a {count} jours" },
+    "Italiano": { one: "Ultima sincronizzazione {count} giorno fa", other: "Ultima sincronizzazione {count} giorni fa" },
+    "Español (Spanish)": { one: "Última sincronización hace {count} día", other: "Última sincronización hace {count} días" },
+    "Português": { one: "Última sincronização há {count} dia", other: "Última sincronização há {count} dias" },
+    "Русский (Russian)": { one: "Последняя синхронизация {count} день назад", few: "Последняя синхронизация {count} дня назад", many: "Последняя синхронизация {count} дней назад", other: "Последняя синхронизация {count} дня назад" },
+    "日本語 (Japanese)": { other: "最終同期は {count} 日前" },
+    "中文 (Chinese)": { other: "上次同步在 {count} 天前" },
+    "العربية (Arabic)": { zero: "آخر مزامنة قبل {count} يوم", one: "آخر مزامنة قبل {count} يوم", two: "آخر مزامنة قبل {count} يومين", few: "آخر مزامنة قبل {count} أيام", many: "آخر مزامنة قبل {count} يومًا", other: "آخر مزامنة قبل {count} يوم" },
+    "हिन्दी (Hindi)": { other: "अंतिम सिंक {count} दिन पहले" }
+  }
+};
+
+export function studioDayPhrase(count: number, phrase: StudioDayPhrase, language: string | null | undefined): string {
+  const normalized = normalizeStudioLanguage(language);
+  const forms = DAY_PHRASE_FORMS[phrase][normalized] ?? DAY_PHRASE_FORMS[phrase]["English"];
+  const template = forms[pluralCategory(count, normalized)] ?? forms.other;
+  return template.replace("{count}", String(count));
+}
+
+/** Every language and plural form of the day phrases, for the check script. */
+export const STUDIO_DAY_PHRASE_FORMS = DAY_PHRASE_FORMS;

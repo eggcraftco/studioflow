@@ -51,6 +51,8 @@ import { WorkspaceAccessLostError } from "@/lib/studioflow/workspaceResolution";
 import { fetchSalesCapability, SALES_VISIBILITY_CHANGED_EVENT } from "@/lib/studioflow/sales";
 import { notificationVisibleForAccess } from "@/lib/studioflow/notificationAccess";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
+import { studioCountLabel, studioDayPhrase } from "@/lib/studioflow/countLabel";
+import { foreignCurrenciesLine, foreignCurrencyTotals, formatCurrencyCodeAmount, isForeignToWorkspace } from "@/lib/studioflow/orderCurrency";
 import { studioLanguageDir, studioLanguageLocale } from "@/lib/studioflow/languageDirection";
 import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
 import { EMPTY_INTEGRATION_SIGNALS, loadIntegrationSignals, type IntegrationSignals } from "@/lib/studioflow/integrations";
@@ -738,6 +740,7 @@ function TrialBanner({
   orderCount,
   customerCount,
   t,
+  language,
   onViewPlans,
 }: {
   companyId: string;
@@ -746,6 +749,8 @@ function TrialBanner({
   orderCount: number;
   customerCount: number;
   t: (text: string) => string;
+  /** The app language, for the plural form of the day count ("1 day remaining"). */
+  language: string;
   onViewPlans: () => void;
 }) {
   const [collapsedCompanyId, setCollapsedCompanyId] = useState(() => {
@@ -768,8 +773,8 @@ function TrialBanner({
   const headline = daysRemaining <= 0
     ? t("Your trial ends today.")
     : daysRemaining <= 3
-      ? `${t("Your trial ends in")} ${daysRemaining} ${daysRemaining === 1 ? t("day") : t("days")}.`
-      : `${planName} ${t("trial")} · ${daysRemaining} ${t("days remaining")}`;
+      ? `${t("Your trial ends in")} ${studioCountLabel(daysRemaining, "day", language)}.`
+      : `${planName} ${t("trial")} · ${studioDayPhrase(daysRemaining, "remaining", language)}`;
 
   // Under three days the reassurance matters more than the tally: the fear is
   // being charged, so answer it before anything else.
@@ -795,7 +800,7 @@ function TrialBanner({
         <span aria-hidden="true">★</span>
         <span>{planName} {t("trial")}</span>
         <span style={{ opacity: 0.55 }}>·</span>
-        <span>{daysRemaining <= 0 ? t("ends today") : `${daysRemaining} ${t("days remaining")}`}</span>
+        <span>{daysRemaining <= 0 ? t("ends today") : studioDayPhrase(daysRemaining, "remaining", language)}</span>
         <span aria-hidden="true" style={{ opacity: 0.55 }}>⌄</span>
       </button>
     );
@@ -1883,21 +1888,31 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     memberCanAccess(workspace, "financialInfo"),
   );
   // Same rule as the dashboard: cancelled and refunded orders earn nothing.
+  // ETSY-E2E r2: only orders in the workspace's currency (or with none
+  // recorded) are added; a USD order in a £ workspace is listed apart.
   const monthMargin = useMemo(
     () =>
       financeOrders
-        .filter(order => order.countsTowardBalance !== false)
+        .filter(order => order.countsTowardBalance !== false && !isForeignToWorkspace(order, settings))
         .filter(orderInCurrentMonth)
         .reduce((total, order) => total + orderGrossMargin(order), 0),
-    [financeOrders],
+    [financeOrders, settings],
   );
   const yearMargin = useMemo(
     () =>
       financeOrders
-        .filter(order => order.countsTowardBalance !== false)
+        .filter(order => order.countsTowardBalance !== false && !isForeignToWorkspace(order, settings))
         .filter(orderInCurrentYear)
         .reduce((total, order) => total + orderGrossMargin(order), 0),
-    [financeOrders],
+    [financeOrders, settings],
+  );
+  const yearForeignMargins = useMemo(
+    () => foreignCurrencyTotals(
+      financeOrders.filter(order => order.countsTowardBalance !== false).filter(orderInCurrentYear),
+      settings,
+      order => orderGrossMargin(order),
+    ),
+    [financeOrders, settings],
   );
   const toolbarAvatarUrl = workspace?.currentMemberPhotoURL ?? "";
   const showToolbarAvatarImage = Boolean(
@@ -2896,6 +2911,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             orderCount={financeOrders.length}
             customerCount={workspaceCustomerCount}
             t={t}
+            language={language}
             onViewPlans={() => router.push("/settings?section=plan-access")}
           />
         ) : null}
@@ -2999,6 +3015,17 @@ function AppShellFrame({ children }: { children: ReactNode }) {
                     {t("Year Margin")}{" "}
                     <strong>{money(yearMargin, hideNumbers, settings)}</strong>
                   </span>
+                  {yearForeignMargins.length ? (
+                    // No room for the whole line in the bar: the amounts, and the full line on hover / for screen readers.
+                    <span
+                      className="toolbar-net-strip__foreign"
+                      title={foreignCurrenciesLine(yearForeignMargins, settings, language, hideNumbers)}
+                      aria-label={foreignCurrenciesLine(yearForeignMargins, settings, language, hideNumbers)}
+                      data-foreign-currencies=""
+                    >
+                      {`+ ${yearForeignMargins.map(row => (hideNumbers ? `${row.code} ••••` : formatCurrencyCodeAmount(row.amount, row.code, settings))).join(" · ")}`}
+                    </span>
+                  ) : null}
                 </div>
               ) : (
                 <div className="toolbar-role-strip" aria-label={t("Workspace role")}>

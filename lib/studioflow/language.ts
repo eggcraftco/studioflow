@@ -10,6 +10,7 @@ import { ORDER_LIST_VIEW_TRANSLATIONS } from "./orderListViewTranslations";
 import { FILES_NOTES_ACCOUNT_TRANSLATIONS } from "./filesNotesAccountTranslations";
 import { SALES_STORES_TRANSLATIONS } from "./salesStoresTranslations";
 import { WOO_STORES_TRANSLATIONS } from "./wooStoresTranslations";
+import { ETSY_ROUND_TWO_TRANSLATIONS } from "./etsyRoundTwoTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -9247,6 +9248,9 @@ mergeIntoTranslations(SALES_STORES_TRANSLATIONS);
 
 // Multistore (23 Oct 2026): WooCommerce stores of one workspace. After MC-2.
 mergeIntoTranslations(WOO_STORES_TRANSLATIONS);
+
+// ETSY-E2E r2 (24 Oct 2026): order currency apart from the workspace's, Etsy delivery line. After Multistore.
+mergeIntoTranslations(ETSY_ROUND_TWO_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {
