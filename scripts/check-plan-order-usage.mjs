@@ -98,7 +98,10 @@ expect("store history line", formatStoreHistoryLine(202), "Finished Etsy orders 
 
 // 5. Every string, every language — through the real studioT.
 const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
-for (const key of ["Active orders", "Total orders", "no limit", PLAN_ORDER_RULE_HINT, STORE_HISTORY_LABEL, "Orders", "Loading..."]) {
+// ET-E3 b2 (owner, 24 Oct): a reopen refused by updateWebOrder shows the server's sentence through t() (friendlyError keeps
+// failed-precondition text) — so it is translated here, word for word as functions/orders/reopenGuard.js sends it.
+const REOPEN_REFUSED = "Your current plan has reached its active order limit, so this order stays finished. Mark another order as delivered, or upgrade the workspace plan, then reopen it.";
+for (const key of ["Active orders", "Total orders", "no limit", PLAN_ORDER_RULE_HINT, STORE_HISTORY_LABEL, REOPEN_REFUSED, "Orders", "Loading..."]) {
   const untranslated = LANGUAGES.filter(language => studioT(key, language) === key);
   expect(`translated in all 11 non-English languages: ${key.slice(0, 40)}`, untranslated, []);
 }
@@ -118,6 +121,8 @@ expect("loader reads the server callable", /"getWorkspacePlanUsage"/.test(loader
 expect("loader counts isDeleted == true", /where\("isDeleted", "==", true\)/.test(loader), true);
 expect("loader counts isDelivered == true", /where\("isDelivered", "==", true\)/.test(loader), true);
 // ET-E3 b2: on a limited plan the client never puts its own count against the limit.
+const detail = read("app/orders/OrderDetailContent.tsx");
+expect("a refused detail save reloads the order and shows the error, never a success status", /catch \(saveFailure\) \{\s*await onReloadOrder\(\);\s*setInlineStatus\(null\);\s*setInlineError\(/.test(detail), true);
 expect("loader reads storeHistoryOrderCount from the server", /storeHistoryOrderCount/.test(loader), true);
 expect("loader has no client-count fallback on a limited plan", /return \{ \.\.\.local, limit: orderLimit, source: "client" \}/.test(loader), false);
 expect("loader throws (screen shows —) when the server does not answer on a limited plan", /throw new Error\("The plan's active-order figure comes from the server/.test(loader), true);
