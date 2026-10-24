@@ -19,6 +19,7 @@ import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { deviceStudioLanguage } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
+import { temporaryOrderSaveMessage } from "@/lib/studioflow/orderCallableErrors";
 
 /** Toasts fired from this module are read by a person, so they get translated. */
 const toastT = (text: string) => studioT(text, deviceStudioLanguage());
@@ -219,6 +220,8 @@ export function canEditOrderDetailsForRole(role: string) {
 }
 
 function friendlyCreateOrderError(error: unknown) {
+  const temporary = temporaryOrderSaveMessage(error);
+  if (temporary) return temporary;
   const message = error instanceof Error ? error.message : "";
   if (/assigned_only_cannot_create/i.test(message)) return ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE;
   if (/plan.*limit|order limit|failed-precondition/i.test(message)) {
@@ -246,6 +249,8 @@ function friendlyUndoOrderCreateError(error: unknown) {
 }
 
 function friendlyUpdateOrderError(error: unknown) {
+  const temporary = temporaryOrderSaveMessage(error);
+  if (temporary) return temporary;
   const message = error instanceof Error ? error.message : "";
   if (/assigned_only_cannot_change_dates/i.test(message)) return ASSIGNED_ONLY_CANNOT_CHANGE_DATES_MESSAGE;
   if (/assigned_only_cannot_create/i.test(message)) return ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE;
@@ -505,14 +510,21 @@ export async function restoreOrderFromWeb(workspace: WorkspaceContext, orderId: 
   if (!canDeleteOrRestoreOrders(workspace)) {
     throw new Error("Your workspace role cannot restore orders.");
   }
-  return await withWebSyncStatus(async () => {
-    const callable = httpsCallable<Record<string, unknown>, DeleteOrderResult>(functions, "restoreWebOrder");
-    const response = await callable({ companyId: workspace.id, orderId });
-    if (response.data?.ok === false) {
-      throw new Error(response.data?.message || "Could not restore the order.");
-    }
-    return response.data;
-  }, "Restoring order from cloud.");
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, DeleteOrderResult>(functions, "restoreWebOrder");
+      const response = await callable({ companyId: workspace.id, orderId });
+      if (response.data?.ok === false) {
+        throw new Error(response.data?.message || "Could not restore the order.");
+      }
+      return response.data;
+    }, "Restoring order from cloud.");
+  } catch (error) {
+    // ET-E3 b2.1: a temporary server failure is not the plan's refusal; every other error keeps its own sentence.
+    const temporary = temporaryOrderSaveMessage(error);
+    if (temporary) throw new Error(temporary);
+    throw error;
+  }
 }
 
 export type MergeOrderResult = {

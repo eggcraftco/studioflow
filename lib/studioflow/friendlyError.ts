@@ -22,6 +22,7 @@ const FUNCTION_MESSAGES: Record<string, string> = {
   "functions/permission-denied": "You don't have permission for this.",
   "functions/resource-exhausted": "Too many requests. Please try again in a moment.",
   "functions/unavailable": "The server is busy. Please try again.",
+  "functions/aborted": "The server is busy. Please try again.",
   "functions/deadline-exceeded": "The server is busy. Please try again.",
   "functions/unauthenticated": "Please sign in again.",
   "functions/internal": "Something went wrong. Please try again."
