@@ -1025,15 +1025,15 @@ const TREE_EN: GuideNode[] = [
           { kind: "bullets", items: [
             "[Web] Settings → Integrations → Etsy → Manage, then Connect Etsy. NivaDesk lists what it will read before it sends you anywhere.",
             "You approve on Etsy's own page and come back. NivaDesk never sees your Etsy password, and no Etsy access is ever held by your browser.",
-            "The access is read-only: your orders, your shop details, and the buyer email Etsy provides. NivaDesk cannot touch your listings, your prices or anything else in your shop.",
+            "The access is read-only: your orders and your shop details (and the buyer's email when Etsy shares one — often it does not). NivaDesk cannot touch your listings, your prices or anything else in your shop.",
             "On your return the shop is checked and named on screen, so you can see which shop you connected before going any further.",
-            "More than one shop can be connected to the same workspace."
+            "One Etsy shop per workspace at the moment."
           ] },
           { kind: "sub", text: "Choosing what comes in" },
           { kind: "bullets", items: [
-            "How far back to look starts at 90 days, and can reach back as far as two years.",
+            "How far back to look: the last 30 days, 90 days (the default) or 12 months.",
             "Completed, cancelled, digital-only and not-yet-paid orders are each left out unless you turn them on.",
-            "Preview writes nothing at all. It shows every order it found and what it would do with each one.",
+            "Preview changes nothing in your workspace. It shows every order it found and what it would do with each one.",
             "An order it will not import says why: cancelled on Etsy, digital only, not paid yet, or nothing in it NivaDesk can map.",
             "An order in another currency is kept exactly as the buyer paid it, and never converted.",
             "Import everything the preview found, or tick only the orders you want."
@@ -1047,15 +1047,15 @@ const TREE_EN: GuideNode[] = [
           ] },
           { kind: "sub", text: "Staying up to date" },
           { kind: "bullets", items: [
-            "NivaDesk checks your shop every fifteen minutes on its own. Sync now is there for when you would rather not wait.",
+            "Etsy tells NivaDesk about new and changed orders as they happen, and NivaDesk also checks your shop about once an hour to catch anything missed. Sync now is there for when you would rather not wait.",
             "The sync centre says what actually happened on each run: what arrived, what was updated, and anything that needs a look.",
             "Etsy keeps the money and the buyer. Totals, items and buyer details go on coming from your shop.",
-            "Your production work is yours — stages, notes, schedule, files, everything you add here — and a sync never writes over it.",
+            "Your production work is yours — stages, notes, schedule, files, everything you add here — and a sync never writes over it. If you correct the customer's name, the design name or the delivery address, your version stays; Etsy's own copy stays visible in the Etsy panel on the order.",
             "If the connection ever needs your attention the card says so in plain words, and Reconnect puts it right. Your orders are untouched in the meantime."
           ] },
           { kind: "sub", text: "Disconnecting" },
           { kind: "bullets", items: [
-            "Disconnect says what will happen before it happens: syncing stops, and the stored Etsy access is destroyed.",
+            "Disconnect says what will happen before it happens: syncing stops, the stored Etsy access is destroyed, and Etsy's copy of the order details and the remembered buyer matches are removed from NivaDesk.",
             "Every order and every piece of production work already in NivaDesk stays exactly where it is."
           ] }
         ]
@@ -2319,15 +2319,15 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "[Web] Settings → Integrations → Etsy → Manage, ardından Connect Etsy. NivaDesk sizi bir yere göndermeden önce neyi okuyacağını sıralar.",
             "Onayı Etsy'nin kendi sayfasında verir, sonra geri dönersiniz. NivaDesk Etsy şifrenizi hiç görmez ve tarayıcınız hiçbir zaman Etsy erişimi taşımaz.",
-            "Erişim salt okunurdur: siparişleriniz, mağaza bilgileriniz ve Etsy'nin verdiği alıcı e-postası. NivaDesk ilanlarınıza, fiyatlarınıza ya da mağazanızdaki başka bir şeye dokunamaz.",
+            "Erişim salt okunurdur: siparişleriniz ve mağaza bilgileriniz (Etsy paylaşıyorsa alıcının e-postası — çoğu zaman paylaşmaz). NivaDesk ilanlarınıza, fiyatlarınıza ya da mağazanızdaki başka bir şeye dokunamaz.",
             "Döndüğünüzde mağaza doğrulanır ve adı ekranda yazar; devam etmeden önce hangi mağazayı bağladığınızı görürsünüz.",
-            "Aynı çalışma alanına birden fazla mağaza bağlanabilir."
+            "Şimdilik bir çalışma alanına bir Etsy mağazası bağlanır."
           ] },
           { kind: "sub", text: "Neyin geleceğini seçmek" },
           { kind: "bullets", items: [
-            "Ne kadar geriye bakılacağı 90 günden başlar, iki yıla kadar uzatılabilir.",
+            "Ne kadar geriye bakılacağı: son 30 gün, 90 gün (varsayılan) ya da 12 ay.",
             "Tamamlanmış, iptal edilmiş, yalnızca dijital ve henüz ödenmemiş siparişlerin her biri, siz açmadıkça dışarıda bırakılır.",
-            "Önizleme hiçbir şey yazmaz. Bulduğu her siparişi ve her biriyle ne yapacağını gösterir.",
+            "Önizleme çalışma alanınızda hiçbir şeyi değiştirmez. Bulduğu her siparişi ve her biriyle ne yapacağını gösterir.",
             "İçe aktarmayacağı sipariş nedenini söyler: Etsy'de iptal edilmiş, yalnızca dijital, henüz ödenmemiş ya da NivaDesk'in eşleyebileceği bir şey yok.",
             "Başka para birimindeki sipariş, alıcının ödediği haliyle korunur ve asla çevrilmez.",
             "Önizlemenin bulduğu her şeyi içe aktarabilir ya da yalnızca istediğiniz siparişleri işaretleyebilirsiniz."
@@ -2341,15 +2341,15 @@ const TREE_TR: GuideNode[] = [
           ] },
           { kind: "sub", text: "Güncel kalmak" },
           { kind: "bullets", items: [
-            "NivaDesk mağazanızı kendi kendine on beş dakikada bir kontrol eder. Beklemek istemediğinizde Sync now orada.",
+            "Etsy yeni ve değişen siparişleri olduğu anda NivaDesk'e bildirir; NivaDesk ayrıca kaçanı yakalamak için mağazanızı yaklaşık saatte bir kontrol eder. Beklemek istemediğinizde Sync now orada.",
             "Senkronizasyon merkezi her turda gerçekte ne olduğunu söyler: ne geldi, ne güncellendi ve bakılması gereken ne var.",
             "Para ve alıcı Etsy'nindir. Toplamlar, ürünler ve alıcı bilgileri mağazanızdan gelmeye devam eder.",
-            "Üretim işiniz sizindir — aşamalar, notlar, takvim, dosyalar, buraya eklediğiniz her şey — ve senkronizasyon bunların üzerine asla yazmaz.",
+            "Üretim işiniz sizindir — aşamalar, notlar, takvim, dosyalar, buraya eklediğiniz her şey — ve senkronizasyon bunların üzerine asla yazmaz. Müşteri adını, tasarım adını ya da teslimat adresini düzeltirseniz sizin hâliniz kalır; Etsy'nin kendi kopyası siparişteki Etsy panelinde görünür.",
             "Bağlantı bir gün ilginizi gerektirirse kart bunu açık sözlerle söyler, Reconnect düzeltir. Bu sırada siparişlerinize dokunulmaz."
           ] },
           { kind: "sub", text: "Bağlantıyı kesmek" },
           { kind: "bullets", items: [
-            "Disconnect, olmadan önce ne olacağını söyler: senkronizasyon durur ve saklanan Etsy erişimi yok edilir.",
+            "Disconnect, olmadan önce ne olacağını söyler: senkronizasyon durur, saklanan Etsy erişimi yok edilir ve sipariş ayrıntılarının Etsy kopyası ile hatırlanan alıcı eşleşmeleri NivaDesk'ten kaldırılır.",
             "NivaDesk'te zaten bulunan her sipariş ve her üretim işi olduğu yerde kalır."
           ] }
         ]
