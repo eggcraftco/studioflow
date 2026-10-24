@@ -33,6 +33,7 @@ import { mapWorkDayHistory, mapWorkDays, type WorkDayDetail, type WorkDayHistory
 import { productionWorkIsLive, type ProductionStage } from "@/lib/studioflow/production";
 import type { HeadingItem } from "@/lib/studioflow/blockHeadings";
 import { compareOrdersTieBreak, orderIsCancelled, type FilterableOrder } from "@/lib/studioflow/orderFilters";
+import { isEtsyOrder } from "@/lib/studioflow/etsyOrder";
 
 export type JoinedWorkspaceOption = {
   id: string;
@@ -436,6 +437,8 @@ export type OrderOptionItem = {
   designName: string;
   status: string;
   paymentDate: Date | null;
+  /** Came from Etsy (lib/studioflow/etsyOrder.ts): NivaDesk sends its buyer nothing (Etsy API Terms). */
+  isEtsy?: boolean;
 };
 
 export type CustomerOrderFile = {
@@ -2079,7 +2082,13 @@ export async function loadWorkspaceOrderOptions(companyId: string, workspace?: W
       customerName: stringValue(data.customerName, "New Project"),
       designName: stringValue(data.designName, "Untitled design"),
       status: stringValue(data.status, "Not Yet"),
-      paymentDate: dateValue(data.paymentDate)
+      paymentDate: dateValue(data.paymentDate),
+      isEtsy: isEtsyOrder({
+        id: orderDocument.id,
+        etsySource: data.etsySource,
+        commerce: data.commerce && typeof data.commerce === "object" ? data.commerce as { provider?: string } : null,
+        customFields: data.customFields && typeof data.customFields === "object" ? data.customFields as Record<string, string> : null
+      })
     };
   });
 

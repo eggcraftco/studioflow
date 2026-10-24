@@ -72,6 +72,7 @@
     "test:order-currency": "npx tsx scripts/check-order-currency.mts",
     "test:day-labels": "npx tsx scripts/check-day-labels.mts",
     "test:etsy-fulfilment": "npx tsx scripts/check-etsy-fulfilment.mts",
+    "test:etsy-compliance": "npx tsx scripts/check-etsy-compliance.mts",
     "test:etsy-photo-freshness": "npx tsx scripts/check-etsy-photo-freshness.mts",
     "test:todo-patch": "npx tsx scripts/check-todo-patch.mts",
     "test:web-small-fixes": "npx tsx scripts/check-web-small-fixes.mts",

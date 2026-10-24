@@ -41,6 +41,7 @@ import { relativeTimeLabel as relativeTime } from "@/lib/studioflow/relativeTime
 import { MessagesTabs } from "@/components/MessagesTabs";
 import { inboxEmptySentence, isDefaultInboxView } from "@/lib/studioflow/inboxEmptyState";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
+import { ETSY_INBOX_NOTE, inboxReplyRefusalText, isEtsyOrder, isEtsyOrderId } from "@/lib/studioflow/etsyOrder";
 import { InboxAttachment } from "./InboxAttachment";
 import { EmojiPicker } from "./EmojiPicker";
 import {
@@ -392,6 +393,8 @@ export function InboxContent({
   const [replyText, setReplyText] = useState("");
   const [replyBusy, setReplyBusy] = useState(false);
   const [replyError, setReplyError] = useState("");
+  // The conversation the server refused a reply on because it is linked to an Etsy order.
+  const [etsyRefusedFor, setEtsyRefusedFor] = useState("");
   const pendingReplyId = useRef("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [attachment, setAttachment] = useState<Attachment | null>(null);
@@ -723,7 +726,10 @@ export function InboxContent({
       await openThread(openId);
       await loadList();
     } catch (failure) {
-      setReplyError(friendlyErrorMessage(failure, t));
+      // The REPLY refusal map first: "etsy_order_messaging" is a rule, not a failure to retry.
+      const refusal = inboxReplyRefusalText(failure);
+      if (refusal === ETSY_INBOX_NOTE) { setEtsyRefusedFor(openId); pendingReplyId.current = ""; }
+      setReplyError(refusal ? t(refusal) : friendlyErrorMessage(failure, t));
     } finally {
       setReplyBusy(false);
     }
@@ -824,7 +830,19 @@ export function InboxContent({
     return out;
   }, [thread?.messages]);
 
-  const composerDisabled = replyBusy || (!replyText.trim() && !attachment) || (isInstagramThread && replyBytes > INSTAGRAM_MAX_REPLY_BYTES);
+  // Etsy API Terms §5: no replies from NivaDesk on a conversation linked to an Etsy order.
+  // The importer's "etsy_…" id is enough on its own; otherwise the linked order's own fields
+  // (read the way the panel names it). Reading, marking read, linking and reactions stay.
+  const linkedEtsyOrder = useMemo(() => {
+    if (thread && etsyRefusedFor && etsyRefusedFor === openId) return true;
+    const orderId = thread?.orderId || "";
+    if (!orderId) return false;
+    if (isEtsyOrderId(orderId)) return true;
+    const order = options?.orders.find((entry) => entry.id === orderId);
+    return order ? isEtsyOrder({ id: order.id, customFields: order.customFields, commerceProvider: order.commerceProvider }) : false;
+  }, [thread, etsyRefusedFor, openId, options]);
+
+  const composerDisabled = linkedEtsyOrder || replyBusy || (!replyText.trim() && !attachment) || (isInstagramThread && replyBytes > INSTAGRAM_MAX_REPLY_BYTES);
   const threadLabel = thread ? (thread.customerName || linkedCustomerName || "") : "";
 
   const renderReactions = (message: CustomerInboxMessage) => {
@@ -1383,7 +1401,16 @@ export function InboxContent({
                   </li>
                 ))}
               </ol>
-              {isInstagramThread && !instagramReady ? (
+              {linkedEtsyOrder ? (
+                <div className="inbox-notice inbox-reply-closed" role="status" data-etsy-compliance="inbox">
+                  <p>{t(ETSY_INBOX_NOTE)}</p>
+                  {/* The composer stays visible but locked, so nothing (a pasted Quick Reply included) can be sent. */}
+                  <div className="inbox-composer" aria-disabled="true">
+                    <textarea className="inbox-reply-text" value="" readOnly disabled aria-disabled="true" rows={2} aria-label={t("Write a reply…")} placeholder={t("Write a reply…")} />
+                    <button type="button" className="inbox-reply-send" disabled aria-disabled="true" aria-label={t("Send")} title={t("Send")}>{ICON_SEND}</button>
+                  </div>
+                </div>
+              ) : isInstagramThread && !instagramReady ? (
                 // The server says whether an Instagram reply can leave now
                 // (readCustomerInboxConversation → replyChannel) and refuses one
                 // that cannot. No composer, and never "Send on WhatsApp", on a

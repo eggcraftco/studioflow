@@ -70,7 +70,8 @@ export function OrderShipmentsPanel({
   language,
   onOrderChanged,
   onSizeChange,
-  addressRestricted = false
+  addressRestricted = false,
+  etsyOrder = false
 }: {
   workspace: WorkspaceContext;
   orderId: string;
@@ -84,6 +85,8 @@ export function OrderShipmentsPanel({
    * cannot be prepared from it, so the panel does not offer one as if it could and says where the label is made.
    */
   addressRestricted?: boolean;
+  /** Etsy order: the draft dialog does not take or send the buyer's e-mail (Etsy API Terms). */
+  etsyOrder?: boolean;
 }) {
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const companyId = workspace.id.trim();
@@ -430,6 +433,7 @@ export function OrderShipmentsPanel({
           can={can}
           connection={connection}
           language={language}
+          etsyOrder={etsyOrder}
           onClose={async () => { setEditingId(""); await reload(); }}
           onCreated={async (message) => {
             setEditingId("");

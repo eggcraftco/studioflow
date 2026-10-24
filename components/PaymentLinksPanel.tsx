@@ -22,6 +22,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { minorToInputText, parseRequestAmount, requestAmountMessage } from "@/lib/studioflow/money";
+import { ETSY_COPY_LINK_NOTE, isEtsyOrderId } from "@/lib/studioflow/etsyOrder";
 
 export type PaymentLinkRow = {
   paymentRequestId: string;
@@ -493,6 +494,13 @@ export default function PaymentLinksPanel({
                           {busyId === row.paymentRequestId ? t("Cancelling…") : t("Cancel")}
                         </button>
                       </>
+                    ) : null}
+                    {/* Etsy API Terms: an Etsy order's link is never sent to the buyer by NivaDesk. */}
+                    {isEtsyOrderId(row.orderId) && row.url && tabForStatus(row.publicStatus) === "open" ? (
+                      <div role={copiedId === row.paymentRequestId ? "status" : undefined} data-etsy-compliance="copy-link"
+                        style={{ marginTop: 6, textAlign: "left", whiteSpace: "normal", fontSize: 11.5, color: "#b45309" }}>
+                        {t(ETSY_COPY_LINK_NOTE)}
+                      </div>
                     ) : null}
                     {shownId === row.paymentRequestId && row.url ? (
                       <div style={{ marginTop: 6, textAlign: "left", wordBreak: "break-all", fontSize: 11.5, opacity: 0.8 }}>{row.url}</div>

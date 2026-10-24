@@ -62,6 +62,9 @@ try {
     "export const minorToInputText = refuse('minorToInputText');",
     "export const parseRequestAmount = refuse('parseRequestAmount');",
     "export const requestAmountMessage = refuse('requestAmountMessage');",
+    // lib/studioflow/etsyOrder.ts (Etsy API Terms note on an Etsy order's row); checked by check-etsy-compliance.mts.
+    "export const ETSY_COPY_LINK_NOTE = '';",
+    "export const isEtsyOrderId = () => false;",
     "export const useCallback = (fn) => fn;",
     "export const useEffect = () => {};",
     "export const useMemo = (fn) => fn();",

@@ -245,6 +245,10 @@ function EtsySourcePanelBody({ source, photos, language, showMoney }: EtsySource
         {t("Read-only: this is Etsy's copy of the order. Your own changes go in the cards below.")}
         {fetched ? ` · ${t("Last updated from Etsy")} ${new Date(fetched).toLocaleString()}` : ""}
       </p>
+      {/* Etsy API Terms: the required trademark notice, verbatim and never translated. */}
+      <p className="etsy-source-panel__foot" data-etsy-trademark="" lang="en">
+        {"The term 'Etsy' is a trademark of Etsy, Inc. This Application uses Etsy's API, but is not endorsed or certified by Etsy."}
+      </p>
     </section>
   );
 }

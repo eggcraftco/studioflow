@@ -371,6 +371,10 @@ export type CustomerInboxReplyResult = {
  */
 export type CustomerInboxOutboundMedia = { base64: string; mimeType: string; filename?: string };
 
+// The REPLY refusal map (server reason → sentence) lives with the Etsy rule so a
+// test can read it without Firebase; "etsy_order_messaging" → the Etsy inbox note.
+export { INBOX_REPLY_REFUSALS, inboxReplyRefusalText } from "./etsyOrder";
+
 export async function sendCustomerInboxReply(
   companyId: string,
   conversationId: string,

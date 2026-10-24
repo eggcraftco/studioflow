@@ -31,6 +31,7 @@ import { functions } from "@/lib/firebase/client";
 import { formatMinor, tabForStatus, type PaymentLinkRow } from "@/components/PaymentLinksPanel";
 import { minorToInputText, parseRequestAmount, requestAmountMessage } from "@/lib/studioflow/money";
 import { usePaymentLinksAvailable } from "@/lib/studioflow/usePaymentLinksAvailable";
+import { ETSY_COPY_LINK_NOTE } from "@/lib/studioflow/etsyOrder";
 
 type ListResult = {
   ok: boolean;
@@ -64,6 +65,7 @@ export default function OrderPaymentLinks({
   canCreate,
   locale,
   onSizeChange,
+  etsyOrder = false,
 }: {
   companyId: string;
   orderId: string;
@@ -76,6 +78,8 @@ export default function OrderPaymentLinks({
    *  board sizes its cards from a measurement it takes when IT renders, so without this the Financial card kept
    *  its pre-load height and the card below it was drawn over this one. Same contract as OrderShipmentsPanel. */
   onSizeChange?: () => void;
+  /** Etsy API Terms: NivaDesk never sends this link to an Etsy buyer; copying stays, with the M2 warning. */
+  etsyOrder?: boolean;
 }) {
   // The pilot gate, as the server answers it (S2). Outside the pilot this card
   // does not exist: nothing is listed, nothing is asked, nothing is shown.
@@ -256,6 +260,10 @@ export default function OrderPaymentLinks({
         </div>
       ) : null}
 
+      {etsyOrder && state.requests.some((row) => row.url && tabForStatus(row.publicStatus) === "open") ? (
+        <p data-etsy-compliance="copy-link" style={{ margin: "0 0 6px", fontSize: 12, color: "#b45309" }}>{t(ETSY_COPY_LINK_NOTE)}</p>
+      ) : null}
+
       {state.requests.length === 0 ? (
         <p style={{ margin: 0, fontSize: 12, opacity: 0.7 }}>{t("No payment links for this order yet.")}</p>
       ) : (
@@ -313,6 +321,9 @@ export default function OrderPaymentLinks({
                     </button>
                   ) : null}
                 </>
+              ) : null}
+              {etsyOrder && copiedId === row.paymentRequestId ? (
+                <span role="status" data-etsy-compliance="copied" style={{ flexBasis: "100%", fontSize: 11.5, color: "#b45309" }}>{t(ETSY_COPY_LINK_NOTE)}</span>
               ) : null}
               {shownId === row.paymentRequestId && row.url ? (
                 <span style={{ flexBasis: "100%", wordBreak: "break-all", fontSize: 11.5, opacity: 0.8 }}>{row.url}</span>
