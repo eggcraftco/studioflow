@@ -150,6 +150,7 @@ import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
 import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
+import { ETSY_COPY_LINK_NOTE, ETSY_NO_BUYER_UPDATES_NOTE, isEtsyOrder as orderComesFromEtsy } from "@/lib/studioflow/etsyOrder";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, orderDetailFinance, platformFeeLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
@@ -5889,6 +5890,11 @@ export function OrderDetailContent({
   const isEtsyOrder = String(order.customFields?.["Source"] || "") === "Etsy";
   const etsySource = useEtsySource(order.id, isEtsyOrder);
   const etsyPhotos = useEtsyListingPhotos(order.id, isEtsyOrder && Boolean(etsySource));
+  // Etsy API Terms §5: NivaDesk never sends an Etsy buyer status, delivery or tracking
+  // messages. One rule (lib/studioflow/etsyOrder.ts) decides "Etsy order" for every
+  // control below: Automatic Updates off and locked, tracking e-mail replaced by a note,
+  // and a warning next to every customer link the seller can copy.
+  const etsyBuyerMessagingBlocked = orderComesFromEtsy({ id: order.id, commerce: order.commerce, customFields: order.customFields, etsySource });
   // A fresh photo first (6 h rule); otherwise any row Etsy named, drawn as the placeholder + "View on Etsy".
   const etsyFirstPhoto = etsyPhotos.photos.find((row) => etsyPhotoIsShowable(row, Date.now(), true))
     ?? etsyPhotos.photos.find((row) => Boolean(etsyListingLink(row)));
@@ -5972,8 +5978,11 @@ export function OrderDetailContent({
     autoUpdates: PortalAutoUpdates
   ) {
     setPortalNotice("");
+    // An Etsy order's Automatic Updates are not ours to switch on: the switch is locked
+    // and nothing here writes a changed autoUpdates for it.
+    const nextAutoUpdates = etsyBuyerMessagingBlocked ? portal.autoUpdates : autoUpdates;
     try {
-      await saveOrderPortalSettings(workspace, order.id, visibility, autoUpdates);
+      await saveOrderPortalSettings(workspace, order.id, visibility, nextAutoUpdates);
       await onReloadOrder().catch(() => undefined);
     } catch (failure) {
       setPortalNotice(failure instanceof Error ? failure.message : "The portal settings could not be saved.");
@@ -5984,7 +5993,7 @@ export function OrderDetailContent({
     if (!portalUrl) return;
     try {
       await navigator.clipboard?.writeText(portalUrl);
-      setPortalNotice("Link copied. Send it to your customer.");
+      setPortalNotice(etsyBuyerMessagingBlocked ? ETSY_COPY_LINK_NOTE : "Link copied. Send it to your customer.");
     } catch {
       setPortalNotice("Copying was blocked — select the link and copy it by hand.");
     }
@@ -6094,7 +6103,7 @@ export function OrderDetailContent({
           copied = false;
         }
         setEstimateNotice(copied
-          ? "Link copied. Send it to your customer."
+          ? (etsyBuyerMessagingBlocked ? ETSY_COPY_LINK_NOTE : "Link copied. Send it to your customer.")
           : "Link created — copy it below and send it to your customer.");
       }
       await onReloadOrder().catch(() => undefined);
@@ -6109,7 +6118,7 @@ export function OrderDetailContent({
     if (!estimateLinkUrl) return;
     try {
       await navigator.clipboard?.writeText(estimateLinkUrl);
-      setEstimateNotice("Link copied. Send it to your customer.");
+      setEstimateNotice(etsyBuyerMessagingBlocked ? ETSY_COPY_LINK_NOTE : "Link copied. Send it to your customer.");
     } catch {
       setEstimateNotice("Copying was blocked — select the link above and copy it by hand.");
     }
@@ -6239,7 +6248,7 @@ export function OrderDetailContent({
                   in the populated branch, so the outcome of the very first
                   "Create estimate" click — success or refusal — had nowhere to
                   render, and the card just blinked. */}
-              {estimateNotice ? <p className="estimate-card-note">{t(estimateNotice)}</p> : null}
+              {estimateNotice ? <p className="estimate-card-note">{estimateNotice === ETSY_COPY_LINK_NOTE ? `${t("Link copied.")} ` : ""}{t(estimateNotice)}</p> : null}
               {!canSeeFinance ? (
                 <p className="estimate-card-note">{t("Hidden on this workspace role.")}</p>
               ) : !currentEstimate ? (
@@ -6355,6 +6364,9 @@ export function OrderDetailContent({
                         <input type="text" readOnly value={estimateLinkUrl} onFocus={event => event.currentTarget.select()} />
                         <button type="button" onClick={() => void copyEstimateLink()}>{t("Copy link")}</button>
                       </div>
+                      {etsyBuyerMessagingBlocked ? (
+                        <p className="estimate-card-note" data-etsy-compliance="copy-link">{t(ETSY_COPY_LINK_NOTE)}</p>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -6372,6 +6384,9 @@ export function OrderDetailContent({
                         <button type="button" onClick={() => void shareEstimateLink()} disabled={estimateBusy}>
                           {t(linkLive ? "Create a fresh link" : "Send to customer")}
                         </button>
+                      ) : null}
+                      {etsyBuyerMessagingBlocked && !estimateLinkUrl && !decided && currentEstimate.status !== "superseded" ? (
+                        <p className="estimate-card-note" data-etsy-compliance="copy-link">{t(ETSY_COPY_LINK_NOTE)}</p>
                       ) : null}
                       {linkLive && !decided ? (
                         <button type="button" onClick={() => void revokeEstimateLink()} disabled={estimateBusy}>
@@ -6405,7 +6420,9 @@ export function OrderDetailContent({
       }
       case "customerPortal": {
         const shows = portal.visibility;
-        const auto = portal.autoUpdates;
+        // Etsy order: Automatic Updates render OFF and locked, whatever is stored.
+        const autoLocked = etsyBuyerMessagingBlocked;
+        const auto = autoLocked ? { ...portal.autoUpdates, enabled: false, email: false, sms: false } : portal.autoUpdates;
         const canEditPortal = canInlineEditFullDetails;
         const seesRows: { key: keyof PortalVisibility; label: string }[] = [
           { key: "status", label: "Repair status" },
@@ -6415,7 +6432,7 @@ export function OrderDetailContent({
           { key: "expectedDate", label: "Expected completion" }
         ];
         const toggleSees = (key: keyof PortalVisibility) =>
-          void savePortalPreferences({ ...shows, [key]: !shows[key] }, auto);
+          void savePortalPreferences({ ...shows, [key]: !shows[key] }, portal.autoUpdates);
 
         return (
           <section key={cardId} className="card order-detail-card">
@@ -6430,6 +6447,9 @@ export function OrderDetailContent({
                   </span>
                 </div>
 
+                {etsyBuyerMessagingBlocked && portal.active && portalUrl ? (
+                  <p className="portal-hint" data-etsy-compliance="copy-link">{t(ETSY_COPY_LINK_NOTE)}</p>
+                ) : null}
                 {portal.active && portalUrl ? (
                   <div className="portal-link-row">
                     <input type="text" readOnly value={portalUrl} onFocus={event => event.currentTarget.select()} />
@@ -6457,7 +6477,7 @@ export function OrderDetailContent({
                   </div>
                 ) : null}
 
-                {portalNotice ? <p className="portal-notice">{t(portalNotice)}</p> : null}
+                {portalNotice ? <p className="portal-notice">{portalNotice === ETSY_COPY_LINK_NOTE ? `${t("Link copied.")} ` : ""}{t(portalNotice)}</p> : null}
               </div>
 
               <div className="portal-section">
@@ -6487,13 +6507,18 @@ export function OrderDetailContent({
                   <button
                     type="button"
                     className={`portal-switch ${auto.enabled ? "is-on" : ""}`}
-                    disabled={!canEditPortal}
+                    disabled={!canEditPortal || autoLocked}
+                    aria-disabled={autoLocked || !canEditPortal ? true : undefined}
                     aria-pressed={auto.enabled}
-                    onClick={() => void savePortalPreferences(shows, { ...auto, enabled: !auto.enabled })}
+                    data-etsy-locked={autoLocked ? "" : undefined}
+                    onClick={() => { if (!autoLocked) void savePortalPreferences(shows, { ...auto, enabled: !auto.enabled }); }}
                   >
                     <span />
                   </button>
                 </div>
+                {autoLocked ? (
+                  <p className="portal-hint" data-etsy-compliance="auto-updates" role="note">{t(ETSY_NO_BUYER_UPDATES_NOTE)}</p>
+                ) : null}
                 <p className="portal-hint">
                   {t("Sent when the order's status moves — estimate ready, work started, ready for collection.")}
                 </p>
@@ -6502,8 +6527,9 @@ export function OrderDetailContent({
                   <button
                     type="button"
                     className={`portal-pill ${auto.email ? "is-on" : "is-off"}`}
-                    disabled={!canEditPortal || !auto.enabled}
-                    onClick={() => void savePortalPreferences(shows, { ...auto, email: !auto.email })}
+                    disabled={!canEditPortal || !auto.enabled || autoLocked}
+                    aria-disabled={autoLocked ? true : undefined}
+                    onClick={() => { if (!autoLocked) void savePortalPreferences(shows, { ...auto, email: !auto.email }); }}
                   >
                     {t(auto.email ? "ON" : "OFF")}
                   </button>
@@ -6511,8 +6537,9 @@ export function OrderDetailContent({
                   <button
                     type="button"
                     className={`portal-pill ${auto.sms ? "is-on" : "is-off"}`}
-                    disabled={!canEditPortal || !auto.enabled || workspaceSms?.available !== true}
-                    onClick={() => void savePortalPreferences(shows, { ...auto, sms: !auto.sms })}
+                    disabled={!canEditPortal || !auto.enabled || workspaceSms?.available !== true || autoLocked}
+                    aria-disabled={autoLocked ? true : undefined}
+                    onClick={() => { if (!autoLocked) void savePortalPreferences(shows, { ...auto, sms: !auto.sms }); }}
                   >
                     {t(auto.sms ? "ON" : "OFF")}
                   </button>
@@ -7549,6 +7576,7 @@ export function OrderDetailContent({
                   canCreate={canInlineEditFinance}
                   locale={studioLocaleTag(detailLanguage)}
                   onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)}
+                  etsyOrder={etsyBuyerMessagingBlocked}
                 />
               </>
             ) : (
@@ -7721,7 +7749,9 @@ export function OrderDetailContent({
                   {`${t("No tracking number yet.")} ${t("Add a courier and tracking number to enable live status.")}`}
                 </p>
               )}
-              {cleanTrackingNumber(order.trackingNumber) ? (
+              {cleanTrackingNumber(order.trackingNumber) && etsyBuyerMessagingBlocked ? (
+                <p className="layout-status finance-inline-message" data-etsy-compliance="tracking-email" role="note">{t(ETSY_NO_BUYER_UPDATES_NOTE)}</p>
+              ) : cleanTrackingNumber(order.trackingNumber) ? (
                 <OrderTrackingEmailSection
                   workspace={workspace}
                   orderId={order.id}
@@ -7756,7 +7786,8 @@ export function OrderDetailContent({
               />
               {/* DHL Express, only where the server has opened it for this workspace. */}
               <OrderShipmentsPanel workspace={workspace} orderId={order.id} language={detailLanguage} onOrderChanged={onReloadOrder} onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)}
-                addressRestricted={order.commerce?.provider === "ebay" && !String(order.shippingStreetAddress || "").trim() && !String(order.shippingPostalCode || "").trim()} />
+                addressRestricted={order.commerce?.provider === "ebay" && !String(order.shippingStreetAddress || "").trim() && !String(order.shippingPostalCode || "").trim()}
+                etsyOrder={etsyBuyerMessagingBlocked} />
             </div>
           </section>
         );

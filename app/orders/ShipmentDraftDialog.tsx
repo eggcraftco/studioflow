@@ -41,6 +41,7 @@ import {
   type ShippingConnectionView
 } from "@/lib/studioflow/shipping";
 import { senderFromProfile, senderWarningLabels } from "@/lib/studioflow/shippingSender";
+import { ETSY_DHL_EMAIL_NOTE } from "@/lib/studioflow/etsyOrder";
 
 type PieceInput = { weight: string; length: string; width: string; height: string };
 type ItemInput = {
@@ -69,7 +70,8 @@ export function ShipmentDraftDialog({
   connection,
   language,
   onClose,
-  onCreated
+  onCreated,
+  etsyOrder = false
 }: {
   companyId: string;
   orderId: string;
@@ -80,6 +82,8 @@ export function ShipmentDraftDialog({
   language: string;
   onClose: () => void | Promise<void>;
   onCreated: (message: string) => void | Promise<void>;
+  /** Etsy API Terms: an Etsy buyer's e-mail is never passed to DHL (the server strips it too). */
+  etsyOrder?: boolean;
 }) {
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const locale = studioLocaleTag(language);
@@ -203,7 +207,7 @@ export function ShipmentDraftDialog({
   function buildPatch(): ShipmentDraftPatch {
     const patch: ShipmentDraftPatch = {
       recipient: {
-        fullName: recipient.fullName, companyName: recipient.companyName, phone: recipient.phone, email: recipient.email,
+        fullName: recipient.fullName, companyName: recipient.companyName, phone: recipient.phone, email: etsyOrder ? "" : recipient.email,
         address: {
           line1: recipient.line1, line2: recipient.line2, city: recipient.city, postalCode: recipient.postalCode,
           provinceCode: recipient.provinceCode, countryCode: recipient.countryCode
@@ -424,8 +428,12 @@ export function ShipmentDraftDialog({
               <input className="input" value={recipient.companyName} onChange={e => change(setRecipient)({ ...recipient, companyName: e.target.value })} /></label>
             <label className="inventory-field"><span>{t("Phone")}</span>
               <input className="input" type="tel" value={recipient.phone} onChange={e => change(setRecipient)({ ...recipient, phone: e.target.value })} /></label>
-            <label className="inventory-field"><span>{t("Email")}</span>
-              <input className="input" type="email" value={recipient.email} onChange={e => change(setRecipient)({ ...recipient, email: e.target.value })} /></label>
+            {etsyOrder ? (
+              <p className="inventory-field shipment-muted" data-etsy-compliance="dhl-email" role="note">{t(ETSY_DHL_EMAIL_NOTE)}</p>
+            ) : (
+              <label className="inventory-field"><span>{t("Email")}</span>
+                <input className="input" type="email" value={recipient.email} onChange={e => change(setRecipient)({ ...recipient, email: e.target.value })} /></label>
+            )}
             <label className="inventory-field is-wide"><span>{t("Street address")}</span>
               <input className="input" value={recipient.line1} onChange={e => change(setRecipient)({ ...recipient, line1: e.target.value })} /></label>
             <label className="inventory-field is-wide"><span>{t("Address line 2 (optional)")}</span>

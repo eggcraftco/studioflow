@@ -20,6 +20,7 @@ import {
 } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { studioT } from "@/lib/studioflow/language";
+import { ETSY_QUICK_REPLY_NOTE, isEtsyOrderId } from "@/lib/studioflow/etsyOrder";
 import { canEditPersonalQuickReplySettingsForRole, generateQuickReply, loadQuickReplyPersonalSettings, saveQuickReplyPersonalSettings } from "@/lib/studioflow/quickReply";
 
 function quickReplyTitle(mode: string, language: string | null | undefined) {
@@ -261,6 +262,11 @@ export default function QuickReplyPage() {
     }
   }
 
+  // Etsy API Terms §5: NivaDesk never sends this reply to an Etsy buyer; the seller pastes it into Etsy Messages.
+  const etsyOrderSelected = Boolean(selectedOrderId) && (
+    isEtsyOrderId(selectedOrderId) || orderOptions.some(option => option.id === selectedOrderId && option.isEtsy === true)
+  );
+
   async function copyReply() {
     if (!generatedText.trim()) return;
     await navigator.clipboard.writeText(generatedText);
@@ -416,6 +422,9 @@ export default function QuickReplyPage() {
                 <button className={copied ? "button success-button quick-reply-copy-button" : "button secondary quick-reply-copy-button"} type="button" disabled={!generatedText.trim()} onClick={copyReply}>
                   {copied ? t("Copied to Clipboard!") : t("Copy Reply")}
                 </button>
+                {etsyOrderSelected ? (
+                  <p className="muted-copy" data-etsy-compliance="quick-reply" role={copied ? "status" : "note"}>{t(ETSY_QUICK_REPLY_NOTE)}</p>
+                ) : null}
               </section>
             </div>
           </div>

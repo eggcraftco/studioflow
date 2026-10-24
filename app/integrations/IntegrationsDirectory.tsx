@@ -159,7 +159,7 @@ function IntegrationsDirectoryContent() {
         : item.state === "live"
           ? <Link href="/login" lang={locale} dir="auto">{t("integrations.action.connect")} ↗</Link>
           : <Link href="/contact" lang={locale} dir="auto">{t(item.state === "limited" ? "integrations.action.request" : "integrations.action.ask")} ↗</Link>}</details></article>)}</div>{!filtered.length && <div className={styles.empty}><h3>No matching integrations</h3><p>Try another name or explore all categories.</p><button onClick={() => {setQuery("");setCategory("All integrations");}}>Clear filters</button></div>}</div></div>
-      <p className={styles.micro}>The term &ldquo;Etsy&rdquo; is a trademark of Etsy, Inc. This application uses the Etsy API but is not endorsed or certified by Etsy, Inc.</p>
+      <p className={styles.micro} lang="en">{"The term 'Etsy' is a trademark of Etsy, Inc. This Application uses Etsy's API, but is not endorsed or certified by Etsy."}</p>
     </section>
     <section className={styles.faq}><div><p className={styles.eyebrow}>A FEW USEFUL DETAILS</p><h2>Before you connect.</h2></div><div>{[
       ["Does connecting a shop also publish my products?", "No. Bringing orders into NivaDesk is separate from publishing listings, changing prices or sending stock quantities back to a marketplace. Check the supported scope of each connection."],

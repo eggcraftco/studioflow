@@ -37,6 +37,38 @@ import { workspaceAccessAllows } from "@/lib/studioflow/firestore";
 
 type Props = { workspace: WorkspaceContext; language?: string };
 
+/**
+ * Etsy API Terms: the trademark notice (T1), the contact address (T2) and the terms the
+ * seller agrees to by connecting (T3), shown in EVERY state of this section. T1 is Etsy's
+ * required wording and is NEVER translated or reworded (scripts/check-etsy-compliance.mts
+ * reads this file for the exact string).
+ */
+export function EtsyLegalNotes({ t, showTrademark = true }: { t: (text: string) => string; showTrademark?: boolean }) {
+  const agree = t("By connecting Etsy you agree to the NivaDesk {terms} and our {privacy}.");
+  const [beforeTerms, afterTerms = ""] = agree.split("{terms}");
+  const [between, afterPrivacy = ""] = afterTerms.split("{privacy}");
+  return (
+    <section className="card app-card quick-reply-settings-card" data-etsy-card="" data-etsy-legal="">
+      {showTrademark ? (
+        <p className="muted-copy" data-etsy-trademark="" lang="en">
+          {"The term 'Etsy' is a trademark of Etsy, Inc. This Application uses Etsy's API, but is not endorsed or certified by Etsy."}
+        </p>
+      ) : null}
+      <p className="muted-copy" data-etsy-contact="">
+        {t("Questions about the Etsy connection? Email")}{" "}
+        <a href="mailto:contact@nivadesk.co.uk">contact@nivadesk.co.uk</a>
+      </p>
+      <p className="muted-copy" data-etsy-agreement="">
+        {beforeTerms}
+        <a href="/terms" target="_blank" rel="noopener noreferrer">{t("Terms")}</a>
+        {between}
+        <a href="/privacy" target="_blank" rel="noopener noreferrer">{t("Privacy Policy")}</a>
+        {afterPrivacy}
+      </p>
+    </section>
+  );
+}
+
 const DATE_RANGES = [
   { days: 30, label: "Last 30 days" },
   { days: 90, label: "Last 90 days" },
@@ -296,10 +328,13 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
 
   if (!configured) {
     return (
-      <section className="card app-card quick-reply-settings-card" data-etsy-card="">
-        <h3>{t("Etsy")}</h3>
-        <p className="muted-copy">{t("Etsy is not set up on this server yet. Contact support and we will enable it.")}</p>
-      </section>
+      <div className="settings-card-stack">
+        <section className="card app-card quick-reply-settings-card" data-etsy-card="">
+          <h3>{t("Etsy")}</h3>
+          <p className="muted-copy">{t("Etsy is not set up on this server yet. Contact support and we will enable it.")}</p>
+        </section>
+        <EtsyLegalNotes t={t} />
+      </div>
     );
   }
 
@@ -362,15 +397,13 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
             {t("Disconnecting does not delete the orders already in NivaDesk.")}
           </p>
           {/* Required by Etsy's API Terms of Use, verbatim and in a prominent
-              position: "The term 'Etsy' is a trademark of Etsy, Inc. This
-              application uses the Etsy API but is not endorsed or certified by
-              Etsy, Inc." It is deliberately NOT translated — it is a trademark
-              notice, and the wording Etsy requires is this wording. It sits
-              above the connect button because that is the moment a seller is
-              deciding whether we are Etsy, and we are not. */}
-          <p className="muted-copy">
-            The term &ldquo;Etsy&rdquo; is a trademark of Etsy, Inc. This application uses the
-            Etsy API but is not endorsed or certified by Etsy, Inc.
+              position. Deliberately NOT translated — it is a trademark notice,
+              and the wording Etsy requires is this wording. It sits above the
+              connect button because that is the moment a seller is deciding
+              whether we are Etsy, and we are not. The same notice, with the
+              contact address and the terms, closes every state of this section. */}
+          <p className="muted-copy" data-etsy-trademark="" lang="en">
+            {"The term 'Etsy' is a trademark of Etsy, Inc. This Application uses Etsy's API, but is not endorsed or certified by Etsy."}
           </p>
           <div className="settings-action-row">
             <button
@@ -391,6 +424,8 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
             <p className="muted-copy">{t("Only the workspace owner can connect an Etsy shop.")}</p>
           ) : null}
         </section>
+        {/* The trademark notice is already above the connect button in this state. */}
+        <EtsyLegalNotes t={t} showTrademark={false} />
       </div>
     );
   }
@@ -1000,6 +1035,7 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
           <p className="muted-copy">{t("Only the workspace owner can disconnect an Etsy shop.")}</p>
         )}
       </section>
+      <EtsyLegalNotes t={t} />
     </div>
   );
 }
