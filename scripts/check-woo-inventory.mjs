@@ -92,6 +92,8 @@ for (const m of source.matchAll(/sentence: "([^"]+)"/g)) used.add(m[1]);
 for (const m of source.matchAll(/^\s+[a-z_]+: "([^"]+)",?$/gm)) used.add(m[1]);
 for (const [, label] of panel.matchAll(/\["[a-z_]+", "([^"]+)"\]/g)) used.add(label);
 used.add("Sold out in the store"); used.add("Archived in the store");
+const line = read("app/settings/WooInventoryLine.tsx");
+for (const m of line.matchAll(/\bt\("([^"]+)"\)/g)) used.add(m[1]);
 for (const word of [...used]) if (/^[a-z_]+$/.test(word)) used.delete(word);   // reason codes, not sentences
 const content = read("app/inventory/InventoryContent.tsx");
 ok("panel sentences found", used.size > 40);
@@ -112,6 +114,16 @@ ok("?panel=woo opens it", /get\("panel"\) === "woo"\) setTab\("woo"\)/.test(cont
 const client = read("lib/studioflow/wooInventory.ts");
 const callables = [...client.matchAll(/\("([A-Za-z]+)"\)\(/g)].map((m) => m[1]).sort();
 expect("only the read/import callables are called", callables, ["getWooProductLinks", "importWooProducts", "previewWooProducts"]);
+// 25 Oct fix: one store's list at a time, and a way in from Settings ▸ WooCommerce.
+ok("changing the store empties the list, ticks and decisions", /onChange=\{\(event\) => chooseStore\(event\.target\.value\)\}/.test(panel) && /storeRef\.current = next;\s*setConnectionId\(next\);\s*setAnswer\(null\);[^\n]*setChosen\(\[\]\); setDecisions\(\{\}\)/.test(panel));
+ok("a read that answers after the store changed is dropped", (panel.match(/if \(storeRef\.current !== forStore\) return;/g) || []).length === 2);
+ok("import goes to the store the list was read from", /importWooProducts\(companyId, answerStore, toSend\)/.test(panel) && /answerStore && answerStore === connectionId \?/.test(panel));
+ok("?store= preselects that store", /get\("store"\)/.test(panel));
+const section = read("app/settings/WooCommerceIntegrationSection.tsx");
+ok("Settings ▸ WooCommerce shows the products line for a connected store", /<WooInventoryLine companyId=\{companyId\} connectionId=\{connection\.id\}/.test(section) && /from "\.\/WooInventoryLine"/.test(section));
+ok("the line opens Inventory ▸ WooCommerce products for that store, gated on the server's answer", /href=\{`\/inventory\?panel=woo&store=\$\{encodeURIComponent\(connectionId\)\}`\}/.test(line) && /if \(!answer \|\| !answer\.enabled\) return null;/.test(line));
+const detail = read("app/inventory/ItemDetailPanel.tsx");
+ok("a WooCommerce card without a cost says 'not entered', not £0.00", /item\.source === "woocommerce" && !\(Number\(item\.purchasePrice\) > 0\)/.test(detail) && /wooInventoryT\("Cost: not entered/.test(detail));
 ok("prices only when the server says money", /money && row\.price/.test(panel) && /status\?\.money === true/.test(panel));
 
 fs.rmSync(tmp, { recursive: true, force: true });

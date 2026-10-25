@@ -9,6 +9,7 @@ import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
+import { WooInventoryLine } from "./WooInventoryLine";
 import {
   beginWooConnect, finishWooConnect, getWooConnections, disconnectWooShop, syncWooNow, recreateWooWebhooks, previewWooImport, runWooImport, auditWooOrders,
   type WooConnection, type WooImportPreview, type WooImportResult, type WooAuditReport
@@ -210,6 +211,7 @@ export function WooCommerceIntegrationSection({ workspace, language = "English" 
           </button>
           <span className="muted-copy">{t("Sync now checks the last 24 hours.")}</span>
         </div>
+        {connection.status === "connected" ? <WooInventoryLine companyId={companyId} connectionId={connection.id} language={language} /> : null}
       </section>
 
       <CommerceSyncHealthCard workspace={workspace} language={language} provider="woocommerce" />

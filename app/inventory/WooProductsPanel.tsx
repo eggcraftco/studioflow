@@ -8,7 +8,7 @@
 // to a card, or make a new card with the opening count the PERSON types (the store's stock figure is the store's, and
 // often not tracked at all) — or, for a one-off, the person's "this item is here". No cost is ever taken from the
 // store. Prices come only when the server sends them (Financial Info). Same look as the eBay listings panel.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import type { InventoryItem } from "@/lib/studioflow/inventory";
 import { studioLocaleTag } from "@/lib/studioflow/language";
@@ -53,6 +53,16 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
   const [search, setSearch] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, WooImportRow>>({});
   const [summary, setSummary] = useState("");
+  // The store the list on screen belongs to. A workspace can hold several stores (EGGcraft + TickToon, 23 Oct): the
+  // list, the ticks and the decisions are ONE store's, so changing the store empties them, and a read that answers
+  // after the person has moved to another store is dropped (25 Oct fix: the old list stayed under the new store's
+  // name and every import came back "not in the last read").
+  const storeRef = useRef("");
+  const chooseStore = useCallback((next: string) => {
+    storeRef.current = next;
+    setConnectionId(next);
+    setAnswer(null); setRefusal(""); setError(""); setSummary(""); setResults({}); setChosen([]); setDecisions({}); setSearch({}); setFilter("active");
+  }, []);
 
   const load = useCallback(async () => {
     if (!companyId) return;
@@ -60,8 +70,11 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
     try {
       const now = await getWooProductLinks(companyId);
       setStatus(now);
-      const live = now.connections.find((c) => c.status === "connected");
-      setConnectionId((current) => current || (live ? live.connectionId : ""));
+      const connected = now.connections.filter((c) => c.status === "connected");
+      // ?panel=woo&store=<connection> (Settings ▸ WooCommerce's link) opens that store; otherwise the first connected one.
+      const asked = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("store") || "" : "";
+      const first = connected.find((c) => c.connectionId === asked) || connected[0];
+      if (!storeRef.current && first) { storeRef.current = first.connectionId; setConnectionId(first.connectionId); }
     } catch {
       setError(t("This could not be done."));
     } finally {
@@ -78,13 +91,16 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
   const editable = canEdit && status?.canEdit === true;
 
   async function read() {
-    if (!connectionId) return;
-    setBusy("read"); setError(""); setRefusal(""); setSummary(""); setResults({}); setChosen([]); setDecisions({});
+    const forStore = connectionId;
+    if (!forStore) return;
+    setBusy("read"); setError(""); setRefusal(""); setSummary(""); setResults({}); setChosen([]); setDecisions({}); setAnswer(null);
     try {
-      const next = await previewWooProducts(companyId, connectionId);
+      const next = await previewWooProducts(companyId, forStore);
+      if (storeRef.current !== forStore) return;   // the person moved to another store meanwhile
       if (next && next.ok === false) { setRefusal(String(next.reason || "provider_unavailable")); setAnswer(null); }
       else setAnswer(next);
     } catch (err) {
+      if (storeRef.current !== forStore) return;
       setError(err instanceof Error && err.message ? err.message : t("This could not be done."));
     } finally {
       setBusy("");
@@ -98,12 +114,14 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
   }
   const setDecision = (linkId: string, patch: Partial<WooDecision>) => setDecisions((current) => ({ ...current, [linkId]: { ...(current[linkId] || EMPTY), ...patch } }));
 
-  const toSend = decisionsToSend(rows, chosen, decisions);
+  // The list's own store: what was read is what is brought in, whatever the selector says.
+  const answerStore = answer ? String(answer.connectionId || "") : "";
+  const toSend = answerStore && answerStore === connectionId ? decisionsToSend(rows, chosen, decisions) : [];
   async function bringIn() {
     if (!toSend.length) return;
     setBusy("import"); setError(""); setSummary("");
     try {
-      const done = await importWooProducts(companyId, connectionId, toSend);
+      const done = await importWooProducts(companyId, answerStore, toSend);
       const byId: Record<string, WooImportRow> = {};
       for (const r of done) byId[r.linkId] = r;
       setResults((current) => ({ ...current, ...byId }));
@@ -138,7 +156,7 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
       {!loading && status?.enabled && liveConnections.length ? (
         <div className="ebay-inv__actions">
           {liveConnections.length > 1 ? (
-            <select className="input" value={connectionId} onChange={(event) => setConnectionId(event.target.value)} aria-label="WooCommerce">
+            <select className="input" value={connectionId} disabled={busy !== ""} onChange={(event) => chooseStore(event.target.value)} aria-label="WooCommerce" data-testid="woo-products-store">
               {liveConnections.map((c) => <option key={c.connectionId} value={c.connectionId}>{c.storeName ? `${c.storeName} (${c.host})` : c.host}</option>)}
             </select>
           ) : <span className="ebay-inv__seller">{liveConnections[0].storeName || liveConnections[0].host}</span>}
@@ -156,6 +174,7 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
       {answer ? (
         <>
           <p className="ebay-inv__summary" data-testid="woo-products-summary">
+            {answer.storeName || answer.host ? <strong data-testid="woo-products-store-read">{String(answer.storeName || answer.host)} · </strong> : null}
             {fill(t("{count} products read · {rows} to match"), { count: Number(answer.products || 0), rows: rows.length })}
           </p>
           {answer.truncated === true ? <p className="ebay-inv__warn">{t("More than 1,000 products: only the first 1,000 were read.")}</p> : null}

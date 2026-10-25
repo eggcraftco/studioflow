@@ -38,6 +38,7 @@ import {
 import { loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { libraryFileUrl, listLibraryFiles, type LibraryFile } from "@/lib/studioflow/filesLibrary";
 import { EbayItemLinks } from "./EbayItemLinks";
+import { wooInventoryT } from "@/lib/studioflow/wooInventory";
 
 type PanelTab = "details" | "history" | "purchases" | "photos" | "files";
 
@@ -464,7 +465,12 @@ export function ItemDetailPanel({
               <dl className="inventory-panel-grid">
                 {item.supplierName ? <><dt>{t("Supplier")}</dt><dd>{item.supplierName}</dd></> : null}
                 {item.purchaseDate ? <><dt>{t("Purchase date")}</dt><dd>{item.purchaseDate}</dd></> : null}
-                <dt>{t("Purchase price")}</dt><dd>{money(currencySymbol, item.purchasePrice)}</dd>
+                <dt>{t("Purchase price")}</dt>
+                {/* MC-3 (25 Oct): a card brought in from WooCommerce has no cost until the person types one — say so,
+                    rather than "£0.00", which reads as a known zero. The store's sale price is never a cost. */}
+                <dd>{item.source === "woocommerce" && !(Number(item.purchasePrice) > 0)
+                  ? <span className="inventory-sub" data-testid="woo-cost-not-entered">{wooInventoryT("Cost: not entered — the store's price is a sale price, not what you paid.", language)}</span>
+                  : money(currencySymbol, item.purchasePrice)}</dd>
                 <dt>{t("Bank Transaction")}</dt>
                 <dd><span className="inventory-sub">{t("No purchase recorded")}</span></dd>
               </dl>
