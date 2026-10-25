@@ -112,6 +112,7 @@ ok("card: purchase price reads inventoryCostKind", /inventoryCostKind\(item\) ==
 ok("card: line value and history read the rule", (detail.match(/inventoryCostKind\(item\) === "notEntered"/g) || []).length >= 3);
 ok("form: the price box keeps its own text (empty ≠ 0)", /const \[costText, setCostText\] = useState\(\(\) => inventoryCostFieldText\(initialItem\)\)/.test(content) && /value=\{costText\}/.test(content) && !/set\("purchasePrice", Number\(e\.target\.value\) \|\| 0\)/.test(content));
 ok("form: the save sends what the box says", /inventoryCostSaveFields\(costText, initialItem\)/.test(content) && /saveInventoryItem\(workspace, \{ \.\.\.draft, \.\.\.costFields \}/.test(content));
+ok("form: the value preview of an empty box says 'Not entered', not £0.00", /costText\.trim\(\) === "" && extrasTotal === 0\s*\n\s*\? wooInventoryT\("Not entered", language\)/.test(content));
 ok("list: a row with no cost says so, not £0.00", /data-testid="inventory-row-cost-not-entered"/.test(content));
 ok("totals: the note under the value counts the cards with no cost", /inventoryCostMissingCount\(items\)/.test(content) && /data-testid="inventory-cost-missing-note"/.test(content));
 ok("export: no cost entered exports empty cells, not 0.00", /inventoryCostKind\(item\) === "notEntered" && inventoryLineValue\(item\) === 0 \? \["", ""\]/.test(content));

@@ -1225,7 +1225,10 @@ function NewItemModal({
               worked out here so nobody has to guess which field moves it. */}
           <div className="inventory-value-preview">
             <span>{isUnique ? t("This item's inventory value") : t("Inventory value per unit")}</span>
-            <strong>{money(currencySymbol, draft.ownership === "customer" ? 0 : internalTotal)}</strong>
+            {/* MC-3 cost: an empty price box with no extra costs is "not entered", not a £0.00 value. */}
+            <strong>{draft.ownership !== "customer" && costText.trim() === "" && extrasTotal === 0
+              ? wooInventoryT("Not entered", language)
+              : money(currencySymbol, draft.ownership === "customer" ? 0 : internalTotal)}</strong>
             {draft.ownership === "customer" ? (
               <small>{t("Customer property is held, not owned — it stays at zero.")}</small>
             ) : null}
