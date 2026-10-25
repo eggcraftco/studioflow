@@ -1250,7 +1250,7 @@ function NewItemModal({
 
           <div className="inventory-cost-total">
             <span>{t("Internal total cost")}</span>
-            <strong>{money(currencySymbol, internalTotal)}</strong>
+            <strong>{costText.trim() === "" && extrasTotal === 0 ? wooInventoryT("Not entered", language) : money(currencySymbol, internalTotal)}</strong>
           </div>
         </div>
         ) : null}
