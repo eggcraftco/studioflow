@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import type { InventoryItem } from "@/lib/studioflow/inventory";
+import { inventoryCostKind } from "@/lib/studioflow/inventoryCost";
 import { studioLocaleTag } from "@/lib/studioflow/language";
 import { changeEbayListingLink, getEbayListingLinks, ebayInventoryT, type EbayLinkView } from "@/lib/studioflow/ebayInventory";
 import { fill, reasonSentence, safePictureUrl } from "@/lib/studioflow/ebayInventoryRules";
@@ -69,7 +70,8 @@ export function EbayItemLinks({ workspace, item, items, canEdit, language, onCha
       <header><strong>{t("On eBay")}</strong></header>
       <p className="inventory-sub">{t("eBay's quantity and price are eBay's; the shelf count and the cost on this card are yours.")}</p>
       {/* FIN-01: a hidden cost arrives as 0 — only somebody who may see the cost can be told it was never entered. */}
-      {money && !item.costHidden && item.source === "ebay" && Number(item.internalTotalCost || 0) === 0 ? <p className="inventory-sub" data-testid="ebay-cost-unknown">{t("Cost not entered — eBay does not know what you paid.")}</p> : null}
+      {/* MC-3 cost: the shared three-way reading — a typed £0 on an eBay card is a real zero, not "not entered". */}
+      {money && !item.costHidden && item.source === "ebay" && inventoryCostKind(item) === "notEntered" ? <p className="inventory-sub" data-testid="ebay-cost-unknown">{t("Cost not entered — eBay does not know what you paid.")}</p> : null}
       {links === null && !error ? <p className="inventory-sub">{t("Loading…")}</p> : null}
       {error ? <p className="layout-error">{error}</p> : null}
       {notice ? <p className="success-copy">{notice}</p> : null}

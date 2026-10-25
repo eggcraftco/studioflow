@@ -123,7 +123,8 @@ const section = read("app/settings/WooCommerceIntegrationSection.tsx");
 ok("Settings ▸ WooCommerce shows the products line for a connected store", /<WooInventoryLine companyId=\{companyId\} connectionId=\{connection\.id\}/.test(section) && /from "\.\/WooInventoryLine"/.test(section));
 ok("the line opens Inventory ▸ WooCommerce products for that store, gated on the server's answer", /href=\{`\/inventory\?panel=woo&store=\$\{encodeURIComponent\(connectionId\)\}`\}/.test(line) && /if \(!answer \|\| !answer\.enabled\) return null;/.test(line));
 const detail = read("app/inventory/ItemDetailPanel.tsx");
-ok("a WooCommerce card without a cost says 'not entered', not £0.00", /item\.source === "woocommerce" && !\(Number\(item\.purchasePrice\) > 0\)/.test(detail) && /wooInventoryT\("Cost: not entered/.test(detail));
+// MC-3 cost (25 Oct): the card reads the shared three-way rule (scripts/check-inventory-cost.mjs runs it).
+ok("a WooCommerce card without a cost says 'not entered', not £0.00", /inventoryCostKind\(item\) === "notEntered"/.test(detail) && /wooInventoryT\("Cost: not entered — the store's price/.test(detail));
 ok("prices only when the server says money", /money && row\.price/.test(panel) && /status\?\.money === true/.test(panel));
 
 fs.rmSync(tmp, { recursive: true, force: true });

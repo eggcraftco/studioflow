@@ -98,6 +98,9 @@ export type InventoryItem = {
   channelLinks?: Array<{ provider: string; connectionId: string; itemId: string; variationKey: string }>;
   /** FIN-01: the server zeroed this row's cost fields — the caller has no Financial Info. */
   costHidden?: boolean;
+  /** MC-3 cost: true = the person entered the price (0 is a real zero); false = not entered (a store import). Absent on
+   *  cards saved before 25 Oct 2026 — read through inventoryCostKind (lib/studioflow/inventoryCost.ts), never directly. */
+  costEntered?: boolean;
 };
 
 export type InventorySummary = {
@@ -143,6 +146,8 @@ export type InventoryItemInput = {
   unit?: string;
   lowStockAt?: number;
   purchasePrice?: number;
+  /** MC-3 cost: sent only when the person typed a price (true) or emptied a price the card had (false). */
+  costEntered?: boolean;
   additionalCosts?: InventoryAdditionalCost[];
   currentValueEst?: number;
   tags?: string[];

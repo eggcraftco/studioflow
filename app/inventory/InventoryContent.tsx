@@ -29,6 +29,7 @@ import {
 import { listSuppliers } from "@/lib/studioflow/inventory";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { inventoryCostFieldText, inventoryCostKind, inventoryCostMissingCount, inventoryCostSaveFields } from "@/lib/studioflow/inventoryCost";
 import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { ItemDetailPanel } from "./ItemDetailPanel";
@@ -277,6 +278,7 @@ export function InventoryContent({
   }, [items, search, quickView, categoryFilter, typeFilter, statusFilter, locationFilter, supplierFilter]);
 
   // Every tag in use, offered back as suggestions so spellings converge.
+  const costMissing = useMemo(() => inventoryCostMissingCount(items), [items]);
   const allTags = useMemo(
     () => Array.from(new Set(items.flatMap(item => item.tags ?? []).filter(Boolean))).sort(),
     [items]
@@ -385,7 +387,9 @@ export function InventoryContent({
       item.number, item.name, item.category, item.trackingType, item.status,
       item.sku || "", item.serialNumber || "",
       String(inventoryOnHand(item)), item.quantity?.unit || "",
-      ...(withCost ? [(Number(item.valuationCost) || 0).toFixed(2), inventoryLineValue(item).toFixed(2)] : []),
+      // MC-3 cost: a card with no cost entered exports empty cells, not "0.00" (which the importer would read as a real zero).
+      ...(withCost ? (inventoryCostKind(item) === "notEntered" && inventoryLineValue(item) === 0 ? ["", ""]
+        : [(Number(item.valuationCost) || 0).toFixed(2), inventoryLineValue(item).toFixed(2)]) : []),
       item.location || "", item.supplierName || ""
     ]);
     const csv = [header, ...rows]
@@ -580,6 +584,15 @@ export function InventoryContent({
         ))}
       </div>
 
+      {/* MC-3 cost: cards with no cost entered add nothing to the value above; say so, so the figure is not read as a
+          complete valuation or as money spent. Counted from the rows loaded ("+" while more pages wait). */}
+      {summary && canSeeCost && costMissing > 0 ? (
+        <p className="inventory-note" data-testid="inventory-cost-missing-note">
+          {wooInventoryT("Items on the shelf with no cost entered: {count}. The inventory value leaves them out — it does not count them as money spent.", language)
+            .replace("{count}", `${costMissing}${listCursor ? "+" : ""}`)}
+        </p>
+      ) : null}
+
       {summary && summary.customerOwnedCount > 0 ? (
         <p className="inventory-note">
           {t("Customer-owned items held here: {count}. They are deliberately valued at zero — they are the customer's property, not stock.").replace("{count}", String(summary.customerOwnedCount))}
@@ -745,7 +758,9 @@ export function InventoryContent({
                 <td className="r">
                   {item.ownership === "customer"
                     ? <span className="inventory-sub">{t("Customer's")}</span>
-                    : money(currencySymbol, inventoryLineValue(item))}
+                    : inventoryCostKind(item) === "notEntered" && inventoryLineValue(item) === 0
+                      ? <span className="inventory-sub" data-testid="inventory-row-cost-not-entered">{wooInventoryT("Not entered", language)}</span>
+                      : money(currencySymbol, inventoryLineValue(item))}
                 </td>
                 <td>{item.location || "—"}</td>
                 <td className="inventory-sub">
@@ -943,6 +958,9 @@ function NewItemModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [tagInput, setTagInput] = useState("");
+  // MC-3 cost: the purchase price box keeps its own text, so an empty box ("not entered") and a typed 0 (a real zero)
+  // stay two different answers; a number field that turns "" and "0" both into 0 could not tell them apart.
+  const [costText, setCostText] = useState(() => inventoryCostFieldText(initialItem));
   // Photos picked before the item exists. Storage paths are keyed by item id,
   // so the files wait here and go up the moment the save returns that id —
   // the form no longer sends people back through the list to add a photo.
@@ -963,7 +981,7 @@ function NewItemModal({
 
   const extras = draft.additionalCosts ?? [];
   const extrasTotal = extras.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
-  const internalTotal = (Number(draft.purchasePrice) || 0) + extrasTotal;
+  const internalTotal = (Number(costText.replace(",", ".")) || 0) + extrasTotal;
 
   function chooseType(trackingType: InventoryTrackingType) {
     // Keep what still makes sense so switching type mid-entry is not punished.
@@ -987,7 +1005,11 @@ function NewItemModal({
     setBusy(true);
     setError("");
     try {
-      const saved = await saveInventoryItem(workspace, draft, editingId || undefined);
+      // MC-3 cost: what the box says — typed (0 included) = entered; empty = not entered. The box is drawn for people
+      // with Financial Info and on a new card; an edit without it sends what it always did and the server keeps the
+      // stored cost and its marker.
+      const costFields = canSeeCost || !editingId ? inventoryCostSaveFields(costText, initialItem) : {};
+      const saved = await saveInventoryItem(workspace, { ...draft, ...costFields }, editingId || undefined);
       const itemId = editingId || saved?.itemId || "";
       if (stagedPhotos.length > 0 && itemId) {
         // The item is real now, so the photos have somewhere to live. A photo
@@ -1177,9 +1199,14 @@ function NewItemModal({
               <span>{isUnique ? t("Purchase price") : t("Purchase price (per unit)")}</span>
               <span className="inventory-money-input">
                 <em aria-hidden="true">{currencySymbol}</em>
-                <input className="input" type="number" min={0} step="0.01" value={draft.purchasePrice ? String(draft.purchasePrice) : ""} placeholder="0.00"
-                  onChange={e => set("purchasePrice", Number(e.target.value) || 0)} />
+                <input className="input" type="number" min={0} step="0.01" value={costText} placeholder="—" data-testid="inventory-cost-input"
+                  onChange={e => setCostText(e.target.value)} />
               </span>
+              <small className="inventory-field-hint" data-testid="inventory-cost-hint">
+                {costText.trim() === "" && initialItem && inventoryCostKind(initialItem) === "notEntered"
+                  ? `${wooInventoryT("Cost: not entered", language)} · ` : ""}
+                {wooInventoryT("Leave it empty if you don't know it yet — type 0 only if it really cost nothing.", language)}
+              </small>
             </label>
             <label className="inventory-field">
               <span>{t("Current value (est.)")}</span>

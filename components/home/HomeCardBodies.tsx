@@ -19,6 +19,8 @@ import {
 import type { HomeData } from "@/lib/studioflow/useHomeData";
 import type { CustomerDirectoryItem, ScheduleOrderItem } from "@/lib/studioflow/firestore";
 import type { InventoryItem } from "@/lib/studioflow/inventory";
+import { inventoryCostKind } from "@/lib/studioflow/inventoryCost";
+import { wooInventoryText } from "@/lib/studioflow/wooInventoryRules";
 import type { StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatStudioMoney, moneySymbol } from "@/lib/studioflow/money";
 import { foreignCurrenciesLine, foreignCurrencyTotals, splitOrdersByWorkspaceCurrency } from "@/lib/studioflow/orderCurrency";
@@ -912,9 +914,12 @@ export function InventoryCardBody({ size, data, t, language, moneySettings, hide
                 <span className="home-attention-where">{item.location || "—"}</span>
                 {/* The same line value the server totals with: one for a unique
                     piece, the count on the shelf for a quantity line. */}
-                <b>{money(item.trackingType === "unique"
-                  ? item.valuationCost
-                  : item.valuationCost * (item.quantity?.onHand ?? 0))}</b>
+                {/* MC-3 cost: no cost entered is not a £0 item. */}
+                <b>{inventoryCostKind(item) === "notEntered" && !(Number(item.valuationCost) > 0)
+                  ? (wooInventoryText("Not entered", language || "English") || "Not entered")
+                  : money(item.trackingType === "unique"
+                    ? item.valuationCost
+                    : item.valuationCost * (item.quantity?.onHand ?? 0))}</b>
               </li>
             ))}
           </ul>

@@ -28,6 +28,8 @@ import {
 } from "@/lib/studioflow/inventory";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { inventoryCostKind } from "@/lib/studioflow/inventoryCost";
+import { wooInventoryT } from "@/lib/studioflow/wooInventory";
 import { workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
 
 function money(symbol: string, value: number) {
@@ -372,7 +374,10 @@ function ReserveStockModal({
                       />
                     ) : (
                       <span className="inventory-match-amount">
-                        {item.costHidden ? null : <strong>{money(currencySymbol, item.valuationCost)}</strong>}
+                        {/* MC-3 cost: a card with no cost entered shows that, not a £0 cost for this order. */}
+                        {item.costHidden ? null : inventoryCostKind(item) === "notEntered" && !(Number(item.valuationCost) > 0)
+                          ? <span className="inventory-sub">{wooInventoryT("Cost: not entered", language)}</span>
+                          : <strong>{money(currencySymbol, item.valuationCost)}</strong>}
                       </span>
                     )}
                     <button
