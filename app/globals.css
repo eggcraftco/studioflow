@@ -35262,3 +35262,13 @@ body[data-studio-theme="dark"] .orders-mobile-header {
 .app-confirm-dialog p { margin: 0 0 16px; font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
 .app-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .app-confirm-danger { background: #c62828; border-color: #c62828; color: #fff; }
+
+/* Etsy final round (25 Oct 2026): the countdown chip is said in the reader's language now ("опоздание 3 дн."), which
+   is longer than "3d late" and pushed the customer name out of the card. The chip may shrink (text ellipsised, full
+   text in its title) and never takes more than ~58 % of the row; short English chips are unchanged. */
+.order-list-title-row .order-delivery-badge { flex: 0 1 auto; max-width: 58%; min-width: 0; overflow: hidden; }
+.order-list-title-row .order-delivery-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A long translated chip ("опоздание 3 дн.", "3 Tage überfällig") steps down to two small lines instead of losing its words. */
+.order-list-title-row .order-delivery-badge.is-long { font-size: 12px; line-height: 1.1; padding: 4px 7px; }
+.order-list-title-row .order-delivery-badge.is-long .order-delivery-text { white-space: normal; text-align: center; overflow-wrap: anywhere; }
+.order-list-title-row > strong, .order-list-title-row > .order-customer-name-link { flex: 1 1 auto; }

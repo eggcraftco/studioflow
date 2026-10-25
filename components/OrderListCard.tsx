@@ -52,16 +52,20 @@ function daysRemaining(date: Date | null) {
   return Math.round((due.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
 }
 
-function dueLabel(order: OrderListCardItem) {
+// Etsy final round (25 Oct 2026): the countdown chip was English in every language ("3d late" on a Russian
+// screen). The words go through the existing table entries ("Cancelled", "Dispatched", "Today", "{days}d late");
+// English reads exactly as before. "{n}d" (days left) has no table entry and stays a number + d.
+function dueLabel(order: OrderListCardItem, language?: string | null) {
+  const t = (text: string) => studioT(text, language ?? "English");
   const normalizedStatus = order.status.trim().toLowerCase();
-  if (normalizedStatus === "cancelled" || normalizedStatus === "canceled") return "Cancelled";
-  if (order.isDispatched) return "Dispatched";
+  if (normalizedStatus === "cancelled" || normalizedStatus === "canceled") return t("Cancelled");
+  if (order.isDispatched) return t("Dispatched");
 
   const days = daysRemaining(order.dueDate);
   if (days === null) return "-";
   if (days > 0) return `${days}d`;
-  if (days === 0) return "Today";
-  return `${Math.abs(days)}d late`;
+  if (days === 0) return t("Today");
+  return t("{days}d late").replace("{days}", String(Math.abs(days)));
 }
 
 function dueIcon(order: OrderListCardItem) {
@@ -193,7 +197,10 @@ function localizedCardStatus(value: string, language: string | null | undefined)
   const displayValue = value.trim() || "Not Yet";
   const normalizedLanguage = String(language || "").toLowerCase();
   const wantsTurkish = normalizedLanguage.includes("türk") || normalizedLanguage === "tr" || normalizedLanguage === "turkish";
-  if (!wantsTurkish) return displayValue;
+  // Etsy final round (25 Oct 2026): only Turkish had words here, so "Not Yet" stayed English in the ten other
+  // languages. The built-in step values ("New", "Not Yet", "In Progress", "Done", "Cancelled") go through the
+  // same table the order detail uses (t(option)); a workspace's own status name has no entry and is shown as typed.
+  if (!wantsTurkish) return studioT(displayValue, language || "English");
 
   const normalized = displayValue.toLowerCase();
   if (normalized === "done" || normalized === "completed") return "Bitti";
@@ -296,10 +303,10 @@ export function OrderListCard({
   const customerHref = order.customerName.trim()
     ? `/customers?customerName=${encodeURIComponent(order.customerName.trim())}`
     : "";
-  const deliveryCountdown = shouldShowDeliveryCountdown(order) ? dueLabel(order) : "";
   const scheduleItem = nextScheduleItem(order);
   const assignmentLabel = assigneeName.trim() || displayNameFromEmail(order.assignedToEmail ?? "");
   const displayLanguage = (moneySettings as { selectedLanguage?: string } | null | undefined)?.selectedLanguage;
+  const deliveryCountdown = shouldShowDeliveryCountdown(order) ? dueLabel(order, displayLanguage) : "";
   const customerName = displayOrderTitle(order.customerName, text => studioT(text, displayLanguage));
   const cardRef = useRef<HTMLDivElement | null>(null);
   const [guideBubblePosition, setGuideBubblePosition] = useState<{ left: number; top: number } | null>(null);
@@ -385,9 +392,9 @@ export function OrderListCard({
               <strong title={customerName}>{customerName}</strong>
             )}
             {deliveryCountdown ? (
-              <span className={`order-delivery-badge ${dueTone(order)}`}>
+              <span className={`order-delivery-badge ${dueTone(order)}${deliveryCountdown.length > 9 ? " is-long" : ""}`} title={deliveryCountdown}>
                 <span className="order-delivery-icon" aria-hidden="true">{dueIcon(order)}</span>
-                {deliveryCountdown}
+                <span className="order-delivery-text">{deliveryCountdown}</span>
               </span>
             ) : null}
           </div>

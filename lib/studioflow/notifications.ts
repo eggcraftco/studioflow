@@ -17,6 +17,7 @@ export {
   type NotificationAccessLike,
   type NotificationAccessRow,
 } from "@/lib/studioflow/notificationAccess";
+export { localizeActivityNotification } from "@/lib/studioflow/notificationText";
 
 export type StudioActivityNotification = {
   id: string;
@@ -45,6 +46,8 @@ export type StudioActivityNotification = {
   readByMillis: Record<string, number>;
   dismissedByMillis: Record<string, number>;
   createdAtMillis: number;
+  /** integration_orders_held: the server's params.count (held-notify-i18n); 0 on an older row. */
+  heldCount?: number;
 };
 
 function tsMillis(value: unknown): number {
@@ -81,6 +84,13 @@ function millisMap(value: unknown): Record<string, number> {
   return out;
 }
 
+function heldCountOf(data: Record<string, unknown>): number {
+  if (str(data.type) !== "integration_orders_held") return 0;
+  const params = (data.params && typeof data.params === "object") ? data.params as Record<string, unknown> : {};
+  const n = Number(params.count);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
 function notificationFromDoc(id: string, data: Record<string, unknown>): StudioActivityNotification {
   return {
     id,
@@ -108,6 +118,7 @@ function notificationFromDoc(id: string, data: Record<string, unknown>): StudioA
     readByMillis: millisMap(data.readBy),
     dismissedByMillis: millisMap(data.dismissedBy),
     createdAtMillis: tsMillis(data.createdAt),
+    heldCount: heldCountOf(data),
   };
 }
 

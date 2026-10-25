@@ -17,6 +17,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { localizeActivityNotification } from "@/lib/studioflow/notificationText";
 import { bootMark } from "@/lib/studioflow/bootTrace";
 import { useQuickActionEvent, type QuickActionPayload } from "@/lib/studioflow/quickActions";
 import { OPEN_ACTIVITY_CENTRE_EVENT } from "@/lib/studioflow/homeCards";
@@ -2169,6 +2170,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     settings?.selectedLanguage ||
     studioLanguageForLocaleTag(typeof navigator !== "undefined" ? navigator.language : "");
   const t = (text: string) => studioT(text, language);
+  // held-notify-i18n: the held-orders row in the reader's language (its count from the server's params.count).
+  const notificationsShown = useMemo(() => notifications.map((item) => localizeActivityNotification(item, language)), [notifications, language]);
   const sidebarUserName =
     workspace?.currentMemberDisplayName?.trim() ||
     user?.displayName?.trim() ||
@@ -3561,7 +3564,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         workspace={workspace}
         uid={user?.uid ?? ""}
         email={user?.email ?? ""}
-        notifications={notifications}
+        notifications={notificationsShown}
         dismissedLocally={notifDismissedLocal}
         onClose={() => setNotifDrawerOpen(false)}
         onLocalDismiss={(ids) => setNotifDismissedLocal((prev) => {

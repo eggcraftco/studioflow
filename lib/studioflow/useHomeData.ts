@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
+import { useAuth } from "@/lib/auth/AuthProvider";
+import { localizeActivityNotification } from "@/lib/studioflow/notificationText";
 import {
   getInventorySummary,
   listInventoryItems,
@@ -394,6 +396,9 @@ export function useHomeData(
   const reload = useCallback(() => setReloadKey((key) => key + 1), []);
 
   const orderScope = workspaceOrderScope(workspace);
+  // held-notify-i18n: the held-orders row in the reader's language.
+  const { language } = useAuth();
+  const localizedActivity = useMemo(() => activity.map((item) => localizeActivityNotification(item, language)), [activity, language]);
 
   return useMemo(
     () => ({
@@ -410,7 +415,7 @@ export function useHomeData(
       inventoryItems,
       files,
       bankTransactions,
-      activity,
+      activity: localizedActivity,
       productionStages,
       productionSteps,
       notes,
@@ -423,7 +428,7 @@ export function useHomeData(
     }),
     [
       status, orderScope, counts, financeOrders, orders, scheduleOrders, customers,
-      workspace, inventory, inventoryItems, files, bankTransactions, activity, productionStages, productionSteps, notes,
+      workspace, inventory, inventoryItems, files, bankTransactions, localizedActivity, productionStages, productionSteps, notes,
       bankLastSync, bankNeedsAttention, bankMonthlyFixed, lastLoadedAtMs, offline, reload,
     ],
   );
