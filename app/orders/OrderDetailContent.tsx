@@ -151,6 +151,7 @@ import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
 import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
 import { ETSY_COPY_LINK_NOTE, ETSY_NO_BUYER_UPDATES_NOTE, isEtsyOrder as orderComesFromEtsy } from "@/lib/studioflow/etsyOrder";
+import { ETSY_SHIPPING_ENTER_HINT, etsyShippingCostUnknown, etsyShippingUnknownNote } from "@/lib/studioflow/etsyShippingCost";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, orderDetailFinance, platformFeeLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
@@ -5906,6 +5907,9 @@ export function OrderDetailContent({
   const orderValueMoney = (value: number, hidden = false) => (hidden
     ? hiddenMoneyLabel(orderMoneySymbol(orderCurrencyRef, moneySettings))
     : formatOrderMoney(value, orderCurrencyRef, moneySettings));
+  // ETSY-SHIP-2: the shipping cost on an Etsy order is what the buyer paid until the seller enters the real postage.
+  // Labels only — no figure changes. null = not Etsy, or the seller's own postage is on the order.
+  const etsyShippingUnknown = isEtsyOrder ? etsyShippingCostUnknown(order, etsySource) : null;
   const [portalBusy, setPortalBusy] = useState(false);
   const [portalNotice, setPortalNotice] = useState("");
   const portalUrl = portalUrlForToken(portal.token, workspace.clientPortalHost);
@@ -7511,17 +7515,26 @@ export function OrderDetailContent({
                         <DetailRow label={t("Profit before Corporation Tax")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} />
                         <DetailRow label={`Corporation Tax (${Math.round(corporationTaxRate)}%, est.)`} value={orderValueMoney(corporationTaxAmount, hideNumbers)} tone="negative" />
                         {/* ETSY-E2E r3: with no cost entered the after-tax figure is an estimate too — not green, and said. */}
-                        <DetailRow label={t("Net Profit (after CT)")} value={orderValueMoney(netProfitAfterCT, hideNumbers)} tone={orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? undefined : "positive"} emphasis />
+                        <DetailRow label={t("Net Profit (after CT)")} value={orderValueMoney(netProfitAfterCT, hideNumbers)} tone={(orderFinance.directCost === 0 && orderFinance.otherExpenses === 0) || etsyShippingUnknown ? undefined : "positive"} emphasis />
                         {orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? (
                           <p className="muted-copy" data-testid="finance-costs-missing" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
                         ) : null}
+                        {etsyShippingUnknown ? (
+                          <p className="muted-copy" data-testid="finance-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 12 }}>{etsyShippingUnknownNote(etsyShippingUnknown, t, (value) => orderValueMoney(value, hideNumbers))}. {t(ETSY_SHIPPING_ENTER_HINT)}</p>
+                        ) : null}
                       </>
-                    ) : orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? (
+                    ) : (orderFinance.directCost === 0 && orderFinance.otherExpenses === 0) || etsyShippingUnknown ? (
                       // ETSY-E2E (24 Oct 2026): with no cost entered the "profit" is the sale minus an estimated fee — not
                       // a final number. An imported Etsy order showed a green "Final Profit" equal to almost the whole sale.
+                      // ETSY-SHIP-2: an Etsy order whose shipping cost is the buyer's figure is an estimate too, and says why.
                       <>
                         <DetailRow label={t("Estimated profit")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} emphasis />
-                        <p className="muted-copy" data-testid="finance-costs-missing" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
+                        {orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? (
+                          <p className="muted-copy" data-testid="finance-costs-missing" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
+                        ) : null}
+                        {etsyShippingUnknown ? (
+                          <p className="muted-copy" data-testid="finance-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 12 }}>{etsyShippingUnknownNote(etsyShippingUnknown, t, (value) => orderValueMoney(value, hideNumbers))}. {t(ETSY_SHIPPING_ENTER_HINT)}</p>
+                        ) : null}
                       </>
                     ) : (
                       <DetailRow label={t("Final Profit")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} tone="positive" emphasis />

@@ -22,7 +22,8 @@ check("costsMissingCount counts orders with no direct cost and no other expense"
   assert.equal(costsMissingCount([]), 0);
 });
 check("card with Corporation Tax: no-cost order is not green and says so", () => {
-  assert.ok(/tone=\{orderFinance\.directCost === 0 && orderFinance\.otherExpenses === 0 \? undefined : "positive"\}/.test(card));
+  // ETSY-SHIP-2: the same rule, now also off when the Etsy shipping cost is not known.
+  assert.ok(/tone=\{\(orderFinance\.directCost === 0 && orderFinance\.otherExpenses === 0\) \|\| etsyShippingUnknown \? undefined : "positive"\}/.test(card));
   assert.equal((card.match(/data-testid="finance-costs-missing"/g) || []).length, 2);
 });
 check("PDF: no-cost order prints \"Estimated profit\", not a green Final Profit", () => {
@@ -31,7 +32,7 @@ check("PDF: no-cost order prints \"Estimated profit\", not a green Final Profit"
 check("Dashboard: profit tiles and breakdown carry the no-cost footnote", () => {
   assert.ok(dash.includes("costsMissingCount(filteredCountingOrders.map(order => orderFinanceBlock(order, settings)))"));
   assert.ok(dash.includes('data-testid="dashboard-costs-missing"'));
-  assert.ok(dash.includes('tone={rangeCostsMissing > 0 ? "blue" : "green"}'));
+  assert.ok(dash.includes('tone={rangeCostsMissing > 0 || rangeEtsyShippingUnknown > 0 ? "blue" : "green"}'));
 });
 check("the footnote is translated in every app language", () => {
   for (const lang of SUPPORTED_STUDIO_LANGUAGES) {

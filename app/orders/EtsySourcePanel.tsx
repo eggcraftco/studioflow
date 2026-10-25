@@ -139,6 +139,8 @@ export type EtsySource = {
   differs?: { field?: string; etsyValue?: string }[];
   /** K2: what Etsy says about shipping and delivery (server, new). Older orders only have isShipped. */
   fulfilment?: EtsyFulfilment | null;
+  /** ETSY-SHIP-2 (server): whose figure the order's deliveryCost holds — "buyer_paid_assumed" or "seller_entered". */
+  deliveryCostSource?: string;
 };
 
 // What a merge-policy field is called on screen.

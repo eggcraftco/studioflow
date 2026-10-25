@@ -152,7 +152,8 @@ ok("Dashboard: fee tile, profit tile, CT tiles carry the footnote",
   && dashboardSrc.includes("rangeFeeSummary.footnote ? ESTIMATED_PLATFORM_FEES_FOOTNOTE"));
 ok("Dashboard: breakdown fee row, breakdown/chart/year footnotes, Extra Spending and Tax set-aside are labelled",
   dashboardSrc.includes("label={platformFeeTotalLabel(rangeFeeSummary, t)}")
-  && (dashboardSrc.match(/dashboard-estimate-footnote/g) || []).length === 4
+  // ETSY-SHIP-2 (25 Oct 2026): + the Etsy "postage cost not known" footnote in the breakdown → 5.
+  && (dashboardSrc.match(/dashboard-estimate-footnote/g) || []).length === 5
   && dashboardSrc.includes("push(platformFeeLabel(block, t, settings)")
   && dashboardSrc.includes("ctIncludesEstimatedFees"));
 ok("Dashboard: Revenue is the same block's revenue as the profit", dashboardSrc.includes("revenue: totals.revenue + block.revenue,"));
