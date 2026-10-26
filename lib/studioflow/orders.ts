@@ -415,13 +415,29 @@ export async function updateOrderFromWeb(workspace: WorkspaceContext, input: Upd
 // setDeliveryCostManual records the seller's own figure (owner "seller", source "manual") and refuses a stale edit:
 // expectedDeliveryCost is the value the screen showed; when the order holds something else the server answers
 // "aborted" and nothing is written. returnDeliveryCostToChannel hands the figure back to the channel.
+// r4: with the pilot switched off the server refuses (details.reason "pilot_off") unless the order's postage is explicit
+// manual; the screen then uses its live edit path. getDeliveryCostOwnershipState says whether the protection is on.
 export type DeliveryCostCallResult =
   | { ok: true; applied?: boolean; deliveryCost?: number | null }
-  | { ok: false; stale: true };
+  | { ok: false; stale: true }
+  | { ok: false; pilotOff: true };
 
 function isStaleDeliveryCostError(error: unknown) {
   const code = String((error as { code?: unknown } | null)?.code || "");
   return code === "functions/aborted" || code === "aborted";
+}
+
+function isPilotOffDeliveryCostError(error: unknown) {
+  const e = error as { code?: unknown; details?: { reason?: unknown } } | null;
+  const code = String(e?.code || "");
+  return (code === "functions/failed-precondition" || code === "failed-precondition") && e?.details?.reason === "pilot_off";
+}
+
+/** Whether K5's shipping cost protection applies in this workspace now (server answer; read straight from the switch). */
+export async function getDeliveryCostOwnershipStateFromWeb(workspace: WorkspaceContext): Promise<boolean> {
+  const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; protectionOn?: boolean }>(functions, "getDeliveryCostOwnershipState");
+  const response = await callable({ companyId: workspace.id });
+  return response.data?.protectionOn === true;
 }
 
 export async function setDeliveryCostManualFromWeb(
@@ -436,6 +452,7 @@ export async function setDeliveryCostManualFromWeb(
     }, "Saving order changes to cloud.");
   } catch (error) {
     if (isStaleDeliveryCostError(error)) return { ok: false, stale: true };
+    if (isPilotOffDeliveryCostError(error)) return { ok: false, pilotOff: true };
     throw new Error(friendlyUpdateOrderError(error));
   }
 }
@@ -452,6 +469,7 @@ export async function returnDeliveryCostToChannelFromWeb(
     }, "Saving order changes to cloud.");
   } catch (error) {
     if (isStaleDeliveryCostError(error)) return { ok: false, stale: true };
+    if (isPilotOffDeliveryCostError(error)) return { ok: false, pilotOff: true };
     throw new Error(friendlyUpdateOrderError(error));
   }
 }

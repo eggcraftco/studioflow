@@ -97,6 +97,7 @@ import {
   ORDER_PREVIEW_IMAGE_ACCEPT,
   assignInvoiceNumberFromWeb,
   registerOrderTrackingFromWeb,
+  getDeliveryCostOwnershipStateFromWeb,
   returnDeliveryCostToChannelFromWeb,
   setDeliveryCostManualFromWeb,
   updateOrderFromWeb,
@@ -155,8 +156,9 @@ import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
 import { ETSY_COPY_LINK_NOTE, ETSY_NO_BUYER_UPDATES_NOTE, isEtsyOrder as orderComesFromEtsy } from "@/lib/studioflow/etsyOrder";
 import { etsyOrderProfitIsEstimate, etsyShippingCostUnknown, etsyShippingNoteText } from "@/lib/studioflow/etsyShippingCost";
 import {
-  K5_ENTER_HINT, K5_RETURNED, K5_RETURNED_NEXT_SYNC, K5_REVIEW_CONFLICT_HINT, K5_SAVE_FAILED, K5_SAVED_MANUAL, K5_STALE,
-  channelDisplayName, channelShippingActionLabel, channelShippingFill, channelShippingNoteText, channelShippingState, channelShippingStatusText,
+  K5_SAVE_FAILED, K5_SAVED_MANUAL, K5_STALE,
+  channelShippingActionLabel, channelShippingFill, channelShippingNoteText, channelShippingProfitNote, channelShippingReturnedText,
+  channelShippingReviewHint, channelShippingState, channelShippingStatusText, needsDeliveryCostProtectionState,
   type ChannelShippingAction
 } from "@/lib/studioflow/channelShippingCost";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, orderDetailFinance, platformFeeLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
@@ -5919,13 +5921,32 @@ export function OrderDetailContent({
     ? hiddenMoneyLabel(orderMoneySymbol(orderCurrencyRef, moneySettings))
     : formatOrderMoney(value, orderCurrencyRef, moneySettings));
   // K5 (26 Oct 2026): whose shipping cost a WooCommerce / Shopify / inbound order holds. Labels and the review box
-  // only — no figure changes. null = not one of those channels. With the server's record (pilot workspaces) the
-  // Shipping Cost edit goes through setDeliveryCostManual, which refuses a stale edit (expected = the value shown).
-  const channelShipping = channelShippingState(order);
+  // only — no figure changes. null = not one of those channels. With the server's record the Shipping Cost edit goes
+  // through setDeliveryCostManual, which refuses a stale edit (expected = the value shown when the editor opened).
+  // r4 (D3): a record that is not explicit manual counts only while the server says the protection is on for this
+  // workspace (the web cannot read the switch itself). Unknown / failed / off = the order reads as before K5 and the
+  // Shipping Cost row saves through the live path. Explicit manual postage keeps its labels and path either way.
+  const deliveryCostRecordNeedsState = needsDeliveryCostProtectionState(order.deliveryCostOwner);
+  const [deliveryCostProtection, setDeliveryCostProtection] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!deliveryCostRecordNeedsState) return;
+    let cancelled = false;
+    getDeliveryCostOwnershipStateFromWeb(workspace).then(
+      (on) => { if (!cancelled) setDeliveryCostProtection(on); },
+      () => { if (!cancelled) setDeliveryCostProtection(false); }
+    );
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one read per order/workspace, not per render
+  }, [deliveryCostRecordNeedsState, workspace.id, order.id]);
+  const channelShipping = channelShippingState(order, deliveryCostProtection);
   const channelShippingEstimate = Boolean(channelShipping?.estimate);
   const channelShippingMoney = (value: number) => orderValueMoney(value, hideNumbers);
   const [deliveryCostStale, setDeliveryCostStale] = useState(false);
-  async function runDeliveryCostCall(call: () => ReturnType<typeof setDeliveryCostManualFromWeb>, successText: (applied: boolean) => string) {
+  async function runDeliveryCostCall(
+    call: () => ReturnType<typeof setDeliveryCostManualFromWeb>,
+    successText: (result: { applied: boolean; deliveryCost: number | null }) => string,
+    liveFallback?: () => Promise<void> | void
+  ) {
     if (!canInlineEditFinance) {
       setFinanceError("Your workspace role cannot edit financial info.");
       return;
@@ -5934,17 +5955,23 @@ export function OrderDetailContent({
     setFinanceStatus(null);
     setDeliveryCostStale(false);
     setSavingFinanceField("Shipping Cost");
+    let useLivePath = false;
     try {
       const result = await call();
       await onReloadOrder();
-      if (!result.ok) setDeliveryCostStale(true);
-      else setFinanceStatus(successText(result.applied !== false));
+      if (!result.ok && "pilotOff" in result) {
+        // The pilot was switched off since this screen asked: read as off from now on; a typed edit still saves (live path).
+        setDeliveryCostProtection(false);
+        useLivePath = true;
+      } else if (!result.ok) setDeliveryCostStale(true);
+      else setFinanceStatus(successText({ applied: result.applied !== false, deliveryCost: typeof result.deliveryCost === "number" ? result.deliveryCost : null }));
     } catch (failure) {
       await onReloadOrder();
-      setFinanceError(failure instanceof Error && failure.message ? failure.message : K5_SAVE_FAILED);
+      setFinanceError(failure instanceof Error && failure.message ? failure.message : t(K5_SAVE_FAILED));
     } finally {
       setSavingFinanceField(null);
     }
+    if (useLivePath && liveFallback) await liveFallback();
   }
   // K5 r3 real-use acceptance (26 Oct 2026): the expected value is the figure the seller saw when the Shipping Cost
   // editor OPENED. The order listens live, so a save from another tab/device lands under an open editor; reading the
@@ -5964,16 +5991,18 @@ export function OrderDetailContent({
     const expectedDeliveryCost = shown !== undefined ? shown : (order.deliveryCostPresent === false ? null : order.deliveryCost);
     return runDeliveryCostCall(
       () => setDeliveryCostManualFromWeb(workspace, { orderId: order.id, deliveryCost: parsed, expectedDeliveryCost }),
-      () => t(K5_SAVED_MANUAL)
+      () => t(K5_SAVED_MANUAL),
+      () => saveMoneyFinanceValue("deliveryCost", parsed, "Shipping Cost")
     );
   }
   function runChannelShippingAction(action: ChannelShippingAction) {
     const expected = order.deliveryCostPresent === false ? null : order.deliveryCost;
-    const channelName = channelShipping ? t(channelDisplayName(channelShipping.channel)) : "";
-    if (action.kind === "use_channel") {
+    if (action.kind === "use_channel" || action.kind === "accept_channel") {
+      // r4: the message says what the server did — the channel's figure applied now, or the value stays until a sync.
+      const channel = channelShipping?.channel ?? "woocommerce";
       return runDeliveryCostCall(
         () => returnDeliveryCostToChannelFromWeb(workspace, { orderId: order.id, expectedDeliveryCost: expected }),
-        (applied) => channelShippingFill(t(applied ? K5_RETURNED : K5_RETURNED_NEXT_SYNC), { channel: channelName })
+        ({ applied, deliveryCost }) => channelShippingReturnedText(applied, channel, channelShippingMoney(applied && deliveryCost !== null ? deliveryCost : (expected ?? 0)), t)
       );
     }
     const deliveryCost = action.kind === "confirm_zero" ? 0 : action.deliveryCost;
@@ -7574,7 +7603,7 @@ export function OrderDetailContent({
                         {channelShipping.status === "review" && channelShipping.note ? (
                           <div className="layout-status" data-testid="k5-shipping-review" style={{ margin: "4px 0" }}>
                             <p style={{ margin: 0 }}>{channelShippingNoteText(channelShipping.note, channelShipping.channel, t, channelShippingMoney)}</p>
-                            {channelShipping.note.key === "review_conflict" ? <p style={{ margin: "2px 0 0" }}>{t(K5_REVIEW_CONFLICT_HINT)}</p> : null}
+                            {channelShippingReviewHint(channelShipping.note, t) ? <p style={{ margin: "2px 0 0" }}>{channelShippingReviewHint(channelShipping.note, t)}</p> : null}
                           </div>
                         ) : null}
                         {deliveryCostStale ? (
@@ -7637,7 +7666,7 @@ export function OrderDetailContent({
                           <p className="muted-copy" data-testid="finance-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 12 }}>{etsyShippingNoteText(etsyShippingUnknown, detailLanguage, t, (value) => orderValueMoney(value, hideNumbers))}</p>
                         ) : null}
                         {channelShipping?.estimate && channelShipping.note ? (
-                          <p className="muted-copy" data-testid="finance-channel-shipping" style={{ margin: "4px 0 0", fontSize: 12 }}>{channelShippingNoteText(channelShipping.note, channelShipping.channel, t, channelShippingMoney)}. {t(K5_ENTER_HINT)}</p>
+                          <p className="muted-copy" data-testid="finance-channel-shipping" style={{ margin: "4px 0 0", fontSize: 12 }}>{channelShippingProfitNote(channelShipping.note, channelShipping.channel, detailLanguage, t, channelShippingMoney)}</p>
                         ) : null}
                       </>
                     ) : orderProfitIsEstimate ? (
@@ -7655,7 +7684,7 @@ export function OrderDetailContent({
                           <p className="muted-copy" data-testid="finance-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 12 }}>{etsyShippingNoteText(etsyShippingUnknown, detailLanguage, t, (value) => orderValueMoney(value, hideNumbers))}</p>
                         ) : null}
                         {channelShipping?.estimate && channelShipping.note ? (
-                          <p className="muted-copy" data-testid="finance-channel-shipping" style={{ margin: "4px 0 0", fontSize: 12 }}>{channelShippingNoteText(channelShipping.note, channelShipping.channel, t, channelShippingMoney)}. {t(K5_ENTER_HINT)}</p>
+                          <p className="muted-copy" data-testid="finance-channel-shipping" style={{ margin: "4px 0 0", fontSize: 12 }}>{channelShippingProfitNote(channelShipping.note, channelShipping.channel, detailLanguage, t, channelShippingMoney)}</p>
                         ) : null}
                       </>
                     ) : (

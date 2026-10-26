@@ -85,7 +85,9 @@ check("Dashboard count: only orders whose cost is the buyer's figure", () => {
 });
 check("order card: one estimate rule (orderProfitIsEstimate) for the label, the CT tone and the PDF; note in both branches", () => {
   assert.ok(card.includes("const etsyShippingUnknown = isEtsyOrder ? etsyShippingCostUnknown(order, etsySource) : null;"));
-  assert.ok(card.includes("const orderProfitIsEstimate = orderCostsMissing || (isEtsyOrder && etsyOrderProfitIsEstimate(orderFinance, etsyShippingUnknown));"));
+  // K5 (26 Oct 2026) extends the same one rule with the WooCommerce / Shopify / inbound shipping estimate.
+  assert.ok(card.includes("const orderProfitIsEstimate = orderCostsMissing || (isEtsyOrder && etsyOrderProfitIsEstimate(orderFinance, etsyShippingUnknown));")
+    || card.includes("const orderProfitIsEstimate = orderCostsMissing || (isEtsyOrder && etsyOrderProfitIsEstimate(orderFinance, etsyShippingUnknown)) || channelShippingEstimate;"));
   assert.ok(card.includes(") : orderProfitIsEstimate ? ("));
   assert.ok(card.includes('tone={orderProfitIsEstimate ? undefined : "positive"}'));
   assert.ok(card.includes("profitIsEstimate: orderProfitIsEstimate"));

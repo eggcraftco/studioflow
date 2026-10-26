@@ -1,5 +1,6 @@
 /**
- * K5 r3 (26 Oct 2026): whose shipping cost a WooCommerce / Shopify / inbound order holds, on the order screen.
+ * K5 r3/r4 (26 Oct 2026): whose shipping cost a WooCommerce / Shopify / inbound order holds, on the order screen.
+ * r4: the pilot's on/off state (D3), the true review reason (D4), the owner's text fixes, ESC-01..03 reused.
  * (a) the state/label table of lib/studioflow/channelShippingCost.ts (pure), (b) the order screen's wiring (source
  * pins), (c) every new text translated in every app language.
  *
@@ -25,15 +26,15 @@ const rec = (over: Record<string, unknown>) => H.parseDeliveryCostOwner({
   owner: "channel", ownerSource: "sync", channel: "woocommerce", channelSent: 4, channelSentKnown: true, channelHistory: [4],
   channelPending: null, channelPendingAtMs: null, keptValue: null, manualValue: null, manualAtMs: null, needsReview: false, reviewReason: null, ...over
 });
-const S = (order: Record<string, unknown>) => H.channelShippingState({ id: "woo_ws_1", ...order });
+const S = (order: Record<string, unknown>, protectionOn: boolean | null = true) => H.channelShippingState({ id: "woo_ws_1", ...order }, protectionOn);
 const kinds = (state: { actions: Array<{ kind: string }> } | null) => (state ? state.actions.map((a) => a.kind).join(",") : "null");
 const en = (text: string) => text;
 const money = (v: number) => `£${v.toFixed(2)}`;
 
 // ---------------------------------------------------------------- (a) the table
 check("not a channel order (manual / Etsy) -> null, nothing changes", () => {
-  assert.equal(H.channelShippingState({ id: "abc", deliveryCost: 0 }), null);
-  assert.equal(H.channelShippingState({ id: "etsy_x", deliveryCost: 0, commerce: { provider: "etsy" } }), null);
+  assert.equal(H.channelShippingState({ id: "abc", deliveryCost: 0 }, true), null);
+  assert.equal(H.channelShippingState({ id: "etsy_x", deliveryCost: 0, commerce: { provider: "etsy" } }, true), null);
 });
 check("channel from the record, the commerce stamp, or the id prefix", () => {
   assert.equal(H.channelOfOrder({ id: "x", commerce: { provider: "shopify" } }), "shopify");
@@ -75,10 +76,10 @@ check("unknown (pre-K5 conflict): estimate, review box, Keep my value + Use chan
   assert.equal(H.channelShippingNoteText(s.note, s.channel, en, money), "WooCommerce says £5.50, this order has £4.00");
   assert.equal(H.channelShippingActionLabel(s.actions[0], s.channel, en, money), "Keep my value");
 });
-check("changed outside the editor: estimate, 'was £7.77, now £4.00', Keep £4.00 + Restore £7.77", () => {
+check("changed after it was saved (cause unknown): estimate, neutral 'was £7.77, now £4.00', Keep £4.00 + Restore £7.77", () => {
   const s = S({ deliveryCost: 4, deliveryCostOwner: rec({ owner: "seller", ownerSource: "manual", manualValue: 7.77, needsReview: true, reviewReason: "changed_outside_manual_path" }) });
   assert.equal(s.estimate, true); assert.equal(s.note.key, "review_outside"); assert.equal(kinds(s), "keep,restore");
-  assert.equal(H.channelShippingNoteText(s.note, s.channel, en, money), "Changed outside the shipping cost editor: was £7.77, now £4.00");
+  assert.equal(H.channelShippingNoteText(s.note, s.channel, en, money), "Shipping cost changed after it was saved as your value: was £7.77, now £4.00");
 });
 check("stale echo of an older channel figure (4 in history, channel now 5.50) -> still the channel's, estimate", () => {
   const s = S({ deliveryCost: 4, deliveryCostOwner: rec({ channelSent: 5.5, channelHistory: [4, 5.5] }) });
@@ -93,6 +94,73 @@ check("an r2 record (no ownerSource) reads as seller/inferred", () => {
   assert.equal(r.ownerSource, "inferred"); assert.equal(r.channelSentKnown, true);
 });
 check("a malformed record is ignored", () => { assert.equal(H.parseDeliveryCostOwner({ owner: "x", channel: "woocommerce" }), null); assert.equal(H.parseDeliveryCostOwner({ owner: "seller", channel: "etsy" }), null); });
+
+// ---------------------------------------------------------------- (a2) r4: the pilot switched off (D3), the true review reason (D4)
+const card4 = readFileSync(new URL("../app/orders/OrderDetailContent.tsx", import.meta.url), "utf8");
+const orders4 = readFileSync(new URL("../lib/studioflow/orders.ts", import.meta.url), "utf8");
+const manualRec = () => rec({ owner: "seller", ownerSource: "manual", manualValue: 7.77 });
+const pausedRec = () => rec({ channelSent: 4.5, channelHistory: [4, 4.5], needsReview: true, reviewReason: "synced_while_paused", pausedValue: 7.77, pausedAtMs: 1000 });
+check("D3: protection OFF - channel / inferred / unknown / paused records read as before K5 (no K5 label, live edit path)", () => {
+  for (const r of [rec({}), rec({ owner: "seller", ownerSource: "inferred" }), rec({ owner: "unknown", channelPending: 5.5, keptValue: 4, needsReview: true, reviewReason: "pre_k5_conflict" }), pausedRec()]) {
+    const s = S({ deliveryCost: 4, deliveryCostOwner: r }, false);
+    assert.equal(s.hasRecord, false); assert.equal(s.manualEditPath, false); assert.equal(s.status, "none"); assert.equal(kinds(s), ""); assert.equal(s.estimate, false);
+  }
+});
+check("D3: protection state not known yet (null) = off for a record that is not explicit manual", () => {
+  const s = S({ deliveryCost: 4, deliveryCostOwner: rec({}) }, null); assert.equal(s.hasRecord, false); assert.equal(s.manualEditPath, false);
+});
+check("D3: explicit manual keeps its labels and edit path with the protection OFF (the server protects it either way)", () => {
+  const s = S({ deliveryCost: 7.77, deliveryCostOwner: manualRec() }, false);
+  assert.equal(s.hasRecord, true); assert.equal(s.manualEditPath, true); assert.equal(s.status, "your_value"); assert.equal(s.yoursExplicit, true);
+  assert.equal(H.channelShippingStatusText(s, { id: "woo_ws_1", deliveryCost: 7.77 }, en, money), "Your value — WooCommerce syncs don't replace it unless you choose WooCommerce's value");
+  assert.equal(H.needsDeliveryCostProtectionState(manualRec()), false); assert.equal(H.needsDeliveryCostProtectionState(rec({})), true); assert.equal(H.needsDeliveryCostProtectionState(null), false);
+});
+check("D3 wiring: the screen asks the server, passes the answer, and falls back to the live save on a pilot_off refusal", () => {
+  assert.ok(card4.includes("getDeliveryCostOwnershipStateFromWeb(workspace).then(") && card4.includes("const channelShipping = channelShippingState(order, deliveryCostProtection);"));
+  assert.ok(card4.includes('() => saveMoneyFinanceValue("deliveryCost", parsed, "Shipping Cost")') && card4.includes('if (!result.ok && "pilotOff" in result) {'));
+  assert.ok(orders4.includes('e?.details?.reason === "pilot_off"') && orders4.includes("return { ok: false, pilotOff: true };") && orders4.includes('(functions, "getDeliveryCostOwnershipState")'));
+});
+check("D4: a value the channel replaced while protection was off is named as a SYSTEM change; Restore £7.77 / Keep £4.50; no-repair hint", () => {
+  const s = S({ deliveryCost: 4.5, deliveryCostOwner: pausedRec() }, true);
+  assert.equal(s.status, "review"); assert.equal(s.note.key, "review_paused"); assert.equal(kinds(s), "restore,accept_channel"); assert.equal(s.estimate, true);
+  assert.equal(H.channelShippingNoteText(s.note, s.channel, en, money), "WooCommerce sync replaced £7.77 with £4.50 while shipping cost protection was off");
+  assert.equal(H.channelShippingReviewHint(s.note, en), "Turning protection back on did not change it back. Choose which figure to keep.");
+  assert.equal(H.channelShippingActionLabel(s.actions[0], s.channel, en, money), "Restore £7.77");
+  assert.equal(H.channelShippingActionLabel(s.actions[1], s.channel, en, money), "Keep £4.50");
+});
+check("D4: the 'changed after it was saved' text names no cause (no device / editor / person)", () => {
+  assert.ok(!/device|editor|you changed|someone|another/i.test(H.K5_REVIEW_OUTSIDE), H.K5_REVIEW_OUTSIDE);
+});
+// ---------------------------------------------------------------- (c2) r4 texts
+check("#5/#6/#7 ARE ETSY-SHIP-2's ESC-01..03 (#7 exactly the approved ESC-03), not repeated in K5's table", () => {
+  assert.equal(H.K5_ENTER_HINT, "Enter your actual postage cost in Shipping Cost to improve this profit estimate.");
+  assert.equal(H.K5_NOTE_BUYER_PAID, "Shipping cost not known — buyer paid {amount}"); assert.equal(H.K5_NOTE_FREE, "Free shipping — postage cost not known, not counted");
+  for (const shared of [H.K5_ENTER_HINT, H.K5_NOTE_BUYER_PAID, H.K5_NOTE_FREE]) assert.ok(!(shared in H.CHANNEL_SHIPPING_COST_TRANSLATIONS), shared);
+  assert.ok(card4.includes("channelShippingProfitNote(channelShipping.note, channelShipping.channel, detailLanguage, t, channelShippingMoney)"));
+});
+check("#2 says the buyer paid no shipping (not that the postage cost is zero)", () => {
+  const s = S({ deliveryCost: 0, deliveryCostOwner: rec({ channelSent: 0, channelHistory: [0] }) });
+  assert.equal(H.channelShippingStatusText(s, { id: "woo_ws_1", deliveryCost: 0 }, en, money), "From WooCommerce: the buyer paid no shipping");
+});
+check("#3 states when syncs do not change it: explicit manual (until you choose the channel's) vs while protection is on", () => {
+  const inferred = S({ deliveryCost: 7.77, deliveryCostOwner: rec({ owner: "seller", ownerSource: "inferred" }) }, true);
+  assert.equal(inferred.yoursExplicit, false);
+  assert.equal(H.channelShippingStatusText(inferred, { id: "woo_ws_1", deliveryCost: 7.77 }, en, money), "Your value — WooCommerce syncs don't replace it while shipping cost protection is on");
+});
+check("#9 says the figure's source could not be confirmed (no 'ownership')", () => {
+  assert.ok(/could not confirm where this figure came from/i.test(H.K5_REVIEW_CONFLICT_HINT) && !/ownership/i.test(H.K5_REVIEW_CONFLICT_HINT));
+});
+check("#19/#20 say what the server did: the channel's figure set now, or the value stays until a sync", () => {
+  assert.equal(H.channelShippingReturnedText(true, "woocommerce", "£4.00", en), "Shipping cost set to WooCommerce's figure, £4.00.");
+  assert.equal(H.channelShippingReturnedText(false, "woocommerce", "£6.66", en), "Shipping cost handed back to WooCommerce. It stays £6.66 until a WooCommerce sync sets a new figure.");
+  assert.ok(card4.includes("channelShippingReturnedText(applied, channel, channelShippingMoney(applied && deliveryCost !== null ? deliveryCost : (expected ?? 0)), t)"));
+});
+check("profit note joins the two sentences with the language's punctuation (SHIP-2 K3), amount isolated in Arabic", () => {
+  const note = { key: "buyer_paid", amount: 4 };
+  assert.ok(H.channelShippingProfitNote(note, "woocommerce", "English", en, money).includes("£4.00. Enter your actual postage cost"));
+  assert.ok(H.channelShippingProfitNote(note, "woocommerce", "日本語 (Japanese)", en, money).includes("£4.00。Enter"));
+  assert.ok(H.channelShippingProfitNote(note, "woocommerce", "العربية (Arabic)", en, money).includes("⁦£4.00⁩، "));
+});
 
 // ---------------------------------------------------------------- (b) wiring
 const card = readFileSync(new URL("../app/orders/OrderDetailContent.tsx", import.meta.url), "utf8");
