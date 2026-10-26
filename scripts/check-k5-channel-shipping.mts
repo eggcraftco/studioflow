@@ -131,7 +131,8 @@ check("D4: a value the channel replaced while protection was off is named as a S
 check("D4: the paused review names the figure the SYNC wrote, even if the order was edited after it (3.90 typed later)", () => {
   const s = S({ deliveryCost: 3.9, deliveryCostOwner: pausedRec() }, true);
   assert.equal(H.channelShippingNoteText(s.note, s.channel, en, money), "WooCommerce sync replaced £7.77 with £4.50 while shipping cost protection was off");
-  assert.equal(kinds(s), "restore,use_channel");
+  assert.equal(kinds(s), "restore,keep,use_channel");
+  assert.equal(H.channelShippingActionLabel(s.actions[1], s.channel, en, money), "Keep £3.90");
 });
 check("D4: the 'changed after it was saved' text names no cause (no device / editor / person)", () => {
   assert.ok(!/device|editor|you changed|someone|another/i.test(H.K5_REVIEW_OUTSIDE), H.K5_REVIEW_OUTSIDE);

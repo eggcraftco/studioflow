@@ -190,7 +190,11 @@ export function channelShippingState(order: ChannelShippingOrderLike, protection
     const actions: ChannelShippingAction[] = [];
     if (record.pausedValue !== null && pence(record.pausedValue) !== pence(current)) actions.push({ kind: "restore", deliveryCost: record.pausedValue });
     if (current !== null && knownFigure !== null && pence(knownFigure) === pence(current)) actions.push({ kind: "accept_channel", deliveryCost: current });
-    else actions.push(...useChannel(knownFigure));
+    else {
+      // The order holds a third figure (typed after the sync, e.g. through the live path while protection was off): keep it.
+      if (current !== null && pence(current) !== pence(record.pausedValue)) actions.push({ kind: "keep", deliveryCost: current });
+      actions.push(...useChannel(knownFigure));
+    }
     // "now" is the figure the SYNC wrote (channelSent), not whatever the order holds later (an edit after it is not the sync's).
     return { ...base, estimate: true, note: { key: "review_paused", was: record.pausedValue, now: knownFigure ?? current }, status: "review", actions };
   }
