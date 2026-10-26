@@ -5946,11 +5946,24 @@ export function OrderDetailContent({
       setSavingFinanceField(null);
     }
   }
-  function saveDeliveryCostManual(value: string | number) {
+  // K5 r3 real-use acceptance (26 Oct 2026): the expected value is the figure the seller saw when the Shipping Cost
+  // editor OPENED. The order listens live, so a save from another tab/device lands under an open editor; reading the
+  // order at save time sent that new figure as "expected" and silently overwrote it (seen: tab A 6.00, tab B 5.00).
+  const deliveryCostShownRef = useRef<number | null | undefined>(undefined);
+  function noteDeliveryCostEditStart() {
+    deliveryCostShownRef.current = order.deliveryCostPresent === false ? null : order.deliveryCost;
+  }
+  function saveDeliveryCostManual(value: string | number, meta?: { edited: boolean }) {
+    const shown = deliveryCostShownRef.current;
+    deliveryCostShownRef.current = undefined;
+    // Opening the editor and leaving it without typing is not a choice: no call, the figure keeps its owner (seen:
+    // a click into the field and away made the channel's £3.00 "Your value").
+    if (meta && !meta.edited) return;
     const parsed = parseFinanceNumber(value);
     if (parsed === null) return;
+    const expectedDeliveryCost = shown !== undefined ? shown : (order.deliveryCostPresent === false ? null : order.deliveryCost);
     return runDeliveryCostCall(
-      () => setDeliveryCostManualFromWeb(workspace, { orderId: order.id, deliveryCost: parsed, expectedDeliveryCost: order.deliveryCostPresent === false ? null : order.deliveryCost }),
+      () => setDeliveryCostManualFromWeb(workspace, { orderId: order.id, deliveryCost: parsed, expectedDeliveryCost }),
       () => t(K5_SAVED_MANUAL)
     );
   }
@@ -7549,7 +7562,8 @@ export function OrderDetailContent({
                       tone="negative"
                       disabled={!canInlineEditFinance}
                       saving={savingFinanceField === "Shipping Cost"}
-                      onSave={value => (channelShipping?.manualEditPath ? saveDeliveryCostManual(value) : saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost"))}
+                      onEditStart={noteDeliveryCostEditStart}
+                      onSave={(value, meta) => (channelShipping?.manualEditPath ? saveDeliveryCostManual(value, meta) : saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost"))}
                     />
                     {channelShipping?.hasRecord ? (
                       // K5: what the figure is (the channel's, the seller's, or waiting for review) and the explicit actions.
@@ -11646,6 +11660,7 @@ function FinanceInlineRow({
   disabled,
   saving,
   onSave,
+  onEditStart,
   labelRaw,
   onLabelSave,
   onRemove
@@ -11658,7 +11673,10 @@ function FinanceInlineRow({
   options?: string[];
   disabled: boolean;
   saving: boolean;
-  onSave: (value: string | number) => Promise<void> | void;
+  /** meta.edited: false when the editor was opened and left without typing (number mode). */
+  onSave: (value: string | number, meta?: { edited: boolean }) => Promise<void> | void;
+  /** Called when the editor opens (K5: the Shipping Cost row remembers the figure the seller saw). */
+  onEditStart?: () => void;
   labelRaw?: string;
   onLabelSave?: (value: string) => Promise<void> | void;
   onRemove?: () => void;
@@ -11668,6 +11686,7 @@ function FinanceInlineRow({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value ?? ""));
   const cancellingRef = useRef(false);
+  const editedRef = useRef(false);
 
   useEffect(() => {
     if (!editing) setDraft(String(value ?? ""));
@@ -11692,7 +11711,7 @@ function FinanceInlineRow({
         return;
       }
       setEditing(false);
-      await onSave(parsed);
+      await onSave(parsed, { edited: editedRef.current });
       return;
     }
     setEditing(false);
@@ -11717,6 +11736,8 @@ function FinanceInlineRow({
     if (disabled || saving) return;
     const shouldStartBlank = mode === "number" && parseFinanceNumber(value) === 0;
     setDraft(shouldStartBlank ? "" : String(value ?? ""));
+    editedRef.current = false;
+    onEditStart?.();
     setEditing(true);
   }
 
@@ -11756,7 +11777,7 @@ function FinanceInlineRow({
           disabled={saving}
           onFocus={event => event.currentTarget.select()}
           onBlur={saveOnBlur}
-          onChange={event => setDraft(event.target.value)}
+          onChange={event => { editedRef.current = true; setDraft(event.target.value); }}
           onKeyDown={event => {
             if (event.key === "Escape") cancelEdit();
             if (event.key === "Enter" || event.code === "NumpadEnter") {

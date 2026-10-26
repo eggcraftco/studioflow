@@ -99,8 +99,20 @@ const card = readFileSync(new URL("../app/orders/OrderDetailContent.tsx", import
 const orders = readFileSync(new URL("../lib/studioflow/orders.ts", import.meta.url), "utf8");
 const fsrc = readFileSync(new URL("../lib/studioflow/firestore.ts", import.meta.url), "utf8");
 check("Shipping Cost: with a record the edit goes through setDeliveryCostManual with the value shown as expected", () => {
-  assert.ok(card.includes('onSave={value => (channelShipping?.manualEditPath ? saveDeliveryCostManual(value) : saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost"))}'));
-  assert.ok(card.includes("expectedDeliveryCost: order.deliveryCostPresent === false ? null : order.deliveryCost"));
+  assert.ok(card.includes('onSave={(value, meta) => (channelShipping?.manualEditPath ? saveDeliveryCostManual(value, meta) : saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost"))}'));
+  assert.ok(card.includes("setDeliveryCostManualFromWeb(workspace, { orderId: order.id, deliveryCost: parsed, expectedDeliveryCost })"));
+});
+// r3 real-use acceptance (26 Oct 2026), two defects seen on screen in the production build:
+check("expected = the figure shown when the editor OPENED, not the live value under an open editor (two tabs)", () => {
+  assert.ok(card.includes("onEditStart={noteDeliveryCostEditStart}"));
+  assert.ok(card.includes("deliveryCostShownRef.current = order.deliveryCostPresent === false ? null : order.deliveryCost;"));
+  assert.ok(card.includes("const expectedDeliveryCost = shown !== undefined ? shown : (order.deliveryCostPresent === false ? null : order.deliveryCost);"));
+  assert.ok(card.includes("editedRef.current = false;\n    onEditStart?.();"));
+});
+check("opening the Shipping Cost editor and leaving it without typing makes no call (ownership unchanged)", () => {
+  assert.ok(card.includes("onChange={event => { editedRef.current = true; setDraft(event.target.value); }}"));
+  assert.ok(card.includes("await onSave(parsed, { edited: editedRef.current });"));
+  assert.ok(card.includes("if (meta && !meta.edited) return;"));
 });
 check("a stale edit is reported, never overwritten (aborted -> message with the current value)", () => {
   assert.ok(orders.includes('code === "functions/aborted"') && orders.includes("return { ok: false, stale: true };"));
