@@ -151,7 +151,7 @@ import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
 import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
 import { ETSY_COPY_LINK_NOTE, ETSY_NO_BUYER_UPDATES_NOTE, isEtsyOrder as orderComesFromEtsy } from "@/lib/studioflow/etsyOrder";
-import { ETSY_SHIPPING_ENTER_HINT, etsyShippingCostUnknown, etsyShippingUnknownNote } from "@/lib/studioflow/etsyShippingCost";
+import { etsyOrderProfitIsEstimate, etsyShippingCostUnknown, etsyShippingNoteText } from "@/lib/studioflow/etsyShippingCost";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, orderDetailFinance, platformFeeLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
@@ -749,6 +749,8 @@ function orderPdfHtml(
     statusSteps: OrderPdfItem[];
     statusToggles: OrderPdfItem[];
     materialItems: OrderPdfItem[];
+    /** K1: the screen's estimate rule for this order (Etsy fee/postage); the PDF prints the same label. */
+    profitIsEstimate?: boolean;
   }
 ) {
   const settings = options.settings;
@@ -842,8 +844,8 @@ function orderPdfHtml(
       const corporationTax = Math.round(Math.max(0, profitAfterVat) * ctRate) / 100;
       financeRows.push({ title: "Profit before Corporation Tax", value: formatMoney(profitAfterVat) });
       financeRows.push({ title: `Corporation Tax (${Math.round(ctRate)}%)`, value: formatMoney(corporationTax), tone: "red" });
-      financeRows.push({ title: "Net Profit (after CT)", value: formatMoney(profitAfterVat - corporationTax), tone: "green" });
-    } else if (pdfFinance.directCost === 0 && pdfFinance.otherExpenses === 0) {
+      financeRows.push({ title: "Net Profit (after CT)", value: formatMoney(profitAfterVat - corporationTax), tone: (pdfFinance.directCost === 0 && pdfFinance.otherExpenses === 0) || options.profitIsEstimate ? undefined : "green" });
+    } else if ((pdfFinance.directCost === 0 && pdfFinance.otherExpenses === 0) || options.profitIsEstimate) {
       // ETSY-E2E r3: the PDF says what the screen says — no cost entered, so the profit is an estimate.
       financeRows.push({ title: "Estimated profit", value: formatMoney(profitAfterVat) });
     } else {
@@ -5479,7 +5481,8 @@ export function OrderDetailContent({
         previewUrl: order.designLink,
         statusSteps,
         statusToggles,
-        materialItems: [...materialChecks, ...materialToggles]
+        materialItems: [...materialChecks, ...materialToggles],
+        profitIsEstimate: orderProfitIsEstimate
       });
     } catch (exportError) {
       setInlineError(exportError instanceof Error ? exportError.message : "Order PDF could not be opened.");
@@ -5910,6 +5913,10 @@ export function OrderDetailContent({
   // ETSY-SHIP-2: the shipping cost on an Etsy order is what the buyer paid until the seller enters the real postage.
   // Labels only — no figure changes. null = not Etsy, or the seller's own postage is on the order.
   const etsyShippingUnknown = isEtsyOrder ? etsyShippingCostUnknown(order, etsySource) : null;
+  // K1 (26 Oct 2026): "Final Profit" only when nothing is a guess. Every order: no costs entered = estimate. An Etsy
+  // order also stays an estimate while its fee is the workspace percentage or its postage is the buyer's figure.
+  const orderCostsMissing = orderFinance.directCost === 0 && orderFinance.otherExpenses === 0;
+  const orderProfitIsEstimate = orderCostsMissing || (isEtsyOrder && etsyOrderProfitIsEstimate(orderFinance, etsyShippingUnknown));
   const [portalBusy, setPortalBusy] = useState(false);
   const [portalNotice, setPortalNotice] = useState("");
   const portalUrl = portalUrlForToken(portal.token, workspace.clientPortalHost);
@@ -7515,15 +7522,15 @@ export function OrderDetailContent({
                         <DetailRow label={t("Profit before Corporation Tax")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} />
                         <DetailRow label={`Corporation Tax (${Math.round(corporationTaxRate)}%, est.)`} value={orderValueMoney(corporationTaxAmount, hideNumbers)} tone="negative" />
                         {/* ETSY-E2E r3: with no cost entered the after-tax figure is an estimate too — not green, and said. */}
-                        <DetailRow label={t("Net Profit (after CT)")} value={orderValueMoney(netProfitAfterCT, hideNumbers)} tone={(orderFinance.directCost === 0 && orderFinance.otherExpenses === 0) || etsyShippingUnknown ? undefined : "positive"} emphasis />
+                        <DetailRow label={t("Net Profit (after CT)")} value={orderValueMoney(netProfitAfterCT, hideNumbers)} tone={orderProfitIsEstimate ? undefined : "positive"} emphasis />
                         {orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? (
                           <p className="muted-copy" data-testid="finance-costs-missing" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
                         ) : null}
                         {etsyShippingUnknown ? (
-                          <p className="muted-copy" data-testid="finance-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 12 }}>{etsyShippingUnknownNote(etsyShippingUnknown, t, (value) => orderValueMoney(value, hideNumbers))}. {t(ETSY_SHIPPING_ENTER_HINT)}</p>
+                          <p className="muted-copy" data-testid="finance-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 12 }}>{etsyShippingNoteText(etsyShippingUnknown, detailLanguage, t, (value) => orderValueMoney(value, hideNumbers))}</p>
                         ) : null}
                       </>
-                    ) : (orderFinance.directCost === 0 && orderFinance.otherExpenses === 0) || etsyShippingUnknown ? (
+                    ) : orderProfitIsEstimate ? (
                       // ETSY-E2E (24 Oct 2026): with no cost entered the "profit" is the sale minus an estimated fee — not
                       // a final number. An imported Etsy order showed a green "Final Profit" equal to almost the whole sale.
                       // ETSY-SHIP-2: an Etsy order whose shipping cost is the buyer's figure is an estimate too, and says why.
@@ -7533,7 +7540,7 @@ export function OrderDetailContent({
                           <p className="muted-copy" data-testid="finance-costs-missing" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
                         ) : null}
                         {etsyShippingUnknown ? (
-                          <p className="muted-copy" data-testid="finance-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 12 }}>{etsyShippingUnknownNote(etsyShippingUnknown, t, (value) => orderValueMoney(value, hideNumbers))}. {t(ETSY_SHIPPING_ENTER_HINT)}</p>
+                          <p className="muted-copy" data-testid="finance-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 12 }}>{etsyShippingNoteText(etsyShippingUnknown, detailLanguage, t, (value) => orderValueMoney(value, hideNumbers))}</p>
                         ) : null}
                       </>
                     ) : (

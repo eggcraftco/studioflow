@@ -22,8 +22,10 @@ check("costsMissingCount counts orders with no direct cost and no other expense"
   assert.equal(costsMissingCount([]), 0);
 });
 check("card with Corporation Tax: no-cost order is not green and says so", () => {
-  // ETSY-SHIP-2: the same rule, now also off when the Etsy shipping cost is not known.
-  assert.ok(/tone=\{\(orderFinance\.directCost === 0 && orderFinance\.otherExpenses === 0\) \|\| etsyShippingUnknown \? undefined : "positive"\}/.test(card));
+  // ETSY-SHIP-2 + K1 (26 Oct 2026): one estimate rule — no costs (every order), or on an Etsy order an estimated fee /
+  // the buyer's postage figure.
+  assert.ok(card.includes("const orderCostsMissing = orderFinance.directCost === 0 && orderFinance.otherExpenses === 0;"));
+  assert.ok(card.includes('tone={orderProfitIsEstimate ? undefined : "positive"}'));
   assert.equal((card.match(/data-testid="finance-costs-missing"/g) || []).length, 2);
 });
 check("PDF: no-cost order prints \"Estimated profit\", not a green Final Profit", () => {

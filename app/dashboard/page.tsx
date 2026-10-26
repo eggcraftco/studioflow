@@ -25,7 +25,7 @@ import {
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { productionStagesFromSettings } from "@/lib/studioflow/production";
 import { loadWorkspaceBlockHeadings } from "@/lib/studioflow/blockHeadings";
-import { ETSY_SHIPPING_UNKNOWN_FOOTNOTE, etsyShippingUnknownCount } from "@/lib/studioflow/etsyShippingCost";
+import { ETSY_SHIPPING_UNKNOWN_DETAIL, ETSY_SHIPPING_UNKNOWN_FOOTNOTE, etsyShippingUnknownCount } from "@/lib/studioflow/etsyShippingCost";
 import {
   adjustedDashboardNetProfit,
   baseCostTotal,
@@ -769,6 +769,9 @@ export default function DashboardPage() {
   // ETSY-SHIP-2: Etsy orders whose shipping cost is what the buyer paid (postage not known) — a label, no figure changes.
   const rangeEtsyShippingUnknown = useMemo(() => etsyShippingUnknownCount(filteredCountingOrders), [filteredCountingOrders]);
   const profitFootnoteKeys = [rangeFeeSummary.footnote ? ESTIMATED_PLATFORM_FEES_FOOTNOTE : "", rangeCostsMissing > 0 ? COSTS_MISSING_FOOTNOTE : "", rangeEtsyShippingUnknown > 0 ? ETSY_SHIPPING_UNKNOWN_FOOTNOTE : ""].filter(Boolean);
+  // K2 (26 Oct 2026): the profit card carries ONE short line (the most specific reason); every reason, with the Etsy
+  // postage detail, stays in Financial Breakdown below. Three joined footnotes ran to six lines on the card.
+  const profitCardFootnote = [...profitFootnoteKeys].reverse()[0] ?? "";
   const allTimeFeeSummary = useMemo(
     () => estimatedFeeSummary(countingFinanceOrders.map(order => orderFinanceBlock(order, settings)), settings),
     [countingFinanceOrders, settings]
@@ -1120,9 +1123,9 @@ export default function DashboardPage() {
                     {dashboardVisibility.fee ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.fee.icon} title={platformFeeTotalLabel(rangeFeeSummary, t)} sub={rangeFeeSummary.footnote ? t(ESTIMATED_PLATFORM_FEES_FOOTNOTE) : undefined} value={money(totals.fee, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.shipping ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.shipping.icon} title={t("Shipping")} value={money(totals.shipping, hideNumbers, settings)} tone="red" /> : null}
                     {dashboardVisibility.tax ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.tax.icon} title={t("VAT Amount")} hint={t("VAT recorded on these orders and set aside — not yet paid to HMRC.")} value={money(totals.tax, hideNumbers, settings)} tone="red" /> : null}
-                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t(settings?.corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit")} hint={t("Revenue − base cost − extra spending − platform fee − shipping − VAT − refunds.")} sub={profitFootnoteKeys.length ? profitFootnoteKeys.map(key => t(key)).join(" · ") : undefined} value={money(totals.netProfit, hideNumbers, settings)} tone={rangeCostsMissing > 0 || rangeEtsyShippingUnknown > 0 ? "blue" : "green"} /> : null}
+                    {dashboardVisibility.profit ? <DashboardSummaryCard icon={DASHBOARD_WIDGET_META.profit.icon} title={t(settings?.corporationTaxEnabled ? "Profit before Corporation Tax" : "Net Profit")} hint={t("Revenue − base cost − extra spending − platform fee − shipping − VAT − refunds.")} sub={profitCardFootnote ? t(profitCardFootnote) : undefined} value={money(totals.netProfit, hideNumbers, settings)} tone={rangeCostsMissing > 0 || rangeEtsyShippingUnknown > 0 ? "blue" : "green"} /> : null}
                     {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="plan" title={`${t("Corporation Tax")} (${Math.round(settings.corporationTaxRate ?? 19)}%)`} sub={rangeFeeSummary.footnote ? t(ESTIMATED_PLATFORM_FEES_FOOTNOTE) : undefined} value={money(totals.corporationTax, hideNumbers, settings)} tone="red" /> : null}
-                    {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="check" title={t("Profit after CT")} sub={profitFootnoteKeys.length ? profitFootnoteKeys.map(key => t(key)).join(" · ") : undefined} value={money(totals.netProfit - totals.corporationTax, hideNumbers, settings)} tone="green" /> : null}
+                    {dashboardVisibility.profit && settings?.corporationTaxEnabled ? <DashboardSummaryCard icon="check" title={t("Profit after CT")} sub={profitCardFootnote ? t(profitCardFootnote) : undefined} value={money(totals.netProfit - totals.corporationTax, hideNumbers, settings)} tone="green" /> : null}
                   </>
                 ) : (
                   <>
@@ -1251,6 +1254,11 @@ export default function DashboardPage() {
                       {rangeEtsyShippingUnknown > 0 ? (
                         <p className="muted-copy dashboard-estimate-footnote" data-testid="dashboard-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 11.5 }}>
                           {t(ETSY_SHIPPING_UNKNOWN_FOOTNOTE)}
+                        </p>
+                      ) : null}
+                      {rangeEtsyShippingUnknown > 0 ? (
+                        <p className="muted-copy" data-testid="dashboard-etsy-shipping-detail" style={{ margin: "2px 0 0", fontSize: 11.5 }}>
+                          {t(ETSY_SHIPPING_UNKNOWN_DETAIL)}
                         </p>
                       ) : null}
                     </div>
