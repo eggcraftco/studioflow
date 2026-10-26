@@ -191,7 +191,8 @@ export function channelShippingState(order: ChannelShippingOrderLike, protection
     if (record.pausedValue !== null && pence(record.pausedValue) !== pence(current)) actions.push({ kind: "restore", deliveryCost: record.pausedValue });
     if (current !== null && knownFigure !== null && pence(knownFigure) === pence(current)) actions.push({ kind: "accept_channel", deliveryCost: current });
     else actions.push(...useChannel(knownFigure));
-    return { ...base, estimate: true, note: { key: "review_paused", was: record.pausedValue, now: current }, status: "review", actions };
+    // "now" is the figure the SYNC wrote (channelSent), not whatever the order holds later (an edit after it is not the sync's).
+    return { ...base, estimate: true, note: { key: "review_paused", was: record.pausedValue, now: knownFigure ?? current }, status: "review", actions };
   }
   if (record.owner === "seller") {
     if (record.needsReview && record.reviewReason === "changed_outside_manual_path") {
