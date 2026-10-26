@@ -244,6 +244,9 @@ export type DashboardFinanceOrder = {
   taxAmountKnown?: boolean;
   taxResponsibility?: string;
   taxIncludedInPrice?: boolean | null;
+  /** ETSY-SHIP-2: Etsy's shipping figure and whose cost the order holds (etsySource.shipping / .deliveryCostSource).
+   * Absent on every non-Etsy order. Read for a label only — no figure uses it. */
+  etsyShipping?: { shipping?: number; deliveryCostSource?: string } | null;
 };
 
 export type WorkspaceSettingsOverview = {
@@ -1598,7 +1601,13 @@ export async function loadDashboardFinanceOrders(companyId: string, workspace?: 
       platformFeeKnown: data.platformFeeKnown === true,
       taxAmountKnown: data.taxAmountKnown === true,
       taxResponsibility: typeof data.taxResponsibility === "string" ? data.taxResponsibility : undefined,
-      taxIncludedInPrice: typeof data.taxIncludedInPrice === "boolean" ? data.taxIncludedInPrice : undefined
+      taxIncludedInPrice: typeof data.taxIncludedInPrice === "boolean" ? data.taxIncludedInPrice : undefined,
+      etsyShipping: data.etsySource && typeof data.etsySource === "object"
+        ? {
+          shipping: typeof (data.etsySource as Record<string, unknown>).shipping === "number" ? (data.etsySource as Record<string, number>).shipping : undefined,
+          deliveryCostSource: typeof (data.etsySource as Record<string, unknown>).deliveryCostSource === "string" ? String((data.etsySource as Record<string, unknown>).deliveryCostSource) : undefined
+        }
+        : null
     };
   });
 }
