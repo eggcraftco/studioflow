@@ -411,6 +411,51 @@ export async function updateOrderFromWeb(workspace: WorkspaceContext, input: Upd
   }
 }
 
+// K5 r3 (26 Oct 2026): the explicit shipping cost path for WooCommerce / Shopify / inbound orders in the pilot.
+// setDeliveryCostManual records the seller's own figure (owner "seller", source "manual") and refuses a stale edit:
+// expectedDeliveryCost is the value the screen showed; when the order holds something else the server answers
+// "aborted" and nothing is written. returnDeliveryCostToChannel hands the figure back to the channel.
+export type DeliveryCostCallResult =
+  | { ok: true; applied?: boolean; deliveryCost?: number | null }
+  | { ok: false; stale: true };
+
+function isStaleDeliveryCostError(error: unknown) {
+  const code = String((error as { code?: unknown } | null)?.code || "");
+  return code === "functions/aborted" || code === "aborted";
+}
+
+export async function setDeliveryCostManualFromWeb(
+  workspace: WorkspaceContext,
+  input: { orderId: string; deliveryCost: number; expectedDeliveryCost: number | null }
+): Promise<DeliveryCostCallResult> {
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; deliveryCost?: number }>(functions, "setDeliveryCostManual");
+      const response = await callable({ companyId: workspace.id, orderId: input.orderId, deliveryCost: input.deliveryCost, expectedDeliveryCost: input.expectedDeliveryCost });
+      return { ok: true as const, deliveryCost: typeof response.data?.deliveryCost === "number" ? response.data.deliveryCost : input.deliveryCost };
+    }, "Saving order changes to cloud.");
+  } catch (error) {
+    if (isStaleDeliveryCostError(error)) return { ok: false, stale: true };
+    throw new Error(friendlyUpdateOrderError(error));
+  }
+}
+
+export async function returnDeliveryCostToChannelFromWeb(
+  workspace: WorkspaceContext,
+  input: { orderId: string; expectedDeliveryCost: number | null }
+): Promise<DeliveryCostCallResult> {
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; applied?: boolean; deliveryCost?: number | null }>(functions, "returnDeliveryCostToChannel");
+      const response = await callable({ companyId: workspace.id, orderId: input.orderId, expectedDeliveryCost: input.expectedDeliveryCost });
+      return { ok: true as const, applied: response.data?.applied === true, deliveryCost: typeof response.data?.deliveryCost === "number" ? response.data.deliveryCost : null };
+    }, "Saving order changes to cloud.");
+  } catch (error) {
+    if (isStaleDeliveryCostError(error)) return { ok: false, stale: true };
+    throw new Error(friendlyUpdateOrderError(error));
+  }
+}
+
 export type OrderTrackingResult = {
   ok?: boolean;
   provider?: string;

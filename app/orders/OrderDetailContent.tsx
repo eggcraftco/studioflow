@@ -97,6 +97,8 @@ import {
   ORDER_PREVIEW_IMAGE_ACCEPT,
   assignInvoiceNumberFromWeb,
   registerOrderTrackingFromWeb,
+  returnDeliveryCostToChannelFromWeb,
+  setDeliveryCostManualFromWeb,
   updateOrderFromWeb,
   uploadOrderPreviewImage,
   type CreateOrderInput,
@@ -152,6 +154,11 @@ import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKe
 import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
 import { ETSY_COPY_LINK_NOTE, ETSY_NO_BUYER_UPDATES_NOTE, isEtsyOrder as orderComesFromEtsy } from "@/lib/studioflow/etsyOrder";
 import { etsyOrderProfitIsEstimate, etsyShippingCostUnknown, etsyShippingNoteText } from "@/lib/studioflow/etsyShippingCost";
+import {
+  K5_ENTER_HINT, K5_RETURNED, K5_RETURNED_NEXT_SYNC, K5_REVIEW_CONFLICT_HINT, K5_SAVE_FAILED, K5_SAVED_MANUAL, K5_STALE,
+  channelDisplayName, channelShippingActionLabel, channelShippingFill, channelShippingNoteText, channelShippingState, channelShippingStatusText,
+  type ChannelShippingAction
+} from "@/lib/studioflow/channelShippingCost";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, orderDetailFinance, platformFeeLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
@@ -847,6 +854,7 @@ function orderPdfHtml(
       financeRows.push({ title: "Net Profit (after CT)", value: formatMoney(profitAfterVat - corporationTax), tone: (pdfFinance.directCost === 0 && pdfFinance.otherExpenses === 0) || options.profitIsEstimate ? undefined : "green" });
     } else if ((pdfFinance.directCost === 0 && pdfFinance.otherExpenses === 0) || options.profitIsEstimate) {
       // ETSY-E2E r3: the PDF says what the screen says — no cost entered, so the profit is an estimate.
+      // K5: the same for a channel order whose shipping cost is not a known postage cost.
       financeRows.push({ title: "Estimated profit", value: formatMoney(profitAfterVat) });
     } else {
       financeRows.push({ title: "Final Profit", value: formatMoney(profitAfterVat), tone: "green" });
@@ -5910,13 +5918,65 @@ export function OrderDetailContent({
   const orderValueMoney = (value: number, hidden = false) => (hidden
     ? hiddenMoneyLabel(orderMoneySymbol(orderCurrencyRef, moneySettings))
     : formatOrderMoney(value, orderCurrencyRef, moneySettings));
+  // K5 (26 Oct 2026): whose shipping cost a WooCommerce / Shopify / inbound order holds. Labels and the review box
+  // only — no figure changes. null = not one of those channels. With the server's record (pilot workspaces) the
+  // Shipping Cost edit goes through setDeliveryCostManual, which refuses a stale edit (expected = the value shown).
+  const channelShipping = channelShippingState(order);
+  const channelShippingEstimate = Boolean(channelShipping?.estimate);
+  const channelShippingMoney = (value: number) => orderValueMoney(value, hideNumbers);
+  const [deliveryCostStale, setDeliveryCostStale] = useState(false);
+  async function runDeliveryCostCall(call: () => ReturnType<typeof setDeliveryCostManualFromWeb>, successText: (applied: boolean) => string) {
+    if (!canInlineEditFinance) {
+      setFinanceError("Your workspace role cannot edit financial info.");
+      return;
+    }
+    setFinanceError(null);
+    setFinanceStatus(null);
+    setDeliveryCostStale(false);
+    setSavingFinanceField("Shipping Cost");
+    try {
+      const result = await call();
+      await onReloadOrder();
+      if (!result.ok) setDeliveryCostStale(true);
+      else setFinanceStatus(successText(result.applied !== false));
+    } catch (failure) {
+      await onReloadOrder();
+      setFinanceError(failure instanceof Error && failure.message ? failure.message : K5_SAVE_FAILED);
+    } finally {
+      setSavingFinanceField(null);
+    }
+  }
+  function saveDeliveryCostManual(value: string | number) {
+    const parsed = parseFinanceNumber(value);
+    if (parsed === null) return;
+    return runDeliveryCostCall(
+      () => setDeliveryCostManualFromWeb(workspace, { orderId: order.id, deliveryCost: parsed, expectedDeliveryCost: order.deliveryCostPresent === false ? null : order.deliveryCost }),
+      () => t(K5_SAVED_MANUAL)
+    );
+  }
+  function runChannelShippingAction(action: ChannelShippingAction) {
+    const expected = order.deliveryCostPresent === false ? null : order.deliveryCost;
+    const channelName = channelShipping ? t(channelDisplayName(channelShipping.channel)) : "";
+    if (action.kind === "use_channel") {
+      return runDeliveryCostCall(
+        () => returnDeliveryCostToChannelFromWeb(workspace, { orderId: order.id, expectedDeliveryCost: expected }),
+        (applied) => channelShippingFill(t(applied ? K5_RETURNED : K5_RETURNED_NEXT_SYNC), { channel: channelName })
+      );
+    }
+    const deliveryCost = action.kind === "confirm_zero" ? 0 : action.deliveryCost;
+    return runDeliveryCostCall(
+      () => setDeliveryCostManualFromWeb(workspace, { orderId: order.id, deliveryCost, expectedDeliveryCost: expected }),
+      () => t(K5_SAVED_MANUAL)
+    );
+  }
   // ETSY-SHIP-2: the shipping cost on an Etsy order is what the buyer paid until the seller enters the real postage.
   // Labels only — no figure changes. null = not Etsy, or the seller's own postage is on the order.
   const etsyShippingUnknown = isEtsyOrder ? etsyShippingCostUnknown(order, etsySource) : null;
   // K1 (26 Oct 2026): "Final Profit" only when nothing is a guess. Every order: no costs entered = estimate. An Etsy
   // order also stays an estimate while its fee is the workspace percentage or its postage is the buyer's figure.
   const orderCostsMissing = orderFinance.directCost === 0 && orderFinance.otherExpenses === 0;
-  const orderProfitIsEstimate = orderCostsMissing || (isEtsyOrder && etsyOrderProfitIsEstimate(orderFinance, etsyShippingUnknown));
+  // K5: a WooCommerce / Shopify / inbound order whose shipping cost is not a known postage cost is an estimate too.
+  const orderProfitIsEstimate = orderCostsMissing || (isEtsyOrder && etsyOrderProfitIsEstimate(orderFinance, etsyShippingUnknown)) || channelShippingEstimate;
   const [portalBusy, setPortalBusy] = useState(false);
   const [portalNotice, setPortalNotice] = useState("");
   const portalUrl = portalUrlForToken(portal.token, workspace.clientPortalHost);
@@ -7489,8 +7549,41 @@ export function OrderDetailContent({
                       tone="negative"
                       disabled={!canInlineEditFinance}
                       saving={savingFinanceField === "Shipping Cost"}
-                      onSave={value => saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost")}
+                      onSave={value => (channelShipping?.manualEditPath ? saveDeliveryCostManual(value) : saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost"))}
                     />
+                    {channelShipping?.hasRecord ? (
+                      // K5: what the figure is (the channel's, the seller's, or waiting for review) and the explicit actions.
+                      <div className="muted-copy" data-testid="k5-shipping-state" style={{ margin: "2px 0 6px", fontSize: 12 }}>
+                        {channelShipping.status !== "review" && channelShippingStatusText(channelShipping, order, t, channelShippingMoney) ? (
+                          <p style={{ margin: 0 }} data-testid="k5-shipping-status">{channelShippingStatusText(channelShipping, order, t, channelShippingMoney)}</p>
+                        ) : null}
+                        {channelShipping.status === "review" && channelShipping.note ? (
+                          <div className="layout-status" data-testid="k5-shipping-review" style={{ margin: "4px 0" }}>
+                            <p style={{ margin: 0 }}>{channelShippingNoteText(channelShipping.note, channelShipping.channel, t, channelShippingMoney)}</p>
+                            {channelShipping.note.key === "review_conflict" ? <p style={{ margin: "2px 0 0" }}>{t(K5_REVIEW_CONFLICT_HINT)}</p> : null}
+                          </div>
+                        ) : null}
+                        {deliveryCostStale ? (
+                          <p className="layout-error" data-testid="k5-shipping-stale" style={{ margin: "4px 0" }}>{channelShippingFill(t(K5_STALE), { amount: channelShippingMoney(order.deliveryCost) })}</p>
+                        ) : null}
+                        {canInlineEditFinance && channelShipping.actions.length ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                            {channelShipping.actions.map(action => (
+                              <button
+                                key={`${action.kind}-${"deliveryCost" in action ? action.deliveryCost : ""}`}
+                                type="button"
+                                className="finance-heading-add"
+                                data-testid={`k5-shipping-action-${action.kind}`}
+                                disabled={savingFinanceField === "Shipping Cost"}
+                                onClick={() => { void runChannelShippingAction(action); }}
+                              >
+                                {channelShippingActionLabel(action, channelShipping.channel, t, channelShippingMoney)}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="app-card-divider" />
                     <FinanceInlineRow
                       label={t("VAT Rule")}
@@ -7529,11 +7622,16 @@ export function OrderDetailContent({
                         {etsyShippingUnknown ? (
                           <p className="muted-copy" data-testid="finance-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 12 }}>{etsyShippingNoteText(etsyShippingUnknown, detailLanguage, t, (value) => orderValueMoney(value, hideNumbers))}</p>
                         ) : null}
+                        {channelShipping?.estimate && channelShipping.note ? (
+                          <p className="muted-copy" data-testid="finance-channel-shipping" style={{ margin: "4px 0 0", fontSize: 12 }}>{channelShippingNoteText(channelShipping.note, channelShipping.channel, t, channelShippingMoney)}. {t(K5_ENTER_HINT)}</p>
+                        ) : null}
                       </>
                     ) : orderProfitIsEstimate ? (
                       // ETSY-E2E (24 Oct 2026): with no cost entered the "profit" is the sale minus an estimated fee — not
                       // a final number. An imported Etsy order showed a green "Final Profit" equal to almost the whole sale.
                       // ETSY-SHIP-2: an Etsy order whose shipping cost is the buyer's figure is an estimate too, and says why.
+                      // K5 (26 Oct 2026): a WooCommerce / Shopify / inbound order whose shipping cost is not a known postage
+                      // cost (empty, a 0 nobody chose, or what the buyer paid) is an estimate too, and says why.
                       <>
                         <DetailRow label={t("Estimated profit")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} emphasis />
                         {orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? (
@@ -7541,6 +7639,9 @@ export function OrderDetailContent({
                         ) : null}
                         {etsyShippingUnknown ? (
                           <p className="muted-copy" data-testid="finance-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 12 }}>{etsyShippingNoteText(etsyShippingUnknown, detailLanguage, t, (value) => orderValueMoney(value, hideNumbers))}</p>
+                        ) : null}
+                        {channelShipping?.estimate && channelShipping.note ? (
+                          <p className="muted-copy" data-testid="finance-channel-shipping" style={{ margin: "4px 0 0", fontSize: 12 }}>{channelShippingNoteText(channelShipping.note, channelShipping.channel, t, channelShippingMoney)}. {t(K5_ENTER_HINT)}</p>
                         ) : null}
                       </>
                     ) : (

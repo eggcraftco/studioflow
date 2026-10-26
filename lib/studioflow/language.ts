@@ -13,6 +13,7 @@ import { WOO_STORES_TRANSLATIONS } from "./wooStoresTranslations";
 import { ETSY_ROUND_TWO_TRANSLATIONS } from "./etsyRoundTwoTranslations";
 import { ETSY_COMPLIANCE_TRANSLATIONS } from "./etsyComplianceTranslations";
 import { ETSY_SHIPPING_COST_TRANSLATIONS } from "./etsyShippingCost";
+import { CHANNEL_SHIPPING_COST_TRANSLATIONS } from "./channelShippingCost";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -9263,6 +9264,10 @@ mergeIntoTranslations(ETSY_COMPLIANCE_TRANSLATIONS);
 
 // ETSY-SHIP-2 (25 Oct 2026): an Etsy order's postage cost is not known (order profit note, Dashboard footnote). After compliance.
 mergeIntoTranslations(ETSY_SHIPPING_COST_TRANSLATIONS);
+
+// K5 (26 Oct 2026): whose shipping cost a Woo / Shopify / inbound order holds (order detail). Drafts except English. After
+// ETSY-SHIP-2, whose three shared texts (ESC-01..03) K5 reuses rather than repeats.
+mergeIntoTranslations(CHANNEL_SHIPPING_COST_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {
