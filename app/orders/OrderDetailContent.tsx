@@ -143,6 +143,7 @@ import { revealRestrictedCustomer, type EbayRevealedCustomer } from "@/lib/studi
 import { EbayOrderBlock } from "./EbayOrderBlock";
 import { EbayOrderRefreshButton } from "./EbayOrderRefreshButton";
 import { EbayOrderStock } from "./EbayOrderStock";
+import { WooOrderStock } from "./WooOrderStock";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
 import { EtsySafe, EtsySourcePanel, EtsyProductPhoto, useEtsyListingPhotos, useEtsySource } from "./EtsySourcePanel";
@@ -10205,6 +10206,8 @@ export function OrderDetailContent({
       <EbayOrderRefreshButton order={order} language={detailLanguage} />
       {/* Package E4: the order's stock (through its listings' links) and every package eBay says went out. */}
       <EbayOrderStock workspace={workspace} currencySymbol={moneySymbol(moneySettings)} order={order} language={detailLanguage} canSeeFinance={canSeeFinance} canEditOrder={canEditOrderFully} onOrderChanged={onReloadOrder} />
+      {/* MC-4: a WooCommerce order's stock through its products' links (reserved / taken / given back / oversold). */}
+      <WooOrderStock workspace={workspace} order={order} language={detailLanguage} canEditOrder={canEditOrderFully} />
 
       {allCardsHidden ? (
         <div className="order-detail-mobile-stack is-visible">
