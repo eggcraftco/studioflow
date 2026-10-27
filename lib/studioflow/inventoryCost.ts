@@ -50,6 +50,21 @@ export function inventoryCostMissingCount(items: readonly InventoryCostCard[]): 
     && inventoryCostKind(item) === "notEntered").length;
 }
 
+/**
+ * Reports tab (27 Oct 2026): getInventoryReport counts what its money figures leave out — on-shelf cards with no cost
+ * (valuation.costMissingCount) and ledger lines in the period that moved stock at no recorded value on a card that is
+ * not a real £0 (movement.uncostedLines). A masked report (FIN-01, costHidden) or an older server (no field) gives none.
+ */
+export function inventoryReportCostNotes(report: {
+  costHidden?: boolean;
+  valuation?: { costMissingCount?: number | null } | null;
+  movement?: { uncostedLines?: number | null } | null;
+} | null | undefined): { missing: number; uncosted: number } {
+  if (!report || report.costHidden === true) return { missing: 0, uncosted: 0 };
+  const count = (value: unknown) => { const n = Number(value); return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0; };
+  return { missing: count(report.valuation?.costMissingCount), uncosted: count(report.movement?.uncostedLines) };
+}
+
 /** What the purchase-price box starts with: empty when not entered (and for an old 0, as before), "0" for a real zero. */
 export function inventoryCostFieldText(item: InventoryCostCard | null | undefined): string {
   const kind = inventoryCostKind(item);

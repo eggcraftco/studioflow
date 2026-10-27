@@ -85,6 +85,17 @@ if (C) {
   expect("save: nonsense is not a number → treated as empty", C.inventoryCostSaveFields("abc", notEntered), { purchasePrice: 0 });
 }
 
+// ---- 1b. Reports tab (27 Oct): the report's own counts (getInventoryReport valuation.costMissingCount /
+// movement.uncostedLines) become the notes; a masked report (FIN-01) or an older server (no field) shows none.
+{
+  const notes = (report) => (typeof C.inventoryReportCostNotes === "function" ? C.inventoryReportCostNotes(report) : "missing inventoryReportCostNotes");
+  expect("report notes: both counts", notes({ valuation: { costMissingCount: 3 }, movement: { uncostedLines: 2 } }), { missing: 3, uncosted: 2 });
+  expect("report notes: masked report shows none", notes({ costHidden: true, valuation: { costMissingCount: 3 }, movement: { uncostedLines: 2 } }), { missing: 0, uncosted: 0 });
+  expect("report notes: older server (no fields) shows none", notes({ valuation: {}, movement: {} }), { missing: 0, uncosted: 0 });
+  expect("report notes: nonsense is none", notes({ valuation: { costMissingCount: "x" }, movement: { uncostedLines: -4 } }), { missing: 0, uncosted: 0 });
+  expect("report notes: no report", notes(null), { missing: 0, uncosted: 0 });
+}
+
 // ---- 2. sentences in every language
 const R = await compile("lib/studioflow/wooInventoryRules.ts", "rules.mjs");
 const SENTENCES = [
@@ -92,7 +103,8 @@ const SENTENCES = [
   "Not entered",
   "Items on the shelf with no cost entered: {count}. The inventory value leaves them out — it does not count them as money spent.",
   "Leave it empty if you don't know it yet — type 0 only if it really cost nothing.",
-  "Cost: not entered — the store's price is a sale price, not what you paid."
+  "Cost: not entered — the store's price is a sale price, not what you paid.",
+  "Stock movements in this period with no cost recorded: {count}. The money figures above leave them out."
 ];
 for (const sentence of SENTENCES) {
   for (const language of R.WOO_INVENTORY_LANGUAGES) {
@@ -120,6 +132,13 @@ ok("order stock: no '£0' cost for a card with none", /inventoryCostKind\(item\)
 ok("home card: no '£0' value for a card with none", /inventoryCostKind\(item\) === "notEntered"/.test(read("components/home/HomeCardBodies.tsx")));
 ok("eBay card: the same rule (a typed £0 is not 'not entered')", /inventoryCostKind\(item\) === "notEntered"/.test(read("app/inventory/EbayItemLinks.tsx")) && !/Number\(item\.internalTotalCost \|\| 0\) === 0/.test(read("app/inventory/EbayItemLinks.tsx")));
 ok("types: costEntered on the card and the save input", (read("lib/studioflow/inventory.ts").match(/costEntered\?: boolean;/g) || []).length === 2);
+// Reports tab (27 Oct): the value and the money moved are not presented as complete when cards have no cost.
+const reports = read("app/inventory/ReportsPanel.tsx");
+ok("reports: the notes come from the report's own counts", /inventoryReportCostNotes\(report\)/.test(reports));
+ok("reports: no-cost cards note under the value", /data-testid="report-cost-missing-note"/.test(reports) && /wooInventoryT\("Items on the shelf with no cost entered: \{count\}\./.test(reports));
+ok("reports: uncosted movements note", /data-testid="report-uncosted-lines-note"/.test(reports) && /wooInventoryT\("Stock movements in this period with no cost recorded: \{count\}\./.test(reports));
+const invTypes = read("lib/studioflow/inventory.ts");
+ok("types: the report carries costMissingCount, uncostedLines, costHidden", /costMissingCount\?: number \| null;/.test(invTypes) && /uncostedLines\?: number \| null;/.test(invTypes) && /export type InventoryReport = \{\n  costHidden\?: boolean;/.test(invTypes));
 // the store's price is never written as a cost by any web path of the import
 ok("the Woo import screens never send a purchase price", !/purchasePrice/.test(read("app/inventory/WooProductsPanel.tsx")) && !/purchasePrice/.test(read("lib/studioflow/wooInventory.ts")));
 

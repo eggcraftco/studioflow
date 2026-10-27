@@ -859,6 +859,7 @@ export type Stocktake = StocktakeSummary & {
 };
 
 export type InventoryReport = {
+  costHidden?: boolean;
   generatedAtMs: number;
   fromMs: number;
   toMs: number;
@@ -866,6 +867,8 @@ export type InventoryReport = {
     totalValue: number;
     onShelfCount: number;
     customerOwnedCount: number;
+    /** On-shelf cards with no cost entered; the total adds them as 0 (server 27 Oct; absent on an older server). */
+    costMissingCount?: number | null;
     byCategory: Array<{ name: string; value: number }>;
     byLocation: Array<{ name: string; value: number }>;
   };
@@ -878,6 +881,8 @@ export type InventoryReport = {
     inValue: number;
     outValue: number;
     netValue: number;
+    /** Lines in the period that moved stock at no recorded value on a card that is not a real 0 (server 27 Oct). */
+    uncostedLines?: number | null;
     byKind: Array<{ kind: MovementKind; lines: number; delta: number; value: number }>;
   };
   lowStock: Array<{

@@ -24,6 +24,8 @@ import {
   type MovementKind
 } from "@/lib/studioflow/inventory";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { inventoryReportCostNotes } from "@/lib/studioflow/inventoryCost";
+import { wooInventoryT } from "@/lib/studioflow/wooInventory";
 
 const KIND_LABEL: Record<MovementKind, string> = {
   openingStock: "Opening stock",
@@ -129,6 +131,28 @@ export function ReportsPanel({
               <strong>{report.lowStock.length}</strong>
             </div>
           </div>
+
+          {/* MC-3 cost (27 Oct): cards with no cost add nothing to the value, and stock that moved with no cost adds
+              nothing to "Came in"/"Went out" — say so, from the report's own counts (none when masked or older server). */}
+          {(() => {
+            const costNotes = inventoryReportCostNotes(report);
+            return (
+              <>
+                {costNotes.missing > 0 ? (
+                  <p className="inventory-note" data-testid="report-cost-missing-note">
+                    {wooInventoryT("Items on the shelf with no cost entered: {count}. The inventory value leaves them out — it does not count them as money spent.", language)
+                      .replace("{count}", String(costNotes.missing))}
+                  </p>
+                ) : null}
+                {costNotes.uncosted > 0 ? (
+                  <p className="inventory-note" data-testid="report-uncosted-lines-note">
+                    {wooInventoryT("Stock movements in this period with no cost recorded: {count}. The money figures above leave them out.", language)
+                      .replace("{count}", String(costNotes.uncosted))}
+                  </p>
+                ) : null}
+              </>
+            );
+          })()}
 
           <div className="inventory-tabs" role="tablist">
             {RANGES.map(entry => (
