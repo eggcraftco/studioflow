@@ -15,6 +15,7 @@ import { ETSY_ROUND_TWO_TRANSLATIONS } from "./etsyRoundTwoTranslations";
 import { ETSY_COMPLIANCE_TRANSLATIONS } from "./etsyComplianceTranslations";
 import { ETSY_SHIPPING_COST_TRANSLATIONS } from "./etsyShippingCost";
 import { CHANNEL_SHIPPING_COST_TRANSLATIONS } from "./channelShippingCost";
+import { ETSY_ORDER_VIEW_TRANSLATIONS } from "./etsyOrderViewTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -9293,6 +9294,10 @@ mergeIntoTranslations(ETSY_SHIPPING_COST_TRANSLATIONS);
 // K5 (26 Oct 2026): whose shipping cost a Woo / Shopify / inbound order holds (order detail). Drafts except English. After
 // ETSY-SHIP-2, whose three shared texts (ESC-01..03) K5 reuses rather than repeats.
 mergeIntoTranslations(CHANNEL_SHIPPING_COST_TRANSLATIONS);
+
+// ETSY-UI-1 (27 Oct 2026): the Etsy order block, the jump bar and the Etsy tracking note (order detail). New keys only;
+// last, after K5, so a later table cannot hide them and they redefine nothing earlier.
+mergeIntoTranslations(ETSY_ORDER_VIEW_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

@@ -1282,6 +1282,7 @@ export default function OrdersPage() {
               >
                 <OrderListCard
                   order={order}
+                  etsyPhoto
                   selected={order.id === selectedOrderId}
                   canSeeFinance={canSeeFinance}
                   canSeeAdvancedFinance={canSeeAdvancedFinance}
@@ -1644,6 +1645,7 @@ export default function OrdersPage() {
               onOptimisticOrderPatch={applyOptimisticOrderPatch}
               onBlockHeadingSettingsChange={setBlockHeadingSettings}
               moneySettings={moneySettings}
+              orderListToggle={{ collapsed: sidebar.collapsed, onToggle: () => sidebar.setCollapsed(value => !value) }}
             />
           ) : null}
         </main>
@@ -1699,6 +1701,7 @@ export default function OrdersPage() {
               <OrderListCard
                 key={order.id}
                 order={order}
+                etsyPhoto
                 selected={order.id === selectedOrderId}
                 canSeeFinance={canSeeFinance}
                 canSeeAdvancedFinance={canSeeAdvancedFinance}

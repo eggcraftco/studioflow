@@ -149,6 +149,7 @@ import { EtsySafe, EtsySourcePanel, EtsyProductPhoto, useEtsyListingPhotos, useE
 import { etsyListingLink, etsyPhotoIsShowable } from "@/lib/studioflow/etsyListingPhotos";
 import { EtsyNotePhotoLinks } from "./EtsyText";
 import { etsyCardFold, etsyNoteDisplay } from "@/lib/studioflow/etsyFirstImport";
+import { ETSY_BLOCK_JUMP_ID, etsyAddTrackingLink, hiddenCardCount, orderJumpTargets } from "@/lib/studioflow/etsyOrderView";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
@@ -2082,7 +2083,8 @@ export function OrderDetailContent({
   onOptimisticOrderPatch,
   onBlockHeadingSettingsChange,
   moneySettings,
-  showBackLink = false
+  showBackLink = false,
+  orderListToggle
 }: {
   order: OrderDetail;
   workspace: WorkspaceContext;
@@ -2091,6 +2093,8 @@ export function OrderDetailContent({
   onBlockHeadingSettingsChange?: (settings: BlockHeadingSettings | null) => void;
   moneySettings?: WorkspaceSettingsOverview | null;
   showBackLink?: boolean;
+  /** ETSY-UI-1 Phase B: the Orders page's own list collapse (its saved sidebar state), offered in the order header. */
+  orderListToggle?: { collapsed: boolean; onToggle: () => void };
 }) {
   const { user } = useAuth();
   const { hideNumbers } = usePricePrivacy();
@@ -2213,6 +2217,8 @@ export function OrderDetailContent({
   // Phone: the sticky header condenses to the name and Actions once scrolled past (review N14).
   const orderHeadRef = useRef<HTMLDivElement | null>(null);
   const orderHeadCondensed = useCondensedHeader(orderHeadRef);
+  // ETSY-UI-1: the Etsy block's place on the page, for the jump bar's "From Etsy".
+  const etsyBlockRef = useRef<HTMLDivElement | null>(null);
   const [assignProjectMenuOpen, setAssignProjectMenuOpen] = useState(false);
   const [savingAssignment, setSavingAssignment] = useState(false);
   const [headerDetailsMenuPosition, setHeaderDetailsMenuPosition] = useState<{ x: number; y: number } | null>(null);
@@ -7979,6 +7985,13 @@ export function OrderDetailContent({
                 saving={savingInlineField === "Delivered"}
                 onSave={value => saveDetailsPatch({ isDelivered: value === "Yes" }, "Delivered")}
               />
+              {/* ETSY-UI-1: NivaDesk's Etsy access is read-only — Dispatched here does not reach Etsy. */}
+              {etsyBuyerMessagingBlocked ? (
+                <div className="order-etsy-tracking-note" data-etsy-tracking-note="" role="note">
+                  <p>{t("NivaDesk reads Etsy orders but can't mark them dispatched on Etsy. Add the tracking number on Etsy too.")}</p>
+                  <a href={etsyAddTrackingLink(etsySource)} target="_blank" rel="noopener noreferrer">{t("Add tracking on Etsy")} ↗</a>
+                </div>
+              ) : null}
               {/* DHL Express, only where the server has opened it for this workspace. */}
               <OrderShipmentsPanel workspace={workspace} orderId={order.id} language={detailLanguage} onOrderChanged={onReloadOrder} onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)}
                 addressRestricted={order.commerce?.provider === "ebay" && !String(order.shippingStreetAddress || "").trim() && !String(order.shippingPostalCode || "").trim()}
@@ -9540,6 +9553,108 @@ export function OrderDetailContent({
     );
   }
 
+  // The Customize cards entry (Actions menu and the jump bar): one way in, the first-project tour advances either way.
+  function openCustomizeCards() {
+    setOrderActionsOpen(false);
+    setCustomizeOpen(true);
+    if (firstProjectGuideStep === 4) {
+      const nextGuide: FirstProjectGuideState = {
+        ...(firstProjectGuide ?? {}),
+        step: 5,
+        orderId: order.id,
+        completed: false
+      };
+      updateFirstProjectGuideState(nextGuide);
+      setFirstProjectGuide(nextGuide);
+    }
+  }
+
+  // ETSY-E2E night: on an Etsy order the cards it does not use yet (preview, repair intake, estimate,
+  // portal) move under one fold at the end of the phone stack. Nothing is removed and the saved layout is
+  // not changed. Computed once here so the jump bar lists the phone cards in the order they are drawn.
+  const mobileCardFold = etsyCardFold(visibleMobileCards, {
+    isEtsy: isEtsyOrder,
+    used: {
+      preview: Boolean(order.designLink) || etsyPhotos.loading || Boolean(etsyFirstPhoto),
+      repairIntake: order.orderType === "repair" || Object.values(repairIntake?.fields ?? {}).some(v => String(v ?? "").trim()) || intakePhotos.length > 0,
+      estimate: Boolean(currentEstimate),
+      customerPortal: Boolean(portal.active)
+    }
+  });
+
+  // ETSY-UI-1: the jump bar. One link per card the page DRAWS, in the order it draws them (desktop: column by
+  // column; phone: the stack, folded cards last), under the card's own title (cardLabel: the workshop's renamed
+  // heading, translated). Hidden cards and cards this member may not see are not drawn, so they are not listed.
+  // "From Etsy" leads when the Etsy block is on the page. Derived only — nothing here writes the layout.
+  const etsyBlockShown = String(order.customFields?.["Source"] || "") === "Etsy" && Boolean(etsySource) && Array.isArray(etsySource?.items);
+  const jumpCardOrder: OrderDetailCardId[] = allCardsHidden
+    ? []
+    : isNarrowLayout
+      ? [...mobileCardFold.main, ...mobileCardFold.folded]
+      : desktopColumns.flatMap(column => column.cards);
+  const jumpTargets = orderJumpTargets(jumpCardOrder, cardId => cardLabel(cardId as OrderDetailCardId), { etsyBlock: etsyBlockShown, etsyLabel: t("From Etsy") });
+  const hiddenCards = hiddenCardCount(customizeCardOrder, cardLayout.visibility);
+
+  function scrollParentOf(node: HTMLElement): HTMLElement {
+    let current = node.parentElement;
+    while (current && current !== document.body) {
+      const overflowY = window.getComputedStyle(current).overflowY;
+      if ((overflowY === "auto" || overflowY === "scroll") && current.scrollHeight > current.clientHeight) return current;
+      current = current.parentElement;
+    }
+    return (document.scrollingElement as HTMLElement | null) ?? document.documentElement;
+  }
+
+  function jumpToOrderCard(targetId: string) {
+    const refs = isNarrowLayout ? mobileCardFrameRefs.current : desktopCardFrameRefs.current;
+    const target = targetId === ETSY_BLOCK_JUMP_ID ? etsyBlockRef.current : refs.get(targetId as OrderDetailCardId) ?? null;
+    if (!target) return;
+    const fold = target.closest("details");
+    if (fold && !fold.open) fold.open = true;
+    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Below the sticky order header, not under it.
+    const scroller = scrollParentOf(target);
+    const scrollerTop = scroller === document.scrollingElement || scroller === document.documentElement ? 0 : scroller.getBoundingClientRect().top;
+    const headBottom = orderHeadRef.current?.getBoundingClientRect().bottom ?? 0;
+    const offset = target.getBoundingClientRect().top - Math.max(headBottom, scrollerTop) - 12;
+    scroller.scrollBy({ top: offset, behavior: smooth ? "smooth" : "auto" });
+    // A card in a column off to the side: the card canvas pans to it.
+    const canvas = target.closest<HTMLElement>(".order-detail-workspace");
+    if (canvas && canvas.scrollWidth > canvas.clientWidth) {
+      const box = canvas.getBoundingClientRect();
+      const rect = target.getBoundingClientRect();
+      if (rect.left < box.left || rect.right > box.right) canvas.scrollBy({ left: rect.left - box.left - 12, behavior: smooth ? "smooth" : "auto" });
+    }
+    if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+    target.focus({ preventScroll: true });
+    target.classList.add("is-notification-focus");
+    window.setTimeout(() => target.classList.remove("is-notification-focus"), 1600);
+  }
+
+  function renderJumpBar() {
+    return (
+      <div className="order-jump-bar" data-order-jump-bar="">
+        <nav className="order-jump-bar__links" aria-label={t("Jump to a card")}>
+          {jumpTargets.map(target => (
+            <button
+              key={target.id}
+              type="button"
+              className={target.id === ETSY_BLOCK_JUMP_ID ? "order-jump-link is-etsy" : "order-jump-link"}
+              data-jump-target={target.id}
+              onClick={() => jumpToOrderCard(target.id)}
+            >
+              {target.label}
+            </button>
+          ))}
+        </nav>
+        <button type="button" className="order-jump-customize" data-jump-customize="" data-hidden-cards={hiddenCards} onClick={openCustomizeCards}>
+          {t("Customize cards")}
+          {hiddenCards > 0 ? <span className="order-jump-customize__count">{` · ${t("{count} hidden").replace("{count}", String(hiddenCards))}`}</span> : null}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <DetailLanguageContext.Provider value={detailLanguage}>
     <div className="order-detail-shell">
@@ -9558,6 +9673,21 @@ export function OrderDetailContent({
           });
         }}
       >
+        {/* ETSY-UI-1 Phase B: hide / show the order list (wide layouts) so the order can use the width. It is the
+            Orders page's existing collapse — the same saved sidebar state as the list's own "<" button. */}
+        {orderListToggle ? (
+          <button
+            type="button"
+            className={orderListToggle.collapsed ? "order-list-toggle is-collapsed" : "order-list-toggle"}
+            data-order-list-toggle=""
+            aria-expanded={!orderListToggle.collapsed}
+            aria-label={orderListToggle.collapsed ? t("Expand order list") : t("Collapse order list")}
+            title={orderListToggle.collapsed ? t("Expand order list") : t("Collapse order list")}
+            onClick={orderListToggle.onToggle}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M9 4v16" stroke="currentColor" strokeWidth="2" /></svg>
+          </button>
+        ) : null}
         {/* The customer/project header (spec §2, Area 3): image, names, the
             created date, the project number and the team, then the chips. */}
         <div className="order-detail-identity">
@@ -9764,20 +9894,7 @@ export function OrderDetailContent({
                 <div className="order-actions-menu-section-title">{t("Card layout")}</div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setOrderActionsOpen(false);
-                    setCustomizeOpen(true);
-                    if (firstProjectGuideStep === 4) {
-                      const nextGuide: FirstProjectGuideState = {
-                        ...(firstProjectGuide ?? {}),
-                        step: 5,
-                        orderId: order.id,
-                        completed: false
-                      };
-                      updateFirstProjectGuideState(nextGuide);
-                      setFirstProjectGuide(nextGuide);
-                    }
-                  }}
+                  onClick={openCustomizeCards}
                 >
                   {t("Customize cards")}
                 </button>
@@ -9813,6 +9930,7 @@ export function OrderDetailContent({
         </div>
       </section>
       {renderOrderTabs()}
+      {renderJumpBar()}
       </div>
       {headerDetailsMenuPosition ? (
         <div
@@ -10071,7 +10189,10 @@ export function OrderDetailContent({
       <ShopifySourceStrip order={order} workspaceCurrency={moneySettings?.selectedCurrency} />
       <ChannelSourceStrip order={order} showMoney={canSeeFinance} />
       {String(order.customFields?.["Source"] || "") === "Etsy" ? (
-        <EtsySourcePanel source={etsySource} photos={etsyPhotos} language={detailLanguage} showMoney={canSeeFinance} />
+        // ETSY-UI-1: in the page flow above the cards (never pinned, no inner scroll); not a card.
+        <div ref={etsyBlockRef} className="order-etsy-block" id="order-etsy-block">
+          <EtsySourcePanel source={etsySource} photos={etsyPhotos} language={detailLanguage} showMoney={canSeeFinance} />
+        </div>
       ) : null}
       <EbayOrderBlock stamp={order.commerce} canSeeFinance={canSeeFinance} language={detailLanguage} />
       <RestrictedBuyerAddress order={order} canReveal={normalizeWorkspaceRole(workspace.role) === "owner"} />
@@ -10159,17 +10280,8 @@ export function OrderDetailContent({
 
           <div className="order-detail-mobile-stack">
             {(() => {
-              // ETSY-E2E night: on an Etsy order the cards it does not use yet (preview, repair intake, estimate,
-              // portal) move under one fold at the end. Nothing is removed and the saved layout is not changed.
-              const fold = etsyCardFold(visibleMobileCards, {
-                isEtsy: isEtsyOrder,
-                used: {
-                  preview: Boolean(order.designLink) || etsyPhotos.loading || Boolean(etsyFirstPhoto),
-                  repairIntake: order.orderType === "repair" || Object.values(repairIntake?.fields ?? {}).some(v => String(v ?? "").trim()) || intakePhotos.length > 0,
-                  estimate: Boolean(currentEstimate),
-                  customerPortal: Boolean(portal.active)
-                }
-              });
+              // ETSY-E2E night: the Etsy fold (mobileCardFold, computed above with the jump bar).
+              const fold = mobileCardFold;
               return (
                 <>
                   {fold.main.map(cardId => renderMobileCardFrame(cardId))}

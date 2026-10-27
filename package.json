@@ -42,6 +42,7 @@
     "test:count-labels": "npx tsx scripts/check-count-labels.ts",
     "test:import-count-phrases": "npx tsx scripts/check-import-count-phrases.ts",
     "test:etsy-shipping-cost": "npx tsx scripts/check-etsy-shipping-cost.mts",
+    "test:etsy-ui-1": "npx tsx scripts/check-etsy-ui-1.mts",
     "test:order-list-view": "npx tsx scripts/check-order-list-view.ts",
     "test:claude-mcp-route": "npx tsx scripts/check-claude-mcp-route.ts",
     "test:oauth-loopback": "node scripts/check-oauth-loopback-proxy.mts",

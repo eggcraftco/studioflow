@@ -35303,3 +35303,282 @@ body[data-studio-theme="dark"] .orders-mobile-header {
   outline: 2px solid var(--accent, #2563eb);
   outline-offset: 3px;
 }
+
+/* ==== ETSY-UI-1 (27 Oct 2026, owner-approved design) ====
+   The Etsy order block (app/orders/EtsySourcePanel.tsx) above the cards, the jump bar under the order header, the
+   enlarged Etsy photo, and the Etsy note on Shipping & Tracking. The block stays in the page flow: no sticky, no
+   max-height, no inner scroll. Logical properties throughout, so the Arabic (dir=rtl) page mirrors with no second rule. */
+.order-etsy-block { position: static; min-width: 0; margin: 10px 14px 0; scroll-margin-top: 12px; }
+.order-etsy-block .etsy-source-panel { margin: 0; }
+.etsy-source-panel {
+  position: static;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  gap: 0;
+  border-color: rgba(194, 65, 12, 0.24);
+  background: var(--surface);
+  font-size: 14px;
+}
+.etsy-source-panel__head {
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 12px 16px;
+}
+.etsy-source-panel__badge {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #fff4ed;
+  color: #9a3412;
+  font-size: 12px;
+  font-weight: 800;
+}
+.etsy-source-panel__heading { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
+.etsy-source-panel__head .etsy-chip { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+.etsy-chip.is-good { background: #ecfdf3; color: #1f7a3f; }
+.etsy-chip.is-warning { background: #fffaeb; color: #93370d; }
+.etsy-chip.is-danger { background: #fef3f2; color: #b42318; }
+.etsy-chip.is-neutral { background: rgba(23, 25, 35, 0.06); color: #374151; }
+.etsy-source-panel__spacer { flex: 1 1 auto; }
+.etsy-source-panel__asof { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.etsy-source-panel__open { font-size: 13px; font-weight: 650; white-space: nowrap; }
+.etsy-source-panel__fulfilment { margin: 0; padding: 0 16px 10px; }
+.etsy-source-panel__grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 16px;
+  border-top: 1px solid rgba(194, 65, 12, 0.14);
+  min-width: 0;
+}
+.etsy-source-panel__grid > .etsy-source-panel__items { flex: 3 1 420px; min-width: 0; gap: 0; }
+.etsy-source-panel__side { flex: 1 1 240px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.etsy-source-panel__items > li.etsy-source-panel__item {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding: 0 0 16px;
+  margin: 0 0 16px;
+  border-bottom: 1px solid var(--border);
+}
+.etsy-source-panel__items > li.etsy-source-panel__item:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+.etsy-source-panel__body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.etsy-source-panel__line { justify-content: space-between; align-items: baseline; gap: 12px; }
+.etsy-source-panel__title { font-size: 16px; font-weight: 650; }
+.etsy-source-panel__price { color: var(--muted); white-space: nowrap; }
+.etsy-source-panel__options { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.etsy-option-chip { padding: 4px 8px; border-radius: 6px; background: rgba(23, 25, 35, 0.06); color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
+.etsy-source-panel__personalisation {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #f5d98b;
+  border-radius: 10px;
+  background: #fff8e6;
+  white-space: normal;
+}
+.etsy-source-panel__personalisation > span.etsy-source-panel__personalisation-label { color: #7a4e00; font-size: 12px; font-weight: 700; }
+.etsy-source-panel__personalisation-value { font-size: 18px; font-weight: 750; letter-spacing: 0.03em; color: var(--text); overflow-wrap: anywhere; white-space: pre-line; min-width: 0; }
+.etsy-source-panel__personalisation.is-upload .etsy-source-panel__personalisation-value { font-size: 14px; letter-spacing: 0; }
+.etsy-copy-button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #f5d98b;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.etsy-copy-button:focus-visible, .etsy-item-photo__button:focus-visible, .order-jump-link:focus-visible, .order-jump-customize:focus-visible, .etsy-lightbox__close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.etsy-source-panel__listing { margin: 0; align-self: flex-start; font-size: 13px; }
+/* The line photo: 112 px, a button that enlarges it; a skeleton while Etsy is asked; a neutral placeholder
+   (linking to the listing) when there is none to show. */
+.etsy-item-photo { position: relative; display: block; width: 112px; height: 112px; }
+.etsy-item-photo .etsy-product-photo { width: 100%; height: 100%; border-radius: 12px; }
+.etsy-item-photo .etsy-product-photo.is-large img { object-fit: cover; }
+.etsy-item-photo .etsy-product-photo__empty { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; text-decoration: none; font-size: 28px; }
+.etsy-item-photo__button { display: block; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 12px; background: transparent; cursor: zoom-in; }
+.etsy-item-photo__skeleton {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(23, 25, 35, 0.06) 0%, rgba(23, 25, 35, 0.12) 50%, rgba(23, 25, 35, 0.06) 100%);
+  background-size: 200% 100%;
+  animation: etsy-photo-skeleton 1.2s ease-in-out infinite;
+}
+@keyframes etsy-photo-skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { .etsy-item-photo__skeleton { animation: none; } }
+.etsy-source-panel__note { margin: 0; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; white-space: pre-line; }
+.etsy-source-panel__note > span:first-child { font-size: 12px; font-weight: 700; }
+.etsy-source-panel__note.is-buyer-note { background: #f5f7ff; border: 1px solid #d6e0ff; }
+.etsy-source-panel__note.is-buyer-note > span:first-child { color: #1e3fb8; }
+.etsy-source-panel__note.is-gift-message { background: #fdf4ff; border: 1px solid #f0d5f7; }
+.etsy-source-panel__note.is-gift-message > span:first-child { color: #86198f; }
+.etsy-source-panel__money-title { margin: 0 0 -6px; font-size: 12px; font-weight: 700; color: var(--text); }
+.etsy-source-panel__money { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; gap: 6px; }
+.etsy-source-panel__money .is-note dt, .etsy-source-panel__money .is-note dd { color: var(--muted); font-size: 12px; }
+.etsy-source-panel__footer { display: grid; gap: 4px; padding: 0 16px 14px; }
+.etsy-source-panel__footer .etsy-source-panel__foot { font-size: 11.5px; line-height: 1.5; }
+
+/* The enlarged photo (a modal on the page body). */
+.etsy-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(17, 24, 39, 0.6);
+}
+.etsy-lightbox {
+  width: min(600px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.3);
+}
+.etsy-lightbox__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.etsy-lightbox__head strong { min-width: 0; overflow-wrap: anywhere; }
+.etsy-lightbox__close {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.etsy-lightbox__photo { height: min(420px, 60vh); min-height: 200px; }
+.etsy-lightbox__photo .etsy-product-photo__empty { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; text-decoration: none; font-size: 40px; }
+.etsy-lightbox__foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; }
+.etsy-lightbox__foot a { font-size: 13px; font-weight: 650; }
+
+/* The jump bar under the order header: one link per visible card, then Customize cards with the hidden count. */
+.order-jump-bar { display: flex; align-items: center; gap: 8px; margin: 8px 14px 0; padding: 0 0 8px; min-width: 0; }
+.order-jump-bar__links {
+  flex: 1 1 auto;
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.order-jump-link {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.order-jump-link:hover { background: rgba(37, 99, 235, 0.06); }
+.order-jump-link.is-etsy { color: #9a3412; font-weight: 750; }
+.order-jump-customize {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.order-jump-customize__count { color: var(--muted); }
+
+/* Shipping & Tracking on an Etsy order: NivaDesk cannot mark it dispatched on Etsy. */
+.order-etsy-tracking-note { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: #fff4ed; display: grid; gap: 4px; }
+.order-etsy-tracking-note p { margin: 0; color: #7c2d12; font-size: 12.5px; line-height: 1.45; }
+.order-etsy-tracking-note a { font-size: 12.5px; font-weight: 650; justify-self: start; }
+
+@media (max-width: 640px) {
+  .order-etsy-block { margin: 10px 10px 0; }
+  .etsy-source-panel__head { padding: 10px 12px; gap: 6px; }
+  .etsy-source-panel__asof { flex-basis: 100%; order: 10; white-space: normal; }
+  .etsy-source-panel__grid { padding: 12px; gap: 12px; }
+  .etsy-source-panel__items > li.etsy-source-panel__item { grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
+  .etsy-item-photo { width: 72px; height: 72px; }
+  .etsy-source-panel__title { font-size: 15px; }
+  .etsy-source-panel__line { flex-wrap: wrap; }
+  .etsy-source-panel__personalisation { align-self: stretch; justify-content: space-between; }
+  .etsy-source-panel__personalisation-value { font-size: 17px; }
+  .etsy-copy-button { min-height: 36px; }
+  .etsy-source-panel__footer { padding: 0 12px 12px; }
+  .etsy-lightbox-backdrop { padding: 16px; background: rgba(17, 24, 39, 0.92); }
+  .order-jump-bar { margin: 6px 10px 0; flex-wrap: wrap; }
+  .order-jump-bar__links { flex-basis: 100%; scrollbar-width: none; }
+  .order-jump-bar__links::-webkit-scrollbar { display: none; }
+  .order-jump-link { min-height: 44px; }
+  .order-jump-customize { min-height: 40px; }
+}
+
+body[data-studio-theme="dark"] .etsy-source-panel { background: rgba(255, 255, 255, 0.04); border-color: rgba(251, 146, 60, 0.3); }
+body[data-studio-theme="dark"] .etsy-source-panel__grid { border-top-color: rgba(251, 146, 60, 0.18); }
+body[data-studio-theme="dark"] .etsy-source-panel__badge { background: rgba(251, 146, 60, 0.16); color: #fdba74; }
+body[data-studio-theme="dark"] .etsy-chip.is-good { background: rgba(52, 199, 89, 0.16); color: #86efac; }
+body[data-studio-theme="dark"] .etsy-chip.is-warning { background: rgba(255, 149, 0, 0.16); color: #fcd34d; }
+body[data-studio-theme="dark"] .etsy-chip.is-danger { background: rgba(255, 138, 138, 0.16); color: #fca5a5; }
+body[data-studio-theme="dark"] .etsy-chip.is-neutral, body[data-studio-theme="dark"] .etsy-option-chip { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+body[data-studio-theme="dark"] .etsy-source-panel__personalisation { background: rgba(245, 217, 139, 0.12); border-color: rgba(245, 217, 139, 0.35); }
+body[data-studio-theme="dark"] .etsy-source-panel__personalisation .etsy-source-panel__personalisation-label { color: #fcd34d; }
+body[data-studio-theme="dark"] .etsy-copy-button { background: #262626; color: var(--text); border-color: rgba(245, 217, 139, 0.35); }
+body[data-studio-theme="dark"] .etsy-source-panel__note.is-buyer-note { background: rgba(96, 165, 250, 0.12); border-color: rgba(96, 165, 250, 0.3); }
+body[data-studio-theme="dark"] .etsy-source-panel__note.is-buyer-note > span:first-child { color: #93c5fd; }
+body[data-studio-theme="dark"] .etsy-source-panel__note.is-gift-message { background: rgba(232, 121, 249, 0.1); border-color: rgba(232, 121, 249, 0.28); }
+body[data-studio-theme="dark"] .etsy-source-panel__note.is-gift-message > span:first-child { color: #f0abfc; }
+body[data-studio-theme="dark"] .etsy-item-photo__skeleton { background: linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.06) 100%); background-size: 200% 100%; }
+body[data-studio-theme="dark"] .order-jump-link.is-etsy { color: #fdba74; }
+body[data-studio-theme="dark"] .order-jump-link:hover { background: rgba(255, 255, 255, 0.06); }
+body[data-studio-theme="dark"] .order-etsy-tracking-note { background: rgba(251, 146, 60, 0.12); }
+body[data-studio-theme="dark"] .order-etsy-tracking-note p { color: #fed7aa; }
+
+/* ETSY-UI-1 Phase B: the order-list toggle in the order header (wide layouts only) and the Etsy photo in a list row. */
+.order-list-toggle {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: 40px;
+  height: 40px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.order-list-toggle svg { width: 18px; height: 18px; }
+.order-list-toggle.is-collapsed { background: var(--accent-soft); color: var(--accent); }
+.order-list-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 640px) { .order-list-toggle { display: none; } }
+.order-list-etsy-thumb { position: absolute; inset: 0; display: grid; place-items: center; }
