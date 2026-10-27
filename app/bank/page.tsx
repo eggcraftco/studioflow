@@ -27,7 +27,7 @@ import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
 import { BankReceiptViewer, type BankReceiptViewerRequest } from "@/components/BankReceiptViewer";
-import { documentAmountText, documentAmountWithCurrency, documentReceiptCurrency, foreignAmountInBankText, suggestedPaymentFor, waitingReceiptLookalikes, waitingSuggestionFrom, waitingSuggestionReason, type WaitingSuggestion } from "@/lib/studioflow/bankWaitingReceipts";
+import { captureCallableMissing, captureResultFrom, documentAmountText, documentAmountWithCurrency, documentReceiptCurrency, foreignAmountInBankText, suggestedPaymentFor, waitingReceiptLookalikes, waitingSourceLabel, waitingSuggestionFrom, waitingSuggestionReason, type CaptureResult, type WaitingSuggestion } from "@/lib/studioflow/bankWaitingReceipts";
 
 type BankAccountInfo = { id: string; name: string; currency: string };
 type BankConnection = {
@@ -370,6 +370,9 @@ function BankPageContent() {
   const [categoryRuleKeyword, setCategoryRuleKeyword] = useState("");
   const [ocrInboxPath, setOcrInboxPath] = useState<string | null>(null);
   const [ocrFileName, setOcrFileName] = useState("");
+  // RCPT-2: the one-step "Scan receipt" answer (attached / waiting / likely payment) and the ?scan=1 prompt.
+  const [captureResult, setCaptureResult] = useState<(CaptureResult & { fileName: string }) | null>(null);
+  const [scanPrompt, setScanPrompt] = useState(false);
   const [ocrParsed, setOcrParsed] = useState<{ amount: number; date: string; currency?: string | null } | null>(null);
   const [ocrCandidates, setOcrCandidates] = useState<Array<{ transactionId: string; score: number; amount: number; currency: string; bookingDate: string; counterparty: string; description: string; hasReceipt: boolean }> | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -797,6 +800,63 @@ function BankPageContent() {
       setStatus(t("Added to the order's expenses."));
     } catch (linkError) {
       setError(linkError instanceof Error ? linkError.message : "Could not link the transaction.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // ---- Scan receipt (RCPT-2): one photo, one call ---------------------------
+  // The photo goes to _inbox and bankCaptureReceipt does the rest — attaches it
+  // when one payment clearly matches, otherwise keeps it waiting for the bank
+  // (the matcher retries after every sync and notifies). Same rules as ChatGPT.
+  // An older server without the callable: fall back to the candidate list below.
+  useEffect(() => {
+    if (searchParams?.get("scan") === "1") setScanPrompt(true);
+  }, [searchParams]);
+
+  async function captureReceipt(file: File) {
+    setBusy("ocr");
+    setError(null);
+    setCaptureResult(null);
+    setOcrCandidates(null);
+    setScanPrompt(false);
+    setStatus(t("Uploading…"));
+    const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "_").slice(0, 120) || "receipt.jpg";
+    const path = `companies/${companyId}/bank_receipts/_inbox/${Date.now()}_${safeName}`;
+    try {
+      await uploadBytes(storageRef(storage, path), file);
+      setStatus(t("Reading the receipt…"));
+      const raw = await call<unknown>("bankCaptureReceipt", { storagePath: path, fileName: file.name, source: "web" });
+      const result = captureResultFrom(raw);
+      if (!result) throw new Error("Could not read the server's answer.");
+      setCaptureResult({ ...result, fileName: file.name });
+      setStatus(null);
+    } catch (captureError) {
+      if (captureCallableMissing(captureError)) {
+        try { await deleteObject(storageRef(storage, path)); } catch { /* already gone */ }
+        setBusy(null);
+        await startReceiptMatch(file);
+        return;
+      }
+      const code = String((captureError as { code?: unknown } | null)?.code || "");
+      setError(code === "functions/permission-denied" ? t("Only the workspace owner can add bank receipts.") : captureError instanceof Error ? captureError.message : "Could not read the receipt.");
+      setStatus(null);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function attachCaptureSuggestion() {
+    const current = captureResult;
+    if (!current || !current.suggestion || !current.storagePath) return;
+    setBusy("capture-assign");
+    setError(null);
+    try {
+      await call("bankAssignInboxReceipt", { storagePath: current.storagePath, transactionId: current.suggestion.transactionId, fileName: current.fileName });
+      const s = current.suggestion;
+      setCaptureResult({ ...current, status: "attached", alreadyAttached: false, suggestion: null, transaction: { id: s.transactionId, bookingDate: s.bookingDate, amount: s.amount, currency: s.currency, merchant: s.merchant } });
+    } catch (assignError) {
+      setError(assignError instanceof Error ? assignError.message : "Could not attach the invoice.");
     } finally {
       setBusy(null);
     }
@@ -1808,16 +1868,16 @@ function BankPageContent() {
           </div>
           {isOwner && linkedBanks.length > 0 ? (
             <>
-              <input type="file" accept="image/*" id="bank-ocr-input" style={{ display: "none" }}
+              <input type="file" accept="image/*,application/pdf" capture="environment" id="bank-ocr-input" style={{ display: "none" }}
                 onChange={event => {
                   const file = event.target.files?.[0];
                   event.target.value = "";
-                  if (file) void startReceiptMatch(file);
+                  if (file) void captureReceipt(file);
                 }} />
               <button type="button" disabled={busy === "ocr"}
                 onClick={() => document.getElementById("bank-ocr-input")?.click()}
                 style={bankBtn}>
-                📷 {busy === "ocr" ? t("Reading the receipt…") : t("Match a receipt")}
+                📷 {busy === "ocr" ? (status || t("Reading the receipt…")) : t("Scan receipt")}
               </button>
               <button type="button" disabled={busy === "sync"} onClick={() => void refresh()} style={bankBtn}>
                 ⟳ {busy === "sync" ? t("Refreshing…") : t("Refresh")}
@@ -1879,6 +1939,61 @@ function BankPageContent() {
             <button type="button" style={bankBtnSm} onClick={() => setRulePrompt(null)}>{t("Not now")}</button>
           </div>
         ) : null}
+
+        {/* ---- Scan receipt: ?scan=1 prompt + the one-step answer (RCPT-2) ---- */}
+        {scanPrompt && isOwner && linkedBanks.length > 0 && !captureResult ? (
+          <div style={{ ...bankCard, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 13, flex: 1, minWidth: 220 }}>{t("Take a photo of a receipt — NivaDesk matches it to your bank")}</span>
+            <button type="button" disabled={busy === "ocr"} onClick={() => document.getElementById("bank-ocr-input")?.click()}
+              style={{ ...bankBtn, background: "#2563eb", color: "#fff", borderColor: "#2563eb" }}>📷 {t("Scan receipt")}</button>
+            <button type="button" className="finance-payments-delete" onClick={() => setScanPrompt(false)} aria-label={t("Close")}>✕</button>
+          </div>
+        ) : null}
+        {captureResult ? (() => {
+          const attached = captureResult.status === "attached";
+          const tx = captureResult.transaction;
+          const sug = captureResult.suggestion;
+          const tone = attached ? { border: "rgba(22,163,74,0.35)", bg: "rgba(22,163,74,0.06)", fg: "#15803d" } : { border: "rgba(245,158,11,0.4)", bg: "rgba(245,158,11,0.06)", fg: "#b45309" };
+          return (
+            <div className="bank-capture-result" style={{ ...bankCard, borderColor: tone.border, background: tone.bg }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <strong style={{ fontSize: 14, color: tone.fg }}>
+                  {attached ? `✅ ${t(captureResult.alreadyAttached ? "This receipt was already attached" : "Receipt attached")}` : `⏳ ${t(captureResult.alreadyWaiting ? "This receipt is already waiting for the bank" : "Saved — waiting for the bank payment")}`}
+                </strong>
+                <span style={{ flex: 1 }} />
+                <button type="button" className="finance-payments-delete" onClick={() => setCaptureResult(null)} aria-label={t("Close")}>✕</button>
+              </div>
+              {attached && tx ? (
+                <div style={{ fontSize: 12.5, marginTop: 4 }}>
+                  {tx.bookingDate ? new Date(tx.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" }) : ""}
+                  {tx.merchant ? ` · ${tx.merchant}` : ""}
+                  {" · "}<strong style={{ whiteSpace: "nowrap" }}>−{money(Math.abs(tx.amount), tx.currency)}</strong>
+                </div>
+              ) : null}
+              {!attached ? (
+                <p style={{ fontSize: 12.5, margin: "4px 0 0", opacity: 0.8 }}>{t("It will be attached automatically when the payment reaches your bank feed. You'll get a notification.")}</p>
+              ) : null}
+              {!attached && captureResult.document.amount === null ? (
+                <p style={{ fontSize: 12, margin: "4px 0 0", color: "#b45309" }}>{t("The total could not be read — check it in Banking ▸ Receipts.")}</p>
+              ) : null}
+              {!attached && sug ? (
+                <div style={{ marginTop: 8, padding: "6px 8px", borderRadius: 8, background: "rgba(22,163,74,0.07)", border: "1px solid rgba(22,163,74,0.25)", fontSize: 12 }}>
+                  <strong style={{ color: "#15803d" }}>{t("Likely payment found")}</strong>
+                  {" · "}{sug.merchant}
+                  {sug.bookingDate ? ` · ${new Date(sug.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}` : ""}
+                  {" · "}<span style={{ whiteSpace: "nowrap" }}>−{money(Math.abs(sug.amount), sug.currency)}</span>
+                  <div style={{ opacity: 0.8 }}>{t(waitingSuggestionReason(sug.reason))}</div>
+                  <button type="button" disabled={busy === "capture-assign"} onClick={() => void attachCaptureSuggestion()}
+                    style={{ ...bankBtnSm, marginTop: 6, background: "#16a34a", color: "#fff", borderColor: "#16a34a" }}>{t("Attach to this payment")}</button>
+                </div>
+              ) : null}
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button type="button" style={bankBtnSm} disabled={busy === "ocr"} onClick={() => document.getElementById("bank-ocr-input")?.click()}>📷 {t("Scan another")}</button>
+                <button type="button" style={bankBtnSm} onClick={() => setCaptureResult(null)}>{t("Done")}</button>
+              </div>
+            </div>
+          );
+        })() : null}
 
         {/* ---- OCR candidates --------------------------------------------- */}
         {ocrCandidates !== null ? (
@@ -2937,7 +3052,7 @@ function BankPageContent() {
                                 <button type="button" onClick={() => openWaitingReceipt(item)} title={t("View receipt")}
                                   style={{ ...attentionLink, fontSize: 12.5, fontWeight: 700, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textAlign: "left" }}>{item.fileName}</button>
                                 <div style={{ fontSize: 11, opacity: 0.65 }}>
-                                  {item.amount ? (item.currency ? <span>{documentAmountKnown(item.amount, item.currency)}</span> : <span title={t("currency not read from the document")}>{documentAmount(item.amount)} <span style={{ opacity: 0.8 }}>({t("currency not read")})</span></span>) : t("Amount unknown")}{item.date ? ` · ${item.date}` : ""} · {item.source === "chatgpt" ? "ChatGPT" : item.source === "claude" ? "Claude" : t("Web")} · {ageDays === 0 ? t("today") : `${ageDays} ${t("days waiting")}`}
+                                  {item.amount ? (item.currency ? <span>{documentAmountKnown(item.amount, item.currency)}</span> : <span title={t("currency not read from the document")}>{documentAmount(item.amount)} <span style={{ opacity: 0.8 }}>({t("currency not read")})</span></span>) : t("Amount unknown")}{item.date ? ` · ${item.date}` : ""} · {waitingSourceLabel(item.source) === "Web" ? t("Web") : waitingSourceLabel(item.source)} · {ageDays === 0 ? t("today") : `${ageDays} ${t("days waiting")}`}
                                   {stale && !lookalike ? <span style={{ color: "#dc2626", fontWeight: 700 }}> · {t("Still no payment — check the amount or assign it by hand")}</span> : null}
                                 </div>
                                 {(() => {

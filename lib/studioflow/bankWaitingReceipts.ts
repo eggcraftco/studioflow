@@ -187,3 +187,69 @@ export function suggestedPaymentFor<T extends { id: string; receiptPath: string 
   const found = transactions.find((tx) => tx.id === suggestion.transactionId) ?? null;
   return found && !found.receiptPath ? found : null;
 }
+
+// RCPT-2 (27 Oct): the app's own "Scan receipt" — one call (bankCaptureReceipt) after the photo is in _inbox.
+// The server attaches it when one payment clearly matches, otherwise keeps it waiting (with the likely payment
+// when there is one). These read its answer for the Bank page; nothing here writes.
+export type CaptureTransaction = { id: string; bookingDate: string; amount: number; currency: string; merchant: string };
+export type CaptureResult = {
+  status: "attached" | "waiting";
+  alreadyAttached: boolean;
+  alreadyWaiting: boolean;
+  transaction: CaptureTransaction | null;
+  waitingId: string;
+  storagePath: string;
+  document: { amount: number | null; currency: string | null; date: string | null };
+  suggestion: WaitingSuggestion | null;
+};
+
+export function captureResultFrom(value: unknown): CaptureResult | null {
+  if (!value || typeof value !== "object") return null;
+  const data = value as Record<string, unknown>;
+  const status = data.status === "attached" || data.status === "waiting" ? data.status : null;
+  if (!status) return null;
+  const rawTx = data.transaction && typeof data.transaction === "object" ? data.transaction as Record<string, unknown> : null;
+  const rawDoc = data.document && typeof data.document === "object" ? data.document as Record<string, unknown> : {};
+  const amount = Number(rawDoc.amount);
+  return {
+    status,
+    alreadyAttached: data.alreadyAttached === true,
+    alreadyWaiting: data.alreadyWaiting === true,
+    transaction: rawTx && typeof rawTx.id === "string" && rawTx.id ? {
+      id: rawTx.id,
+      bookingDate: String(rawTx.bookingDate || ""),
+      amount: Number(rawTx.amount) || 0,
+      currency: String(rawTx.currency || "GBP"),
+      merchant: String(rawTx.merchant || "")
+    } : null,
+    waitingId: typeof data.waitingId === "string" ? data.waitingId : "",
+    storagePath: typeof data.storagePath === "string" ? data.storagePath : "",
+    document: {
+      amount: Number.isFinite(amount) && amount > 0 ? amount : null,
+      currency: documentReceiptCurrency(rawDoc.currency),
+      date: typeof rawDoc.date === "string" && rawDoc.date ? rawDoc.date : null
+    },
+    suggestion: waitingSuggestionFrom(data.suggestion)
+  };
+}
+
+/** Where a waiting receipt came from, as the waiting list names it. */
+export function waitingSourceLabel(source: string): string {
+  switch (String(source || "").toLowerCase()) {
+    case "chatgpt": return "ChatGPT";
+    case "claude": return "Claude";
+    case "ios": return "iPhone";
+    case "android": return "Android";
+    case "mac": return "Mac";
+    default: return "Web";
+  }
+}
+
+/** The callable is not deployed (older server): the page falls back to the candidate list. A server
+ *  "not-found" about the UPLOAD is a real answer, not a missing callable. */
+export function captureCallableMissing(error: unknown): boolean {
+  const code = String((error as { code?: unknown } | null)?.code || "");
+  const message = String((error as { message?: unknown } | null)?.message || "");
+  if (code === "functions/unimplemented") return true;
+  return code === "functions/not-found" && !/upload was not found/i.test(message);
+}
