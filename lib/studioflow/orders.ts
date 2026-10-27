@@ -167,10 +167,13 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     hours?: number;
   };
   workTime?: {
-    action: "start" | "continue" | "stop" | "delete";
+    action: "start" | "continue" | "stop" | "delete" | "edit";
     title?: string;
     sessionId?: string;
     newSessionId?: string;
+    /** "edit" (owner/admin, worktime-edit 23 Oct 2026): ISO instants; endedAt null keeps a running timer running. */
+    startedAt?: string;
+    endedAt?: string | null;
   };
   /** A full/half day entry for the signed-in member (lib/studioflow/workDays.ts). */
   workDay?: WorkDayPatch;
