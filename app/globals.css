@@ -35417,6 +35417,14 @@ body[data-studio-theme="dark"] .app-work-session-row small.app-work-session-corr
 /* The list keeps its last columns on screen: "Updated" gives way first on narrower desktops, and with the item panel
    open the optional columns fold into the item cell (the panel already shows them). */
 @media (max-width: 1500px) { .inventory-table .inventory-col-updated { display: none; } }
+/* Up to 1360 px the app's sidebar and the inventory sidebar leave the list too little room for every column: the
+   optional and action columns fold into the item cell (as with the panel open; the panel carries the actions). */
+@media (max-width: 1360px) {
+  .inventory-table { min-width: 0; }
+  .inventory-table .inventory-col-optional,
+  .inventory-table .inventory-col-actions { display: none; }
+  .inventory-item-folded { display: block; }
+}
 @media (min-width: 1101px) {
   .inventory-body.has-panel .inventory-table { min-width: 0; }
   .inventory-body.has-panel .inventory-table .inventory-col-optional,

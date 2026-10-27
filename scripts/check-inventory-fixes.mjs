@@ -117,6 +117,7 @@ ok("a photo that cannot be read falls back to the tile (no broken image)", /onEr
 ok("rows and sidebar read the workspace's icons, not a hard-coded table", !/CATEGORY_ICON\[/.test(content) && /categoryGlyph\(item\.category, categoryIcons\)/.test(content) && /workspaceCategoryIcons\(categories\)/.test(content));
 const css = read("app/globals.css");
 ok("thumbnail CSS is in app/globals.css (the served one), both themes by variables", /\.inventory-thumb \{[^}]*background: var\(--panel\); border: 1px solid var\(--border\);/.test(css));
+ok("up to 1360 px the optional and action columns fold into the item cell (the list needs no sideways scroll)", /@media \(max-width: 1360px\) \{\s*\.inventory-table \{ min-width: 0; \}\s*\.inventory-table \.inventory-col-optional,\s*\.inventory-table \.inventory-col-actions \{ display: none; \}/.test(css));
 ok("with the item panel open, optional and action columns fold into the item cell", /\.inventory-body\.has-panel \.inventory-table \.inventory-col-optional,/.test(css));
 ok("phone width: the sidebar is one scrolling strip and optional columns fold", /@media \(max-width: 900px\) \{\s*\.inventory-nav \{ flex-direction: row; flex-wrap: nowrap; overflow-x: auto;/.test(css) && /@media \(max-width: 640px\) \{\s*\.inventory-table \{ min-width: 0; \}\s*\.inventory-table \.inventory-col-optional,\s*\.inventory-table \.inventory-col-actions,\s*\.inventory-table \.inventory-col-onhand \{ display: none; \}/.test(css) && /\$\{t\("On Hand"\)\}: \$\{inventoryOnHand\(item\)\}/.test(content));
 
