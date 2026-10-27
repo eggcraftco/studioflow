@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useCondensedHeader } from "@/lib/studioflow/useCondensedHeader";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import OrderPaymentLinks from "@/components/OrderPaymentLinks";
@@ -9599,6 +9599,84 @@ export function OrderDetailContent({
   const jumpTargets = orderJumpTargets(jumpCardOrder, cardId => cardLabel(cardId as OrderDetailCardId), { etsyBlock: etsyBlockShown, etsyLabel: t("From Etsy") });
   const hiddenCards = hiddenCardCount(customizeCardOrder, cardLayout.visibility);
 
+  // ETSY-UI-1 follow-up 3: when the jump links do not fit (a laptop width, the order list open) a trailing "More" menu
+  // lists EVERY link, in order; choosing one jumps exactly like the bar. Phones keep the swipeable bar only. Read-only
+  // navigation: nothing here touches the layout.
+  const jumpNavRef = useRef<HTMLElement | null>(null);
+  const jumpMoreButtonRef = useRef<HTMLButtonElement | null>(null);
+  const jumpMoreMenuRef = useRef<HTMLDivElement | null>(null);
+  const [jumpOverflow, setJumpOverflow] = useState(false);
+  const [jumpMoreOpen, setJumpMoreOpen] = useState(false);
+  const jumpTargetsKey = jumpTargets.map(target => `${target.id}:${target.label}`).join("|");
+  useEffect(() => {
+    const nav = jumpNavRef.current;
+    if (!nav) return;
+    const measure = () => setJumpOverflow(nav.scrollWidth > nav.clientWidth + 1);
+    measure();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    observer?.observe(nav);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [jumpTargetsKey, isNarrowLayout]);
+  const jumpMoreShown = jumpOverflow && !isNarrowLayout;
+  useEffect(() => {
+    if (!jumpMoreShown) setJumpMoreOpen(false);
+  }, [jumpMoreShown]);
+  useEffect(() => {
+    if (!jumpMoreOpen) return;
+    // The menu hangs from the sticky header, so the page cannot scroll it into view: it is held inside the window
+    // (its own list scrolls instead), or the last entries of a long list would sit below the screen edge.
+    const fitToWindow = () => {
+      const menu = jumpMoreMenuRef.current;
+      if (menu) menu.style.maxHeight = `${Math.max(160, Math.floor(window.innerHeight - menu.getBoundingClientRect().top - 12))}px`;
+    };
+    fitToWindow();
+    jumpMoreMenuRef.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus();
+    const closeOnOutsidePress = (event: MouseEvent) => {
+      const node = event.target as Node;
+      if (jumpMoreMenuRef.current?.contains(node) || jumpMoreButtonRef.current?.contains(node)) return;
+      setJumpMoreOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsidePress);
+    window.addEventListener("resize", fitToWindow);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsidePress);
+      window.removeEventListener("resize", fitToWindow);
+    };
+  }, [jumpMoreOpen]);
+
+  function closeJumpMore(returnFocus: boolean) {
+    setJumpMoreOpen(false);
+    if (returnFocus) jumpMoreButtonRef.current?.focus();
+  }
+
+  function handleJumpMoreKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const items = Array.from(jumpMoreMenuRef.current?.querySelectorAll<HTMLButtonElement>("[role=menuitem]") ?? []);
+    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeJumpMore(true);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      items[(index + 1) % items.length]?.focus();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      items[(index - 1 + items.length) % items.length]?.focus();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      items[0]?.focus();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (event.key === "Tab") {
+      closeJumpMore(false);
+    }
+  }
+
   function scrollParentOf(node: HTMLElement): HTMLElement {
     let current = node.parentElement;
     while (current && current !== document.body) {
@@ -9638,7 +9716,7 @@ export function OrderDetailContent({
   function renderJumpBar() {
     return (
       <div className="order-jump-bar" data-order-jump-bar="" data-has-stack-entry={allCardsHidden ? undefined : ""}>
-        <nav className="order-jump-bar__links" aria-label={t("Jump to a card")}>
+        <nav ref={jumpNavRef} className="order-jump-bar__links" aria-label={t("Jump to a card")}>
           {jumpTargets.map(target => (
             <button
               key={target.id}
@@ -9651,6 +9729,43 @@ export function OrderDetailContent({
             </button>
           ))}
         </nav>
+        {jumpMoreShown ? (
+          <div className="order-jump-more">
+            <button
+              ref={jumpMoreButtonRef}
+              type="button"
+              className="order-jump-more__button"
+              data-jump-more=""
+              aria-haspopup="menu"
+              aria-expanded={jumpMoreOpen}
+              aria-controls="order-jump-more-menu"
+              aria-label={`${t("More")} · ${t("Jump to a card")}`}
+              onClick={() => setJumpMoreOpen(open => !open)}
+            >
+              {t("More")} <span aria-hidden="true">▾</span>
+            </button>
+            {jumpMoreOpen ? (
+              <div ref={jumpMoreMenuRef} id="order-jump-more-menu" className="order-jump-more__menu" role="menu" aria-label={t("Jump to a card")} onKeyDown={handleJumpMoreKeyDown}>
+                {jumpTargets.map(target => (
+                  <button
+                    key={target.id}
+                    type="button"
+                    role="menuitem"
+                    tabIndex={-1}
+                    className={target.id === ETSY_BLOCK_JUMP_ID ? "order-jump-more__item is-etsy" : "order-jump-more__item"}
+                    data-jump-more-target={target.id}
+                    onClick={() => {
+                      closeJumpMore(false);
+                      jumpToOrderCard(target.id);
+                    }}
+                  >
+                    {target.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <button type="button" className="order-jump-customize" data-jump-customize="" data-hidden-cards={hiddenCards} onClick={openCustomizeCards}>
           {t("Customize cards")}
           {hiddenCards > 0 ? <span className="order-jump-customize__count">{` · ${t("{count} hidden").replace("{count}", String(hiddenCards))}`}</span> : null}

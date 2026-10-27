@@ -19,6 +19,8 @@
  *     header); every other channel draws it exactly as before.
  *  U. Follow-up 2 (owner, 27 Oct): the block wears the order cards' shared chrome and header classes, inner groups in
  *     app-card-panel, orange only on the Etsy badge — and is still not a card.
+ *  V. Follow-up 3 (owner, 27 Oct): WCAG contrast of the block's labels, badge, chips and "as of" (≥ 4.5:1, light and
+ *     dark, computed from the CSS), the jump bar's "More" menu, one trailing price column.
  *
  * Run: npx tsx scripts/check-etsy-ui-1.mts
  */
@@ -303,7 +305,7 @@ await check("C5 the new code reaches no layout write: no persistLayout / save*Ca
 const detail = read("app/orders/OrderDetailContent.tsx");
 await check("D1 the jump bar sits under the order header (inside the sticky head, after the tab bar) on every order", () => {
   assert.match(detail, /\{renderOrderTabs\(\)\}\s*\{renderJumpBar\(\)\}\s*<\/div>/);
-  assert.match(detail, /<nav className="order-jump-bar__links" aria-label=\{t\("Jump to a card"\)\}>/);
+  assert.match(detail, /<nav (ref=\{jumpNavRef\} )?className="order-jump-bar__links" aria-label=\{t\("Jump to a card"\)\}>/);
 });
 await check("D2 it is built from the cards the page draws (desktop columns / phone stack incl. the Etsy fold) and their own titles", () => {
   assert.match(detail, /: desktopColumns\.flatMap\(column => column\.cards\)/);
@@ -526,6 +528,109 @@ await check("U4 still NOT a card: no frame, drag handle, ⋯ menu or card id on 
   const block = detail.slice(detail.indexOf('className="order-etsy-block"') - 200, detail.indexOf("</EtsyBlockChannelContext.Provider>"));
   assert.ok(block.length > 100, "Etsy block wiring not found");
   assert.doesNotMatch(block, /renderDesktopCardFrame|renderMobileCardFrame|setCardFrameRef|persistLayout|save[A-Za-z]*CardLayout/);
+});
+
+// ── V. Follow-up 3 (owner, 27 Oct): contrast, the jump bar's "More" menu, the price column ───────────────────────
+// WCAG 2.x contrast from the REAL values in app/globals.css (looked up by selector, var() tokens resolved from :root
+// and the dark body block), each text over the fill it actually sits on, composed down to the page:
+//   page (body) → .orders-detail-pane → the card (.card / dark .order-detail-card) → [.app-card-panel] → the tint.
+const CSS_TEXT = read("app/globals.css");
+const cssRules: Array<{ selectors: string[]; body: string }> = [];
+for (const m of CSS_TEXT.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+  cssRules.push({ selectors: m[1].split(",").map((x) => x.trim().replace(/\s+/g, " ")), body: m[2] });
+}
+const cssValue = (selector: string, prop: string): string => {
+  let value = "";
+  for (const rule of cssRules) {
+    if (!rule.selectors.includes(selector)) continue;
+    for (const decl of rule.body.split(";")) {
+      const i = decl.indexOf(":");
+      if (i > 0 && decl.slice(0, i).trim() === prop) value = decl.slice(i + 1).trim();
+    }
+  }
+  if (!value) throw new Error(`no ${prop} for ${selector}`);
+  return value;
+};
+const tokens = (dark: boolean): Record<string, string> => {
+  const out: Record<string, string> = {};
+  for (const sel of dark ? [":root", 'body[data-studio-theme="dark"]'] : [":root"]) {
+    for (const rule of cssRules.filter((r) => r.selectors.includes(sel))) {
+      for (const decl of rule.body.split(";")) { const m = decl.match(/^\s*(--[a-z0-9-]+)\s*:\s*(.+?)\s*$/); if (m) out[m[1]] = m[2]; }
+    }
+  }
+  return out;
+};
+type RGBA = [number, number, number, number];
+const colour = (raw: string, dark: boolean): RGBA => {
+  let v = raw.trim();
+  const t = tokens(dark);
+  for (let i = 0; i < 4 && /^var\(/.test(v); i += 1) { const m = v.match(/^var\((--[a-z0-9-]+)(?:,\s*(.+))?\)$/); v = (m && (t[m[1]] || m[2])) || v; }
+  const hex = v.match(/^#([0-9a-f]{6})$/i);
+  if (hex) return [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16)).concat(1) as RGBA;
+  const rgb = v.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+))?\s*\)$/i);
+  if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3]), rgb[4] === undefined ? 1 : Number(rgb[4])];
+  throw new Error(`cannot read colour ${raw}`);
+};
+const over = (top: RGBA, under: RGBA): RGBA => [0, 1, 2].map((i) => top[i] * top[3] + under[i] * (1 - top[3])).concat(1) as RGBA;
+const luminance = (c: RGBA) => { const f = (x: number) => { const s = x / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
+const ratio = (a: RGBA, b: RGBA) => { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+const ETSY_CONTRAST_TARGETS = (dark: boolean) => {
+  const D = (sel: string) => (dark ? `body[data-studio-theme="dark"] ${sel}` : sel);
+  const page = colour(cssValue("body", "background"), dark);
+  const pane = over(colour(cssValue(dark ? 'body[data-studio-theme="dark"] .orders-detail-pane' : ".orders-detail-pane", "background"), dark), page);
+  const card = over(colour(dark ? cssValue('body[data-studio-theme="dark"] .order-detail-card', "background") : cssValue(".card", "background"), dark), pane);
+  const panel = over(colour(cssValue(D(".app-card-panel"), "background"), dark), card);
+  const text = colour("var(--text)", dark);
+  const chip = (tone: string) => ({ fg: colour(cssValue(D(`.etsy-chip.is-${tone}`), "color"), dark), bg: over(colour(cssValue(D(`.etsy-chip.is-${tone}`), "background"), dark), card) });
+  return [
+    { name: "Personalisation label", fg: colour(cssValue(dark ? 'body[data-studio-theme="dark"] .etsy-source-panel__personalisation .etsy-source-panel__personalisation-label' : ".etsy-source-panel__personalisation > span.etsy-source-panel__personalisation-label", "color"), dark),
+      bg: over(colour(cssValue(D(".etsy-source-panel__personalisation"), "background"), dark), panel) },
+    { name: "Buyer note label", fg: colour(cssValue(D(".etsy-source-panel__note.is-buyer-note > span:first-child"), "color"), dark), bg: over(colour(cssValue(D(".etsy-source-panel__note.is-buyer-note"), "background"), dark), card) },
+    { name: "Gift message label", fg: colour(cssValue(D(".etsy-source-panel__note.is-gift-message > span:first-child"), "color"), dark), bg: over(colour(cssValue(D(".etsy-source-panel__note.is-gift-message"), "background"), dark), card) },
+    { name: "Changed on Etsy label", fg: text, bg: over(colour(cssValue(D(".etsy-source-panel__differs"), "background"), dark), card) },
+    { name: "Etsy badge", fg: colour(cssValue(D(".order-detail-card .card-title-icon.etsy-source-panel__badge"), "color"), dark), bg: over(colour(cssValue(D(".order-detail-card .card-title-icon.etsy-source-panel__badge"), "background"), dark), card) },
+    { name: "Chip Paid on Etsy", ...chip("good") },
+    { name: "Chip Not dispatched on Etsy", ...chip("neutral") },
+    { name: "Chip Not paid on Etsy", ...chip("warning") },
+    { name: "Chip Cancelled/Refunded", ...chip("danger") },
+    { name: "as of", fg: colour(cssValue(".etsy-source-panel__asof", "color"), dark), bg: card }
+  ].map((row) => ({ name: row.name, ratio: Math.round(ratio(row.fg, row.bg) * 100) / 100 }));
+};
+await check("V1 contrast (WCAG, light AND dark, real CSS values over their composed fill): every Etsy label, badge, chip and 'as of' is ≥ 4.5:1", () => {
+  const low: string[] = [];
+  const light = ETSY_CONTRAST_TARGETS(false);
+  const dark = ETSY_CONTRAST_TARGETS(true);
+  for (const [i, row] of light.entries()) console.log(`     contrast  ${row.name.padEnd(28)} light ${row.ratio.toFixed(2).padStart(5)}   dark ${dark[i].ratio.toFixed(2).padStart(5)}`);
+  for (const [mode, rows] of [["light", light], ["dark", dark]] as const) for (const row of rows) if (!(row.ratio >= 4.5)) low.push(`${mode} ${row.name} ${row.ratio}`);
+  assert.deepEqual(low, [], `below 4.5:1: ${low.join("; ")}`);
+});
+await check("V2 the jump bar's 'More' menu: wide layouts only, when the links overflow; lists EVERY link in order; button with aria-haspopup/expanded/controls; Esc closes and returns focus; arrows move; same jump; no layout write", () => {
+  assert.match(detail, /const measure = \(\) => setJumpOverflow\(nav\.scrollWidth > nav\.clientWidth \+ 1\);/);
+  assert.match(detail, /const jumpMoreShown = jumpOverflow && !isNarrowLayout;/);
+  assert.match(detail, /aria-haspopup="menu"\s+aria-expanded=\{jumpMoreOpen\}\s+aria-controls="order-jump-more-menu"/);
+  assert.match(detail, /role="menu" aria-label=\{t\("Jump to a card"\)\} onKeyDown=\{handleJumpMoreKeyDown\}>\s*\{jumpTargets\.map\(target => \(/, "every jump target, same order");
+  assert.match(detail, /role="menuitem"/);
+  assert.match(detail, /closeJumpMore\(false\);\s*jumpToOrderCard\(target\.id\);/, "choosing one jumps exactly like the bar");
+  assert.match(detail, /if \(event\.key === "Escape"\) \{\s*event\.preventDefault\(\);\s*event\.stopPropagation\(\);\s*closeJumpMore\(true\);/);
+  assert.match(detail, /if \(returnFocus\) jumpMoreButtonRef\.current\?\.focus\(\);/);
+  assert.match(detail, /event\.key === "ArrowDown"/);
+  assert.match(detail, /menu\.style\.maxHeight = `\$\{Math\.max\(160, Math\.floor\(window\.innerHeight - menu\.getBoundingClientRect\(\)\.top - 12\)\)\}px`/, "the menu stays inside the window (it hangs from the sticky header)");
+  const start = detail.indexOf("const jumpNavRef = useRef");
+  const end = detail.indexOf("function renderJumpBar()");
+  assert.ok(start > 0 && end > start);
+  assert.doesNotMatch(detail.slice(start, end), /persistLayout|save[A-Za-z]*CardLayout|setCardLayout|setDoc|updateDoc|httpsCallable/);
+  assert.match(read("app/globals.css"), /@media \(max-width: 640px\) \{ \.order-jump-more \{ display: none; \} \}/, "phones keep the swipeable bar only");
+});
+await check("V3 prices: every line has ONE trailing price column, top-aligned, at every width; 'each' when quantity > 1", () => {
+  const css = read("app/globals.css");
+  assert.match(css, /\.etsy-source-panel__line \{ display: grid; grid-template-columns: minmax\(0, 1fr\) auto; align-items: start; column-gap: 12px; \}/);
+  assert.doesNotMatch(css, /\.etsy-source-panel__line \{ flex-wrap: wrap; \}/, "no width moves the price under the title");
+  const html = draw(TWO_LINES, PHOTOS);
+  const lines = html.match(/<div class="etsy-source-panel__line">.*?<\/div>/g) || [];
+  assert.equal(lines.length, 2);
+  for (const line of lines) assert.match(line, /^<div class="etsy-source-panel__line"><span class="etsy-source-panel__title"[^>]*>[^<]+<\/span><span class="etsy-source-panel__price">[^<]+<\/span><\/div>$/);
+  assert.match(lines[1], />£36\.00 each</);
+  assert.match(lines[0], />£42\.00</);
 });
 
 console.log(`\n${passed}/${passed + failed} passed`);
