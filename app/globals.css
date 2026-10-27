@@ -35426,8 +35426,10 @@ body[data-studio-theme="dark"] .app-work-session-row small.app-work-session-corr
 @media (max-width: 640px) {
   .inventory-table { min-width: 0; }
   .inventory-table .inventory-col-optional,
-  .inventory-table .inventory-col-actions { display: none; }
+  .inventory-table .inventory-col-actions,
+  .inventory-table .inventory-col-onhand { display: none; }
   .inventory-item-folded { display: block; }
-  .inventory-table th, .inventory-table td { padding: 10px 8px; }
+  .inventory-table th, .inventory-table td { padding: 10px 6px; }
+  .inventory-thumb { width: 34px; height: 34px; flex-basis: 34px; }
   .inventory-head { flex-wrap: wrap; }
 }

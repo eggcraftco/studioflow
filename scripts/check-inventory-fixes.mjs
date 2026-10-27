@@ -118,7 +118,7 @@ ok("rows and sidebar read the workspace's icons, not a hard-coded table", !/CATE
 const css = read("app/globals.css");
 ok("thumbnail CSS is in app/globals.css (the served one), both themes by variables", /\.inventory-thumb \{[^}]*background: var\(--panel\); border: 1px solid var\(--border\);/.test(css));
 ok("with the item panel open, optional and action columns fold into the item cell", /\.inventory-body\.has-panel \.inventory-table \.inventory-col-optional,/.test(css));
-ok("phone width: the sidebar is one scrolling strip and optional columns fold", /@media \(max-width: 900px\) \{\s*\.inventory-nav \{ flex-direction: row; flex-wrap: nowrap; overflow-x: auto;/.test(css) && /@media \(max-width: 640px\) \{\s*\.inventory-table \{ min-width: 0; \}\s*\.inventory-table \.inventory-col-optional,\s*\.inventory-table \.inventory-col-actions \{ display: none; \}/.test(css));
+ok("phone width: the sidebar is one scrolling strip and optional columns fold", /@media \(max-width: 900px\) \{\s*\.inventory-nav \{ flex-direction: row; flex-wrap: nowrap; overflow-x: auto;/.test(css) && /@media \(max-width: 640px\) \{\s*\.inventory-table \{ min-width: 0; \}\s*\.inventory-table \.inventory-col-optional,\s*\.inventory-table \.inventory-col-actions,\s*\.inventory-table \.inventory-col-onhand \{ display: none; \}/.test(css) && /\$\{t\("On Hand"\)\}: \$\{inventoryOnHand\(item\)\}/.test(content));
 
 // ---- 3. categories ---------------------------------------------------------------------------------------------------------
 const seedRows = SEED.map((title, i) => ({ id: `c${i}`, title, icon: "▪", archived: false, itemCount: title === "Watches" ? 6 : title === "Other" ? 1 : 0 }));

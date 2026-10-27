@@ -733,7 +733,7 @@ export function InventoryContent({
             <tr>
               <th className="inventory-check-col" aria-label={t("Select")} />
               <th>{t("Item")}</th><th className="inventory-col-optional">{t("Type")}</th><th className="inventory-col-optional">{t("Category")}</th><th>{t("Status")}</th>
-              <th className="r">{t("On Hand")}</th>
+              <th className="r inventory-col-onhand">{t("On Hand")}</th>
               <th className="r" title={invT("What it cost: purchase price plus extra costs, times the number on hand. Not a sale price.")}>{t("Value")}</th>
               <th className="inventory-col-optional">{t("Location")}</th><th className="inventory-col-optional inventory-col-updated">{t("Updated")}</th><th className="inventory-col-actions" /><th className="inventory-col-actions" />
             </tr>
@@ -781,7 +781,7 @@ export function InventoryContent({
                       </span>
                       {/* At phone width the Type and Category columns fold into this line. */}
                       <span className="inventory-sub inventory-item-folded">
-                        {t(item.category)} · {item.trackingType === "unique" ? t("Unique") : t("Quantity")}
+                        {t(item.category)} · {item.trackingType === "unique" ? t("Unique") : `${t("On Hand")}: ${inventoryOnHand(item)}${item.quantity?.unit ? ` ${item.quantity.unit}` : ""}`}
                       </span>
                     </div>
                   </div>
@@ -799,7 +799,7 @@ export function InventoryContent({
                       : t(STATUS_LABEL[item.status] ?? item.status)}
                   </span>
                 </td>
-                <td className="r">
+                <td className="r inventory-col-onhand">
                   {inventoryOnHand(item)}{item.trackingType === "quantity" && item.quantity?.unit ? ` ${item.quantity.unit}` : ""}
                 </td>
                 <td className={["sold", "used", "removed", "archived"].includes(item.status) ? "r inventory-value-off" : "r"}
