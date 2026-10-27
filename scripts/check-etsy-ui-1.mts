@@ -308,7 +308,7 @@ await check("D2 it is built from the cards the page draws (desktop columns / pho
 });
 await check("D3 Customize cards next to it is the existing entry (one handler for Actions and the bar) with the hidden count", () => {
   assert.match(detail, /const hiddenCards = hiddenCardCount\(customizeCardOrder, cardLayout\.visibility\);/);
-  assert.equal((detail.match(/onClick=\{openCustomizeCards\}/g) || []).length, 2);
+  assert.equal((detail.match(/onClick=\{openCustomizeCards\}/g) || []).length, 3, "Actions menu, the jump bar, the end of the phone stack");
   assert.match(detail, /t\("\{count\} hidden"\)\.replace\("\{count\}", String\(hiddenCards\)\)/);
 });
 await check("D4 the Etsy block stays in the page flow above the cards: no sticky/fixed, no max-height, no inner scroll", () => {

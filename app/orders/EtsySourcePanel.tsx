@@ -428,7 +428,7 @@ function EtsySourcePanelBody({ source, photos, language, showMoney }: EtsySource
         </p>
         <p className="etsy-source-panel__foot">{t("Photos come live from Etsy and are refreshed at least every 6 hours; they are not saved in NivaDesk.")}</p>
         {/* Etsy API Terms: the required trademark notice, verbatim and never translated. */}
-        <p className="etsy-source-panel__foot" data-etsy-trademark="" lang="en">
+        <p className="etsy-source-panel__foot" data-etsy-trademark="" lang="en" dir="ltr">
           {"The term 'Etsy' is a trademark of Etsy, Inc. This Application uses Etsy's API, but is not endorsed or certified by Etsy."}
         </p>
       </div>

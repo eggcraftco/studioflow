@@ -9633,7 +9633,7 @@ export function OrderDetailContent({
 
   function renderJumpBar() {
     return (
-      <div className="order-jump-bar" data-order-jump-bar="">
+      <div className="order-jump-bar" data-order-jump-bar="" data-has-stack-entry={allCardsHidden ? undefined : ""}>
         <nav className="order-jump-bar__links" aria-label={t("Jump to a card")}>
           {jumpTargets.map(target => (
             <button
@@ -10291,6 +10291,12 @@ export function OrderDetailContent({
                       {fold.folded.map(cardId => renderMobileCardFrame(cardId))}
                     </details>
                   ) : null}
+                  {/* ETSY-UI-1 (phone design): the same Customize cards entry closes the card stack, so the sticky header
+                      keeps only the jump links. */}
+                  <button type="button" className="order-jump-customize is-stack-end" data-jump-customize-stack="" onClick={openCustomizeCards}>
+                    {t("Customize cards")}
+                    {hiddenCards > 0 ? <span className="order-jump-customize__count">{` · ${t("{count} hidden").replace("{count}", String(hiddenCards))}`}</span> : null}
+                  </button>
                 </>
               );
             })()}

@@ -35531,9 +35531,10 @@ body[data-studio-theme="dark"] .orders-mobile-header {
   .etsy-item-photo { width: 72px; height: 72px; }
   .etsy-source-panel__title { font-size: 15px; }
   .etsy-source-panel__line { flex-wrap: wrap; }
-  .etsy-source-panel__personalisation { align-self: stretch; justify-content: space-between; }
+  .etsy-source-panel__personalisation { align-self: stretch; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 10px; }
+  .etsy-source-panel__personalisation > span.etsy-source-panel__personalisation-label, .etsy-source-panel__personalisation-value { grid-column: 1; }
   .etsy-source-panel__personalisation-value { font-size: 17px; }
-  .etsy-copy-button { min-height: 36px; }
+  .etsy-copy-button { min-height: 36px; grid-column: 2; grid-row: 1 / span 2; }
   .etsy-source-panel__footer { padding: 0 12px 12px; }
   .etsy-lightbox-backdrop { padding: 16px; background: rgba(17, 24, 39, 0.92); }
   .order-jump-bar { margin: 6px 10px 0; flex-wrap: wrap; }
@@ -35541,7 +35542,10 @@ body[data-studio-theme="dark"] .orders-mobile-header {
   .order-jump-bar__links::-webkit-scrollbar { display: none; }
   .order-jump-link { min-height: 44px; }
   .order-jump-customize { min-height: 40px; }
+  .order-jump-bar[data-has-stack-entry] .order-jump-customize { display: none; }
 }
+/* The phone's Customize cards entry at the end of the card stack (the phone stack only exists at <= 640 px). */
+.order-jump-customize.is-stack-end { width: 100%; min-height: 44px; border-style: dashed; background: transparent; color: var(--text); }
 
 body[data-studio-theme="dark"] .etsy-source-panel { background: rgba(255, 255, 255, 0.04); border-color: rgba(251, 146, 60, 0.3); }
 body[data-studio-theme="dark"] .etsy-source-panel__grid { border-top-color: rgba(251, 146, 60, 0.18); }
