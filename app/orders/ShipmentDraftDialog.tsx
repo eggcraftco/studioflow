@@ -34,6 +34,7 @@ import {
   shippingErrorMessage,
   type CustomsItem,
   type OrderShipment,
+  type ProductIdSuggestion,
   type ShipmentDraftPatch,
   type ShipmentIssue,
   type ShipmentProductsResult,
@@ -47,6 +48,9 @@ type PieceInput = { weight: string; length: string; width: string; height: strin
 type ItemInput = {
   description: string; quantity: string; quantityUnit: string; unitValue: string;
   hsCode: string; manufacturerCountry: string; netWeight: string; grossWeight: string;
+  // Product identifiers (DHL-8): sent as typed; the server checks and keeps them.
+  merchantProductId: string; manufacturerProductId: string; standardProductId: string;
+  ddsReference: string; taricDocumentCode: string;
 };
 
 const DHL_INCOTERMS = ["DAP", "DDP", "EXW", "FCA", "CPT", "CIP", "DPU", "FAS", "FOB", "CFR", "CIF"];
@@ -59,7 +63,16 @@ const asNumber = (value: string) => {
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : null;
 };
-const emptyItem = (): ItemInput => ({ description: "", quantity: "1", quantityUnit: "PCS", unitValue: "", hsCode: "", manufacturerCountry: "", netWeight: "", grossWeight: "" });
+const emptyItem = (): ItemInput => ({
+  description: "", quantity: "1", quantityUnit: "PCS", unitValue: "", hsCode: "", manufacturerCountry: "", netWeight: "", grossWeight: "",
+  merchantProductId: "", manufacturerProductId: "", standardProductId: "", ddsReference: "", taricDocumentCode: ""
+});
+// Where a suggested code came from (functions/shipping/productIds.js suggestionsFrom).
+const SUGGESTION_SOURCE: Record<ProductIdSuggestion["source"], string> = {
+  order_line: "Order line",
+  order_watch_ref: "Watch reference on the order",
+  inventory_item: "Held for this order"
+};
 
 export function ShipmentDraftDialog({
   companyId,
@@ -121,8 +134,15 @@ export function ShipmentDraftDialog({
   const [invoiceDate, setInvoiceDate] = useState(customsView.invoice?.date ?? "");
   const [items, setItems] = useState<ItemInput[]>(() => (customsView.items ?? []).map((i: CustomsItem) => ({
     description: i.description ?? "", quantity: asInput(i.quantity), quantityUnit: i.quantityUnit || "PCS", unitValue: asInput(i.unitValue),
-    hsCode: i.hsCode ?? "", manufacturerCountry: i.manufacturerCountry ?? "", netWeight: asInput(i.netWeight), grossWeight: asInput(i.grossWeight)
+    hsCode: i.hsCode ?? "", manufacturerCountry: i.manufacturerCountry ?? "", netWeight: asInput(i.netWeight), grossWeight: asInput(i.grossWeight),
+    merchantProductId: i.merchantProductId ?? "", manufacturerProductId: i.manufacturerProductId ?? "", standardProductId: i.standardProductId ?? "",
+    ddsReference: i.ddsReference ?? "", taricDocumentCode: i.taricDocumentCode ?? ""
   })));
+  // What the server says the lines need here (DHL-8): EU consumer → codes required, or refused by the owner's choice.
+  const productIdsView = customsView.productIds;
+  const productIdsRequired = productIdsView?.required === true;
+  const productIdsRefused = productIdsView?.refused === true;
+  const productIdSuggestions = customsView.productIdSuggestions ?? [];
 
   const [issues, setIssues] = useState<ShipmentIssue[]>(shipment.issues ?? []);
   const [confirmed, setConfirmed] = useState(Boolean(customsView.confirmed));
@@ -232,7 +252,9 @@ export function ShipmentDraftDialog({
         invoice: { number: invoiceNumber, date: invoiceDate },
         items: items.map(item => ({
           description: item.description, quantity: asNumber(item.quantity), quantityUnit: item.quantityUnit, unitValue: asNumber(item.unitValue),
-          hsCode: item.hsCode, manufacturerCountry: item.manufacturerCountry, netWeight: asNumber(item.netWeight), grossWeight: asNumber(item.grossWeight)
+          hsCode: item.hsCode, manufacturerCountry: item.manufacturerCountry, netWeight: asNumber(item.netWeight), grossWeight: asNumber(item.grossWeight),
+          merchantProductId: item.merchantProductId, manufacturerProductId: item.manufacturerProductId, standardProductId: item.standardProductId,
+          ddsReference: item.ddsReference, taricDocumentCode: item.taricDocumentCode
         }))
       };
     }
@@ -361,6 +383,15 @@ export function ShipmentDraftDialog({
     setItems(current => current.map((item, i) => (i === index ? { ...item, [key]: value } : item)));
     setDirty(true);
     setCustomsChanged(true);
+  };
+  // A code from the order or its held inventory, copied onto one line; the person decides which line.
+  const applySuggestion = (index: number, suggestion: ProductIdSuggestion) => {
+    if (suggestion.merchantProductId) updateItem(index, "merchantProductId", suggestion.merchantProductId);
+    if (suggestion.manufacturerProductId) updateItem(index, "manufacturerProductId", suggestion.manufacturerProductId);
+  };
+  const suggestionLabel = (suggestion: ProductIdSuggestion) => {
+    const codes = [suggestion.merchantProductId ? `SKU ${suggestion.merchantProductId}` : "", suggestion.manufacturerProductId ?? ""].filter(Boolean).join(" · ");
+    return `${t(SUGGESTION_SOURCE[suggestion.source] ?? suggestion.source)}: ${suggestion.label}${codes ? ` (${codes})` : ""}`;
   };
   const updatePiece = (index: number, key: keyof PieceInput, value: string) => {
     setPieces(current => current.map((piece, i) => (i === index ? { ...piece, [key]: value } : piece)));
@@ -542,6 +573,14 @@ export function ShipmentDraftDialog({
                     </div>
 
                     <div className="shipment-subhead">{t("Declared goods")}</div>
+                    {productIdsRefused ? (
+                      <p className="shipment-banner" data-tone="warn" role="status" data-testid="eu-product-ids-refused">
+                        {shipmentIssueMessage({ code: productIdsView?.mode === "mydhl_plus" ? "eu_b2c_use_mydhl_plus" : "eu_product_ids_not_supported", field: "customs.items" }, t)}
+                        {productIdsView?.mode === "mydhl_plus" ? <> <code className="shipment-mono">{orderReference}</code></> : null}
+                      </p>
+                    ) : productIdsRequired ? (
+                      <p className="shipment-note" data-testid="eu-product-ids-required">{t("This shipment goes to a consumer in the EU: from 1 November 2026 every line needs your product code and the manufacturer's product code. If you made the item, the manufacturer's code is your own model code. One code per product variant, never an order or batch number.")}</p>
+                    ) : null}
                     {items.length === 0 ? <p className="shipment-muted">{t("Add one line per kind of item in the parcel.")}</p> : null}
                     {items.map((item, index) => (
                       <div key={index} className="shipment-item">
@@ -563,6 +602,30 @@ export function ShipmentDraftDialog({
                           <input className="input" type="number" min="0" step="any" inputMode="decimal" value={item.netWeight} onChange={e => updateItem(index, "netWeight", e.target.value)} /></label>
                         <label className="inventory-field"><span>{t("Gross weight (kg)")}</span>
                           <input className="input" type="number" min="0" step="any" inputMode="decimal" value={item.grossWeight} onChange={e => updateItem(index, "grossWeight", e.target.value)} /></label>
+                        <div className="shipment-subhead is-wide">{t("Product codes")}</div>
+                        {!productIdsRequired ? <p className="shipment-muted is-wide">{t("Needed on shipments to consumers in the EU from 1 November 2026. Optional here.")}</p> : null}
+                        {productIdSuggestions.length > 0 ? (
+                          <label className="inventory-field is-wide"><span>{t("Copy codes from…")}</span>
+                            <select className="input" value="" onChange={e => { const chosen = productIdSuggestions[Number(e.target.value)]; if (chosen) applySuggestion(index, chosen); }}>
+                              <option value="">{t("Choose…")}</option>
+                              {productIdSuggestions.map((suggestion, i) => <option key={i} value={i}>{suggestionLabel(suggestion)}</option>)}
+                            </select></label>
+                        ) : null}
+                        <label className="inventory-field"><span>{t("Your product code (SKU)")}{productIdsRequired ? " *" : ""}</span>
+                          <input className="input" value={item.merchantProductId} onChange={e => updateItem(index, "merchantProductId", e.target.value)} /></label>
+                        <label className="inventory-field"><span>{t("Manufacturer's product code")}{productIdsRequired ? " *" : ""}</span>
+                          <input className="input" value={item.manufacturerProductId} onChange={e => updateItem(index, "manufacturerProductId", e.target.value)} /></label>
+                        <label className="inventory-field"><span>{t("Barcode (GTIN/EAN/UPC), if any")}</span>
+                          <input className="input" value={item.standardProductId} inputMode="numeric" onChange={e => updateItem(index, "standardProductId", e.target.value)} /></label>
+                        <details className="shipment-item-eudr is-wide" open={Boolean(item.ddsReference || item.taricDocumentCode)}>
+                          <summary>{t("EUDR references (only for goods the EU deforestation rules cover)")}</summary>
+                          <div className="shipment-item-eudr-fields">
+                          <label className="inventory-field"><span>{t("EUDR due-diligence reference (DDS)")}</span>
+                            <input className="input" value={item.ddsReference} onChange={e => updateItem(index, "ddsReference", e.target.value)} /></label>
+                          <label className="inventory-field"><span>{t("TARIC document code")}</span>
+                            <input className="input" value={item.taricDocumentCode} placeholder="Y129" onChange={e => updateItem(index, "taricDocumentCode", e.target.value.toUpperCase())} /></label>
+                          </div>
+                        </details>
                         <button type="button" className="inventory-link inventory-link-danger" onClick={() => { setItems(current => current.filter((_, i) => i !== index)); setDirty(true); setCustomsChanged(true); }}>{t("Remove line")}</button>
                       </div>
                     ))}

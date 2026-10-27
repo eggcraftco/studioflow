@@ -71,6 +71,37 @@ export type CustomsItem = {
   manufacturerCountry: string;
   netWeight: number | null;
   grossWeight: number | null;
+  // Product identifiers (DHL-8, server functions/shipping/productIds.js). Absent on a server
+  // from before 27 Oct 2026; the server keeps them when an app that does not send them saves.
+  /** The seller's own code for the variant (the shop SKU): DHL "ABW", EU M-PID. */
+  merchantProductId?: string;
+  /** The maker's own model code (your own if you made it): DHL "MF", EU NS-PID. */
+  manufacturerProductId?: string;
+  /** GTIN / EAN / UPC, only where one exists: DHL "SRV", EU S-PID. */
+  standardProductId?: string;
+  /** EUDR due-diligence statement (DDS / CDDS / SDI) reference: DHL "DDS". */
+  ddsReference?: string;
+  /** TARIC document code (EUDR), e.g. Y129: DHL "TAR". */
+  taricDocumentCode?: string;
+};
+
+/** What the server says this draft's lines need (DHL-8). */
+export type ShipmentProductIdsView = {
+  // eu_b2c: declared, from outside the EU, to a private person in the EU — the EU rule applies.
+  scope: "eu_b2c" | "eu_b2b" | "edge" | "none";
+  // The owner's choice (appConfig/shipping): require (codes asked and sent), mydhl_plus / block (refused here).
+  mode: "require" | "mydhl_plus" | "block";
+  required: boolean;
+  refused: boolean;
+};
+
+/** A code the server found on the order or the inventory it holds, for the person to copy. */
+export type ProductIdSuggestion = {
+  source: "order_line" | "order_watch_ref" | "inventory_item";
+  label: string;
+  ownership?: "business" | "customer";
+  merchantProductId?: string;
+  manufacturerProductId?: string;
 };
 
 export type ShipmentCustomsView = {
@@ -88,6 +119,8 @@ export type ShipmentCustomsView = {
   placeOfIncoterm?: string;
   invoice?: { number: string; date: string };
   items?: CustomsItem[];
+  productIds?: ShipmentProductIdsView;
+  productIdSuggestions?: ProductIdSuggestion[];
 };
 
 export type ShipmentDraftView = {
@@ -392,6 +425,16 @@ const ISSUE_MESSAGES: Record<string, string> = {
   item_net_weight_invalid: "Every line needs a net weight.",
   item_gross_weight_invalid: "Every line needs a gross weight at least equal to its net weight.",
   declared_value_mismatch: "The declared value must equal the total of the lines.",
+  // DHL-8: product identifiers on EU consumer shipments (functions/shipping/productIds.js ISSUE_TEXT).
+  item_merchant_pid_missing: "Every line going to a consumer in the EU needs your product code (SKU) for that item.",
+  item_manufacturer_pid_missing: "Every line going to a consumer in the EU needs the manufacturer's product code (your own model code if you made it).",
+  item_pid_placeholder: "A product code cannot be a placeholder such as N/A, TBC or 0.",
+  item_standard_pid_invalid: "The barcode (GTIN/EAN/UPC) has a wrong check digit. Correct it or leave it empty.",
+  item_dds_reference_invalid: "The EUDR due-diligence reference can contain only letters and digits.",
+  item_taric_code_invalid: "The TARIC document code is one letter and three digits, for example Y129.",
+  eu_b2c_use_mydhl_plus: "Shipments to consumers in the EU are created in MyDHL+ for now. Use this order's reference there; NivaDesk finds the shipment on the order.",
+  eu_product_ids_not_supported: "NivaDesk cannot create DHL shipments to consumers in the EU yet (EU product identifier rule).",
+  line_reference_type_invalid: "One of the product codes cannot be sent to DHL.",
   customs_not_confirmed: "Confirm the customs declaration.",
   planned_date_invalid: "Choose a valid shipping date and time.",
   too_long: "One of the fields is longer than DHL accepts.",
