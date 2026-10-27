@@ -27,7 +27,7 @@ import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { PandleCard, PANDLE_DEFAULT_MAPPINGS } from "@/components/PandleCard";
 import { BankReceiptViewer, type BankReceiptViewerRequest } from "@/components/BankReceiptViewer";
-import { documentAmountText, documentAmountWithCurrency, documentReceiptCurrency, foreignAmountInBankText, waitingReceiptLookalikes } from "@/lib/studioflow/bankWaitingReceipts";
+import { documentAmountText, documentAmountWithCurrency, documentReceiptCurrency, foreignAmountInBankText, suggestedPaymentFor, waitingReceiptLookalikes, waitingSuggestionFrom, waitingSuggestionReason, type WaitingSuggestion } from "@/lib/studioflow/bankWaitingReceipts";
 
 type BankAccountInfo = { id: string; name: string; currency: string };
 type BankConnection = {
@@ -130,7 +130,7 @@ type BankRule = {
 };
 // A receipt uploaded before its payment reached the bank feed; the server
 // re-scores it after every sync and attaches it when a confident match lands.
-type WaitingReceipt = { id: string; storagePath: string; fileName: string; amount: number; currency: string | null; date: string; source: string; createdAt: Date | null; attempts: number };
+type WaitingReceipt = { id: string; storagePath: string; fileName: string; amount: number; currency: string | null; date: string; source: string; createdAt: Date | null; attempts: number; suggestion: WaitingSuggestion | null };
 
 // NivaDesk's own VAT treatments — the accounting connector translates them
 // per provider at push time, nothing here is a Pandle code. Zero-rated and
@@ -587,7 +587,8 @@ function BankPageContent() {
               date: String(data.date || ""),
               source: String(data.source || "web"),
               createdAt: created?.toDate ? created.toDate() : null,
-              attempts: Number(data.attempts) || 0
+              attempts: Number(data.attempts) || 0,
+              suggestion: waitingSuggestionFrom(data.suggestion)
             };
           })
           .filter(item => item.storagePath)
@@ -2939,6 +2940,25 @@ function BankPageContent() {
                                   {item.amount ? (item.currency ? <span>{documentAmountKnown(item.amount, item.currency)}</span> : <span title={t("currency not read from the document")}>{documentAmount(item.amount)} <span style={{ opacity: 0.8 }}>({t("currency not read")})</span></span>) : t("Amount unknown")}{item.date ? ` · ${item.date}` : ""} · {item.source === "chatgpt" ? "ChatGPT" : item.source === "claude" ? "Claude" : t("Web")} · {ageDays === 0 ? t("today") : `${ageDays} ${t("days waiting")}`}
                                   {stale && !lookalike ? <span style={{ color: "#dc2626", fontWeight: 700 }}> · {t("Still no payment — check the amount or assign it by hand")}</span> : null}
                                 </div>
+                                {(() => {
+                                  // RCPT-1: the server found the likely payment but its evidence is short of
+                                  // attaching alone. Shown only while that payment is in the feed without a receipt.
+                                  const suggested = suggestedPaymentFor(item.suggestion, transactions);
+                                  if (!item.suggestion || !suggested || lookalike) return null;
+                                  return (
+                                    <div className="bank-waiting-suggestion" style={{ marginTop: 6, padding: "6px 8px", borderRadius: 8, background: "rgba(22,163,74,0.07)", border: "1px solid rgba(22,163,74,0.25)", fontSize: 11.5, lineHeight: 1.45 }}>
+                                      <strong style={{ color: "#15803d" }}>{t("Likely payment found")}</strong>
+                                      {" · "}{suggested.counterparty || suggested.description}
+                                      {" · "}{new Date(suggested.bookingDate).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}
+                                      {" · "}<span style={{ whiteSpace: "nowrap" }}>−{money(Math.abs(suggested.amount), suggested.currency)}</span>
+                                      <div style={{ opacity: 0.8 }}>{t(waitingSuggestionReason(item.suggestion.reason))}</div>
+                                      {isOwner ? (
+                                        <button type="button" disabled={busy === `waiting-${item.id}`} onClick={() => void assignWaitingReceipt(item, suggested.id)}
+                                          style={{ ...bankBtnSm, marginTop: 6, background: "#16a34a", color: "#fff", borderColor: "#16a34a" }}>{t("Attach to this payment")}</button>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })()}
                                 {lookalike ? (
                                   // Review N23: the matcher skips rows that already have a
                                   // receipt, so this item cannot clear itself. Say what is

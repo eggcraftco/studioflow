@@ -144,3 +144,46 @@ export function documentAmountWithCurrency(amount: number, currency: unknown, lo
   const code = documentReceiptCurrency(currency);
   return code ? `${code} ${documentAmountText(amount, locale)}` : null;
 }
+
+// RCPT-1 (27 Oct): the payment the server's matcher (functions/bankFeed.js
+// matchWaitingReceipts) thinks a waiting receipt belongs to, when its evidence
+// is short of N23's attach-alone rule — the document's currency was not read,
+// no merchant word is in the bank text, or the payment was booked 5-7 days
+// after the receipt. The server sets and clears `suggestion` on the waiting
+// row and tells the owner once; the screen shows it and offers the one-tap
+// attach (the existing bankAssignInboxReceipt). Display only, like the rest here.
+export type WaitingSuggestion = { transactionId: string; bookingDate: string; amount: number; currency: string; merchant: string; reason: string };
+
+export function waitingSuggestionFrom(value: unknown): WaitingSuggestion | null {
+  if (!value || typeof value !== "object") return null;
+  const data = value as Record<string, unknown>;
+  const transactionId = typeof data.transactionId === "string" ? data.transactionId.trim() : "";
+  if (!transactionId) return null;
+  return {
+    transactionId,
+    bookingDate: String(data.bookingDate || ""),
+    amount: Number(data.amount) || 0,
+    currency: String(data.currency || ""),
+    merchant: String(data.merchant || ""),
+    reason: String(data.reason || "")
+  };
+}
+
+const WAITING_SUGGESTION_REASONS: Record<string, string> = {
+  currency_not_read: "Not attached on its own: the receipt's currency could not be read.",
+  no_merchant_word: "Not attached on its own: the merchant name on the receipt does not appear in the bank text.",
+  booked_later: "Not attached on its own: the payment was booked more than 4 days after the receipt's date.",
+  needs_confirmation: "Not attached on its own: please confirm it is this payment."
+};
+
+/** The English sentence (a translation key) for why the server stopped short. */
+export function waitingSuggestionReason(reason: string): string {
+  return WAITING_SUGGESTION_REASONS[reason] || WAITING_SUGGESTION_REASONS.needs_confirmation;
+}
+
+/** The suggested payment, only while it is in the feed and still has no receipt. */
+export function suggestedPaymentFor<T extends { id: string; receiptPath: string }>(suggestion: WaitingSuggestion | null, transactions: readonly T[]): T | null {
+  if (!suggestion) return null;
+  const found = transactions.find((tx) => tx.id === suggestion.transactionId) ?? null;
+  return found && !found.receiptPath ? found : null;
+}
