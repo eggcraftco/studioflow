@@ -57,6 +57,7 @@ import { ClientDomainSection } from "./ClientDomainSection";
 import { SmsNotificationsSection } from "./SmsNotificationsSection";
 import { SalesSettingsSection } from "./SalesSettingsSection";
 import { fetchSalesCapability } from "@/lib/studioflow/sales";
+import { NotificationSettingsSection } from "./NotificationSettingsSection";
 import { CustomerChannelPanel } from "./CustomerChannelPanel";
 import { getIntegrationWebhookInfo, rotateIntegrationWebhookToken, sendTestInboundWebhook, sendTestIntegrationWebhook, validateInboundOrderPayload, type IntegrationWebhookInfo, type IntegrationWebhookKind } from "@/lib/studioflow/planActions";
 import { PlanComparisonCard } from "@/components/PlanComparisonCard";
@@ -154,6 +155,7 @@ import {
 type SettingsSectionId =
   | "profile-security"
   | "preferences"
+  | "notifications"
   | "about"
   | "branding"
   | "workflow"
@@ -228,6 +230,9 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   instagram: "integrations",
   "customer-channels": "integrations",
   sms: "sms-notifications",
+  notification: "notifications",
+  "notification-settings": "notifications",
+  push: "notifications",
   general: "profile-security",
   account: "profile-security",
   appearance: "preferences",
@@ -252,7 +257,8 @@ const SETTINGS_ICON_PATHS = {
   about: ["M12 17v-5", "M12 8h.01", "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Z"],
   brand: ["M3 11.5 11.5 3H19a2 2 0 0 1 2 2v6.5L12.5 20a2 2 0 0 1-2.8 0l-5.7-5.7a2 2 0 0 1 0-2.8Z", "M16 8h.01"],
   sliders: ["M4 8h9", "M16 8h4", "M4 16h4", "M11 16h9", "M13 6v4", "M8 14v4"],
-  checklist: ["M10 6h10M10 12h10M10 18h10", "m3.5 6 1.5 1.5L7.5 5", "m3.5 12 1.5 1.5L7.5 11", "m3.5 18 1.5 1.5L7.5 17"]
+  checklist: ["M10 6h10M10 12h10M10 18h10", "m3.5 6 1.5 1.5L7.5 5", "m3.5 12 1.5 1.5L7.5 11", "m3.5 18 1.5 1.5L7.5 17"],
+  bell: ["M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16Z", "M10 20a2 2 0 0 0 4 0"]
 };
 
 // The reviewer's point stands: personal preferences, tax rules, destructive
@@ -262,6 +268,8 @@ const SETTINGS_ICON_PATHS = {
 const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "profile-security", title: "Profile & Security", appKey: "Account", description: "Your name, photo, sign-in email and password.", icon: "account", group: "personal" },
   { id: "preferences", title: "Preferences", appKey: "Preferences", description: "Your personal theme and language.", icon: "sliders", group: "personal" },
+  // GN-09 (22 Oct 2026): every notification in one place; personal switches, workspace rules and this device kept apart.
+  { id: "notifications", title: "Notifications", appKey: "Notifications", description: "What notifies you, where it is decided, and whether this device can receive push.", icon: "bell", group: "personal" },
   { id: "about", title: "About", appKey: "About", description: "App version and product information.", icon: "about", group: "personal" },
   { id: "branding", title: "Branding", appKey: "Branding", description: "Workspace name, logo and subtitle.", icon: "brand", group: "design" },
   { id: "client-domain", title: "Customer Portal Domain", appKey: "Client Domain", description: "Branded customer links: your subdomain and your own domain.", icon: "brand", group: "design" },
@@ -290,6 +298,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
 const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
   "profile-security": "password email photo sign in account delete biometric security",
   preferences: "theme language dark light auto lock",
+  notifications: "notification notifications push bell alert alerts mute file upload work time timer day entry assigned member device permission browser",
   about: "version release diagnostics whats new",
   branding: "logo name subtitle brand colour",
   "client-domain": "domain subdomain dns cname portal accent powered by",
@@ -547,6 +556,7 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   if (
     sectionId === "profile-security" ||
     sectionId === "preferences" ||
+    sectionId === "notifications" ||
     sectionId === "about"
   ) {
     return allowed("settingsGeneral");
@@ -1301,6 +1311,8 @@ function renderSettingsSection({
       return <SmsNotificationsSection workspace={workspace} language={language} />;
     case "sales":
       return <SalesSettingsSection workspace={workspace} language={language} />;
+    case "notifications":
+      return <NotificationSettingsSection workspace={workspace} language={language} />;
     case "support-tickets":
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "about":

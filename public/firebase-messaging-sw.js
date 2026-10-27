@@ -55,7 +55,13 @@ self.addEventListener("notificationclick", (event) => {
     targetUrl = "/notes";
   } else if (data.threadId) targetUrl = "/messages";
   else if (data.ticketId) targetUrl = "/settings?section=support";
-  else if (data.orderId) targetUrl = "/orders";
+  else if (data.orderId) {
+    // The order itself, and (GN-08) the card the notice is about.
+    const params = new URLSearchParams({ orderId: data.orderId });
+    if (data.focus === "files" || data.focus === "workTime") params.set("focus", data.focus);
+    ["fileId", "workSessionId", "workDayId"].forEach((key) => { if (data[key]) params.set(key, data[key]); });
+    targetUrl = "/orders?" + params.toString();
+  }
   const targetPath = targetUrl.split("?")[0];
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {

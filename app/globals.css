@@ -35272,3 +35272,9 @@ body[data-studio-theme="dark"] .orders-mobile-header {
 .order-list-title-row .order-delivery-badge.is-long { font-size: 12px; line-height: 1.1; padding: 4px 7px; }
 .order-list-title-row .order-delivery-badge.is-long .order-delivery-text { white-space: normal; text-align: center; overflow-wrap: anywhere; }
 .order-list-title-row > strong, .order-list-title-row > .order-customer-name-link { flex: 1 1 auto; }
+
+/* GN-08: the order card a notification opened on (Files / Work Time), marked for a moment. */
+.is-notification-focus {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: 3px;
+}
