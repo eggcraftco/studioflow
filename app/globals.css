@@ -34320,12 +34320,10 @@ body[data-studio-theme="dark"] .order-detail-tab-soon {
 }
 
 /* ETSY-E2E (24 Oct 2026): the read-only Etsy order panel under the channel strip (app/orders/EtsySourcePanel.tsx). */
+/* ETSY-UI-1 follow-up 2: background, border, radius, shadow and padding come from the order cards' own classes
+   (.card + .order-detail-card on the section); only layout lives here. */
 .etsy-source-panel {
   margin: 8px 0 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface, rgba(255, 255, 255, 0.9));
   display: grid;
   gap: 8px;
   min-width: 0;
@@ -34333,7 +34331,7 @@ body[data-studio-theme="dark"] .order-detail-tab-soon {
 }
 .etsy-source-panel__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .etsy-source-panel__head strong { font-size: 14.5px; }
-.etsy-source-panel__items { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.etsy-source-panel__items { list-style: none; margin: 0; display: grid; gap: 0; }
 .etsy-source-panel__items > li { padding: 8px 0; border-bottom: 1px solid var(--border); min-width: 0; }
 .etsy-source-panel__items > li:last-child { border-bottom: 0; }
 .etsy-source-panel__line { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
@@ -34352,9 +34350,8 @@ body[data-studio-theme="dark"] .order-detail-tab-soon {
 .etsy-source-panel__money dd { margin: 0; font-variant-numeric: tabular-nums; }
 .etsy-source-panel__money .is-total dt, .etsy-source-panel__money .is-total dd { color: var(--text); font-weight: 750; }
 .etsy-source-panel__foot { margin: 0; color: var(--muted); font-size: 12px; }
-.etsy-source-panel__differs { padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.1); display: grid; gap: 2px; }
+.etsy-source-panel__differs { border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.1); display: grid; gap: 2px; }
 .etsy-source-panel__differs p { margin: 0; overflow-wrap: anywhere; }
-body[data-studio-theme="dark"] .etsy-source-panel { background: rgba(255, 255, 255, 0.04); }
 /* ETSY-E2E night (24 Oct 2026): product photos (fetched from Etsy on open, never stored), photo links, folds. */
 .etsy-source-panel__items > li.etsy-source-panel__item { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; align-items: start; }
 .etsy-source-panel__body { min-width: 0; }
@@ -35314,41 +35311,41 @@ body[data-studio-theme="dark"] .orders-mobile-header {
   position: static;
   max-height: none;
   overflow: visible;
-  padding: 0;
-  gap: 0;
-  border-color: rgba(194, 65, 12, 0.24);
-  background: var(--surface);
-  font-size: 14px;
+  gap: 10px;
 }
-.etsy-source-panel__head {
-  justify-content: flex-start;
-  gap: 8px;
-  padding: 12px 16px;
-}
-.etsy-source-panel__badge {
-  padding: 3px 8px;
+/* The header is the card header (.card-title / .card-title-icon / .card-title-text under .order-detail-card): the Etsy
+   badge sits where a card's icon sits, the title in the card title type, chips and shop on a line under it, and
+   "Open in Etsy" at the trailing edge where a card's ⋯ sits. */
+.etsy-source-panel__head { flex-wrap: nowrap; justify-content: flex-start; }
+.etsy-source-panel__title-group { flex: 1 1 auto; min-width: 0; display: grid; gap: 6px; }
+.etsy-source-panel__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.etsy-source-panel__heading { overflow-wrap: anywhere; }
+/* The one orange thing in the block: the small Etsy badge. */
+.order-detail-card .card-title-icon.etsy-source-panel__badge {
+  width: auto;
+  height: auto;
+  align-self: flex-start;
+  padding: 3px 7px;
   border-radius: 6px;
   background: #fff4ed;
   color: #9a3412;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
+  line-height: 1.3;
 }
-.etsy-source-panel__heading { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
-.etsy-source-panel__head .etsy-chip { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+.etsy-source-panel__meta .etsy-chip { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
 .etsy-chip.is-good { background: #ecfdf3; color: #1f7a3f; }
 .etsy-chip.is-warning { background: #fffaeb; color: #93370d; }
 .etsy-chip.is-danger { background: #fef3f2; color: #b42318; }
 .etsy-chip.is-neutral { background: rgba(23, 25, 35, 0.06); color: #374151; }
 .etsy-source-panel__spacer { flex: 1 1 auto; }
 .etsy-source-panel__asof { color: var(--muted); font-size: 12px; white-space: nowrap; }
-.etsy-source-panel__open { font-size: 13px; font-weight: 650; white-space: nowrap; }
-.etsy-source-panel__fulfilment { margin: 0; padding: 0 16px 10px; }
+.etsy-source-panel__open { flex: 0 0 auto; align-self: flex-start; font-size: 13px; font-weight: 650; white-space: nowrap; }
+.etsy-source-panel__fulfilment { margin: 0; }
 .etsy-source-panel__grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 18px;
-  padding: 16px;
-  border-top: 1px solid rgba(194, 65, 12, 0.14);
+  gap: 12px;
   min-width: 0;
 }
 .etsy-source-panel__grid > .etsy-source-panel__items { flex: 3 1 420px; min-width: 0; gap: 0; }
@@ -35358,14 +35355,14 @@ body[data-studio-theme="dark"] .orders-mobile-header {
   grid-template-columns: 112px minmax(0, 1fr);
   gap: 16px;
   align-items: start;
-  padding: 0 0 16px;
-  margin: 0 0 16px;
+  padding: 0 0 12px;
+  margin: 0 0 12px;
   border-bottom: 1px solid var(--border);
 }
 .etsy-source-panel__items > li.etsy-source-panel__item:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
 .etsy-source-panel__body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .etsy-source-panel__line { justify-content: space-between; align-items: baseline; gap: 12px; }
-.etsy-source-panel__title { font-size: 16px; font-weight: 650; }
+.etsy-source-panel__title { font-size: 14px; font-weight: 700; }
 .etsy-source-panel__price { color: var(--muted); white-space: nowrap; }
 .etsy-source-panel__options { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .etsy-option-chip { padding: 4px 8px; border-radius: 6px; background: rgba(23, 25, 35, 0.06); color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
@@ -35377,9 +35374,7 @@ body[data-studio-theme="dark"] .orders-mobile-header {
   gap: 6px 10px;
   align-self: flex-start;
   max-width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #f5d98b;
-  border-radius: 10px;
+  border-color: #f5d98b;
   background: #fff8e6;
   white-space: normal;
 }
@@ -35421,16 +35416,16 @@ body[data-studio-theme="dark"] .orders-mobile-header {
 }
 @keyframes etsy-photo-skeleton { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .etsy-item-photo__skeleton { animation: none; } }
-.etsy-source-panel__note { margin: 0; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 10px; white-space: pre-line; }
+.etsy-source-panel__note { margin: 0; display: flex; flex-direction: column; gap: 4px; white-space: pre-line; }
 .etsy-source-panel__note > span:first-child { font-size: 12px; font-weight: 700; }
-.etsy-source-panel__note.is-buyer-note { background: #f5f7ff; border: 1px solid #d6e0ff; }
+.etsy-source-panel__note.is-buyer-note { background: #f5f7ff; border-color: #d6e0ff; }
 .etsy-source-panel__note.is-buyer-note > span:first-child { color: #1e3fb8; }
-.etsy-source-panel__note.is-gift-message { background: #fdf4ff; border: 1px solid #f0d5f7; }
+.etsy-source-panel__note.is-gift-message { background: #fdf4ff; border-color: #f0d5f7; }
 .etsy-source-panel__note.is-gift-message > span:first-child { color: #86198f; }
-.etsy-source-panel__money-title { margin: 0 0 -6px; font-size: 12px; font-weight: 700; color: var(--text); }
-.etsy-source-panel__money { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; gap: 6px; }
+.etsy-source-panel__money-title { margin: 0; font-size: 12px; font-weight: 700; color: var(--text); }
+.etsy-source-panel__money { gap: 6px; }
 .etsy-source-panel__money .is-note dt, .etsy-source-panel__money .is-note dd { color: var(--muted); font-size: 12px; }
-.etsy-source-panel__footer { display: grid; gap: 4px; padding: 0 16px 14px; }
+.etsy-source-panel__footer { display: grid; gap: 4px; }
 .etsy-source-panel__footer .etsy-source-panel__foot { font-size: 11.5px; line-height: 1.5; }
 
 /* The enlarged photo (a modal on the page body). */
@@ -35524,18 +35519,15 @@ body[data-studio-theme="dark"] .orders-mobile-header {
 
 @media (max-width: 640px) {
   .order-etsy-block { margin: 10px 10px 0; }
-  .etsy-source-panel__head { padding: 10px 12px; gap: 6px; }
   .etsy-source-panel__asof { flex-basis: 100%; order: 10; white-space: normal; }
-  .etsy-source-panel__grid { padding: 12px; gap: 12px; }
   .etsy-source-panel__items > li.etsy-source-panel__item { grid-template-columns: 72px minmax(0, 1fr); gap: 10px; }
   .etsy-item-photo { width: 72px; height: 72px; }
-  .etsy-source-panel__title { font-size: 15px; }
+
   .etsy-source-panel__line { flex-wrap: wrap; }
   .etsy-source-panel__personalisation { align-self: stretch; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 10px; }
   .etsy-source-panel__personalisation > span.etsy-source-panel__personalisation-label, .etsy-source-panel__personalisation-value { grid-column: 1; }
   .etsy-source-panel__personalisation-value { font-size: 17px; }
   .etsy-copy-button { min-height: 36px; grid-column: 2; grid-row: 1 / span 2; }
-  .etsy-source-panel__footer { padding: 0 12px 12px; }
   .etsy-lightbox-backdrop { padding: 16px; background: rgba(17, 24, 39, 0.92); }
   .order-jump-bar { margin: 6px 10px 0; flex-wrap: wrap; }
   .order-jump-bar__links { flex-basis: 100%; scrollbar-width: none; }
@@ -35547,9 +35539,7 @@ body[data-studio-theme="dark"] .orders-mobile-header {
 /* The phone's Customize cards entry at the end of the card stack (the phone stack only exists at <= 640 px). */
 .order-jump-customize.is-stack-end { width: 100%; min-height: 44px; border-style: dashed; background: transparent; color: var(--text); }
 
-body[data-studio-theme="dark"] .etsy-source-panel { background: rgba(255, 255, 255, 0.04); border-color: rgba(251, 146, 60, 0.3); }
-body[data-studio-theme="dark"] .etsy-source-panel__grid { border-top-color: rgba(251, 146, 60, 0.18); }
-body[data-studio-theme="dark"] .etsy-source-panel__badge { background: rgba(251, 146, 60, 0.16); color: #fdba74; }
+body[data-studio-theme="dark"] .order-detail-card .card-title-icon.etsy-source-panel__badge { background: rgba(251, 146, 60, 0.16); color: #fdba74; }
 body[data-studio-theme="dark"] .etsy-chip.is-good { background: rgba(52, 199, 89, 0.16); color: #86efac; }
 body[data-studio-theme="dark"] .etsy-chip.is-warning { background: rgba(255, 149, 0, 0.16); color: #fcd34d; }
 body[data-studio-theme="dark"] .etsy-chip.is-danger { background: rgba(255, 138, 138, 0.16); color: #fca5a5; }

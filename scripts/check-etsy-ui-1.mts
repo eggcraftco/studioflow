@@ -17,6 +17,8 @@
  *  F. Phase B: list photos within a session budget, the order-list toggle.
  *  S. Follow-up (owner, 27 Oct): the old channel strip is gone on Etsy orders only (its content moved into the block
  *     header); every other channel draws it exactly as before.
+ *  U. Follow-up 2 (owner, 27 Oct): the block wears the order cards' shared chrome and header classes, inner groups in
+ *     app-card-panel, orange only on the Etsy badge — and is still not a card.
  *
  * Run: npx tsx scripts/check-etsy-ui-1.mts
  */
@@ -124,10 +126,10 @@ const draw = (source: unknown, photos: unknown, showMoney = true, language = "En
 };
 const PHOTOS = { photos: [fresh("t1", "111", 1), fresh("t2", "222", 2)], reason: "", loading: false };
 
-await check("B1 header: Etsy badge, 'Order #', snapshot chips, 'as of', 'Open in Etsy' (viewOnEtsyUrl); no Ship-by chip", () => {
+await check("B1 header: Etsy badge, 'Etsy order #', snapshot chips, 'as of', 'Open in Etsy' (viewOnEtsyUrl); no Ship-by chip", () => {
   const html = draw(TWO_LINES, PHOTOS);
-  assert.match(html, /class="etsy-source-panel__badge"[^>]*>Etsy</);
-  assert.match(html, /Order #3100000096/);
+  assert.match(html, /class="[^"]*etsy-source-panel__badge"[^>]*>Etsy</);
+  assert.match(html, /Etsy order #3100000096/);
   assert.match(html, /data-etsy-chip="Paid on Etsy"/);
   assert.match(html, /data-etsy-chip="Not dispatched on Etsy"/);
   assert.match(html, /data-etsy-asof="">as of 27 Oct 2026/);
@@ -478,6 +480,52 @@ await check("S3 what the strip carried is in the block header: shop, Etsy's stat
   assert.doesNotMatch(html, /data-etsy-needs-attention/, "no stamp, no flag");
   const tr = draw(base, PHOTOS, true, "Türkçe");
   assert.match(tr, /Platform durumu: partially refunded/);
+});
+
+// ── U. Follow-up 2 (owner, 27 Oct): the block wears the order cards' own chrome, not its own ─────────────────
+await check("U1 the block is drawn with the order cards' shared classes: card + order-detail-card chrome, card header (card-title / card-title-icon / card-title-text)", () => {
+  const html = draw(TWO_LINES, PHOTOS);
+  assert.match(html, /^<section class="card order-detail-card etsy-source-panel" data-etsy-source-panel=""/);
+  const head = html.slice(html.indexOf("<header"), html.indexOf("</header>"));
+  assert.match(head, /^<header class="card-title etsy-source-panel__head">/);
+  assert.match(head, /<span class="card-title-icon etsy-source-panel__badge" lang="en">Etsy<\/span>/, "the Etsy badge sits where a card's icon sits");
+  assert.match(head, /<h2 id="etsy-source-panel-heading" class="card-title-text etsy-source-panel__heading">Etsy order #3100000096<\/h2>/);
+  assert.ok(head.indexOf("data-etsy-meta") > head.indexOf("card-title-text"), "chips and shop on the line under the title");
+  assert.ok(head.indexOf("data-etsy-chip") > head.indexOf("data-etsy-meta"), "chips inside the secondary line");
+  assert.ok(head.lastIndexOf("data-etsy-open-order") > head.lastIndexOf("data-etsy-meta"), "Open in Etsy at the trailing edge (after the title group)");
+});
+await check("U2 inner parts use the cards' inner-group class (app-card-panel): line items, personalisation, notes, totals, read-only footer", () => {
+  const html = draw({ ...TWO_LINES, differs: [{ field: "customerName", etsyValue: "M. Williams" }] }, PHOTOS);
+  for (const part of ["etsy-source-panel__items", "etsy-source-panel__personalisation", "etsy-source-panel__note is-buyer-note", "etsy-source-panel__note is-gift-message", "etsy-source-panel__totals", "etsy-source-panel__footer", "etsy-source-panel__differs"]) {
+    assert.match(html, new RegExp(`class="app-card-panel ${part.replace(/ /g, " ")}`), part);
+  }
+  assert.doesNotMatch(draw(TWO_LINES, PHOTOS, false), /etsy-source-panel__totals/, "no empty totals group without Financial Info");
+});
+await check("U3 the chrome is NOT hand-copied and the only orange is the Etsy badge: no orange border/background in the block's rules, no own background/border/radius/shadow/padding on the block", () => {
+  const css = read("app/globals.css");
+  const rules = (css.match(/[^{}]*\.etsy-source-panel[^{]*\{[^}]*\}/g) || []).map((r) => r.trim());
+  assert.ok(rules.length > 20, "Etsy block rules not found");
+  const ORANGE = /rgba\(\s*(194|251|234),\s*(65|146|88),\s*(12|60)|#9a3412|#fff4ed|#fdba74|#f3d3c1|#c2410c|#ea580c/i;
+  for (const rule of rules) {
+    const selector = rule.slice(0, rule.indexOf("{"));
+    if (/etsy-source-panel__badge/.test(selector)) continue;
+    assert.doesNotMatch(rule, ORANGE, `orange outside the badge: ${selector.trim().slice(-80)}`);
+  }
+  for (const rule of rules.filter((r) => /(^|[\s,])\.etsy-source-panel\s*\{/.test(r.slice(0, r.indexOf("{")) + "{"))) {
+    assert.doesNotMatch(rule, /(^|[\s;{])(background|border|border-color|border-radius|box-shadow|padding)\s*:/, `the block sets its own chrome: ${rule.slice(0, 120)}`);
+  }
+  assert.doesNotMatch(css, /body\[data-studio-theme="dark"\] \.etsy-source-panel \{/, "no own dark background (the dark .order-detail-card rule applies)");
+});
+await check("U4 still NOT a card: no frame, drag handle, ⋯ menu or card id on the block; the 19 card ids are unchanged; no layout writer", () => {
+  const panel = read("app/orders/EtsySourcePanel.tsx");
+  assert.doesNotMatch(panel, /order-detail-card-frame|order-card-drag-handle|order-card-menu|data-first-project-guide-card|renderCardMenu|ORDER_DETAIL_CARD_IDS|cardLayouts/);
+  const html = draw(TWO_LINES, PHOTOS);
+  assert.doesNotMatch(html, /draggable|data-first-project-guide-card|order-card-menu/);
+  assert.deepEqual([...layouts.ORDER_DETAIL_CARD_IDS], IDS_19);
+  assert.ok(!(IDS_19 as string[]).includes("etsy"), "the block is not a card id");
+  const block = detail.slice(detail.indexOf('className="order-etsy-block"') - 200, detail.indexOf("</EtsyBlockChannelContext.Provider>"));
+  assert.ok(block.length > 100, "Etsy block wiring not found");
+  assert.doesNotMatch(block, /renderDesktopCardFrame|renderMobileCardFrame|setCardFrameRef|persistLayout|save[A-Za-z]*CardLayout/);
 });
 
 console.log(`\n${passed}/${passed + failed} passed`);

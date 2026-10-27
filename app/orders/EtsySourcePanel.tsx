@@ -315,18 +315,25 @@ function EtsySourcePanelBody({ source, photos, language, showMoney }: EtsySource
   };
   const lightboxItem = openLine !== null ? source.items[openLine] : undefined;
   return (
-    <section className="etsy-source-panel" data-etsy-source-panel="" aria-label={t("Etsy order")}>
-      <header className="etsy-source-panel__head">
-        <span className="etsy-source-panel__badge" lang="en">Etsy</span>
-        <h2 className="etsy-source-panel__heading">{t("Order")}{source.receiptId ? ` #${source.receiptId}` : ""}</h2>
-        {shopName ? <span className="etsy-source-panel__shop" data-etsy-shop="" dir="auto">{shopName}</span> : null}
-        {chips.map((chip) => (
-          <span key={chip.key} className={`studio-pill etsy-chip is-${chip.tone}`} data-etsy-chip={chip.key}>{t(chip.key)}</span>
-        ))}
-        {statusNote ? <span className="studio-pill etsy-chip is-neutral" data-etsy-status-note="">{`${t("Platform status")}: ${statusNote}`}</span> : null}
-        {channel.reviewRequired ? <span className="studio-pill etsy-chip is-warning" data-etsy-needs-attention="">{t("Needs attention")}</span> : null}
-        <span className="etsy-source-panel__spacer" aria-hidden="true" />
-        {fetched ? <span className="etsy-source-panel__asof" data-etsy-asof="">{t("as of {time}").replace("{time}", fetchedText(fetched, language))}</span> : null}
+    // ETSY-UI-1 follow-up 2 (owner, 27 Oct): the order cards' own chrome — `card order-detail-card` (globals.css .card,
+    // .order-detail-card and their dark-theme rules) and the card header (`card-title`, `card-title-icon`,
+    // `card-title-text`) — with the inner groups in `app-card-panel`. Still NOT a card: no frame, no drag handle, no ⋯
+    // menu, no card id, nothing in Customize cards, no layout write.
+    <section className="card order-detail-card etsy-source-panel" data-etsy-source-panel="" aria-labelledby="etsy-source-panel-heading">
+      <header className="card-title etsy-source-panel__head">
+        <span className="card-title-icon etsy-source-panel__badge" lang="en">Etsy</span>
+        <div className="etsy-source-panel__title-group">
+          <h2 id="etsy-source-panel-heading" className="card-title-text etsy-source-panel__heading">{t("Etsy order")}{source.receiptId ? ` #${source.receiptId}` : ""}</h2>
+          <div className="etsy-source-panel__meta" data-etsy-meta="">
+            {shopName ? <span className="etsy-source-panel__shop" data-etsy-shop="" dir="auto">{shopName}</span> : null}
+            {chips.map((chip) => (
+              <span key={chip.key} className={`studio-pill etsy-chip is-${chip.tone}`} data-etsy-chip={chip.key}>{t(chip.key)}</span>
+            ))}
+            {statusNote ? <span className="studio-pill etsy-chip is-neutral" data-etsy-status-note="">{`${t("Platform status")}: ${statusNote}`}</span> : null}
+            {channel.reviewRequired ? <span className="studio-pill etsy-chip is-warning" data-etsy-needs-attention="">{t("Needs attention")}</span> : null}
+            {fetched ? <span className="etsy-source-panel__asof" data-etsy-asof="">{t("as of {time}").replace("{time}", fetchedText(fetched, language))}</span> : null}
+          </div>
+        </div>
         {orderLink ? (
           <a className="etsy-source-panel__open" href={orderLink} target="_blank" rel="noopener noreferrer" data-etsy-open-order="">{t("Open in Etsy")} ↗</a>
         ) : (
@@ -340,7 +347,7 @@ function EtsySourcePanelBody({ source, photos, language, showMoney }: EtsySource
         </p>
       ) : null}
       <div className="etsy-source-panel__grid">
-        <ul className="etsy-source-panel__items">
+        <ul className="app-card-panel etsy-source-panel__items">
           {source.items.map((item, index) => {
             const photo = photoFor(item);
             const link = linkFor(item);
@@ -390,7 +397,7 @@ function EtsySourcePanelBody({ source, photos, language, showMoney }: EtsySource
                     const text = upload ? value : etsyPersonalisationLine(value);
                     const key = `${index}-${i}`;
                     return (
-                      <div key={i} className={`etsy-source-panel__personalisation${upload ? " is-upload" : ""}`} data-etsy-personalisation="">
+                      <div key={i} className={`app-card-panel etsy-source-panel__personalisation${upload ? " is-upload" : ""}`} data-etsy-personalisation="">
                         <span className="etsy-source-panel__personalisation-label">{upload ? (entry.name || t("Personalisation")) : t("Personalisation")}</span>
                         <span className="etsy-source-panel__personalisation-value" dir="auto">
                           <EtsyText value={isUploadUrl(value) ? value : etsyPersonalisationLine(value)} photoLabel={t("Photo attached")} />
@@ -418,13 +425,13 @@ function EtsySourcePanelBody({ source, photos, language, showMoney }: EtsySource
         </ul>
         <div className="etsy-source-panel__side">
           {source.buyerNote ? (
-            <p className="etsy-source-panel__note is-buyer-note"><span>{t("Buyer note")}</span><span dir="auto">{source.buyerNote}</span></p>
+            <p className="app-card-panel etsy-source-panel__note is-buyer-note"><span>{t("Buyer note")}</span><span dir="auto">{source.buyerNote}</span></p>
           ) : null}
           {source.giftMessage ? (
-            <p className="etsy-source-panel__note is-gift-message"><span>{t("Gift message")}</span><span dir="auto">{source.giftMessage}</span></p>
+            <p className="app-card-panel etsy-source-panel__note is-gift-message"><span>{t("Gift message")}</span><span dir="auto">{source.giftMessage}</span></p>
           ) : null}
           {(source.differs || []).length ? (
-            <div className="etsy-source-panel__differs" role="note">
+            <div className="app-card-panel etsy-source-panel__differs" role="note">
               <strong>{t("Changed on Etsy")}</strong>
               {(source.differs || []).map((row, i) => (
                 <p key={`${row.field}-${i}`}>
@@ -434,7 +441,10 @@ function EtsySourcePanelBody({ source, photos, language, showMoney }: EtsySource
               <p className="etsy-source-panel__foot">{t("Your edit in NivaDesk is kept. Update the order yourself if Etsy's version is right.")}</p>
             </div>
           ) : null}
-          {showMoney ? <p className="etsy-source-panel__money-title">{t("Totals from Etsy")}</p> : null}
+          {/* The totals are one inner group; the inner test is the Financial Info gate the compliance check reads. */}
+          {showMoney ? (
+          <div className="app-card-panel etsy-source-panel__totals" data-etsy-totals="">
+          <p className="etsy-source-panel__money-title">{t("Totals from Etsy")}</p>
           {showMoney ? (
             <dl className="etsy-source-panel__money">
               <div><dt>{t("Subtotal")}</dt><dd>{money(source.subtotal, currency)}</dd></div>
@@ -446,9 +456,11 @@ function EtsySourcePanelBody({ source, photos, language, showMoney }: EtsySource
               {taxMode === "unclaimed" ? <div className="is-note" data-etsy-tax="unclaimed"><dt>{t("Tax reported by Etsy")}</dt><dd>{money(source.tax, currency)}</dd></div> : null}
             </dl>
           ) : null}
+          </div>
+          ) : null}
         </div>
       </div>
-      <div className="etsy-source-panel__footer">
+      <div className="app-card-panel etsy-source-panel__footer">
         {photos?.reason === "not_connected" || photos?.reason === "quota" || photos?.reason === "unavailable" ? (
           <p className="etsy-source-panel__foot">{t("Product photos open on Etsy.")}</p>
         ) : null}
