@@ -33,6 +33,11 @@ export type StudioActivityNotification = {
   messageId: string;
   /** A customer-inbox notification: the conversation to open (the keyed id the inbox list carries). */
   conversationId: string;
+  /** Order notices (GN-08): which card to open — "files" | "workTime" — and the one item, when there is one. */
+  focus: string;
+  fileId: string;
+  workSessionId: string;
+  workDayId: string;
   channel: string;
   senderUid: string;
   senderName: string;
@@ -105,6 +110,10 @@ function notificationFromDoc(id: string, data: Record<string, unknown>): StudioA
     threadId: str(data.threadId),
     messageId: str(data.messageId),
     conversationId: str(data.conversationId),
+    focus: str(data.focus),
+    fileId: str(data.fileId),
+    workSessionId: str(data.workSessionId),
+    workDayId: str(data.workDayId),
     channel: str(data.channel),
     senderUid: str(data.senderUid),
     senderName: str(data.senderName),

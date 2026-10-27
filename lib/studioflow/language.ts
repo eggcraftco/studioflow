@@ -6,6 +6,7 @@ import { I18N_GAP_TRANSLATIONS } from "./screenGapTranslations";
 import { NOTES_SHARING_TRANSLATIONS } from "./notesSharingTranslations";
 import { BOOT_RECOVERY_TRANSLATIONS } from "./bootRecoveryTranslations";
 import { WEB_SMALL_FIXES_TRANSLATIONS } from "./webSmallFixesTranslations";
+import { NOTIFICATION_SETTINGS_TRANSLATIONS } from "./notificationSettingsTranslations";
 import { ORDER_LIST_VIEW_TRANSLATIONS } from "./orderListViewTranslations";
 import { FILES_NOTES_ACCOUNT_TRANSLATIONS } from "./filesNotesAccountTranslations";
 import { SALES_STORES_TRANSLATIONS } from "./salesStoresTranslations";
@@ -9226,6 +9227,11 @@ mergeIntoTranslations({
 // Web small fixes (17 Oct 2026): Team seat breakdown, the matrix's owner-approval
 // cell, the phone Schedule's Calendar File line. Merged last on purpose.
 mergeIntoTranslations(WEB_SMALL_FIXES_TRANSLATIONS);
+
+// Settings > Notifications (GN-09, 22 Oct 2026). Its 22 Oct place, right after the table above. New keys only
+// (47, none on the table before — checked 27 Oct), so it overrides nothing; kept away from the tail where each
+// release line appends its own table.
+mergeIntoTranslations(NOTIFICATION_SETTINGS_TRANSLATIONS);
 
 // GN-12 release gate (22 Oct 2026): an estimated platform fee is labelled as one —
 // "Platform Fee (estimate, 3%)" on an order, the footnote on a total. Lowercase

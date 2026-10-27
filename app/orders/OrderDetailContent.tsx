@@ -164,6 +164,7 @@ import {
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, orderDetailFinance, platformFeeLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
+import { orderCardForFocus } from "@/lib/studioflow/notificationSettings";
 
 /** The notes the Payment Links rail writes on a TEST row (functions/payments/orderLedger.js, S2). */
 const TEST_PAYMENT_NOTES = new Set(["Stripe TEST payment - no real money moved", "Stripe TEST refund - no real money moved"]);
@@ -2100,6 +2101,36 @@ export function OrderDetailContent({
   const [fileActionError, setFileActionError] = useState<string | null>(null);
   const [actioningFileId, setActioningFileId] = useState<string | null>(null);
   const [downloadingOrderFiles, setDownloadingOrderFiles] = useState(false);
+
+  // GN-08: a notice about a member's upload or saved work time arrives as
+  // /orders?orderId=…&focus=files|workTime. Once this order is on screen, bring
+  // that card into view and mark it briefly; then drop the parameter so a later
+  // re-render (or a reload) does not jump again. Nothing happens when the card
+  // is hidden for this person — the order still opens.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("orderId") !== order.id && url.searchParams.get("selectedOrderId") !== order.id) return;
+    const cardId = orderCardForFocus(url.searchParams.get("focus"));
+    if (!cardId) return;
+    let tries = 0;
+    let timer = 0;
+    const attempt = () => {
+      const frame = document.querySelector<HTMLElement>(`[data-first-project-guide-card="${cardId}"]`);
+      if (frame) {
+        frame.scrollIntoView({ block: "center", behavior: "smooth" });
+        frame.classList.add("is-notification-focus");
+        window.setTimeout(() => frame.classList.remove("is-notification-focus"), 2400);
+        ["focus", "fileId", "workSessionId", "workDayId"].forEach(key => url.searchParams.delete(key));
+        window.history.replaceState(window.history.state, "", url.pathname + url.search);
+        return;
+      }
+      tries += 1;
+      if (tries < 20) timer = window.setTimeout(attempt, 150);
+    };
+    attempt();
+    return () => window.clearTimeout(timer);
+  }, [order.id]);
 
   async function handleDownloadOrderFiles() {
     if (downloadingOrderFiles) return;
