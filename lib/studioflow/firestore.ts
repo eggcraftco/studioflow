@@ -31,6 +31,7 @@ import {
 } from "@/lib/studioflow/workspaceResolution";
 import { trackingEmailRecordFrom, type TrackingEmailRecord } from "@/lib/studioflow/trackingEmailRules";
 import { mapWorkDayHistory, mapWorkDays, type WorkDayDetail, type WorkDayHistoryDetail } from "@/lib/studioflow/workDays";
+import { mapWorkSessionAudit, type WorkSessionAuditDetail } from "@/lib/studioflow/workSessionCorrections";
 import { productionWorkIsLive, type ProductionStage } from "@/lib/studioflow/production";
 import type { HeadingItem } from "@/lib/studioflow/blockHeadings";
 import { compareOrdersTieBreak, orderIsCancelled, type FilterableOrder } from "@/lib/studioflow/orderFilters";
@@ -736,6 +737,8 @@ export type OrderDetail = {
   workDays?: WorkDayDetail[];
   /** The server's change log for day entries (since 15 Oct 2026), newest first. */
   workDayHistory?: WorkDayHistoryDetail[];
+  /** Owner/admin corrections and deletions of timer rows (server-only, worktime-edit 23 Oct 2026). */
+  workSessionAudit?: WorkSessionAuditDetail[];
   historyLog: HistoryLogDetail[];
   payments: PaymentEntryDetail[];
   lineItems: LineItemDetail[];
@@ -2731,6 +2734,7 @@ function mapOrderDetailSnapshot(
     workSessions: mapWorkSessions(data.workSessions),
     workDays: mapWorkDays(data.workDays),
     workDayHistory: mapWorkDayHistory(data.workDayHistory),
+    workSessionAudit: mapWorkSessionAudit(data.workSessionAudit),
     historyLog: mapHistoryLog(data.historyLog),
     payments: mapPayments(data.payments),
     invoiceNote: stringValue(data.invoiceNote, ""),

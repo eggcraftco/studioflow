@@ -79,6 +79,13 @@ expect("what is sent", sent, [
   { linkId: sold.linkId, action: "create", trackingType: "quantity", openingCount: 0, includeInactive: true }
 ]);
 expect("the default tab is what is for sale; sold/archived apart", [R.filterRows(rows, "active").length, R.filterRows(rows, "inactive").map((r) => r.productId)], [4, ["504"]]);
+// 27 Oct: the header's "{rows} to match" = Needs a choice + Same SKU (native 2.3 wooRowsToMatch parity). Linked rows,
+// sold/archived rows and not-stock (grouped/external) rows are not counted, so linking one lowers the number.
+const toMatch = (list) => (typeof R.rowsToMatch === "function" ? R.rowsToMatch(list) : "missing rowsToMatch");
+expect("rows to match = needs a choice + same SKU (sold and not-stock left out)", toMatch(rows), 3);
+expect("linking a row lowers the number", toMatch(rows.map((r, i) => (i === 0 ? { ...r, state: "linked" } : r))), 2);
+expect("every row linked → 0 to match", toMatch(rows.map((r) => ({ ...r, state: "linked" }))), 0);
+expect("no rows → 0 to match", toMatch([]), 0);
 expect("store stock sentence: untracked", R.storeStockSentence(roll).sentence, "Stock not tracked in the store");
 expect("store stock sentence: parent", R.storeStockSentence({ ...strap, stockTracked: "parent", listedQuantity: null }).sentence, "Stock is tracked on the parent product");
 expect("unknown reason → the general sentence", R.reasonSentence("raw_code_x"), "This could not be done.");
@@ -125,6 +132,7 @@ ok("the line opens Inventory ▸ WooCommerce products for that store, gated on t
 const detail = read("app/inventory/ItemDetailPanel.tsx");
 // MC-3 cost (25 Oct): the card reads the shared three-way rule (scripts/check-inventory-cost.mjs runs it).
 ok("a WooCommerce card without a cost says 'not entered', not £0.00", /inventoryCostKind\(item\) === "notEntered"/.test(detail) && /wooInventoryT\("Cost: not entered — the store's price/.test(detail));
+ok("the header counts the rows still to match, not every row read", /rows: rowsToMatch\(rows\)/.test(panel) && !/rows: rows\.length/.test(panel));
 ok("prices only when the server says money", /money && row\.price/.test(panel) && /status\?\.money === true/.test(panel));
 
 fs.rmSync(tmp, { recursive: true, force: true });
