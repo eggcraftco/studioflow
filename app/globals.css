@@ -35441,3 +35441,14 @@ body[data-studio-theme="dark"] .app-work-session-row small.app-work-session-corr
   .inventory-thumb { width: 34px; height: 34px; flex-basis: 34px; }
   .inventory-head { flex-wrap: wrap; }
 }
+/* The Categories screen used .btn / .btn-primary / .btn-sm / .btn-danger, which this stylesheet never defined — its
+   buttons drew as bare browser buttons (27 Oct 2026). Scoped here so nothing else changes. */
+.inv-categories .btn {
+  border: 1px solid var(--border); background: transparent; color: inherit; border-radius: 10px;
+  padding: 8px 14px; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.inv-categories .btn:disabled { opacity: 0.5; cursor: default; }
+.inv-categories .btn-primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+.inv-categories .btn-sm { padding: 5px 10px; font-size: 12px; }
+.inv-categories .btn-danger { color: #dc2626; border-color: rgba(220, 38, 38, 0.35); }
+body[data-studio-theme="dark"] .inv-categories .btn-danger { color: #f87171; border-color: rgba(248, 113, 113, 0.4); }
