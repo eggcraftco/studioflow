@@ -35586,3 +35586,8 @@ body[data-studio-theme="dark"] .order-etsy-tracking-note p { color: #fed7aa; }
 .order-list-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (max-width: 640px) { .order-list-toggle { display: none; } }
 .order-list-etsy-thumb { position: absolute; inset: 0; display: grid; place-items: center; }
+/* ETSY-UI-1 follow-up: what the old channel strip carried, now in the Etsy block header; an Etsy order whose copy is
+   missing draws no empty block box (the old strip shows instead). */
+.etsy-source-panel__shop { color: var(--muted); font-size: 13px; font-weight: 600; }
+.etsy-source-panel__open.is-unavailable { color: var(--muted); font-weight: 600; }
+.order-etsy-block:empty { display: none; }

@@ -14,10 +14,14 @@
  *     hidden count through the existing entry; the Etsy block in the page flow (no sticky, no inner scroll); the
  *     Etsy note on Shipping & Tracking only for Etsy orders.
  *  E. Every new string in all 11 languages, through the table (studioT), redefining no existing key; RTL-safe CSS.
+ *  F. Phase B: list photos within a session budget, the order-list toggle.
+ *  S. Follow-up (owner, 27 Oct): the old channel strip is gone on Etsy orders only (its content moved into the block
+ *     header); every other channel draws it exactly as before.
  *
  * Run: npx tsx scripts/check-etsy-ui-1.mts
  */
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -312,7 +316,7 @@ await check("D3 Customize cards next to it is the existing entry (one handler fo
   assert.match(detail, /t\("\{count\} hidden"\)\.replace\("\{count\}", String\(hiddenCards\)\)/);
 });
 await check("D4 the Etsy block stays in the page flow above the cards: no sticky/fixed, no max-height, no inner scroll", () => {
-  assert.match(detail, /<div ref=\{etsyBlockRef\} className="order-etsy-block" id="order-etsy-block">\s*<EtsySourcePanel source=\{etsySource\} photos=\{etsyPhotos\} language=\{detailLanguage\} showMoney=\{canSeeFinance\} \/>/);
+  assert.match(detail, /<div ref=\{etsyBlockRef\} className="order-etsy-block" id="order-etsy-block">\s*(<EtsyBlockChannelContext\.Provider [^\n]*>\s*)?<EtsySourcePanel source=\{etsySource\} photos=\{etsyPhotos\} language=\{detailLanguage\} showMoney=\{canSeeFinance\} \/>/);
   assert.ok(detail.indexOf('className="order-etsy-block"') < detail.indexOf('id="order-tab-panel-overview"'), "the block is above the cards");
   const css = read("app/globals.css");
   const rules = css.match(/[^}]*(?:\.order-etsy-block|\.etsy-source-panel)[^{]*\{[^}]*\}/g) || [];
@@ -424,6 +428,56 @@ await check("F3 hide/show the order list from the order header: the Orders page'
   assert.match(detail, /aria-expanded=\{!orderListToggle\.collapsed\}/);
   assert.doesNotMatch(read("app/orders/[orderId]/page.tsx"), /orderListToggle/, "the phone order page has no list to hide");
   assert.match(read("app/globals.css"), /@media \(max-width: 640px\) \{ \.order-list-toggle \{ display: none; \} \}/);
+});
+
+// ── S. Follow-up (owner, 27 Oct): the Etsy block replaces the old channel strip on Etsy orders only ──────────
+await check("S1 the strip rule: an Etsy order with Etsy's copy (or while it is read) → no strip; without it → strip; every other channel → strip", () => {
+  const rule = need("etsyBlockReplacesStrip");
+  const etsy = { customFields: { Source: "Etsy", "Etsy Receipt ID": "1" } };
+  assert.equal(rule(etsy, { source: { items: [] }, settled: true }), true, "Etsy + snapshot");
+  assert.equal(rule(etsy, { source: null, settled: false }), true, "Etsy while its copy is read (no flash of the strip)");
+  assert.equal(rule(etsy, { source: null, settled: true }), false, "Etsy without its copy keeps the strip");
+  assert.equal(rule(etsy, { source: { receiptId: "1" }, settled: true }), false, "a copy without lines draws no block, so the strip stays");
+  for (const source of ["WooCommerce", "Shopify", "Square", "eBay", "Amazon", "Instagram", ""]) {
+    assert.equal(rule({ customFields: { Source: source } }, { source: { items: [] }, settled: true }), false, source || "manual");
+    assert.equal(rule({ customFields: { Source: source } }, { source: null, settled: false }), false, `${source || "manual"} loading`);
+  }
+  assert.equal(rule(null, { source: null, settled: true }), false);
+});
+await check("S2 the page: the strip is skipped only by that rule; the strip itself is byte-identical to 02d03d50 (Woo/Shopify/Square/inbound draw as before)", () => {
+  assert.match(detail, /const etsySourceState = useEtsySourceState\(order\.id, isEtsyOrder\);\s*const etsySource = etsySourceState\.source;/);
+  assert.match(detail, /const etsyBlockOwnsStrip = etsyBlockReplacesStrip\(order, etsySourceState\);/);
+  assert.match(detail, /\{etsyBlockOwnsStrip \? null : <ChannelSourceStrip order=\{order\} showMoney=\{canSeeFinance\} \/>\}/);
+  assert.equal((detail.match(/<ChannelSourceStrip /g) || []).length, 1, "drawn in one place");
+  const a = detail.indexOf("function ChannelSourceStrip(");
+  const b = detail.indexOf("// A marketplace buyer's protected details");
+  assert.ok(a > 0 && b > a, "ChannelSourceStrip not found");
+  const md5 = (text: string) => createHash("md5").update(text).digest("hex");
+  assert.equal(md5(detail.slice(a, b)), "72796a8ced601bd7f5c0b3763d2272c5", "ChannelSourceStrip changed (it must draw every other channel exactly as before)");
+  assert.match(detail, /<ShopifySourceStrip order=\{order\} workspaceCurrency=\{moneySettings\?\.selectedCurrency\} \/>/, "the Shopify strip is untouched");
+  assert.match(detail, /<EbayOrderBlock stamp=\{order\.commerce\} canSeeFinance=\{canSeeFinance\} language=\{detailLanguage\} \/>/, "the eBay block is untouched");
+});
+await check("S3 what the strip carried is in the block header: shop, Etsy's status word when the chips do not say it, Needs attention, the receipt link (or 'Order link not available')", () => {
+  assert.equal(need("etsyStatusNotInChips")("partially refunded"), "partially refunded");
+  for (const said of ["paid", "Paid", "open", "completed", "canceled", "cancelled", "fully refunded", "", null]) assert.equal(need("etsyStatusNotInChips")(said), "", String(said));
+  assert.equal(need("etsyOrderLink")({ receiptId: "3100000096" }), "https://www.etsy.com/your/orders/sold?order_id=3100000096", "receipt id fallback (the strip's rule)");
+  assert.equal(need("etsyOrderLink")({ receiptId: "31 OR 1=1" }), "");
+  const base = { ...TWO_LINES, shopName: "PrimroseStubStudio", status: "partially refunded", isRefunded: true, viewOnEtsyUrl: "" };
+  const html = draw(base, PHOTOS);
+  assert.match(html, /data-etsy-shop="" dir="auto">PrimroseStubStudio</);
+  assert.match(html, /data-etsy-status-note="">Platform status: partially refunded</);
+  assert.match(html, /href="https:\/\/www\.etsy\.com\/your\/orders\/sold\?order_id=3100000096"[^>]*>Open in Etsy ↗/);
+  assert.doesNotMatch(draw({ ...TWO_LINES, status: "paid" }, PHOTOS), /data-etsy-status-note/);
+  assert.match(draw({ ...TWO_LINES, receiptId: "", viewOnEtsyUrl: "" }, PHOTOS), /data-etsy-open-order="unavailable">Order link not available</);
+  const ctx = panelModule.EtsyBlockChannelContext;
+  assert.ok(ctx, "EtsyBlockChannelContext missing");
+  const flagged = renderToStaticMarkup(React.createElement(ctx.Provider, { value: { reviewRequired: true, connectionName: "Second Shop" } },
+    React.createElement(panelModule.EtsySourcePanel, { source: { ...TWO_LINES, shopName: "" }, photos: PHOTOS, language: "English", showMoney: true })));
+  assert.match(flagged, /data-etsy-needs-attention="">Needs attention</);
+  assert.match(flagged, /data-etsy-shop="" dir="auto">Second Shop</, "the stamp's connection name when Etsy's copy has no shop");
+  assert.doesNotMatch(html, /data-etsy-needs-attention/, "no stamp, no flag");
+  const tr = draw(base, PHOTOS, true, "Türkçe");
+  assert.match(tr, /Platform durumu: partially refunded/);
 });
 
 console.log(`\n${passed}/${passed + failed} passed`);

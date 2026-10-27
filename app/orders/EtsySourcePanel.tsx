@@ -36,7 +36,7 @@
 // tax line COMPUTED from the stored figures (lib/studioflow/etsyOrderView.ts), never assumed. The photo rules
 // above are unchanged (asked of Etsy on open, never stored, 6 h expiry, Etsy's own image host only).
 
-import { Component, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { Component, createContext, useContext, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -47,26 +47,44 @@ import {
   etsyListingLink, etsyPhotoIsShowable, loadEtsyListingPhotos, nextEtsyPhotoExpiry,
   type EtsyListingPhoto, type EtsyPhotosAnswer
 } from "@/lib/studioflow/etsyListingPhotos";
-import { etsyOrderLink, etsyPhotoForItem, etsyStatusChips, etsyTaxMode } from "@/lib/studioflow/etsyOrderView";
+import { etsyOrderLink, etsyPhotoForItem, etsyStatusChips, etsyStatusNotInChips, etsyTaxMode } from "@/lib/studioflow/etsyOrderView";
 import { EtsyText } from "./EtsyText";
 
 export type { EtsyListingPhoto, EtsyPhotosAnswer };
 
-/** Etsy's copy of the order (etsySource), read once. null = none (not an Etsy order, or disconnected). */
-export function useEtsySource(orderId: string, enabled: boolean): EtsySource | null {
-  const [source, setSource] = useState<EtsySource | null>(null);
+/**
+ * Etsy's copy of the order (etsySource), read once, and whether the read has finished for THIS order (settled).
+ * source null = none (not an Etsy order, or disconnected). ETSY-UI-1 follow-up: `settled` lets the page keep the old
+ * channel strip away while Etsy's copy is still on its way, instead of showing it for a moment and swapping it out.
+ */
+export function useEtsySourceState(orderId: string, enabled: boolean): { source: EtsySource | null; settled: boolean } {
+  const [state, setState] = useState<{ key: string; source: EtsySource | null; settled: boolean }>({ key: "", source: null, settled: false });
+  const key = `${orderId}|${enabled ? 1 : 0}`;
   useEffect(() => {
     let cancelled = false;
-    setSource(null);
-    if (!orderId || !enabled) return;
+    if (!orderId || !enabled) { setState({ key, source: null, settled: true }); return; }
+    setState({ key, source: null, settled: false });
     import("@/lib/firebase/client")
       .then(({ db }) => getDoc(doc(db, "siparisler", orderId)))
-      .then((snap) => { if (!cancelled) setSource(((snap.data() || {}) as { etsySource?: EtsySource }).etsySource || null); })
-      .catch(() => { if (!cancelled) setSource(null); });
+      .then((snap) => { if (!cancelled) setState({ key, source: ((snap.data() || {}) as { etsySource?: EtsySource }).etsySource || null, settled: true }); })
+      .catch(() => { if (!cancelled) setState({ key, source: null, settled: true }); });
     return () => { cancelled = true; };
-  }, [orderId, enabled]);
-  return source;
+  }, [orderId, enabled, key]);
+  // A state left over from the previous order is never this order's answer.
+  return state.key === key ? { source: state.source, settled: state.settled } : { source: null, settled: !orderId || !enabled };
 }
+
+/** Etsy's copy of the order (etsySource), read once. null = none (not an Etsy order, or disconnected). */
+export function useEtsySource(orderId: string, enabled: boolean): EtsySource | null {
+  return useEtsySourceState(orderId, enabled).source;
+}
+
+/**
+ * ETSY-UI-1 follow-up: what the old channel strip showed from the order's channel stamp (order.commerce) that Etsy's
+ * copy does not carry — the connection's name and the stamp's "Needs attention". Given by the order page; an order
+ * with no stamp (every Etsy order today) gives nothing, and the block then shows nothing extra.
+ */
+export const EtsyBlockChannelContext = createContext<{ reviewRequired: boolean; connectionName: string }>({ reviewRequired: false, connectionName: "" });
 
 async function callGetEtsyListingPhotos(orderId: string): Promise<unknown> {
   const { functions } = await import("@/lib/firebase/client");
@@ -155,6 +173,8 @@ export type EtsySource = {
   deliveryCostSource?: string;
   /** The seller's Sold Orders page filtered to this receipt (server: etsySource.viewOnEtsyUrl). */
   viewOnEtsyUrl?: string;
+  /** The Etsy shop the order came from (server: etsySource.shopName). */
+  shopName?: string;
 };
 
 // What a merge-policy field is called on screen.
@@ -264,6 +284,7 @@ function EtsyPhotoLightbox({ line, language, onClose }: { line: LightboxLine; la
 
 function EtsySourcePanelBody({ source, photos, language, showMoney }: EtsySourcePanelProps) {
   const t = (text: string) => studioT(text, language);
+  const channel = useContext(EtsyBlockChannelContext);
   const [openLine, setOpenLine] = useState<number | null>(null);
   const [copiedKey, setCopiedKey] = useState("");
   const openerRef = useRef<HTMLElement | null>(null);
@@ -280,6 +301,10 @@ function EtsySourcePanelBody({ source, photos, language, showMoney }: EtsySource
   const chips = etsyStatusChips(source);
   const fetched = Number(source.fetchedAtMs || 0);
   const orderLink = etsyOrderLink(source);
+  // ETSY-UI-1 follow-up: what the old channel strip carried that the block did not — the shop, Etsy's own status word
+  // when the chips do not already say it, the stamp's "Needs attention", and "Order link not available".
+  const shopName = String(source.shopName || channel.connectionName || "").trim();
+  const statusNote = etsyStatusNotInChips(source.status);
   const taxMode = etsyTaxMode(source);
   const loading = Boolean(photos?.loading);
   const lineTitle = (item: EtsyItem) => `${Number(item.quantity || 1)} × ${item.title || t("Item")}`;
@@ -294,14 +319,19 @@ function EtsySourcePanelBody({ source, photos, language, showMoney }: EtsySource
       <header className="etsy-source-panel__head">
         <span className="etsy-source-panel__badge" lang="en">Etsy</span>
         <h2 className="etsy-source-panel__heading">{t("Order")}{source.receiptId ? ` #${source.receiptId}` : ""}</h2>
+        {shopName ? <span className="etsy-source-panel__shop" data-etsy-shop="" dir="auto">{shopName}</span> : null}
         {chips.map((chip) => (
           <span key={chip.key} className={`studio-pill etsy-chip is-${chip.tone}`} data-etsy-chip={chip.key}>{t(chip.key)}</span>
         ))}
+        {statusNote ? <span className="studio-pill etsy-chip is-neutral" data-etsy-status-note="">{`${t("Platform status")}: ${statusNote}`}</span> : null}
+        {channel.reviewRequired ? <span className="studio-pill etsy-chip is-warning" data-etsy-needs-attention="">{t("Needs attention")}</span> : null}
         <span className="etsy-source-panel__spacer" aria-hidden="true" />
         {fetched ? <span className="etsy-source-panel__asof" data-etsy-asof="">{t("as of {time}").replace("{time}", fetchedText(fetched, language))}</span> : null}
         {orderLink ? (
           <a className="etsy-source-panel__open" href={orderLink} target="_blank" rel="noopener noreferrer" data-etsy-open-order="">{t("Open in Etsy")} ↗</a>
-        ) : null}
+        ) : (
+          <span className="etsy-source-panel__open is-unavailable" aria-disabled="true" data-etsy-open-order="unavailable">{t("Order link not available")}</span>
+        )}
       </header>
       {fulfilment ? (
         <p className="etsy-source-panel__fulfilment" data-etsy-fulfilment="">

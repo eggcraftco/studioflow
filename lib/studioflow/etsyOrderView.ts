@@ -76,6 +76,35 @@ export function etsyStatusChips(source: {
 }
 
 /**
+ * ETSY-UI-1 follow-up (27 Oct 2026, owner): on an Etsy order the old channel strip ("Etsy · #receipt · Platform status ·
+ * total · Open in Etsy") is replaced by this block. Etsy's own status word was the one thing on it the chips do not
+ * already say: "paid", "open", "completed", "canceled" and "fully refunded" are the chips; anything else ("partially
+ * refunded", "processing", a word Etsy adds later) is shown as Etsy wrote it. "" = nothing extra to show.
+ */
+const STATUS_SAID_BY_CHIPS = new Set(["", "paid", "open", "completed", "canceled", "cancelled", "fully refunded"]);
+export function etsyStatusNotInChips(status: unknown): string {
+  const text = String(status ?? "").trim();
+  return STATUS_SAID_BY_CHIPS.has(text.toLowerCase()) ? "" : text;
+}
+
+/**
+ * Whether the Etsy block takes the old channel strip's place on this order. Etsy orders only (the "Source" field, the
+ * page's own test for drawing the block): while Etsy's copy is still being read (so the strip does not flash and vanish) and once it
+ * is there with its lines. A settled order WITHOUT Etsy's copy (disconnected, removed) keeps the strip — then it is the
+ * only Etsy information on the page. Every other channel keeps its strip exactly as before.
+ */
+export function etsyBlockReplacesStrip(
+  order: { customFields?: Record<string, string | undefined> | null } | null | undefined,
+  snapshot: { source: { items?: unknown } | null; settled: boolean }
+): boolean {
+  if (!order) return false;
+  // The same test the page uses to draw the block (and to read Etsy's copy at all): the "Source" field.
+  if (String(order.customFields?.["Source"] ?? "").trim() !== "Etsy") return false;
+  if (!snapshot.settled) return true;
+  return Boolean(snapshot.source) && Array.isArray(snapshot.source?.items);
+}
+
+/**
  * ETSY-UI-1 asks for a "Ship by <date> (Etsy)" chip only when the stored data carries Etsy's own expected ship
  * date. It does not: the importer reads `expected_ship_date` only to set the order's due date (a whole number
  * of days from the order date, which the seller can then change), and `etsySource` keeps no ship-by field. The
@@ -88,10 +117,15 @@ export const ETSY_SHIP_BY_STORED = false;
 // Links and photos
 // ---------------------------------------------------------------------------------------------------------------
 
-/** The seller's Sold Orders page, filtered to this receipt (etsySource.viewOnEtsyUrl), or "" when not safe. */
-export function etsyOrderLink(source: { viewOnEtsyUrl?: unknown } | null | undefined): string {
+/**
+ * The seller's Sold Orders page, filtered to this receipt: etsySource.viewOnEtsyUrl, else built from the receipt id
+ * (the rule the old channel strip used — lib/studioflow/orderSourceLink.ts: digits only, fixed host). "" when neither.
+ */
+export function etsyOrderLink(source: { viewOnEtsyUrl?: unknown; receiptId?: unknown } | null | undefined): string {
   const url = String(source?.viewOnEtsyUrl ?? "").trim();
-  return /^https:\/\/www\.etsy\.com\/your\/orders\/sold(?:[/?#]|$)/i.test(url) ? url : "";
+  if (/^https:\/\/www\.etsy\.com\/your\/orders\/sold(?:[/?#]|$)/i.test(url)) return url;
+  const receipt = String(source?.receiptId ?? "").trim();
+  return /^\d+$/.test(receipt) ? `https://www.etsy.com/your/orders/sold?order_id=${receipt}` : "";
 }
 
 /** Where to add tracking on Etsy: this receipt's page when known, else the Sold Orders page. */

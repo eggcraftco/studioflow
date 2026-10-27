@@ -145,11 +145,11 @@ import { EbayOrderRefreshButton } from "./EbayOrderRefreshButton";
 import { EbayOrderStock } from "./EbayOrderStock";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
-import { EtsySafe, EtsySourcePanel, EtsyProductPhoto, useEtsyListingPhotos, useEtsySource } from "./EtsySourcePanel";
+import { EtsyBlockChannelContext, EtsySafe, EtsySourcePanel, EtsyProductPhoto, useEtsyListingPhotos, useEtsySourceState } from "./EtsySourcePanel";
 import { etsyListingLink, etsyPhotoIsShowable } from "@/lib/studioflow/etsyListingPhotos";
 import { EtsyNotePhotoLinks } from "./EtsyText";
 import { etsyCardFold, etsyNoteDisplay } from "@/lib/studioflow/etsyFirstImport";
-import { ETSY_BLOCK_JUMP_ID, etsyAddTrackingLink, hiddenCardCount, orderJumpTargets } from "@/lib/studioflow/etsyOrderView";
+import { ETSY_BLOCK_JUMP_ID, etsyAddTrackingLink, etsyBlockReplacesStrip, hiddenCardCount, orderJumpTargets } from "@/lib/studioflow/etsyOrderView";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
@@ -5939,7 +5939,11 @@ export function OrderDetailContent({
   const portal = order.customerPortal;
   // ETSY-E2E night: Etsy's copy of the order and its product photos, read once per open (never stored).
   const isEtsyOrder = String(order.customFields?.["Source"] || "") === "Etsy";
-  const etsySource = useEtsySource(order.id, isEtsyOrder);
+  const etsySourceState = useEtsySourceState(order.id, isEtsyOrder);
+  const etsySource = etsySourceState.source;
+  // ETSY-UI-1 follow-up (owner, 27 Oct): on an Etsy order the Etsy block replaces the old channel strip (and carries
+  // what the strip showed); every other channel keeps its strip exactly as before.
+  const etsyBlockOwnsStrip = etsyBlockReplacesStrip(order, etsySourceState);
   const etsyPhotos = useEtsyListingPhotos(order.id, isEtsyOrder && Boolean(etsySource));
   // Etsy API Terms §5: NivaDesk never sends an Etsy buyer status, delivery or tracking
   // messages. One rule (lib/studioflow/etsyOrder.ts) decides "Etsy order" for every
@@ -10187,11 +10191,13 @@ export function OrderDetailContent({
 
 
       <ShopifySourceStrip order={order} workspaceCurrency={moneySettings?.selectedCurrency} />
-      <ChannelSourceStrip order={order} showMoney={canSeeFinance} />
+      {etsyBlockOwnsStrip ? null : <ChannelSourceStrip order={order} showMoney={canSeeFinance} />}
       {String(order.customFields?.["Source"] || "") === "Etsy" ? (
         // ETSY-UI-1: in the page flow above the cards (never pinned, no inner scroll); not a card.
         <div ref={etsyBlockRef} className="order-etsy-block" id="order-etsy-block">
+          <EtsyBlockChannelContext.Provider value={{ reviewRequired: Boolean(order.commerce?.reviewRequired), connectionName: order.commerce?.connectionDisplayName || "" }}>
           <EtsySourcePanel source={etsySource} photos={etsyPhotos} language={detailLanguage} showMoney={canSeeFinance} />
+          </EtsyBlockChannelContext.Provider>
         </div>
       ) : null}
       <EbayOrderBlock stamp={order.commerce} canSeeFinance={canSeeFinance} language={detailLanguage} />
