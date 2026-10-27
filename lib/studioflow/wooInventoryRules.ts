@@ -164,6 +164,12 @@ export function filterRows(rows: WooProductRow[], filter: string): WooProductRow
 export function countsOf(rows: WooProductRow[]) {
   return { active: filterRows(rows, "active").length, needs_choice: filterRows(rows, "needs_choice").length, sku_match: filterRows(rows, "sku_match").length, linked: filterRows(rows, "linked").length, inactive: filterRows(rows, "inactive").length };
 }
+/** The header's "{rows} to match": the rows still to match — Needs a choice plus Same SKU. Linked rows, sold/archived
+ *  ones and grouped/external products are not counted, so linking one lowers the number (it used to count every row).
+ *  Same definition as native 2.3 (`wooRowsToMatch`, Swift and Kotlin). */
+export function rowsToMatch(rows: WooProductRow[]): number {
+  return filterRows(rows, "needs_choice").length + filterRows(rows, "sku_match").length;
+}
 
 /** The word for a row's state. */
 export function rowStateSentence(row: WooProductRow): string {

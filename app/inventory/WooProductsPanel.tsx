@@ -14,7 +14,7 @@ import type { InventoryItem } from "@/lib/studioflow/inventory";
 import { studioLocaleTag } from "@/lib/studioflow/language";
 import { getWooProductLinks, previewWooProducts, importWooProducts, wooInventoryT, type WooLinksAnswer } from "@/lib/studioflow/wooInventory";
 import {
-  canChoose, countsOf, decisionProblem, decisionsToSend, fill, filterRows, productRowsOf, reasonSentence, rowStateSentence, startingDecision, storeStockSentence,
+  canChoose, countsOf, decisionProblem, decisionsToSend, fill, filterRows, productRowsOf, reasonSentence, rowsToMatch, rowStateSentence, startingDecision, storeStockSentence,
   type WooDecision, type WooImportRow, type WooProductRow
 } from "@/lib/studioflow/wooInventoryRules";
 
@@ -175,7 +175,7 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
         <>
           <p className="ebay-inv__summary" data-testid="woo-products-summary">
             {answer.storeName || answer.host ? <strong data-testid="woo-products-store-read">{String(answer.storeName || answer.host)} · </strong> : null}
-            {fill(t("{count} products read · {rows} to match"), { count: Number(answer.products || 0), rows: rows.length })}
+            {fill(t("{count} products read · {rows} to match"), { count: Number(answer.products || 0), rows: rowsToMatch(rows) })}
           </p>
           {answer.truncated === true ? <p className="ebay-inv__warn">{t("More than 1,000 products: only the first 1,000 were read.")}</p> : null}
           {Number(answer.variationsTruncated || 0) > 0 ? <p className="ebay-inv__warn">{t("Some products have more than 300 variations: only the first 300 were read.")}</p> : null}
