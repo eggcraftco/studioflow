@@ -97,7 +97,13 @@ export function writeEtsyPhotoCache(orderId: string, answer: EtsyPhotosAnswer): 
 
 export function clearEtsyPhotoCache(): void {
   cache.clear();
+  inFlight.clear();
 }
+
+// ETSY-UI-1 (27 Oct 2026): one question per order while it is being asked. A list row and the order page can ask for
+// the same order at once, and the order screen can re-run its photo hook before a slow answer arrives (the acceptance
+// rig saw two calls for one open when Etsy's answer was held back); while a call is in flight every caller shares it.
+const inFlight = new Map<string, Promise<EtsyPhotosAnswer>>();
 
 /**
  * One fetch, the way the screen does it: a fresh cached answer, or the callable.
@@ -110,12 +116,20 @@ export async function loadEtsyListingPhotos(
 ): Promise<EtsyPhotosAnswer> {
   const cached = readEtsyPhotoCache(orderId, now());
   if (cached) return cached;
+  const pending = inFlight.get(orderId);
+  if (pending) return pending;
   const calledAtMs = now();
-  try {
-    const answer = normaliseEtsyPhotosResponse(await call(orderId), calledAtMs);
-    writeEtsyPhotoCache(orderId, answer);
-    return answer;
-  } catch {
-    return { photos: [], reason: "unavailable", loading: false };
-  }
+  const asking = (async (): Promise<EtsyPhotosAnswer> => {
+    try {
+      const answer = normaliseEtsyPhotosResponse(await call(orderId), calledAtMs);
+      writeEtsyPhotoCache(orderId, answer);
+      return answer;
+    } catch {
+      return { photos: [], reason: "unavailable", loading: false };
+    } finally {
+      inFlight.delete(orderId);
+    }
+  })();
+  inFlight.set(orderId, asking);
+  return asking;
 }

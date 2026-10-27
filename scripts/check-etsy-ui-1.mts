@@ -385,6 +385,24 @@ await check("F1 list photos: one getEtsyListingPhotos call per order per session
   await photosLib.loadEtsyListingPhotos("a", call, now);
   assert.equal(calls.length, before, "the order page reused the list's fresh answer");
 });
+await check("F1b while a photo call is in flight, a second caller for the same order shares it (no second call)", async () => {
+  photosLib.clearEtsyPhotoCache();
+  let calls = 0; let release: () => void = () => {};
+  const gate = new Promise<void>((ok) => { release = ok; });
+  const call = async () => { calls += 1; await gate; return { ok: true, photos: [{ transactionId: "1", listingId: "1", url: IMG(1), thumbUrl: IMG(1), expiresAtMs: Date.now() + H }] }; };
+  const a = photosLib.loadEtsyListingPhotos("o-inflight", call);
+  const b = photosLib.loadEtsyListingPhotos("o-inflight", call);
+  release();
+  const [x, y] = await Promise.all([a, b]);
+  assert.equal(calls, 1, "two callers, one call");
+  assert.equal(x, y);
+  const failing = async () => { calls += 1; throw new Error("functions/unavailable"); };
+  const [f1, f2] = await Promise.all([photosLib.loadEtsyListingPhotos("o-fail", failing), photosLib.loadEtsyListingPhotos("o-fail", failing)]);
+  assert.equal(calls, 2, "a failing call is shared too");
+  assert.equal(f1.reason, "unavailable"); assert.equal(f2.reason, "unavailable");
+  await photosLib.loadEtsyListingPhotos("o-fail", failing);
+  assert.equal(calls, 3, "after it settles, a failure is asked again (nothing failed is remembered here)");
+});
 await check("F2 the row asks only while on screen (IntersectionObserver + dwell) and only for Etsy orders on the Orders page", () => {
   const thumb = read("components/EtsyListThumbnail.tsx");
   assert.match(thumb, /new IntersectionObserver\(/);
