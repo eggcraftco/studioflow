@@ -541,7 +541,7 @@ export function InventoryContent({
         <button type="button" data-active={tab === "locations"} onClick={() => { setTab("locations"); setSelectedId(""); }}>{t("Locations")}</button>
         <button type="button" data-active={tab === "recipes"} onClick={() => { setTab("recipes"); setSelectedId(""); }}>{t("Recipes")}</button>
         <button type="button" data-active={tab === "reports"} onClick={() => { setTab("reports"); setSelectedId(""); }}>{t("Reports")}</button>
-        <button type="button" data-active={tab === "categories"} onClick={() => { setTab("categories"); setSelectedId(""); }}>{t("Categories")}</button>
+        {/* Categories moved up to "Manage categories" under the category list (27 Oct 2026): one entry, where the list is. */}
       </nav>
 
       <div className="inventory-main">
@@ -735,7 +735,7 @@ export function InventoryContent({
               <th>{t("Item")}</th><th className="inventory-col-optional">{t("Type")}</th><th className="inventory-col-optional">{t("Category")}</th><th>{t("Status")}</th>
               <th className="r">{t("On Hand")}</th>
               <th className="r" title={invT("What it cost: purchase price plus extra costs, times the number on hand. Not a sale price.")}>{t("Value")}</th>
-              <th className="inventory-col-optional">{t("Location")}</th><th className="inventory-col-optional">{t("Updated")}</th><th /><th />
+              <th className="inventory-col-optional">{t("Location")}</th><th className="inventory-col-optional inventory-col-updated">{t("Updated")}</th><th className="inventory-col-actions" /><th className="inventory-col-actions" />
             </tr>
           </thead>
           <tbody>
@@ -811,10 +811,10 @@ export function InventoryContent({
                       : money(currencySymbol, inventoryLineValue(item))}
                 </td>
                 <td className="inventory-col-optional">{item.location || "—"}</td>
-                <td className="inventory-sub inventory-col-optional">
+                <td className="inventory-sub inventory-col-optional inventory-col-updated">
                   {item.updatedAtMs ? new Date(item.updatedAtMs).toLocaleDateString() : "—"}
                 </td>
-                <td className="r" onClick={event => event.stopPropagation()}>
+                <td className="r inventory-col-actions" onClick={event => event.stopPropagation()}>
                   <button
                     type="button"
                     className="inventory-link"
@@ -833,7 +833,7 @@ export function InventoryContent({
                     🏷
                   </button>
                 </td>
-                <td className="r" onClick={event => event.stopPropagation()}>
+                <td className="r inventory-col-actions" onClick={event => event.stopPropagation()}>
                   {canEdit ? (
                     <select
                       className="inventory-status-select"

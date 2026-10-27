@@ -35413,9 +35413,20 @@ body[data-studio-theme="dark"] .app-work-session-row small.app-work-session-corr
   .inventory-nav button { flex: 0 0 auto; white-space: nowrap; border: 1px solid var(--border); }
   .inventory-nav-hint { flex: 0 0 auto; white-space: nowrap; margin: 0 6px; align-self: center; }
 }
+.ebay-inv__count.woo-category-field .input { flex: 0 0 14em; width: 14em; max-width: 100%; }
+/* The list keeps its last columns on screen: "Updated" gives way first on narrower desktops, and with the item panel
+   open the optional columns fold into the item cell (the panel already shows them). */
+@media (max-width: 1500px) { .inventory-table .inventory-col-updated { display: none; } }
+@media (min-width: 1101px) {
+  .inventory-body.has-panel .inventory-table { min-width: 0; }
+  .inventory-body.has-panel .inventory-table .inventory-col-optional,
+  .inventory-body.has-panel .inventory-table .inventory-col-actions { display: none; }
+  .inventory-body.has-panel .inventory-item-folded { display: block; }
+}
 @media (max-width: 640px) {
   .inventory-table { min-width: 0; }
-  .inventory-table .inventory-col-optional { display: none; }
+  .inventory-table .inventory-col-optional,
+  .inventory-table .inventory-col-actions { display: none; }
   .inventory-item-folded { display: block; }
   .inventory-table th, .inventory-table td { padding: 10px 8px; }
   .inventory-head { flex-wrap: wrap; }

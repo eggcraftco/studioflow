@@ -117,7 +117,8 @@ ok("a photo that cannot be read falls back to the tile (no broken image)", /onEr
 ok("rows and sidebar read the workspace's icons, not a hard-coded table", !/CATEGORY_ICON\[/.test(content) && /categoryGlyph\(item\.category, categoryIcons\)/.test(content) && /workspaceCategoryIcons\(categories\)/.test(content));
 const css = read("app/globals.css");
 ok("thumbnail CSS is in app/globals.css (the served one), both themes by variables", /\.inventory-thumb \{[^}]*background: var\(--panel\); border: 1px solid var\(--border\);/.test(css));
-ok("phone width: the sidebar is one scrolling strip and optional columns fold", /@media \(max-width: 900px\) \{\s*\.inventory-nav \{ flex-direction: row; flex-wrap: nowrap; overflow-x: auto;/.test(css) && /\.inventory-table \.inventory-col-optional \{ display: none; \}/.test(css));
+ok("with the item panel open, optional and action columns fold into the item cell", /\.inventory-body\.has-panel \.inventory-table \.inventory-col-optional,/.test(css));
+ok("phone width: the sidebar is one scrolling strip and optional columns fold", /@media \(max-width: 900px\) \{\s*\.inventory-nav \{ flex-direction: row; flex-wrap: nowrap; overflow-x: auto;/.test(css) && /@media \(max-width: 640px\) \{\s*\.inventory-table \{ min-width: 0; \}\s*\.inventory-table \.inventory-col-optional,\s*\.inventory-table \.inventory-col-actions \{ display: none; \}/.test(css));
 
 // ---- 3. categories ---------------------------------------------------------------------------------------------------------
 const seedRows = SEED.map((title, i) => ({ id: `c${i}`, title, icon: "▪", archived: false, itemCount: title === "Watches" ? 6 : title === "Other" ? 1 : 0 }));
@@ -145,7 +146,7 @@ for (const [english, row] of Object.entries(C.TEMPLATE_TITLES || {})) for (const
 ok("every template title (but Other) has a translation row", Object.values(templates).flat().every(([english]) => english === "Other" || english in (C.TEMPLATE_TITLES || {})));
 ok("the Categories screen offers the trade's set, preselected from the onboarding answer", /templateKindFromWorkKinds\(workKinds\)/.test(panelCats) && /applyCategoryTemplate\(rows, tradeKind, language, \{ hideUnusedSeed, now: Date\.now\(\) \}\)/.test(panelCats) && /data-testid="categories-template-apply"/.test(panelCats));
 ok("Remove/Merge wait for unsaved edits (a reload would drop them)", (panelCats.match(/disabled=\{!canEdit \|\| busy \|\| [^}]*dirty\}/g) || []).length === 2);
-ok("the sidebar has 'Manage categories' under the categories", /data-testid="inventory-nav-manage-categories"/.test(content) && /invT\("Manage categories"\)/.test(content));
+ok("the sidebar has 'Manage categories' under the categories — one entry for the Categories screen, not two", /data-testid="inventory-nav-manage-categories"/.test(content) && /invT\("Manage categories"\)/.test(content) && (content.match(/data-active=\{tab === "categories"\}/g) || []).length === 1);
 ok("a new item starts in the default or first category, never a hard-coded Watches", !/category: trackingType === "quantity" \? "Consumables" : "Watches"/.test(content) && /const newItemCategory = defaultCategory \|\| visibleCategories\[0\]\?\.title \|\| "Other";/.test(content) && /emptyDraft\(trackingType, current\.category\)/.test(content));
 ok("one active sidebar entry: quick views clear the category; All Items clears every filter", /setStatusFilter\(""\);\s*setCategoryFilter\(""\);\s*setSelectedId\(""\);/.test(content) && /function openAllItems\(\) \{\s*openQuickView\("all"\);\s*setTypeFilter\(""\); setLocationFilter\(""\); setSupplierFilter\(""\); setSearch\(""\);/.test(content));
 

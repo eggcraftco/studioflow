@@ -270,7 +270,7 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
                               {decision.trackingType === "unique" ? (
                                 <label><input type="checkbox" data-testid="woo-in-hand" checked={decision.inHand} onChange={(event) => setDecision(row.linkId, { inHand: event.target.checked })} /> {t("This one item is here, on my shelf")}</label>
                               ) : null}
-                              <label className="ebay-inv__count">{t("Category for the new card")}
+                              <label className="ebay-inv__count woo-category-field">{t("Category for the new card")}
                                 <select className="input" data-testid="woo-category" value={decision.category} onChange={(event) => setDecision(row.linkId, { category: event.target.value })}>
                                   {decision.category ? null : <option value="" disabled>{t("Choose…")}</option>}
                                   {categoryOptions.map((c) => <option key={c} value={c}>{t(c)}</option>)}
