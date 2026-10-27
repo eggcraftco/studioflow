@@ -57,6 +57,8 @@ export type ShipmentParty = {
   /** Sender only: printed beside the signature on a commercial invoice. */
   contactTitle?: string;
   registrationNumbers?: ShipperRegistration[];
+  /** Recipient only (DHL-8): business or consumer as a person chose it; "" = read from the details. */
+  kind?: "" | "business" | "consumer";
 };
 
 
@@ -79,6 +81,8 @@ export type CustomsItem = {
   manufacturerProductId?: string;
   /** GTIN / EAN / UPC, only where one exists: DHL "SRV", EU S-PID. */
   standardProductId?: string;
+  /** The person confirmed the product has no GTIN/EAN/UPC: the server declares TARIC Y081 for it. */
+  standardProductIdAbsent?: boolean;
   /** EUDR due-diligence statement (DDS / CDDS / SDI) reference: DHL "DDS". */
   ddsReference?: string;
   /** TARIC document code (EUDR), e.g. Y129: DHL "TAR". */
@@ -87,12 +91,21 @@ export type CustomsItem = {
 
 /** What the server says this draft's lines need (DHL-8). */
 export type ShipmentProductIdsView = {
-  // eu_b2c: declared, from outside the EU, to a private person in the EU — the EU rule applies.
-  scope: "eu_b2c" | "eu_b2b" | "edge" | "none";
+  // eu_b2c: declared, from outside the EU, to a consumer in the EU — the EU rule applies;
+  // eu_unconfirmed: the same, but business or consumer is not decided yet (company name only).
+  scope: "eu_b2c" | "eu_b2b" | "eu_unconfirmed" | "edge" | "none";
   // The owner's choice (appConfig/shipping): require (codes asked and sent), mydhl_plus / block (refused here).
   mode: "require" | "mydhl_plus" | "block";
   required: boolean;
   refused: boolean;
+  /** How the server read the recipient: a person's choice, a VAT/EORI number, no company name, or a company name only. */
+  recipientKind?: {
+    kind: "business" | "consumer" | "unconfirmed";
+    source: "choice" | "tax_id" | "no_company_name" | "company_name_only";
+    staleChoice: boolean;
+    /** "consumer" when the order came from an online shop or marketplace (a hint, never applied). */
+    hint: "" | "consumer";
+  };
 };
 
 /** A code the server found on the order or the inventory it holds, for the person to copy. */
@@ -428,6 +441,8 @@ const ISSUE_MESSAGES: Record<string, string> = {
   // DHL-8: product identifiers on EU consumer shipments (functions/shipping/productIds.js ISSUE_TEXT).
   item_merchant_pid_missing: "Every line going to a consumer in the EU needs your product code (SKU) for that item.",
   item_manufacturer_pid_missing: "Every line going to a consumer in the EU needs the manufacturer's product code (your own model code if you made it).",
+  item_standard_pid_unconfirmed: "Add the barcode (GTIN/EAN/UPC), or tick “This product has no barcode” for that line.",
+  recipient_kind_unconfirmed: "Say whether the recipient is a business or a consumer: in the EU the product codes depend on it, and a company name alone does not decide it.",
   item_pid_placeholder: "A product code cannot be a placeholder such as N/A, TBC or 0.",
   item_standard_pid_invalid: "The barcode (GTIN/EAN/UPC) has a wrong check digit. Correct it or leave it empty.",
   item_dds_reference_invalid: "The EUDR due-diligence reference can contain only letters and digits.",

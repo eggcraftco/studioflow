@@ -32630,6 +32630,7 @@ body[data-studio-theme="dark"] .settings-ticket-thread { background: var(--setti
 .shipment-item > .shipment-subhead.is-wide, .shipment-item > .shipment-muted.is-wide, .shipment-item > .shipment-item-eudr { grid-column: 1 / -1; }
 .shipment-item-eudr > summary { cursor: pointer; font-size: 12px; opacity: 0.8; }
 .shipment-item-eudr-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 8px; }
+.shipment-item .shipment-check > span { display: flex; align-items: center; gap: 6px; font-size: 12.5px; }
 .shipment-total { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 18px; font-size: 13px; }
 .shipment-total .inventory-field { min-width: 160px; }
 .shipment-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }

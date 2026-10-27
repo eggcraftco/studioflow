@@ -51,6 +51,8 @@ type ItemInput = {
   // Product identifiers (DHL-8): sent as typed; the server checks and keeps them.
   merchantProductId: string; manufacturerProductId: string; standardProductId: string;
   ddsReference: string; taricDocumentCode: string;
+  /** "This product has no barcode": the server declares TARIC Y081 for the line. */
+  standardProductIdAbsent: boolean;
 };
 
 const DHL_INCOTERMS = ["DAP", "DDP", "EXW", "FCA", "CPT", "CIP", "DPU", "FAS", "FOB", "CFR", "CIF"];
@@ -65,8 +67,15 @@ const asNumber = (value: string) => {
 };
 const emptyItem = (): ItemInput => ({
   description: "", quantity: "1", quantityUnit: "PCS", unitValue: "", hsCode: "", manufacturerCountry: "", netWeight: "", grossWeight: "",
-  merchantProductId: "", manufacturerProductId: "", standardProductId: "", ddsReference: "", taricDocumentCode: ""
+  merchantProductId: "", manufacturerProductId: "", standardProductId: "", ddsReference: "", taricDocumentCode: "", standardProductIdAbsent: false
 });
+// How the server read the recipient (functions/shipping/productIds.js recipientKind), for the hint under the choice.
+const RECIPIENT_KIND_SOURCE: Record<string, string> = {
+  tax_id: "Read as a business: the recipient has a VAT or EORI number.",
+  no_company_name: "Read as a consumer: there is no company name.",
+  company_name_only: "A company name alone does not show that the recipient is a business. Choose Business or Consumer."
+};
+const BUSINESS_TAX_TYPES = new Set(["VAT", "EOR", "EIN", "DUN", "FED", "STA"]);
 // Where a suggested code came from (functions/shipping/productIds.js suggestionsFrom).
 const SUGGESTION_SOURCE: Record<ProductIdSuggestion["source"], string> = {
   order_line: "Order line",
@@ -113,7 +122,10 @@ export function ShipmentDraftDialog({
     city: draft.recipient?.address?.city ?? "",
     postalCode: draft.recipient?.address?.postalCode ?? "",
     provinceCode: draft.recipient?.address?.provinceCode ?? "",
-    countryCode: draft.recipient?.address?.countryCode ?? ""
+    countryCode: draft.recipient?.address?.countryCode ?? "",
+    // DHL-8: business or consumer as chosen here ("" = read from the details), and the recipient's VAT number.
+    kind: (draft.recipient?.kind ?? "") as "" | "business" | "consumer",
+    vat: (draft.recipient?.registrationNumbers ?? []).find(r => String(r.typeCode).toUpperCase() === "VAT")?.number ?? ""
   }));
   const [pieces, setPieces] = useState<PieceInput[]>(() => {
     const list = (draft.pieces ?? []).map(p => ({ weight: asInput(p.weight), length: asInput(p.length), width: asInput(p.width), height: asInput(p.height) }));
@@ -136,13 +148,25 @@ export function ShipmentDraftDialog({
     description: i.description ?? "", quantity: asInput(i.quantity), quantityUnit: i.quantityUnit || "PCS", unitValue: asInput(i.unitValue),
     hsCode: i.hsCode ?? "", manufacturerCountry: i.manufacturerCountry ?? "", netWeight: asInput(i.netWeight), grossWeight: asInput(i.grossWeight),
     merchantProductId: i.merchantProductId ?? "", manufacturerProductId: i.manufacturerProductId ?? "", standardProductId: i.standardProductId ?? "",
-    ddsReference: i.ddsReference ?? "", taricDocumentCode: i.taricDocumentCode ?? ""
+    ddsReference: i.ddsReference ?? "", taricDocumentCode: i.taricDocumentCode ?? "", standardProductIdAbsent: i.standardProductIdAbsent === true
   })));
   // What the server says the lines need here (DHL-8): EU consumer → codes required, or refused by the owner's choice.
   const productIdsView = customsView.productIds;
   const productIdsRequired = productIdsView?.required === true;
   const productIdsRefused = productIdsView?.refused === true;
   const productIdSuggestions = customsView.productIdSuggestions ?? [];
+  // How the server read the recipient, shown only where the EU rule is in play and nobody chose yet.
+  const kindView = productIdsView?.recipientKind;
+  const euScope = ["eu_b2c", "eu_b2b", "eu_unconfirmed"].includes(productIdsView?.scope ?? "");
+  const recipientKindNote = !kindView || !euScope || recipient.kind
+    ? ""
+    : [
+        kindView.staleChoice ? t("The recipient changed after the type was chosen. Choose again.") : "",
+        recipient.vat.trim() || (draft.recipient?.registrationNumbers ?? []).some(r => BUSINESS_TAX_TYPES.has(String(r.typeCode).toUpperCase()) && String(r.number ?? "").trim())
+          ? t(RECIPIENT_KIND_SOURCE.tax_id)
+          : t(RECIPIENT_KIND_SOURCE[kindView.source] ?? ""),
+        kindView.hint === "consumer" && kindView.source === "company_name_only" ? t("Orders from online shops and marketplaces usually come from consumers.") : ""
+      ].filter(Boolean).join(" ");
 
   const [issues, setIssues] = useState<ShipmentIssue[]>(shipment.issues ?? []);
   const [confirmed, setConfirmed] = useState(Boolean(customsView.confirmed));
@@ -228,6 +252,12 @@ export function ShipmentDraftDialog({
     const patch: ShipmentDraftPatch = {
       recipient: {
         fullName: recipient.fullName, companyName: recipient.companyName, phone: recipient.phone, email: etsyOrder ? "" : recipient.email,
+        kind: recipient.kind,
+        // The VAT number typed here replaces any VAT on the draft; other registrations stay as they were.
+        registrationNumbers: [
+          ...(draft.recipient?.registrationNumbers ?? []).filter(r => String(r.typeCode).toUpperCase() !== "VAT"),
+          ...(recipient.vat.trim() ? [{ typeCode: "VAT", number: recipient.vat.trim(), issuerCountryCode: recipient.countryCode }] : [])
+        ],
         address: {
           line1: recipient.line1, line2: recipient.line2, city: recipient.city, postalCode: recipient.postalCode,
           provinceCode: recipient.provinceCode, countryCode: recipient.countryCode
@@ -254,7 +284,8 @@ export function ShipmentDraftDialog({
           description: item.description, quantity: asNumber(item.quantity), quantityUnit: item.quantityUnit, unitValue: asNumber(item.unitValue),
           hsCode: item.hsCode, manufacturerCountry: item.manufacturerCountry, netWeight: asNumber(item.netWeight), grossWeight: asNumber(item.grossWeight),
           merchantProductId: item.merchantProductId, manufacturerProductId: item.manufacturerProductId, standardProductId: item.standardProductId,
-          ddsReference: item.ddsReference, taricDocumentCode: item.taricDocumentCode
+          ddsReference: item.ddsReference, taricDocumentCode: item.taricDocumentCode,
+          standardProductIdAbsent: !item.standardProductId.trim() && item.standardProductIdAbsent
         }))
       };
     }
@@ -379,7 +410,7 @@ export function ShipmentDraftDialog({
     setDutiesPaid("");
   }
 
-  const updateItem = (index: number, key: keyof ItemInput, value: string) => {
+  const updateItem = (index: number, key: keyof ItemInput, value: string | boolean) => {
     setItems(current => current.map((item, i) => (i === index ? { ...item, [key]: value } : item)));
     setDirty(true);
     setCustomsChanged(true);
@@ -388,6 +419,14 @@ export function ShipmentDraftDialog({
   const applySuggestion = (index: number, suggestion: ProductIdSuggestion) => {
     if (suggestion.merchantProductId) updateItem(index, "merchantProductId", suggestion.merchantProductId);
     if (suggestion.manufacturerProductId) updateItem(index, "manufacturerProductId", suggestion.manufacturerProductId);
+  };
+  // An issue on one customs line names that line ("Line 2 (Strap): …"); the server sends line and description.
+  const issueText = (issue: ShipmentIssue) => {
+    const line = Number(issue.detail?.line);
+    const description = String(issue.detail?.description ?? "").trim();
+    const sentence = shipmentIssueMessage(issue, t);
+    if (!Number.isInteger(line) || line < 1) return sentence;
+    return `${t("Line {n}").replace("{n}", String(line))}${description ? ` (${description})` : ""}: ${sentence}`;
   };
   const suggestionLabel = (suggestion: ProductIdSuggestion) => {
     const codes = [suggestion.merchantProductId ? `SKU ${suggestion.merchantProductId}` : "", suggestion.manufacturerProductId ?? ""].filter(Boolean).join(" · ");
@@ -477,7 +516,16 @@ export function ShipmentDraftDialog({
               <input className="input" value={recipient.provinceCode} onChange={e => change(setRecipient)({ ...recipient, provinceCode: e.target.value })} /></label>
             <label className="inventory-field"><span>{t("Country")}</span>
               {countrySelect(recipient.countryCode, code => { change(setRecipient)({ ...recipient, countryCode: code }); setProducts(null); }, t("Country"))}</label>
+            <label className="inventory-field"><span>{t("Recipient type")}</span>
+              <select className="input" value={recipient.kind} onChange={e => change(setRecipient, { customs: true })({ ...recipient, kind: e.target.value as "" | "business" | "consumer" })}>
+                <option value="">{t("Automatic (from the details above)")}</option>
+                <option value="business">{t("Business")}</option>
+                <option value="consumer">{t("Consumer")}</option>
+              </select></label>
+            <label className="inventory-field"><span>{t("Recipient's VAT number (businesses only)")}</span>
+              <input className="input" value={recipient.vat} onChange={e => change(setRecipient, { customs: true })({ ...recipient, vat: e.target.value })} /></label>
           </div>
+          {recipientKindNote ? <p className="shipment-muted" data-testid="recipient-kind-note">{recipientKindNote}</p> : null}
         </section>
 
         <section className="shipment-section">
@@ -617,6 +665,9 @@ export function ShipmentDraftDialog({
                           <input className="input" value={item.manufacturerProductId} onChange={e => updateItem(index, "manufacturerProductId", e.target.value)} /></label>
                         <label className="inventory-field"><span>{t("Barcode (GTIN/EAN/UPC), if any")}</span>
                           <input className="input" value={item.standardProductId} inputMode="numeric" onChange={e => updateItem(index, "standardProductId", e.target.value)} /></label>
+                        <label className="inventory-field shipment-check"><span>
+                          <input type="checkbox" checked={item.standardProductIdAbsent && !item.standardProductId.trim()} disabled={Boolean(item.standardProductId.trim())} onChange={e => updateItem(index, "standardProductIdAbsent", e.target.checked)} />{" "}
+                          {t("This product has no barcode (GTIN/EAN/UPC)")}</span></label>
                         <details className="shipment-item-eudr is-wide" open={Boolean(item.ddsReference || item.taricDocumentCode)}>
                           <summary>{t("EUDR references (only for goods the EU deforestation rules cover)")}</summary>
                           <div className="shipment-item-eudr-fields">
@@ -724,8 +775,13 @@ export function ShipmentDraftDialog({
           {!dirty && issues.length === 0 ? <p className="shipment-ready">{t("Ready to create the label.")}</p> : null}
           {issues.length > 0 ? (
             <ul className="shipment-issues">
-              {issues.map(issue => <li key={`${issue.code}:${issue.field}`}>{shipmentIssueMessage(issue, t)}</li>)}
+              {issues.map(issue => <li key={`${issue.code}:${issue.field}`}>{issueText(issue)}</li>)}
             </ul>
+          ) : null}
+          {issues.some(issue => issue.detail?.alternative === "mydhl_plus") ? (
+            <p className="shipment-note" data-testid="mydhl-alternative">
+              {t("Or create this shipment in MyDHL+ with the reference {reference}, then use “Find shipments made on MyDHL” on the order to link it.").replace("{reference}", orderReference)}
+            </p>
           ) : null}
           <p className="shipment-muted">{t("Creating the label sends this shipment to DHL once. No pickup is booked, and the order is not marked dispatched until DHL scans the parcel.")}</p>
         </section>
