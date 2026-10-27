@@ -18,10 +18,12 @@ export type WooProductRow = {
   listedQuantity: number | null; stockTracked: "parent" | boolean; stockStatus: string; lifecycle: "active" | "sold" | "archived";
   price: WooMoney; salePrice: WooMoney; onSale: boolean;
   state: string; ambiguity: string; linkedItem: WooCandidate | null; candidates: WooCandidate[]; suggestions: WooCandidate[];
-  proposed: { name: string; trackingType: "" | "unique" | "quantity" };
+  proposed: { name: string; trackingType: "" | "unique" | "quantity"; category: string; categoryBasis: string; categoryFrom: string };
+  /** The store's own categories for the product ("Character Watches"), at most five (27 Oct 2026). */
+  categories: string[];
 };
 export type WooDecision = { action: "" | "link" | "create"; inventoryItemId: string; trackingType: "" | "unique" | "quantity"; openingCount: string; inHand: boolean; confirmAmbiguous: boolean; category: string };
-export type WooImportRow = { linkId: string; result: string; reason: string; inventoryItemId: string; number: string };
+export type WooImportRow = { linkId: string; result: string; reason: string; inventoryItemId: string; number: string; category: string; photo: string; photoReason: string };
 
 export const WOO_IMPORT_PER_CALL = 200;
 const LINK_ID = /^s[0-9a-f]{10}__p\d{1,20}__v\d{1,20}$/;
@@ -38,7 +40,8 @@ export function safeImageUrl(value: unknown, storeHost: string): string {
   try { parsed = new URL(url); } catch { return ""; }
   if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.port) return "";
   const host = parsed.hostname.toLowerCase();
-  const store = String(storeHost || "").toLowerCase();
+  // The bare name behind a leading "www." counts as the store too (server: commerce/woo/productImage.js storeBase).
+  const store = String(storeHost || "").toLowerCase().replace(/^www\./, "");
   if (store && (host === store || host.endsWith(`.${store}`))) return url;
   if (/^i[0-3]\.wp\.com$/.test(host)) return url;
   return "";
@@ -79,7 +82,11 @@ export function productRowsOf(answer: unknown): WooProductRow[] {
       price: moneyOf(r.price), salePrice: moneyOf(r.salePrice), onSale: r.onSale === true,
       state: STATES.includes(text(r.state, 20)) ? text(r.state, 20) : "no_match", ambiguity: text(r.ambiguity, 40),
       linkedItem: candidateOf(r.linkedItem), candidates: candidatesOf(r.candidates), suggestions: candidatesOf(r.suggestions),
-      proposed: { name: text(proposed.name, 160), trackingType: proposed.trackingType === "unique" ? "unique" : proposed.trackingType === "quantity" ? "quantity" : "" }
+      proposed: {
+        name: text(proposed.name, 160), trackingType: proposed.trackingType === "unique" ? "unique" : proposed.trackingType === "quantity" ? "quantity" : "",
+        category: text(proposed.category, 60), categoryBasis: text(proposed.categoryBasis, 20), categoryFrom: text(proposed.categoryFrom, 60)
+      },
+      categories: Array.isArray(r.categories) ? (r.categories as unknown[]).map((c) => text(c, 60)).filter(Boolean).slice(0, 5) : []
     });
   }
   return out;
@@ -90,9 +97,57 @@ export function canChoose(row: WooProductRow): boolean {
   return row.state !== "linked" && row.state !== "not_stock";
 }
 
-/** The decision a row starts with when ticked: link to the one SKU match; otherwise nothing chosen yet. Never a count. */
-export function startingDecision(row: WooProductRow): WooDecision {
-  const base: WooDecision = { action: "", inventoryItemId: "", trackingType: row.proposed.trackingType, openingCount: "", inHand: false, confirmAmbiguous: false, category: "" };
+// ---- the category a new card starts in (27 Oct 2026) ----------------------------------------------------------------
+// The first real import (TickToon #181 → INV-00007) went to "Other" because nobody had chosen a category and nothing
+// said so. Now: the server proposes one (functions commerce/woo/products.js categoryForProduct: the store's category
+// matched by name to one of the workspace's, else the workspace default); this file repeats the same rule for a
+// server that does not send a proposal yet, the row shows it, and the person can change it. A create with no category
+// is not sent (category_required): nothing lands in "Other" without the person seeing it.
+const CATEGORY_STOP_WORDS = new Set(["and", "the", "of", "for", "with", "a", "an"]);
+const UNCATEGORISED = new Set(["uncategorized", "uncategorised"]);
+function singularWord(word: string): string {
+  if (word.length > 4 && /(ches|shes|sses|xes|zes)$/.test(word)) return word.slice(0, -2);
+  if (word.length > 3 && word.endsWith("s") && !word.endsWith("ss")) return word.slice(0, -1);
+  return word;
+}
+export function categoryWords(value: string): string[] {
+  return String(value || "").trim().slice(0, 120).toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .split(/[^\p{L}\p{N}]+/u).filter((w) => w && !CATEGORY_STOP_WORDS.has(w)).map(singularWord);
+}
+/** Same rule, same order as the server's categoryForProduct: same name → every word of a title → the default → none. */
+export function categoryForStoreCategories(storeCategories: string[], titles: string[], defaultCategory = "", fallbackTitle = "Other"): { category: string; basis: string; from: string } {
+  const list = titles.map((t) => String(t || "").trim()).filter(Boolean);
+  const store = storeCategories.map((c) => String(c || "").trim()).filter((c) => c && !UNCATEGORISED.has(c.toLowerCase()));
+  for (const name of store) {
+    const same = list.find((t) => t.toLowerCase() === name.toLowerCase());
+    if (same) return { category: same, basis: "same_name", from: name };
+  }
+  let best: { category: string; from: string; words: number; storeIndex: number; titleIndex: number } | null = null;
+  store.forEach((name, storeIndex) => {
+    const have = new Set(categoryWords(name));
+    list.forEach((title, titleIndex) => {
+      if (title.toLowerCase() === fallbackTitle.toLowerCase()) return;
+      const need = categoryWords(title);
+      if (!need.length || !need.every((w) => have.has(w))) return;
+      const better = !best || need.length > best.words || (need.length === best.words && (storeIndex < best.storeIndex || (storeIndex === best.storeIndex && titleIndex < best.titleIndex)));
+      if (better) best = { category: title, from: name, words: need.length, storeIndex, titleIndex };
+    });
+  });
+  if (best) return { category: (best as { category: string }).category, basis: "word", from: (best as { from: string }).from };
+  if (defaultCategory && list.includes(defaultCategory)) return { category: defaultCategory, basis: "default", from: "" };
+  return { category: "", basis: "none", from: "" };
+}
+/** The category a ticked row starts with: the server's proposal when it is one of the categories offered, else the same
+ *  rule here, else nothing (the person chooses). */
+export function preselectCategory(row: WooProductRow, options: string[], defaultCategory = ""): { category: string; basis: string; from: string } {
+  if (row.proposed.category && options.includes(row.proposed.category)) return { category: row.proposed.category, basis: row.proposed.categoryBasis || "server", from: row.proposed.categoryFrom };
+  return categoryForStoreCategories(row.categories, options, defaultCategory);
+}
+
+/** The decision a row starts with when ticked: link to the one SKU match; otherwise nothing chosen yet. Never a count.
+ *  `category` is the preselected category for a new card (preselectCategory); the person can change it. */
+export function startingDecision(row: WooProductRow, category = ""): WooDecision {
+  const base: WooDecision = { action: "", inventoryItemId: "", trackingType: row.proposed.trackingType, openingCount: "", inHand: false, confirmAmbiguous: false, category };
   if (row.state === "sku_match" && row.candidates.length === 1) return { ...base, action: "link", inventoryItemId: row.candidates[0].id };
   return base;
 }
@@ -108,16 +163,18 @@ export function decisionProblem(row: WooProductRow, decision: WooDecision | unde
     return "";
   }
   if (!decision.trackingType) return "tracking_type_required";
+  // 27 Oct 2026: a new card needs its category (asked last, after the count): no silent "Other".
+  const needsCategory = decision.category.trim() ? "" : "category_required";
   if (decision.trackingType === "unique") {
     if (row.hasVariations) return "one_off_card_for_variation";
     if ((row.listedQuantity ?? 0) > 1) return "one_off_card_for_many";
     if (!decision.inHand) return "count_required";
-    return "";
+    return needsCategory;
   }
   if (decision.openingCount.trim() === "") return "count_required";
   const n = Number(decision.openingCount.replace(",", "."));
   if (!Number.isFinite(n) || n < 0 || n > 1e7) return "count_invalid";
-  return "";
+  return needsCategory;
 }
 
 /** What Import sends for the chosen rows, in the list's order; rows with a problem are not sent. */
@@ -148,7 +205,28 @@ export function importRowsOf(answer: unknown): WooImportRow[] {
   const rows = Array.isArray(obj(answer).results) ? obj(answer).results as unknown[] : [];
   return rows.map((raw) => {
     const r = obj(raw);
-    return { linkId: text(r.linkId, 80), result: text(r.result, 30), reason: text(r.reason, 60), inventoryItemId: text(r.inventoryItemId, 80), number: text(r.number, 40) };
+    return {
+      linkId: text(r.linkId, 80), result: text(r.result, 30), reason: text(r.reason, 60), inventoryItemId: text(r.inventoryItemId, 80), number: text(r.number, 40),
+      category: text(r.category, 60), photo: text(r.photo, 20), photoReason: text(r.photoReason, 40)
+    };
+  });
+}
+
+/** 27 Oct 2026: what the screen shows right after an import, without reading the store again. A row brought in (a new
+ *  card, a link, or already linked) IS linked now: its chip says Linked and names the card, it cannot be ticked again,
+ *  and it leaves "to match" (the first real import kept saying "No card has this SKU" until Read again). */
+export function applyImportResults(rows: WooProductRow[], results: Record<string, WooImportRow>): WooProductRow[] {
+  return rows.map((row) => {
+    const done = results[row.linkId];
+    if (!done || !["created", "linked", "already_linked"].includes(done.result) || !done.inventoryItemId) return row;
+    const known = [...row.candidates, ...row.suggestions].find((c) => c.id === done.inventoryItemId) || (row.linkedItem && row.linkedItem.id === done.inventoryItemId ? row.linkedItem : null);
+    return {
+      ...row, state: "linked", ambiguity: "", candidates: [], suggestions: [],
+      linkedItem: {
+        id: done.inventoryItemId, number: done.number || (known ? known.number : ""), name: known ? known.name : row.proposed.name,
+        sku: known ? known.sku : row.sku, status: known ? known.status : "available", trackingType: known ? known.trackingType : "", reason: "link"
+      }
+    };
   });
 }
 
@@ -207,6 +285,7 @@ const REASONS: Record<string, string> = {
   one_off_card_for_variation: "A variation is brought in as a counted card.",
   card_linked_to_other_product: "This one-off card is already linked to another product of this store.",
   tracking_type_required: "Choose one-off or counted.",
+  category_required: "Choose a category for the new card.",
   count_required: "Type how many you have on the shelf (0 is allowed), or confirm the one item is here.",
   count_invalid: "That count is not a number NivaDesk can use.",
   inactive_needs_explicit_choice: "This product is sold out or archived: choose it from that list.",
@@ -305,9 +384,25 @@ export const WOO_INVENTORY_TEXT: Record<string, Record<Lang, string>> = {
   "The store could not be reached just now. Try again in a moment.": L("Mağazaya şu anda ulaşılamadı. Birazdan yeniden deneyin.", "Der Shop ist gerade nicht erreichbar. Versuchen Sie es gleich noch einmal.", "La boutique est injoignable pour le moment. Réessayez dans un instant.", "Il negozio non è raggiungibile ora. Riprova tra un momento.", "No se pudo contactar con la tienda ahora. Inténtalo de nuevo en un momento.", "Não foi possível contactar a loja agora. Tente novamente daqui a pouco.", "Магазин сейчас недоступен. Повторите чуть позже.", "現在ストアに接続できません。しばらくしてからもう一度お試しください。", "暂时无法连接商店。请稍后重试。", "تعذّر الوصول إلى المتجر الآن. حاول مرة أخرى بعد لحظة.", "अभी स्टोर तक नहीं पहुँच सके। थोड़ी देर में फिर कोशिश करें।")
 };
 
+// Inventory fixes (27 Oct 2026) — draft wording, owner approval pending.
+export const WOO_INVENTORY_TEXT_27OCT: Record<string, Record<Lang, string>> = {
+  "Choose a category for the new card.": L("Yeni kart için bir kategori seçin.", "Wählen Sie eine Kategorie für die neue Karte.", "Choisissez une catégorie pour la nouvelle fiche.", "Scegli una categoria per la nuova scheda.", "Elige una categoría para la nueva ficha.", "Escolha uma categoria para a nova ficha.", "Выберите категорию для новой карточки.", "新しいカードのカテゴリを選んでください。", "请为新卡片选择一个类别。", "اختر فئة للبطاقة الجديدة.", "नए कार्ड के लिए एक श्रेणी चुनें।"),
+  "Category for the new card": L("Yeni kartın kategorisi", "Kategorie der neuen Karte", "Catégorie de la nouvelle fiche", "Categoria della nuova scheda", "Categoría de la nueva ficha", "Categoria da nova ficha", "Категория новой карточки", "新しいカードのカテゴリ", "新卡片的类别", "فئة البطاقة الجديدة", "नए कार्ड की श्रेणी"),
+  "Suggested from the store's category “{from}”": L("Mağazanın “{from}” kategorisinden önerildi", "Vorgeschlagen aus der Shop-Kategorie „{from}“", "Suggérée d'après la catégorie « {from} » de la boutique", "Suggerita dalla categoria del negozio «{from}»", "Sugerida por la categoría de la tienda «{from}»", "Sugerida a partir da categoria da loja «{from}»", "Предложено по категории магазина «{from}»", "ストアのカテゴリ「{from}」から提案", "根据商店类别“{from}”建议", "مقترحة من فئة المتجر «{from}»", "स्टोर की श्रेणी “{from}” से सुझाई गई"),
+  "Your default category": L("Varsayılan kategoriniz", "Ihre Standardkategorie", "Votre catégorie par défaut", "La tua categoria predefinita", "Tu categoría predeterminada", "A sua categoria predefinida", "Ваша категория по умолчанию", "既定のカテゴリ", "您的默认类别", "فئتك الافتراضية", "आपकी डिफ़ॉल्ट श्रेणी"),
+  "In the store: {categories}": L("Mağazada: {categories}", "Im Shop: {categories}", "Dans la boutique : {categories}", "Nel negozio: {categories}", "En la tienda: {categories}", "Na loja: {categories}", "В магазине: {categories}", "ストアでは: {categories}", "在商店中：{categories}", "في المتجر: {categories}", "स्टोर में: {categories}"),
+  "Picture copied from the store": L("Resim mağazadan kopyalandı", "Bild aus dem Shop kopiert", "Image copiée depuis la boutique", "Immagine copiata dal negozio", "Imagen copiada de la tienda", "Imagem copiada da loja", "Фото скопировано из магазина", "ストアから画像をコピーしました", "已从商店复制图片", "تم نسخ الصورة من المتجر", "चित्र स्टोर से कॉपी किया गया"),
+  "The store's picture was not copied": L("Mağazanın resmi kopyalanmadı", "Das Bild des Shops wurde nicht kopiert", "L'image de la boutique n'a pas été copiée", "L'immagine del negozio non è stata copiata", "La imagen de la tienda no se copió", "A imagem da loja não foi copiada", "Фото магазина не скопировано", "ストアの画像はコピーされませんでした", "未复制商店的图片", "لم يتم نسخ صورة المتجر", "स्टोर का चित्र कॉपी नहीं हुआ"),
+  "Open the card": L("Kartı aç", "Karte öffnen", "Ouvrir la fiche", "Apri la scheda", "Abrir la ficha", "Abrir a ficha", "Открыть карточку", "カードを開く", "打开卡片", "افتح البطاقة", "कार्ड खोलें"),
+  "Picture shown from your store; bringing it in copies it onto the new card": L("Resim mağazanızdan gösteriliyor; içe alınca yeni karta kopyalanır", "Bild aus Ihrem Shop angezeigt; bei der Übernahme wird es auf die neue Karte kopiert", "Image affichée depuis votre boutique ; l'importer la copie sur la nouvelle fiche", "Immagine mostrata dal tuo negozio; importandola viene copiata sulla nuova scheda", "Imagen mostrada desde tu tienda; al traerla se copia en la nueva ficha", "Imagem mostrada a partir da sua loja; ao trazê-la é copiada para a nova ficha", "Фото показано из вашего магазина; при переносе оно копируется в новую карточку", "ストアの画像を表示しています。取り込むと新しいカードにコピーされます", "图片来自您的商店；导入时会复制到新卡片上", "الصورة معروضة من متجرك؛ عند استيرادها تُنسخ إلى البطاقة الجديدة", "चित्र आपके स्टोर से दिखाया गया है; लाने पर यह नए कार्ड पर कॉपी हो जाता है"),
+  "Choose…": L("Seçin…", "Auswählen…", "Choisir…", "Scegli…", "Elegir…", "Escolher…", "Выбрать…", "選択…", "选择…", "اختر…", "चुनें…")
+};
+
 /** The sentence in `language`, or "" when this table has none (the screen then asks E4's table, then the app's studioT). */
 export function wooInventoryText(sentence: string, language: string): string {
-  if (!Object.prototype.hasOwnProperty.call(WOO_INVENTORY_TEXT, sentence)) return "";
-  const row = WOO_INVENTORY_TEXT[sentence];
+  const table = Object.prototype.hasOwnProperty.call(WOO_INVENTORY_TEXT, sentence) ? WOO_INVENTORY_TEXT
+    : Object.prototype.hasOwnProperty.call(WOO_INVENTORY_TEXT_27OCT, sentence) ? WOO_INVENTORY_TEXT_27OCT : null;
+  if (!table) return "";
+  const row = table[sentence];
   return Object.prototype.hasOwnProperty.call(row, language) ? row[language as Lang] : "";
 }

@@ -1064,3 +1064,21 @@ export async function mergeInventoryCategories(
     "Categories could not be merged."
   );
 }
+
+// ---------------------------------------------------------------------------
+// The trade the onboarding wizard recorded (companySettings.onboardingWorkKinds), read once by Inventory so the
+// Categories screen can offer that trade's starting set and the sidebar can say the list is a watch workshop's
+// (inventory fixes, 27 Oct 2026). Read-only; a failed read means "not known" and nothing is suggested.
+// ---------------------------------------------------------------------------
+import { doc as firestoreDoc, getDoc as firestoreGetDoc } from "firebase/firestore";
+import { db as firestoreDb } from "@/lib/firebase/client";
+
+export async function loadInventoryWorkKinds(workspace: WorkspaceContext): Promise<string[]> {
+  try {
+    const snap = await firestoreGetDoc(firestoreDoc(firestoreDb, "companySettings", workspace.id));
+    const kinds = snap.exists() ? (snap.data() as { onboardingWorkKinds?: unknown }).onboardingWorkKinds : [];
+    return Array.isArray(kinds) ? kinds.filter((kind): kind is string => typeof kind === "string") : [];
+  } catch {
+    return [];
+  }
+}

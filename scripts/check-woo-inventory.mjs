@@ -60,7 +60,10 @@ expect("single SKU match starts as link to it", R.startingDecision(seiko).action
 expect("no other row starts with an action", [strap, roll, sold].map((r) => R.startingDecision(r).action), ["", "", ""]);
 expect("no count is ever prefilled", [seiko, strap, roll, sold].map((r) => R.startingDecision(r).openingCount), ["", "", "", ""]);
 ok("a grouped product cannot be chosen; a linked one cannot either", !R.canChoose(group) && !R.canChoose({ ...seiko, state: "linked" }));
-const D = (patch) => ({ action: "create", inventoryItemId: "", trackingType: "quantity", openingCount: "", inHand: false, confirmAmbiguous: false, category: "", ...patch });
+// 27 Oct 2026 (inventory fixes): a new card needs its category — the decisions below carry one; check-inventory-fixes.mjs
+// checks the missing-category case and the preselection.
+const D = (patch) => ({ action: "create", inventoryItemId: "", trackingType: "quantity", openingCount: "", inHand: false, confirmAmbiguous: false, category: "Watches", ...patch });
+expect("a new card without a category → category_required (asked after the count)", R.decisionProblem(strap, D({ openingCount: "2", category: "" })), "category_required");
 expect("counted card without a count → count_required (the store's 7 is not a default)", R.decisionProblem(strap, D({})), "count_required");
 expect("0 is allowed", R.decisionProblem(strap, D({ openingCount: "0" })), "");
 expect("negative refused", R.decisionProblem(strap, D({ openingCount: "-1" })), "count_invalid");
@@ -74,9 +77,9 @@ const sent = R.decisionsToSend(rows, [strap.linkId, roll.linkId, sold.linkId, gr
   [strap.linkId]: D({ openingCount: "2,5" }), [roll.linkId]: D({ openingCount: "1", confirmAmbiguous: true }), [sold.linkId]: D({ openingCount: "0" }), [group.linkId]: D({ openingCount: "1" })
 });
 expect("what is sent", sent, [
-  { linkId: strap.linkId, action: "create", trackingType: "quantity", openingCount: 2.5 },
-  { linkId: roll.linkId, action: "create", trackingType: "quantity", openingCount: 1, confirmAmbiguous: true },
-  { linkId: sold.linkId, action: "create", trackingType: "quantity", openingCount: 0, includeInactive: true }
+  { linkId: strap.linkId, action: "create", trackingType: "quantity", openingCount: 2.5, category: "Watches" },
+  { linkId: roll.linkId, action: "create", trackingType: "quantity", openingCount: 1, category: "Watches", confirmAmbiguous: true },
+  { linkId: sold.linkId, action: "create", trackingType: "quantity", openingCount: 0, category: "Watches", includeInactive: true }
 ]);
 expect("the default tab is what is for sale; sold/archived apart", [R.filterRows(rows, "active").length, R.filterRows(rows, "inactive").map((r) => r.productId)], [4, ["504"]]);
 // 27 Oct: the header's "{rows} to match" = Needs a choice + Same SKU (native 2.3 wooRowsToMatch parity). Linked rows,
