@@ -13,6 +13,7 @@ import {
   type WorkspaceContext,
 } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import { retryIdsFor, type HeldQueueRow } from "@/lib/studioflow/heldQueue";
 import type { WorkDayPatch } from "@/lib/studioflow/workDays";
 import { type UploadPolicyStamp, uploadPolicyMetadata } from "@/lib/studioflow/uploadPolicy";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
@@ -663,8 +664,12 @@ export async function uploadOrderPreviewImage({
 
 export type HeldIntegrationOrders = {
   ok?: boolean;
-  held?: { id: string; provider: string; externalId: string; heldAtMs: number }[];
+  // The per-row queue fields (queueState, stuckAtMs, stuckReason, failedImports,
+  // lastImport*) and stuckCount come only from a server with the stuck-row rule
+  // (capacity stage 1); without them nothing is stuck (lib/studioflow/heldQueue.ts).
+  held?: HeldQueueRow[];
   heldCount?: number;
+  stuckCount?: number;
   activeOrderCount?: number;
   orderLimit?: number | null;
   roomAvailable?: number;
@@ -676,13 +681,16 @@ export async function listHeldIntegrationOrders(workspace: WorkspaceContext) {
   return response.data ?? {};
 }
 
-export async function releaseHeldIntegrationOrders(workspace: WorkspaceContext) {
+export async function releaseHeldIntegrationOrders(workspace: WorkspaceContext, retryIds: string[] = []) {
   return withWebSyncStatus(async () => {
-    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; imported?: number; queued?: number; stillHeld?: number; message?: string }>(
+    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; imported?: number; queued?: number; stillHeld?: number; retried?: number; stuck?: number; newlyStuck?: number; message?: string }>(
       functions,
       "releaseHeldIntegrationOrders"
     );
-    const response = await callable({ companyId: workspace.id });
+    // retryIds: the owner's "Try again" on stuck rows — put back in their old
+    // place before this same Import reads the queue. Sent only when there are some.
+    const ids = retryIdsFor(retryIds);
+    const response = await callable(ids.length ? { companyId: workspace.id, retryIds: ids } : { companyId: workspace.id });
     if (response.data?.ok === false) throw new Error(response.data.message || "Could not import the waiting orders.");
     return response.data;
   }, "Importing waiting store orders.");
