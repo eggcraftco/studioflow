@@ -59,6 +59,9 @@ type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "locatio
 // picture placeholder all read the WORKSPACE's own icon (Inventory ▸ Categories); this hard-coded table used to win in
 // the rows, so a renamed or new category always showed "▪" there, and Bracelets/Straps did too.
 
+// Statuses whose items are no longer on the shelf: not on hand, not in the inventory value (server getInventorySummary).
+const OFF_SHELF: string[] = ["sold", "used", "removed", "archived"];
+
 const STATUS_LABEL: Record<InventoryStatus, string> = {
   available: "Available",
   reserved: "Reserved",
@@ -799,11 +802,12 @@ export function InventoryContent({
                       : t(STATUS_LABEL[item.status] ?? item.status)}
                   </span>
                 </td>
-                <td className="r inventory-col-onhand">
-                  {inventoryOnHand(item)}{item.trackingType === "quantity" && item.quantity?.unit ? ` ${item.quantity.unit}` : ""}
+                <td className={OFF_SHELF.includes(item.status) ? "r inventory-col-onhand inventory-value-off" : "r inventory-col-onhand"}>
+                  {/* 27 Oct 2026: a one-off piece that is sold/used/removed/archived is not on hand (it read 1). */}
+                  {item.trackingType === "unique" && OFF_SHELF.includes(item.status) ? 0 : inventoryOnHand(item)}{item.trackingType === "quantity" && item.quantity?.unit ? ` ${item.quantity.unit}` : ""}
                 </td>
-                <td className={["sold", "used", "removed", "archived"].includes(item.status) ? "r inventory-value-off" : "r"}
-                  title={["sold", "used", "removed", "archived"].includes(item.status) ? invT("Not counted in the inventory value: this item is no longer on the shelf.") : undefined}>
+                <td className={OFF_SHELF.includes(item.status) ? "r inventory-value-off" : "r"}
+                  title={OFF_SHELF.includes(item.status) ? invT("Not counted in the inventory value: this item is no longer on the shelf.") : undefined}>
                   {item.ownership === "customer"
                     ? <span className="inventory-sub">{t("Customer's")}</span>
                     : inventoryCostKind(item) === "notEntered" && inventoryLineValue(item) === 0

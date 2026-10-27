@@ -150,6 +150,7 @@ ok("the Categories screen offers the trade's set, preselected from the onboardin
 ok("Remove/Merge wait for unsaved edits (a reload would drop them)", (panelCats.match(/disabled=\{!canEdit \|\| busy \|\| [^}]*dirty\}/g) || []).length === 2);
 ok("the sidebar has 'Manage categories' under the categories — one entry for the Categories screen, not two", /data-testid="inventory-nav-manage-categories"/.test(content) && /invT\("Manage categories"\)/.test(content) && (content.match(/data-active=\{tab === "categories"\}/g) || []).length === 1);
 ok("a new item starts in the default or first category, never a hard-coded Watches", !/category: trackingType === "quantity" \? "Consumables" : "Watches"/.test(content) && /const newItemCategory = defaultCategory \|\| visibleCategories\[0\]\?\.title \|\| "Other";/.test(content) && /emptyDraft\(trackingType, current\.category\)/.test(content));
+ok("a sold/used/removed/archived one-off piece is not shown as 1 on hand", /item\.trackingType === "unique" && OFF_SHELF\.includes\(item\.status\) \? 0 : inventoryOnHand\(item\)/.test(content));
 ok("one active sidebar entry: quick views clear the category; All Items clears every filter", /setStatusFilter\(""\);\s*setCategoryFilter\(""\);\s*setSelectedId\(""\);/.test(content) && /function openAllItems\(\) \{\s*openQuickView\("all"\);\s*setTypeFilter\(""\); setLocationFilter\(""\); setSupplierFilter\(""\); setSearch\(""\);/.test(content));
 
 // ---- 1b. the panel wiring ----------------------------------------------------------------------------------------------
