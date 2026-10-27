@@ -27824,6 +27824,31 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 .orders-held-banner strong { font-size: 13px; }
 .orders-held-banner span { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
 .orders-held-banner button { align-self: flex-start; }
+/* Stuck store orders (capacity stage 1): kept and shown, no longer holding the queue. */
+.orders-held-stuck {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.orders-held-stuck ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.orders-held-stuck li {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--surface, var(--bg));
+  min-width: 0;
+}
+.orders-held-stuck-title { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; font-size: 12.5px; }
+.orders-held-stuck-title span { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.orders-held-stuck li p { margin: 0; font-size: 12px; line-height: 1.4; color: var(--text); }
+.orders-held-stuck li small { font-size: 11px; color: var(--muted); line-height: 1.4; }
+.orders-held-stuck-detail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------------------------------------------------------------------------
    Setup wizard. Four steps, a visible position ("Step 2 of 4"), Back from the

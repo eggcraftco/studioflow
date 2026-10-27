@@ -31,6 +31,7 @@
     "test:ebay-sync": "node scripts/check-ebay-sync.mjs",
     "test:ebay-inventory": "node scripts/check-ebay-inventory.mjs",
     "test:integrations": "node scripts/check-integration-states.mjs",
+    "test:held-stuck": "node scripts/check-held-stuck.mjs",
     "test:payment-links": "node scripts/check-payment-links-panel.mjs",
     "test:request-amount": "node scripts/check-request-amount.mjs",
     "test:payment-links-pilot": "node scripts/check-payment-links-pilot.mjs",
