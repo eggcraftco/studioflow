@@ -1,10 +1,11 @@
-// UX-010 / UX-006 (27 Oct 2026): the platform an order came from, as a small
-// text capsule on every order row (Orders list, Schedule list, Production board).
-// One resolver decides it (orderSourceOf, the same one the Source filter uses);
-// an order added by hand — including assistant-created and repair orders — has
-// no chip. The words are always there; the colour (app/globals.css, the
-// --order-source-* tokens) only repeats them.
-import { orderSourceChipLabel, orderSourceOf, type OrderSourceInput } from "@/lib/studioflow/orderFilters";
+// UX-010 / UX-006: the platform an order came from, on every order row (Orders list, Schedule list,
+// Production board). 27 Oct 2026 it was the platform's name in a capsule; 28 Oct 2026 (owner: "show
+// initials, not the long names") it is the platform's monogram (components/OrderSourceMonogram.tsx),
+// the full name in the tooltip and as the accessible name. One resolver decides it (orderSourceOf, the
+// same one the Source filter and the quick platform bar use); an order added by hand — including
+// assistant-created and repair orders — has none. The order page's channel strip keeps the full name.
+import { OrderSourceMonogram } from "@/components/OrderSourceMonogram";
+import { isOrderPlatform, orderSourceChipLabel, orderSourceOf, type OrderSourceInput } from "@/lib/studioflow/orderFilters";
 
 export function OrderSourceChip({
   order,
@@ -17,15 +18,13 @@ export function OrderSourceChip({
   className?: string;
 }) {
   const source = orderSourceOf(order);
-  const label = orderSourceChipLabel(source, t);
-  if (!label) return null;
+  if (!isOrderPlatform(source)) return null;
   return (
-    <span
-      className={["order-source-chip", `is-${source}`, className].filter(Boolean).join(" ")}
-      data-source-chip={source}
-      title={`${t("Source")}: ${label}`}
-    >
-      {label}
-    </span>
+    <OrderSourceMonogram
+      source={source}
+      t={t}
+      title={`${t("Source")}: ${orderSourceChipLabel(source, t)}`}
+      className={className}
+    />
   );
 }

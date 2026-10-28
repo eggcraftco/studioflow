@@ -4421,71 +4421,139 @@ body[data-studio-theme="dark"] {
   --order-source-website-rgb: 94, 201, 188;      /* #5EC9BC */
 }
 
-.order-source-chip {
+/* 28 Oct 2026 (owner: "initials, not the long names"): the platform's MONOGRAM — our own letters
+   (orderFilters.ts ORDER_SOURCE_MONOGRAMS; a drawn globe for the website form), never a third-party logo —
+   in a small rounded square (18 px on rows, 20 px in the bar; the widest pair, WC, measured 15.6 px at 9 px
+   and 17.8 px at 10 px in Inter 850, so every monogram is a true square), same tokens, same 14 % ground and
+   30 % border as the 27 Oct chip. The full name is the tooltip and the accessible name. Contrast is a property
+   of the colour pair, not the glyph size, but 9-10 px bold is "normal" text for WCAG, so every pair must keep
+   >= 4.5:1 — re-measured on every ground
+   the monogram paints (list card, board card, the platform bar's button, light and dark):
+   scripts/check-order-source-chip.mjs. */
+.order-source-monogram {
   --order-source-rgb: var(--order-source-square-rgb);
-  display: inline-block;
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
+  --order-source-monogram-size: 18px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
   box-sizing: border-box;
-  padding: 1px 7px;
-  border-radius: 999px;
+  width: var(--order-source-monogram-size);
+  height: var(--order-source-monogram-size);
+  padding: 0;
+  border-radius: 5px;
   border: 1px solid rgba(var(--order-source-rgb), 0.30);
   background-color: var(--order-source-ground);
   background-image: linear-gradient(rgba(var(--order-source-rgb), 0.14), rgba(var(--order-source-rgb), 0.14));
   color: rgb(var(--order-source-rgb));
-  font-size: 10.5px;
-  line-height: 14px;
-  font-weight: 800;
-  letter-spacing: 0.01em;
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 850;
+  letter-spacing: -0.02em;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-transform: none;
+  overflow: visible;
   vertical-align: middle;
 }
+.order-source-monogram-glyph { display: block; width: 12px; height: 12px; }
 
-.order-source-chip.is-etsy { --order-source-rgb: var(--order-source-etsy-rgb); }
-.order-source-chip.is-shopify { --order-source-rgb: var(--order-source-shopify-rgb); }
-.order-source-chip.is-woocommerce { --order-source-rgb: var(--order-source-woocommerce-rgb); }
-.order-source-chip.is-ebay { --order-source-rgb: var(--order-source-ebay-rgb); }
-.order-source-chip.is-square { --order-source-rgb: var(--order-source-square-rgb); }
-.order-source-chip.is-amazon { --order-source-rgb: var(--order-source-amazon-rgb); }
-.order-source-chip.is-inbound { --order-source-rgb: var(--order-source-website-rgb); }
+.order-source-monogram.is-etsy { --order-source-rgb: var(--order-source-etsy-rgb); }
+.order-source-monogram.is-shopify { --order-source-rgb: var(--order-source-shopify-rgb); }
+.order-source-monogram.is-woocommerce { --order-source-rgb: var(--order-source-woocommerce-rgb); }
+.order-source-monogram.is-ebay { --order-source-rgb: var(--order-source-ebay-rgb); }
+.order-source-monogram.is-square { --order-source-rgb: var(--order-source-square-rgb); }
+.order-source-monogram.is-amazon { --order-source-rgb: var(--order-source-amazon-rgb); }
+.order-source-monogram.is-inbound { --order-source-rgb: var(--order-source-website-rgb); }
 
 /* In the row it rides on the date line, after the date (no new line). The negative block margin keeps the
-   line box at the date's own height, so a row with a chip is exactly as tall as one without. */
+   line box at the date's own height, so a row with a monogram is exactly as tall as one without. */
 .order-list-date-line .order-list-date-text { flex: 0 0 auto; }
-.order-list-date-line .order-source-chip { flex: 0 0 auto; margin: -3px 0 -3px 2px; }
+.order-list-date-line .order-source-monogram { margin: -3px 0 -3px 2px; }
 
-/* Phone list: the main column is ~112 px at 375 px, too narrow for the date and a chip, so the same chip is
-   pinned on the bottom edge of the order's photo, which the row always shows there (centred in the row).
-   No new line, the status badges and the delivery chip do not move. */
+/* Phone list: the main column is ~112 px at 375 px, so the monogram is pinned on the bottom-end corner of the
+   order's photo, which the row always shows there (centred in the row). No new line; the status badges and
+   the delivery chip do not move. */
 .orders-mobile-list .order-list-card-content { position: relative; --order-source-thumb: 56px; }
-.orders-mobile-list .order-list-date-line .order-source-chip {
+.orders-mobile-list .order-list-date-line .order-source-monogram {
   position: absolute;
-  inset-inline-start: calc(var(--order-source-thumb) / 2);
-  top: calc(50% + var(--order-source-thumb) / 2);
+  inset-inline-start: calc(var(--order-source-thumb) - 3px);
+  top: calc(50% + var(--order-source-thumb) / 2 - 3px);
   transform: translate(-50%, -50%);
-  max-width: calc(var(--order-source-thumb) + 32px);
   margin: 0;
   z-index: 1;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
 }
-html[dir="rtl"] .orders-mobile-list .order-list-date-line .order-source-chip { transform: translate(50%, -50%); }
+html[dir="rtl"] .orders-mobile-list .order-list-date-line .order-source-monogram { transform: translate(50%, -50%); }
 @media (max-width: 640px) {
   .orders-mobile-list .order-list-card-content { --order-source-thumb: 70px; }
 }
 
-/* A very narrow desktop list (sidebar <= 310 px) hides the date line; the chip keeps it, without the date. */
+/* A very narrow desktop list (sidebar <= 310 px) hides the date line; the monogram keeps it, without the date. */
 @container (max-width: 310px) {
-  .order-list-date-line:has(.order-source-chip) { display: flex; }
-  .order-list-date-line:has(.order-source-chip) > :not(.order-source-chip) { display: none; }
-  .order-list-date-line .order-source-chip { margin-left: 0; }
+  .order-list-date-line:has(.order-source-monogram) { display: flex; }
+  .order-list-date-line:has(.order-source-monogram) > :not(.order-source-monogram) { display: none; }
+  .order-list-date-line .order-source-monogram { margin-left: 0; }
 }
 
-/* Production board: the chip sits beside the priority chip in the card's existing row, on the card's own ground. */
+/* Production board: the monogram sits beside the priority chip in the card's existing row, on the card's own ground. */
 .production-card-chips { display: inline-flex; align-items: center; gap: 5px; min-width: 0; flex: 0 1 auto; }
-.production-card .order-source-chip { --order-source-ground: var(--surface); }
+.production-card .order-source-monogram { --order-source-ground: var(--surface); }
+
+/* The quick platform bar (components/OrderPlatformBar.tsx), under the list's search box: All + one button per
+   source the list has (monogram + count). Wraps in the desktop column; scrolls sideways inside itself on the
+   phone list, never the page. The chosen button is not told by colour alone: its border doubles in weight
+   (an inset ring) and turns to the text colour, and it is aria-pressed. */
+.order-platform-bar {
+  --order-platform-bar-ground: #ffffff;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+html[data-studio-theme="dark"] .order-platform-bar,
+body[data-studio-theme="dark"] .order-platform-bar { --order-platform-bar-ground: #272727; }
+.order-platform-bar-item {
+  --order-source-ground: var(--order-platform-bar-ground);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-height: 30px;
+  margin: 0;
+  padding: 4px 9px 4px 4px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--order-platform-bar-ground);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 800;
+  cursor: pointer;
+}
+.order-platform-bar-item .order-source-monogram { --order-source-monogram-size: 20px; font-size: 10px; letter-spacing: 0; }
+.order-platform-bar-word { padding-inline-start: 5px; white-space: nowrap; }
+.order-platform-bar-count { min-width: 1ch; color: var(--muted); font-variant-numeric: tabular-nums; }
+.order-platform-bar-item:hover { border-color: rgba(23, 25, 35, 0.28); }
+html[data-studio-theme="dark"] .order-platform-bar-item:hover,
+body[data-studio-theme="dark"] .order-platform-bar-item:hover { border-color: rgba(255, 255, 255, 0.32); }
+.order-platform-bar-item[aria-pressed="true"] { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
+.order-platform-bar-item[aria-pressed="true"] .order-platform-bar-count { color: var(--text); font-weight: 900; }
+.order-platform-bar-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.orders-mobile-platform-bar {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  margin: 0 0 10px;
+  padding: 2px;
+}
+.orders-mobile-platform-bar::-webkit-scrollbar { display: none; }
+@media (max-width: 640px) {
+  /* The phone list is edge to edge here; the bar takes the header's 14 px gutter inside its own scroller. */
+  .orders-mobile-platform-bar { margin: 8px 0 6px; padding: 2px 14px; scroll-padding-inline: 14px; }
+}
 
 .order-list-side {
   display: grid;

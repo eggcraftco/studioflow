@@ -310,11 +310,16 @@ expect("order page: the block gets Financial Info", screen.includes("<EbayOrderB
 expect("order page: the channel strip leaves eBay to the block", screen.includes('if (stamp?.provider === "ebay" || (!stamp && source === "eBay")) return null;'), true);
 expect("order page: the channel strip's total follows Financial Info", screen.includes("<ChannelSourceStrip order={order} showMoney={canSeeFinance} />") && screen.includes("{total && showMoney ?"), true);
 expect("orders list: ?source=ebay is honoured, and only a known word", listPage.includes('searchParams.get("source")') && listPage.includes("ORDER_SOURCE_FILTERS.some(item => item.id === source)"), true);
-expect("orders list: the filter bar gets the source", (listPage.match(/onSourceChange=\{setOrderSource\}/g) || []).length, 2);
+// UX-010 / UX-006 (28 Oct 2026): the quick platform bar at the top of the list sets the same state, desktop and phone.
+expect("orders list: the filter bar and the platform bar get the source (desktop + phone)",
+  [(listPage.match(/<OrderQuickFilterBar[\s\S]{0,400}?onSourceChange=\{setOrderSource\}/g) || []).length, (listPage.match(/<OrderPlatformBar [^>]*onSourceChange=\{setOrderSource\}/g) || []).length], [2, 2]);
 const bar = read("components/OrderQuickFilterBar.tsx");
 expect("filter bar: the quick-filter counts are within the chosen source (the top count is the list's length)", bar.includes("quickFilterCount(inSource, id)") && bar.includes("const selectedCount = countFor(filter);"), true);
-expect("filter bar: the source counts are within the chosen filter", bar.includes("sourceFilterCount(inFilter, item.id)"), true);
-expect("filter bar: no source section without a choice to make", bar.includes('onSourceChange && (sourcesPresent.length > 1 || source !== "all")'), true);
+// UX-010 / UX-006 (28 Oct 2026): the source rows come from orderSourceChoices, the list the platform bar reads too.
+expect("filter bar: the source rows are the shared choices, counted within the chosen filter",
+  bar.includes("const sourceRows = onSourceChange ? orderSourceChoices(orders, filter, source) : [];") && bar.includes("({item.count})"), true);
+expect("choices: counted within the chosen filter", (O.orderSourceChoices?.(list, "active", "all") || []).map((c) => [c.id, c.count]), [["all", 3], ["ebay", 0], ["shopify", 1], ["manual", 2]]);
+expect("choices: no source section without a choice to make", [O.orderSourceChoices?.([ord({}), ord({})], "all", "all").length, (O.orderSourceChoices?.([ord({})], "all", "ebay") || []).map((c) => c.id)], [0, ["all", "ebay", "manual"]]);
 
 // ---- 5. every sentence, in all eleven languages
 for (const rel of ["lib/studioflow/macTranslations.ts", "lib/studioflow/settingsContentTranslations.ts", "lib/studioflow/shippingTranslations.ts", "lib/studioflow/trackingEmailTranslations.ts", "lib/studioflow/screenGapTranslations.ts"]) compile(rel);
