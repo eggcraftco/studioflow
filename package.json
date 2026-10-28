@@ -49,6 +49,7 @@
     "test:pdf-export-preview": "node scripts/check-pdf-export-preview.mjs",
     "test:export-date-range": "node scripts/check-export-date-range.mjs",
     "test:order-source-links": "node scripts/check-order-source-links.mjs",
+    "test:order-source-chip": "node scripts/check-order-source-chip.mjs",
     "test:upload-progress": "node scripts/check-upload-progress.mjs",
     "test:upload-translations": "node scripts/check-upload-translations.mjs",
     "test:upload-policy": "node scripts/check-upload-policy.mjs",

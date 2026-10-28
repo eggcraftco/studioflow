@@ -50,6 +50,7 @@ import { orderPageHref } from "@/lib/studioflow/orderLink";
 import { orderIsCancelled } from "@/lib/studioflow/orderFilters";
 import { doneLaneView, rememberMovedHere, sortDoneLane } from "@/lib/studioflow/productionDoneLane";
 import { ProductionStagesModal } from "./ProductionStagesModal";
+import { OrderSourceChip } from "@/components/OrderSourceChip";
 
 type ViewMode = "board" | "list" | "workload";
 
@@ -684,8 +685,12 @@ function BoardCard({
 
       <div className="production-card-row">
         <span className="production-card-person">{assignee}</span>
-        <span className={`production-chip production-chip-${priorityTone(order.priority || "Normal")}`}>
-          {t(order.priority || "Normal")}
+        {/* UX-010: the platform chip sits beside the priority chip, in the same row (no new line). */}
+        <span className="production-card-chips">
+          <OrderSourceChip order={order} t={t} />
+          <span className={`production-chip production-chip-${priorityTone(order.priority || "Normal")}`}>
+            {t(order.priority || "Normal")}
+          </span>
         </span>
       </div>
 

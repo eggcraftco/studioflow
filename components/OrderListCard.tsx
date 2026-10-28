@@ -9,6 +9,7 @@ import { studioT } from "@/lib/studioflow/language";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
 import { type StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatOrderMoney, orderMoneySymbol } from "@/lib/studioflow/orderCurrency";
+import { OrderSourceChip } from "@/components/OrderSourceChip";
 
 export type OrderListCardItem = {
   id: string;
@@ -31,6 +32,10 @@ export type OrderListCardItem = {
   previewImageUrl: string;
   customFields?: Record<string, string>;
   extraStatuses?: Record<string, string>;
+  /** UX-010 platform chip (orderSourceOf, with id + customFields above): read from the list's own snapshot. */
+  commerceProvider?: string;
+  orderSource?: string;
+  hasEtsySource?: boolean;
 };
 
 const SCHEDULE_ITEMS_CUSTOM_KEY = "__scheduleAlertItemsV1";
@@ -415,7 +420,9 @@ export function OrderListCard({
           </div>
           <div className="order-list-detail-line order-list-date-line">
             <span aria-hidden="true">▣</span>
-            <span>{shortDate(order.paymentDate ?? null)}</span>
+            <span className="order-list-date-text">{shortDate(order.paymentDate ?? null)}</span>
+            {/* UX-010: the platform the order came from; none for an order added by hand. */}
+            <OrderSourceChip order={order} t={text => studioT(text, displayLanguage)} />
           </div>
           {scheduleItem ? (
             <div className={`order-list-detail-line order-list-schedule-line ${scheduleTone(scheduleItem.dueAt)}`}>

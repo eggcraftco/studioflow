@@ -39,6 +39,8 @@ export type FilterableOrder = {
   commerceProvider?: string;
   /** "inbound" on an order the public order form created (`orderSource`). */
   orderSource?: string;
+  /** True when the order carries Etsy's own copy (`etsySource`); a list row keeps only whether it is there. */
+  hasEtsySource?: boolean;
 };
 
 // ---- where an order came from (1 Oct 2026, package E3) ----------------------
@@ -47,6 +49,13 @@ export type FilterableOrder = {
 // adapter's `customFields.Source` display word (the same providers, including the
 // orders written before the engine stamped them), the public order form's
 // `orderSource`. Anything else was added by hand.
+//
+// UX-010 / UX-006 (27 Oct 2026): the same resolver now also decides the platform
+// chip on every order row, so two more rungs catch the orders the first three miss:
+// Etsy's own copy on the order (`etsySource` — the Etsy importer writes no stamp)
+// and the importers' deterministic document ids (`shopify_…`, `woo_…`, `etsy_…`,
+// `ebay_…`, `square_…`, `amazon_…`, `inbound_…`), which survive a cleared Source
+// field. A random id (manual, assistant, repair, backup restore) matches none.
 export type OrderSourceId = "all" | "ebay" | "shopify" | "woocommerce" | "etsy" | "square" | "amazon" | "inbound" | "manual";
 
 export const ORDER_SOURCE_FILTERS: Array<{ id: OrderSourceId; label: string }> = [
@@ -65,13 +74,48 @@ const SOURCE_WORDS: Record<string, Exclude<OrderSourceId, "all">> = {
   ebay: "ebay", shopify: "shopify", woocommerce: "woocommerce", woo: "woocommerce", etsy: "etsy", square: "square", amazon: "amazon", inbound: "inbound", website: "inbound"
 };
 
-export function orderSourceOf(order: Pick<FilterableOrder, "commerceProvider" | "orderSource" | "customFields">): Exclude<OrderSourceId, "all"> {
+/** The importers' document-id prefixes (server: orderDocRef / etsy.js / wooConnector / …), checked last. */
+const ORDER_ID_PREFIXES: ReadonlyArray<readonly [string, Exclude<OrderSourceId, "all" | "manual">]> = [
+  ["shopify_", "shopify"],
+  ["woo_", "woocommerce"],
+  ["etsy_", "etsy"],
+  ["ebay_", "ebay"],
+  ["square_", "square"],
+  ["amazon_", "amazon"],
+  ["inbound_", "inbound"]
+];
+
+/** What the resolver reads: a list row, an order detail or a raw document all fit (every field optional). */
+export type OrderSourceInput = Pick<FilterableOrder, "id" | "commerceProvider" | "orderSource" | "customFields" | "hasEtsySource"> & {
+  /** Etsy's own copy, when the caller holds the document; only its presence is read. */
+  etsySource?: unknown;
+};
+
+export function orderSourceOf(order: OrderSourceInput): Exclude<OrderSourceId, "all"> {
   const candidates = [order.commerceProvider, order.customFields?.["Source"], order.orderSource];
   for (const candidate of candidates) {
     const word = String(candidate ?? "").trim().toLowerCase().replace(/[\s_-]+/g, "");
     if (word && Object.prototype.hasOwnProperty.call(SOURCE_WORDS, word)) return SOURCE_WORDS[word];
   }
+  if (order.hasEtsySource === true || (order.etsySource !== null && typeof order.etsySource === "object" && !Array.isArray(order.etsySource))) {
+    return "etsy";
+  }
+  const id = String(order.id ?? "");
+  for (const [prefix, source] of ORDER_ID_PREFIXES) {
+    if (id.startsWith(prefix)) return source;
+  }
   return "manual";
+}
+
+/**
+ * The platform chip's words for a source, or "" for an order added by hand (no chip).
+ * Provider names are proper nouns and stay as written in every language; "Website"
+ * goes through the same table the Source filter uses (`t` is the caller's studioT).
+ */
+export function orderSourceChipLabel(source: OrderSourceId, t: (text: string) => string = text => text): string {
+  if (source === "all" || source === "manual") return "";
+  const label = ORDER_SOURCE_FILTERS.find(item => item.id === source)?.label ?? "";
+  return source === "inbound" ? t(label) : label;
 }
 
 export function orderMatchesSource(order: FilterableOrder, source: OrderSourceId) {
