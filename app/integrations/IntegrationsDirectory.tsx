@@ -31,21 +31,23 @@ type Category = typeof categories[number];
  *   "comingSoon"  not available to customers: not deployed, or deployed only
  *                 against the provider's test environment.
  *
- * Today: 7 live (Shopify since 14 October 2026, Etsy from the 28 October 2026
- * pass, WooCommerce, Square, PayPal, TrueLayer, ChatGPT), 8 limited (Xero,
- * QuickBooks, Twilio, WhatsApp, Instagram Direct, Amazon, DHL Express, eBay
- * since 1 October 2026) — 15 cards. The 28 October 2026 pass re-read every card
+ * Today: 8 live (Shopify since 14 October 2026, Etsy from the 28 October 2026
+ * pass, DHL Express from 28 October 2026 (late), WooCommerce, Square, PayPal,
+ * TrueLayer, ChatGPT), 7 limited (Xero, QuickBooks, Twilio, WhatsApp, Instagram
+ * Direct, Amazon, eBay since 1 October 2026) — 15 cards. The 28 October 2026 pass re-read every card
  * against the integration status records (docs/integrations/<slug>.md in the
  * main repository, §1 and §5): Etsy became live (commercial access approved
  * 24 October 2026, any seller connects on their own, read only), and sentences
  * the records no longer support were corrected or removed.
- * DHL Express stays limited (re-read later on 28 October 2026): DHL gave the
- * first business production access on 27 October 2026, but that business's
- * connection still runs in DHL's test environment, no real shipment has been
- * sent, and appConfig/shipping opens DHL to one workspace. Its note now says
- * that instead of "sample documents sent for verification"; it becomes live
- * only once a real label has been accepted in production and the switch is
- * open to every workspace (scripts/check-dhl-texts.mts keeps it limited).
+ * DHL Express became live late on 28 October 2026: appConfig/shipping opens it
+ * to every workspace ("*": true), and the first business's connection was
+ * saved in DHL production (the key is checked against DHL before it is stored).
+ * What stands between a business and a label is its own MyDHL API access, which
+ * DHL issues per DHL Express account (test key first, production when DHL
+ * decides) — the provider's own account set-up, like PayPal's app, not an
+ * approval NivaDesk is waiting for; the note says how to ask for it. No
+ * production label had been created by then (docs/integrations/dhl-express.md
+ * section 4). scripts/check-dhl-texts.mts keeps the card and the app in step.
  * Shopify: the app was published on the Shopify App Store on 12 October 2026
  * (Shopify's e-mail, relayed by the owner); no per-workspace switch stands in
  * front of the connect (shopifyCompleteConnect checks the install and the
@@ -98,8 +100,9 @@ const integrations: Integration[] = [
   { name: "Twilio", logo: "/integration-logos/twilio.png", website: "https://www.twilio.com/", category: "Communication", summary: "Keep customers informed as their work moves forward.", detail: "Customer SMS notifications on the Pro and Team plans: your workspace settings decide which order updates go out. Messages are sent through Twilio from the NivaDesk sender name. Today SMS runs as a pilot for one business; it is not yet open to other businesses. Messaging charges apply.", state: "limited", note: "integrations.note.twilio" },
   { name: "ChatGPT", logo: "/integration-logos/chatgpt.svg", website: "https://chatgpt.com/", category: "AI", summary: "A conversational way to work with your NivaDesk information.", detail: "The NivaDesk app is published in the ChatGPT app directory: connect your workspace once and read orders, notes and finances, or make supported updates, from a conversation.", state: "live" },
   { name: "WhatsApp", logo: "/integration-logos/whatsapp.svg", website: "https://www.whatsapp.com/", category: "Communication", summary: "Customer conversations connected to the work they belong to.", detail: "A customer inbox for WhatsApp on the Team plan: messages from your customers arrive in NivaDesk, your team replies, and each conversation can be linked to the order it belongs to. It runs for one business today, on a Meta test number; connecting other businesses waits on Meta's approval. No automated messaging and no outbound campaigns.", state: "limited", note: "integrations.note.whatsapp" },
-  // Instagram Direct and DHL Express, added 28 September 2026 (second pass). Both
-  // are open to one workspace only (appConfig/instagram, appConfig/shipping). No
+  // Instagram Direct and DHL Express, added 28 September 2026 (second pass). Instagram
+  // is open to one workspace only (appConfig/instagram); DHL to every workspace
+  // since 28 October 2026 (appConfig/shipping). No
   // logo file: the marks are Meta's and DHL's and are not redrawn, so the tiles
   // keep an initial, as the app's own integration tiles do.
   { name: "Instagram Direct", mark: "I", website: "https://www.instagram.com/", category: "Communication", summary: { key: "integrations.summary.instagram" }, detail: { key: "integrations.detail.instagram" }, state: "limited", note: "integrations.note.instagram" },
@@ -107,7 +110,7 @@ const integrations: Integration[] = [
   // real seller account; open to named workspaces (appConfig/commerce.connectors.workspaces).
   { name: "eBay", logo: "/integration-logos/ebay.svg", website: "https://www.ebay.com/", category: "Commerce", summary: { key: "integrations.summary.ebay" }, detail: { key: "integrations.detail.ebay" }, state: "limited", note: "integrations.note.ebay" },
   { name: "Amazon", logo: "/integration-logos/amazon.png", website: "https://www.amazon.com/", category: "Commerce", summary: "Marketplace order visibility, with a careful approach to customer data.", detail: "The Amazon connection is complete on our side, with customer data kept in a separate, hardened environment. Amazon approved our developer profile on 17 September 2026; the app itself is still in Amazon's review, so a seller cannot authorise it yet. General connection and listing management are not offered.", state: "limited", note: "integrations.note.amazon" },
-  { name: "DHL Express", mark: "D", website: "https://www.dhl.com/", category: "Shipping", summary: { key: "integrations.summary.dhl" }, detail: { key: "integrations.detail.dhl" }, state: "limited", note: "integrations.note.dhl" },
+  { name: "DHL Express", mark: "D", website: "https://www.dhl.com/", category: "Shipping", summary: { key: "integrations.summary.dhl" }, detail: { key: "integrations.detail.dhl" }, state: "live", note: "integrations.note.dhl" },
 ];
 
 const logoVariants: Record<string, string> = {

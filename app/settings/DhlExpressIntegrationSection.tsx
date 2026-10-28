@@ -9,8 +9,9 @@
 // - The owner or an admin keeps the sender details. Other members see whether
 //   DHL is connected, nothing more.
 // - The tile and this screen exist only where the server has opened DHL for the
-//   workspace (appConfig/shipping). The public integrations page lists DHL Express
-//   as "Limited access" with the same scope and status sentences as below.
+//   workspace (appConfig/shipping; open to every workspace since 28 Oct 2026). The
+//   public integrations page lists DHL Express as Live and tells a business, in the
+//   same words as below, how to get its own MyDHL API key from DHL.
 import { useCallback, useEffect, useState } from "react";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
@@ -28,6 +29,10 @@ import {
   type ShippingConnectionView,
   type ShippingEnvironment
 } from "@/lib/studioflow/shipping";
+
+// DHL's own page for the MyDHL API; its "Get Access" button opens the request form
+// (developer.dhl.com/form/dhl-express-onboarding, which needs a portal sign-in).
+const MYDHL_API_PAGE = "https://developer.dhl.com/api-reference/dhl-express-mydhl-api";
 
 type Props = { workspace: WorkspaceContext; language?: string };
 
@@ -239,12 +244,12 @@ export function DhlExpressIntegrationSection({ workspace, language = "English" }
     </div>
   );
 
-  // Where DHL stands, in the same words as the public integrations card.
+  // How a business gets its own key, in the same words as the public integrations card.
   const accessStatus = (
     <p className="muted-copy" data-testid="dhl-access-status">
-      <strong>{t("Limited access")}</strong>{" · "}
-      {t("NivaDesk's label and commercial invoice tests in DHL's test environment are complete. DHL reviewed them and gave the first business production access on 27 October 2026. No real shipment has been sent through NivaDesk yet.")}{" "}
-      {t("Each business connects its own DHL Express account and MyDHL API credentials.")}
+      {t("Each business connects its own DHL Express account and MyDHL API credentials.")}{" "}
+      {t("No MyDHL API key yet? Request one from DHL: on the MyDHL API page of developer.dhl.com, choose Get Access and fill in DHL's form with your DHL Express account number. DHL sends a test key first and decides when production access opens.")}{" "}
+      <a href={MYDHL_API_PAGE} target="_blank" rel="noopener noreferrer">{t("Open the MyDHL API page")}</a>
     </p>
   );
 

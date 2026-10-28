@@ -5886,7 +5886,7 @@ function IntegrationsSection({
           <div className="integrations-grid settings-integrations-grid">
             <IntegrationCard
               provider={DHL_EXPRESS_TILE}
-              live={{ state: dhl.connected ? "connected" : "available", detail: dhl.connected && dhl.environment === "test" ? `${t("Limited access")} · ${t("DHL test environment")}` : t("Limited access") }}
+              live={{ state: dhl.connected ? "connected" : "available", detail: !dhl.connected ? "" : dhl.environment === "production" ? t("DHL production") : t("DHL test environment") }}
               t={t}
               highlighted={false}
               onManage={() => setManaging("dhl")}

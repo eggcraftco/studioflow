@@ -2,17 +2,18 @@
 // Integrations tile and Settings ▸ DHL Express say the same, honest thing.
 //   npx tsx scripts/check-dhl-texts.mts
 //
-// Facts the code supports today: per-workspace switch (appConfig/shipping, one business),
+// Facts the code supports today: per-workspace switch (appConfig/shipping; "*": true, every
+// workspace, since 28 Oct 2026 — an exact false still closes one),
 // each business's own DHL Express account + MyDHL key/secret, DHL services for the route
 // (GET /products: names and delivery estimates, no prices), label, commercial invoice for
 // declarable shipments (GB↔NI included), tracking. pickup.isRequested is always false.
-// Status (28 Oct 2026, docs/integrations/dhl-express.md §4): NivaDesk's label and commercial
-// invoice tests in DHL's test environment are complete; DHL reviewed them and gave the first
-// business production access on 27 Oct 2026 (that business's MyDHL API app only — other
-// businesses are not covered); NivaDesk's connection still runs in DHL's test environment, so
-// no real shipment has been sent. Card stays Limited access. Never "acceptance" / "approved" /
-// "kabul" / "onay" — it reads as if DHL endorsed NivaDesk itself, or opened it for everyone.
-// (23 Oct wording, replaced: "sample documents were sent to DHL for verification".)
+// Status (28 Oct 2026, late; docs/integrations/dhl-express.md §4): Live. Every workspace sees
+// DHL; each business needs its own MyDHL API access from DHL (Get Access on the MyDHL API page
+// of developer.dhl.com; DHL sends a test key first and decides when production opens); DHL gave
+// the first NivaDesk business production access on 27 Oct 2026. Never "acceptance" /
+// "approved" / "kabul" / "onay" — it reads as if DHL endorsed NivaDesk itself.
+// (Earlier wordings, replaced: 23 Oct "sample documents were sent to DHL for verification";
+// 28 Oct 7b0dec48 "no real shipment … switched on for that business only".)
 //
 // Never: "approved / certified / partner / official" (EN) or "onayladı / sertifika / ortak"
 // (TR); a price or quote claim; a pickup or courier mention that is not a negation.
@@ -30,9 +31,9 @@ const expect = (name: string, ok: boolean) => { checks += 1; if (!ok) failures.p
 const PUBLIC_KEYS = ["integrations.summary.dhl", "integrations.detail.dhl", "integrations.note.dhl"] as const;
 const APP_KEYS = [
   "See the DHL Express services for an order's route, create the label with the commercial invoice where customs needs one, and follow each parcel.",
-  "NivaDesk's label and commercial invoice tests in DHL's test environment are complete. DHL reviewed them and gave the first business production access on 27 October 2026. No real shipment has been sent through NivaDesk yet.",
+  "No MyDHL API key yet? Request one from DHL: on the MyDHL API page of developer.dhl.com, choose Get Access and fill in DHL's form with your DHL Express account number. DHL sends a test key first and decides when production access opens.",
   "Each business connects its own DHL Express account and MyDHL API credentials.",
-  "Limited access", "DHL services", "Commercial invoice", "Tracking",
+  "Open the MyDHL API page", "DHL services", "Commercial invoice", "Tracking",
   "NivaDesk never books a pickup, and never marks an order dispatched before DHL scans the parcel."
 ];
 
@@ -45,16 +46,14 @@ const PICKUP: Record<Lang, RegExp> = { en: /pick-?ups?|courier|collection/i, tr:
 const NEGATION: Record<Lang, RegExp> = { en: /\b(not|never|no)\b/i, tr: /(maz|mez|değil|yok)\b/i };
 const REQUIRED: Record<Lang, [string, RegExp][]> = {
   en: [
-    ["NivaDesk's tests done", /NivaDesk's label and commercial invoice tests in DHL's test environment are complete/],
-    ["DHL reviewed + first business only", /DHL reviewed them and gave the first business production access on 27 October 2026/],
-    ["no real shipment yet", /No real shipment has been sent through NivaDesk yet/],
+    ["where to get a key", /MyDHL API page of developer\.dhl\.com/], ["Get Access", /\bGet Access\b/],
+    ["test key first, DHL decides production", /DHL sends a test key first and decides when production access opens/],
     ["own account + API", /own DHL Express account and MyDHL API credentials/i],
     ["services", /DHL Express services/i], ["label", /\blabel\b/i], ["commercial invoice", /commercial invoice/i], ["tracking", /tracking/i]
   ],
   tr: [
-    ["NivaDesk testleri tamam", /NivaDesk'in DHL test ortamındaki etiket ve ticari fatura testleri tamamlandı/],
-    ["DHL inceledi + yalnız ilk işletme", /DHL bunları inceledi ve 27 Ekim 2026'da ilk işletmeye production erişimi verdi/],
-    ["henüz gerçek gönderi yok", /NivaDesk üzerinden henüz gerçek gönderi yapılmadı/],
+    ["anahtar nereden", /developer\.dhl\.com'daki MyDHL API sayfasında/], ["Get Access", /\bGet Access/],
+    ["önce test anahtarı", /DHL önce bir test anahtarı gönderir/],
     ["kendi hesap + API", /kendi DHL Express hesabı ve MyDHL API bilgileriyle/],
     ["servisler", /DHL Express servislerini/], ["etiket", /etiket/i], ["ticari fatura", /ticari fatura/i], ["takip", /takip/i]
   ]
@@ -82,24 +81,23 @@ const surfaces: [string, Lang, string][] = [
 const en = publicText("English");
 const tr = publicText("Türkçe");
 const mutants: [string, Lang, string][] = [
-  ["EN 'approved'", "en", en.replace("DHL reviewed them and gave", "DHL approved NivaDesk and gave")],
-  ["EN 'acceptance'", "en", en.replace("NivaDesk's label and commercial invoice tests in DHL's test environment are complete", "Label and customs document acceptance is complete in DHL's test environment")],
-  ["EN every business claimed", "en", en.replace("gave the first business production access", "gave every business production access")],
-  ["EN 'no real shipment' dropped", "en", en.replace("No real shipment has been sent through NivaDesk yet", "Real shipments are underway")],
+  ["EN 'approved'", "en", en.replace("DHL sends a test key first", "DHL approved NivaDesk and sends a test key first")],
+  ["EN 'acceptance'", "en", en.replace("decides when production access opens", "has accepted NivaDesk for production")],
+  ["EN instant connect claimed", "en", en.replace("DHL sends a test key first and decides when production access opens", "Connect at once with NivaDesk's DHL account")],
+  ["EN key route dropped", "en", en.replaceAll("Get Access", "the button")],
   ["EN 'certified'", "en", `${en} NivaDesk is DHL certified.`],
   ["EN 'partner'", "en", `${en} An official DHL partner.`],
   ["EN positive pickup", "en", `${en} Book a DHL courier pickup from the order.`],
   ["EN price claim", "en", `${en} Compare DHL prices for each parcel.`],
-  ["EN real shipments claimed", "en", en.replace("No real shipment has been sent through NivaDesk yet", "Real shipments are live")],
+  ["EN where-to-ask dropped", "en", en.replace("the MyDHL API page of developer.dhl.com", "DHL")],
   ["EN own account dropped", "en", en.replace("its own DHL Express account and MyDHL API credentials", "the NivaDesk DHL account")],
-  ["TR 'onayladı'", "tr", tr.replace("DHL bunları inceledi", "DHL NivaDesk'i onayladı")],
-  ["TR tüm işletmeler", "tr", tr.replace("ilk işletmeye production erişimi verdi", "tüm işletmelere production erişimi verdi")],
-  ["TR gerçek gönderi var", "tr", tr.replace("NivaDesk üzerinden henüz gerçek gönderi yapılmadı", "Gerçek gönderiler başladı")],
-  ["TR 'kabul'", "tr", tr.replace("etiket ve ticari fatura testleri tamamlandı", "etiket ve gümrük belgesi kabulü tamamlandı")],
+  ["TR 'onayladı'", "tr", tr.replace("DHL önce bir test anahtarı gönderir", "DHL NivaDesk'i onayladı ve önce bir test anahtarı gönderir")],
+  ["TR anında bağlantı", "tr", tr.replace("DHL önce bir test anahtarı gönderir", "Tüm işletmeler hemen bağlanır")],
+  ["TR 'kabul'", "tr", tr.replace("production erişiminin ne zaman açılacağına kendisi karar verir", "NivaDesk'i production için kabul etti")],
   ["TR 'sertifikalı'", "tr", `${tr} NivaDesk DHL sertifikalı.`],
   ["TR positive courier", "tr", `${tr} Siparişten kurye çağırın.`],
   ["TR price claim", "tr", `${tr} Her koli için DHL fiyatlarını karşılaştırın.`],
-  ["TR tests sentence dropped", "tr", tr.replace("NivaDesk'in DHL test ortamındaki etiket ve ticari fatura testleri tamamlandı", "DHL entegrasyonu hazır")]
+  ["TR nereden sorulacağı düştü", "tr", tr.replace("developer.dhl.com'daki MyDHL API sayfasında", "bir yerde")]
 ];
 for (const [name, lang, text] of mutants) expect(`mutant caught: ${name}`, textProblems(lang, "mutant", text).length > 0);
 
@@ -122,14 +120,15 @@ for (const lang of LANGS) {
   for (const key of APP_KEYS) expect(`app "${key.slice(0, 40)}…" in ${lang}`, studioT(key, lang) !== key);
 }
 
-// ---- the screens use these words, and DHL stays Limited access -------------------
+// ---- the screens use these words, and DHL is Live ---------------------------------
 const directory = read("app/integrations/IntegrationsDirectory.tsx");
-expect("public card state is limited", /name: "DHL Express"[^\n]*state: "limited"/.test(directory));
+expect("public card state is live", /name: "DHL Express"[^\n]*state: "live"/.test(directory));
 const settings = read("app/settings/page.tsx");
 const section = read("app/settings/DhlExpressIntegrationSection.tsx");
 expect("tile blurb", settings.includes(`blurb: ${JSON.stringify(APP_KEYS[0])}`));
 expect("tile capabilities", settings.includes('capabilities: ["DHL services", "Shipping labels", "Commercial invoice", "Tracking"]'));
-expect("tile says Limited access", /detail: dhl\.connected[^\n]*t\("Limited access"\)/.test(settings));
+expect("tile shows the connection's DHL environment, no access label", /detail: !dhl\.connected \? "" : dhl\.environment === "production" \? t\("DHL production"\) : t\("DHL test environment"\)/.test(settings) && !/t\("Limited access"\)/.test(section));
+expect("section links DHL's MyDHL API page", section.includes('const MYDHL_API_PAGE = "https://developer.dhl.com/api-reference/dhl-express-mydhl-api"') && /href=\{MYDHL_API_PAGE\} target="_blank" rel="noopener noreferrer"/.test(section));
 for (const key of APP_KEYS.slice(0, 4).concat(APP_KEYS[7])) expect(`section uses "${key.slice(0, 40)}…"`, section.includes(`t(${JSON.stringify(key)})`));
 expect("status shown on the not-available card too", (section.match(/\{accessStatus\}/g) ?? []).length === 2);
 for (const [name, source] of [["settings", settings], ["section", section]] as const) {
