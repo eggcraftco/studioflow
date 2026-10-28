@@ -305,8 +305,11 @@ await section("5 SD-4 Etsy health card", async () => {
   expect("health card: the visibility rule is the shared one, decided after every hook", health.includes('if (!healthCardShown({ onlyWhenInstrumented, loaded: connections !== null, failed: Boolean(error), state: card?.state ?? "", rowCount: connections?.length ?? 0 })) return null;')
     && health.indexOf("healthCardShown({") > health.lastIndexOf("useEffect("), true);
   const etsy = read("app/settings/EtsyIntegrationSection.tsx");
-  expect("etsy section: the card is mounted once, provider etsy, instrumented-only", [(etsy.match(/<CommerceSyncHealthCard/g) || []).length, etsy.includes('<CommerceSyncHealthCard workspace={workspace} language={language} provider="etsy" onlyWhenInstrumented />')], [1, true]);
-  const mounts = ["app/settings/WooCommerceIntegrationSection.tsx", "app/settings/SquareIntegrationSection.tsx", "app/settings/EbayIntegrationSection.tsx", "app/settings/page.tsx"].map(read).join("\n");
+  const etsyMount = etsy.slice(etsy.indexOf("<CommerceSyncHealthCard"), etsy.indexOf("/>", etsy.indexOf("<CommerceSyncHealthCard")) + 2);
+  expect("etsy section: the card is mounted once, provider etsy, instrumented-only", [(etsy.match(/<CommerceSyncHealthCard/g) || []).length, etsyMount.includes('provider="etsy"') && /\bonlyWhenInstrumented\b(?!=)/.test(etsyMount)], [1, true]);
+  expect("etsy section: the row heading is the shop's name, not the connection's document id",
+    etsyMount.includes("connectionLabels={Object.fromEntries(connections.map((row) => [row.id, row.shopName || row.shopId || \"\"]))}")
+      && health.includes("<strong>{connectionLabels?.[row.connectionId]?.trim() || row.connectionId}</strong>"), true);  const mounts = ["app/settings/WooCommerceIntegrationSection.tsx", "app/settings/SquareIntegrationSection.tsx", "app/settings/EbayIntegrationSection.tsx", "app/settings/page.tsx"].map(read).join("\n");
   expect("other channels: mounted as before, without the flag", [mounts.includes('provider="woocommerce" />'), mounts.includes('provider="square" />'), mounts.includes('provider="shopify" />'), mounts.includes('provider="ebay" freshness={false} />'), /onlyWhenInstrumented/.test(mounts)], [true, true, true, true, false]);
 });
 

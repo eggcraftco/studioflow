@@ -64,7 +64,7 @@ function commerceAgoText(ms: number | null | undefined, t: (text: string) => str
   return `${Math.round(diff / 86400000)} ${t("days ago")}`;
 }
 
-export function CommerceSyncHealthCard({ workspace, language = "English", provider, freshness = true, onlyWhenInstrumented = false }: {
+export function CommerceSyncHealthCard({ workspace, language = "English", provider, freshness = true, onlyWhenInstrumented = false, connectionLabels }: {
   workspace: WorkspaceContext; language?: string; provider: string;
   /**
    * SD-4 (Etsy): show the card only once the server says it records this channel's health (never_synced / rows);
@@ -79,6 +79,12 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
    * truthful one, and one screen must not carry two different answers.
    */
   freshness?: boolean;
+  /**
+   * The name the section already shows for each connection (e.g. the Etsy shop name), keyed by the
+   * connection id the health record carries. An Etsy connection id is an opaque document id, so
+   * without this the row's heading read like "rv-ws_55500011".
+   */
+  connectionLabels?: Record<string, string>;
 }) {
   const t = (text: string) => studioT(text, language);
   const companyId = workspace.id.trim();
@@ -153,7 +159,7 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
         <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
           {connections.map((row) => (
             <div key={`${row.provider}:${row.connectionId}`} style={{ border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px" }}>
-              <strong>{row.connectionId}</strong>
+              <strong>{connectionLabels?.[row.connectionId]?.trim() || row.connectionId}</strong>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
                 {(["orders", "products", "inventory", "finance"] as const).map((entity) => {
                   const cell = row.health[entity] || { state: "unsupported" as const };
