@@ -48,7 +48,7 @@ async function clickOpens(data, openTabs = []) {
   };
   vm.runInNewContext(swSource, sandbox);
   let waited = Promise.resolve();
-  listeners.notificationclick({ notification: { close: () => {}, data }, waitUntil: (p) => { waited = p; } });
+  listeners.notificationclick({ notification: { close: () => {}, data }, stopImmediatePropagation: () => {}, waitUntil: (p) => { waited = p; } });
   await waited;
   return { opened, navigated };
 }

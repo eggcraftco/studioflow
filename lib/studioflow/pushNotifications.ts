@@ -3,6 +3,8 @@ import { getMessaging, getToken, isSupported, onMessage } from "firebase/messagi
 import { db, messagingServiceWorkerConfig } from "@/lib/firebase/client";
 import { getApp } from "firebase/app";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { orderNotificationHref } from "@/lib/studioflow/notificationSettings";
+import { openInApp } from "@/lib/studioflow/openInApp";
 
 const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? "";
 
@@ -146,14 +148,33 @@ export async function registerWebPush(
 
     // Foreground push: show a browser notification ourselves. Attached once for
     // the life of the page — a second listener means a second notification.
+    // Drawn through the service worker with the push's data, so a click takes
+    // the same route as a background push (a delivery opens its order on the
+    // Shipping card); a bare `new Notification` had no click handler at all and
+    // only brought the browser forward.
     if (!foregroundListenerAttached) {
       foregroundListenerAttached = true;
       onMessage(messaging, (payload) => {
         const title = payload.notification?.title || payload.data?.title || "New message";
         const body = payload.notification?.body || payload.data?.body || "";
-        if (Notification.permission === "granted") {
-          new Notification(title, { body, icon: "/icon.png" });
-        }
+        if (Notification.permission !== "granted") return;
+        const data = payload.data ?? {};
+        swRegistration
+          .showNotification(title, {
+            body,
+            icon: "/icon.png",
+            badge: "/icon.png",
+            // drawnByPage: the click moves this tab (the worker asks it), not a new one.
+            data: { ...data, drawnByPage: "1" },
+            tag: data.conversationId || data.threadId || data.messageId || undefined,
+          })
+          .catch(() => {
+            const shown = new Notification(title, { body, icon: "/icon.png" });
+            shown.onclick = () => {
+              window.focus();
+              if (data.orderId) openInApp(orderNotificationHref(data));
+            };
+          });
       });
     }
 

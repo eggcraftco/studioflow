@@ -15,6 +15,7 @@ import {
 import { signOut } from "firebase/auth";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { inAppLink, OPEN_IN_APP_EVENT } from "@/lib/studioflow/openInApp";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { localizeActivityNotification } from "@/lib/studioflow/notificationText";
@@ -1249,6 +1250,27 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const { hideNumbers, toggleHideNumbers } = usePricePrivacy();
   const pathname = usePathname();
   const router = useRouter();
+  // A notification click for a page that is already open: the service worker
+  // asks this tab to move when the browser refuses its navigate() (Safari), and
+  // a notification drawn without the worker posts the same request. Both go
+  // through the router, so the open session and its state stay as they are.
+  useEffect(() => {
+    const go = (url: unknown) => {
+      const link = inAppLink(url);
+      if (link) router.push(link);
+    };
+    const onWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type === OPEN_IN_APP_EVENT) go(event.data.url);
+    };
+    const onWindowRequest = (event: Event) => go((event as CustomEvent<string>).detail);
+    const worker = typeof navigator !== "undefined" && "serviceWorker" in navigator ? navigator.serviceWorker : null;
+    worker?.addEventListener("message", onWorkerMessage);
+    window.addEventListener(OPEN_IN_APP_EVENT, onWindowRequest);
+    return () => {
+      worker?.removeEventListener("message", onWorkerMessage);
+      window.removeEventListener(OPEN_IN_APP_EVENT, onWindowRequest);
+    };
+  }, [router]);
   // Timings only (bootTrace): when a menu link is clicked and when its route is on screen.
   useEffect(() => {
     bootMark("nav:path", pathname);

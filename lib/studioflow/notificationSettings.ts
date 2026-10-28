@@ -75,13 +75,15 @@ export function saveNotificationSettings(workspace: WorkspaceContext, changes: P
  * Where a bell row or push opens: the order, scrolled to the card the notice is about.
  * Server shape (functions/notifications/memberOrderActivity.js): route "order", orderId, focus
  * "files" | "workTime", and fileId / workSessionId / workDayId when the notice is about one item.
+ * A delivery notice (functions/index.js writeDeliveryNotification: type "delivery", orderId) opens
+ * on the Shipping card. public/firebase-messaging-sw.js builds the same link for a push.
  */
-export function orderNotificationHref(row: { orderId?: string | null; focus?: string | null; fileId?: string | null; workSessionId?: string | null; workDayId?: string | null }): string {
+export function orderNotificationHref(row: { orderId?: string | null; type?: string | null; focus?: string | null; fileId?: string | null; workSessionId?: string | null; workDayId?: string | null }): string {
   const orderId = String(row.orderId || "").trim();
   if (!orderId) return "/orders";
   const params = new URLSearchParams({ orderId });
-  const focus = String(row.focus || "").trim();
-  if (focus === "files" || focus === "workTime") params.set("focus", focus);
+  const focus = String(row.focus || "").trim() || (String(row.type || "").trim() === "delivery" ? "shipping" : "");
+  if (focus === "files" || focus === "workTime" || focus === "shipping") params.set("focus", focus);
   for (const key of ["fileId", "workSessionId", "workDayId"] as const) {
     const value = String(row[key] || "").trim();
     if (value) params.set(key, value);
@@ -89,9 +91,13 @@ export function orderNotificationHref(row: { orderId?: string | null; focus?: st
   return `/orders?${params.toString()}`;
 }
 
+/** Fired by the Orders page when a link with `focus` arrives for an order that may already be open. */
+export const ORDER_CARD_FOCUS_EVENT = "nivadesk-order-card-focus";
+
 /** The order card id a `focus` value scrolls to (OrderDetailContent card ids). */
-export function orderCardForFocus(focus: string | null | undefined): "clientFiles" | "workTime" | null {
+export function orderCardForFocus(focus: string | null | undefined): "clientFiles" | "workTime" | "shipping" | null {
   if (focus === "files") return "clientFiles";
   if (focus === "workTime") return "workTime";
+  if (focus === "shipping") return "shipping";
   return null;
 }

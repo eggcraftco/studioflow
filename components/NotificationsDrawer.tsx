@@ -264,7 +264,8 @@ export function NotificationsDrawer({
     } else if (route === "order" || n.orderId.trim()) {
       // Landing on the order list and leaving the reader to find the order
       // again is not opening the notification.
-      // GN-08: a member's upload / saved work time opens on that card (focus + item id).
+      // GN-08: a member's upload / saved work time opens on that card (focus + item id);
+      // a delivery opens on the Shipping card.
       router.push(orderNotificationHref(n));
       onClose();
     }

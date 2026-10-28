@@ -9,6 +9,7 @@ import { OrderListCard } from "@/components/OrderListCard";
 import { OrderQuickFilterBar } from "@/components/OrderQuickFilterBar";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { ORDER_CARD_FOCUS_EVENT } from "@/lib/studioflow/notificationSettings";
 import {
   loadWorkspaceBlockHeadings,
   type BlockHeadingSettings
@@ -219,7 +220,8 @@ export default function OrdersPage() {
   // rewrote the URL and left the previous order on screen.
   const searchParams = useSearchParams();
   useEffect(() => {
-    setRequestedOrderId(searchParams.get("selectedOrderId") ?? searchParams.get("orderId") ?? "");
+    const linkedOrderId = searchParams.get("orderId") ?? "";
+    setRequestedOrderId(searchParams.get("selectedOrderId") ?? linkedOrderId);
     // "View All Orders" on a customer profile lands here filtered to that
     // customer — the search box already matches customer names.
     const customerName = searchParams.get("customerName");
@@ -228,6 +230,18 @@ export default function OrdersPage() {
     // word the source menu knows is taken, anything else leaves the filter alone.
     const source = searchParams.get("source");
     if (source && ORDER_SOURCE_FILTERS.some(item => item.id === source)) setOrderSource(source as OrderSourceId);
+    // A link that names one order (a notification, the bell, Getting started)
+    // lands on that order: a search, quick filter or source picked earlier in
+    // this tab would hide it, and the list guard below then opened the first
+    // row instead — a delivered parcel's order under "Active", say.
+    if (linkedOrderId && !customerName && !source) {
+      setOrderSearch("");
+      setOrderFilter("all");
+      setOrderSource("all");
+    }
+    // The order may already be open (same tab, same order): ask its detail to
+    // bring the named card into view again.
+    if (linkedOrderId && searchParams.get("focus")) window.dispatchEvent(new Event(ORDER_CARD_FOCUS_EVENT));
   }, [searchParams]);
 
   // "/orders?new=1" opens Quick Create on arrival (review N08): the onboarding
