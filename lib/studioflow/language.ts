@@ -4,6 +4,7 @@ import { SHIPPING_TRANSLATIONS } from "./shippingTranslations";
 import { TRACKING_EMAIL_TRANSLATIONS } from "./trackingEmailTranslations";
 import { I18N_GAP_TRANSLATIONS } from "./screenGapTranslations";
 import { NOTES_SHARING_TRANSLATIONS } from "./notesSharingTranslations";
+import { COMMERCE_REVIEW_TRANSLATIONS } from "./commerceReviewTranslations";
 import { BOOT_RECOVERY_TRANSLATIONS } from "./bootRecoveryTranslations";
 import { WEB_SMALL_FIXES_TRANSLATIONS } from "./webSmallFixesTranslations";
 import { ORDER_LIST_VIEW_TRANSLATIONS } from "./orderListViewTranslations";
@@ -9253,6 +9254,10 @@ mergeIntoTranslations(SALES_STORES_TRANSLATIONS);
 
 // Multistore (23 Oct 2026): WooCommerce stores of one workspace. After MC-2.
 mergeIntoTranslations(WOO_STORES_TRANSLATIONS);
+
+// S-B client (28 Oct 2026): the commerce "Needs review" list — possible duplicate customer, reason words, the
+// inbound review card. Only keys no other table has, so its place in this order changes nothing.
+mergeIntoTranslations(COMMERCE_REVIEW_TRANSLATIONS);
 
 // ETSY-E2E r2 (24 Oct 2026): order currency apart from the workspace's, Etsy delivery line. After Multistore.
 mergeIntoTranslations(ETSY_ROUND_TWO_TRANSLATIONS);
