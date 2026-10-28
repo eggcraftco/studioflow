@@ -25,6 +25,7 @@ import {
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { productionStagesFromSettings } from "@/lib/studioflow/production";
 import { loadWorkspaceBlockHeadings } from "@/lib/studioflow/blockHeadings";
+import { orderSourceOf } from "@/lib/studioflow/orderFilters";
 import {
   adjustedDashboardNetProfit,
   baseCostTotal,
@@ -234,7 +235,7 @@ function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
   );
 }
 
-type DashboardChannel = "all" | "shopify" | "woocommerce" | "etsy" | "square" | "amazon" | "ebay" | "manual";
+type DashboardChannel = "all" | "shopify" | "woocommerce" | "etsy" | "square" | "amazon" | "ebay" | "inbound" | "manual";
 
 // The store connectors the server stamps orders with, keyed by the exact
 // `Source` label it writes. Four writers, not one: functions/index.js maps
@@ -252,7 +253,10 @@ const DASHBOARD_CHANNELS: Array<{ key: DashboardChannel; source: string }> = [
   { key: "etsy", source: "Etsy" },
   { key: "square", source: "Square" },
   { key: "amazon", source: "Amazon" },
-  { key: "ebay", source: "eBay" }
+  { key: "ebay", source: "eBay" },
+  // UX-010: the website form (Wix, Squarespace, Zapier, Make…) is a channel of its own, labelled as
+  // the order list's chip labels it; its label is a word, so it goes through t() at the pill.
+  { key: "inbound", source: "Website" }
 ];
 
 // Workspace currency is stored as a display symbol; imported orders carry ISO
@@ -263,11 +267,11 @@ const DASHBOARD_CHANNELS: Array<{ key: DashboardChannel; source: string }> = [
 // lib/studioflow/orderCurrency.ts, for this page, Home, the top bar and the
 // order screen).
 
+// UX-010: one rule for "where did this order come from" — the order list's chip, its Source
+// filter and these pills all ask lib/studioflow/orderFilters.ts, so an order is never Etsy on
+// one screen and Manual on another (stamp → Source → orderSource → Etsy's copy → id prefix).
 function dashboardOrderChannel(order: DashboardFinanceOrder): DashboardChannel {
-  const source = (order.customFields["Source"] || "").trim().toLowerCase();
-  // Anything the table does not name is manual, which still covers the generic
-  // inbound webhook's own labels (Website, Wix, Squarespace, Zapier, Make).
-  return DASHBOARD_CHANNELS.find(channel => channel.source.toLowerCase() === source)?.key ?? "manual";
+  return orderSourceOf(order);
 }
 
 const RANGE_OPTIONS: Array<{ key: RangeKey; label: string }> = [
@@ -978,7 +982,7 @@ export default function DashboardPage() {
                   // an Etsy-only workshop got no pills at all.
                   ...DASHBOARD_CHANNELS
                     .filter(channel => availableChannels.has(channel.key))
-                    .map(channel => [channel.key, channel.source] as const),
+                    .map(channel => [channel.key, channel.key === "inbound" ? t(channel.source) : channel.source] as const),
                   ["manual", t("Manual")]
                 ] as Array<readonly [DashboardChannel, string]>).map(([key, label]) => (
                   <button

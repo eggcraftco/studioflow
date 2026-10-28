@@ -236,6 +236,17 @@ expect("detail strip: one Shopify strip — the channel strip stands aside on th
   detail.includes('if ((cf["Source"] || "").trim() === "Shopify") return null;') && !detail.includes('if (source === "Shopify" && !stamp) return null;')
     && detail.includes('if ((cf["Source"] || "").trim() !== "Shopify") return null;'), true);
 expect("detail strip: the field lookups still use the stored source", detail.includes("const field = (suffix: string) => (cf[`${source} ${suffix}`] || \"\").trim();"), true);
+const dashboard = read("app/dashboard/page.tsx");
+const dashboardChannel = dashboard.slice(dashboard.indexOf("function dashboardOrderChannel("), dashboard.indexOf("const RANGE_OPTIONS"));
+expect("dashboard pills ask the shared resolver, with no Source rule of their own",
+  dashboard.includes('import { orderSourceOf } from "@/lib/studioflow/orderFilters";') && dashboardChannel.includes("return orderSourceOf(order);")
+    && !/customFields\[|\.find\(/.test(dashboardChannel), true);
+expect("dashboard: the website form has its own pill, its word through t()",
+  dashboard.includes('{ key: "inbound", source: "Website" }') && dashboard.includes('channel.key === "inbound" ? t(channel.source) : channel.source')
+    && /type DashboardChannel = [^;]*"inbound"/.test(dashboard), true);
+const loaders = read("lib/studioflow/firestore.ts");
+const financeLoader = loaders.slice(loaders.indexOf("export async function loadDashboardFinanceOrders("), loaders.indexOf("countsTowardBalance: orderCountsTowardBalance(data)", loaders.indexOf("export async function loadDashboardFinanceOrders(")));
+expect("dashboard loader carries the stamps from the snapshot it already read", financeLoader.includes("...orderSourceFieldsFrom(data),"), true);
 
 // ---- 5. the palette
 const css = read("app/globals.css");

@@ -215,6 +215,11 @@ export type DashboardFinanceOrder = {
   deliveryCost: number;
   taxAmount: number;
   customFields: Record<string, string>;
+  /** UX-010: the stamps the shared resolver (orderSourceOf) reads, so the Dashboard's channel
+   * pills file an order exactly as the order list's chip does. */
+  commerceProvider?: string;
+  orderSource?: string;
+  hasEtsySource?: boolean;
   customerName: string;
   designName: string;
   watchRef: string;
@@ -1589,6 +1594,7 @@ export async function loadDashboardFinanceOrders(companyId: string, workspace?: 
       deliveryCost: numberValue(data.deliveryCost, 0),
       taxAmount: numberValue(data.taxAmount, 0),
       customFields: stringMapValue(data.customFields),
+      ...orderSourceFieldsFrom(data),
       customerName: stringValue(data.customerName, ""),
       designName: stringValue(data.designName, ""),
       watchRef: stringValue(data.watchRef, ""),
