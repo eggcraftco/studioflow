@@ -1868,7 +1868,8 @@ function BankPageContent() {
           </div>
           {isOwner && linkedBanks.length > 0 ? (
             <>
-              <input type="file" accept="image/*,application/pdf" capture="environment" id="bank-ocr-input" style={{ display: "none" }}
+              {/* No capture attribute: it would force the camera on phones and hide the photo library and PDFs. */}
+              <input type="file" accept="image/*,application/pdf" id="bank-ocr-input" style={{ display: "none" }}
                 onChange={event => {
                   const file = event.target.files?.[0];
                   event.target.value = "";

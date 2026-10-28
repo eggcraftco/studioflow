@@ -63,7 +63,9 @@ for (const key of keys) {
 
 // ---- the page wires it ----
 const bank = read("app/bank/page.tsx");
-expect("the scan input opens the camera on phones and takes PDFs", /accept="image\/\*,application\/pdf" capture="environment" id="bank-ocr-input"/.test(bank), true);
+expect("the scan input takes photos and PDFs", /accept="image\/\*,application\/pdf" id="bank-ocr-input"/.test(bank), true);
+// capture="environment" forces the camera on phones: no photo library, no PDF from email (screen check 28 Oct).
+expect("the scan input does not force the camera", /capture=/.test(bank), false);
 expect("the scan input calls the one-step capture", /if \(file\) void captureReceipt\(file\);/.test(bank), true);
 expect("one call: bankCaptureReceipt with source web", /call<unknown>\("bankCaptureReceipt", \{ storagePath: path, fileName: file\.name, source: "web" \}\)/.test(bank), true);
 expect("fallback deletes its own upload before the old flow", /captureCallableMissing\(captureError\)\) \{\s*try \{ await deleteObject\(storageRef\(storage, path\)\); \}/.test(bank), true);
