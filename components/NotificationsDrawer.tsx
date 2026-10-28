@@ -1,5 +1,6 @@
 "use client";
 
+import { orderNotificationHref } from "@/lib/studioflow/notificationSettings";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -263,8 +264,8 @@ export function NotificationsDrawer({
     } else if (route === "order" || n.orderId.trim()) {
       // Landing on the order list and leaving the reader to find the order
       // again is not opening the notification.
-      const orderId = n.orderId.trim();
-      router.push(orderId ? `/orders?orderId=${encodeURIComponent(orderId)}` : "/orders");
+      // GN-08: a member's upload / saved work time opens on that card (focus + item id).
+      router.push(orderNotificationHref(n));
       onClose();
     }
   };
