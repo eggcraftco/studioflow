@@ -1120,7 +1120,7 @@ export const PUBLIC_SITE_EN = {
   "integrations.note.instagram": "Available once Meta grants the app Advanced Access (App Review); each business then connects its own Instagram professional account.",
   "integrations.summary.dhl": "Prepare DHL Express shipments from your orders: labels, commercial invoices where needed, and tracking.",
   "integrations.detail.dhl": "From an order in NivaDesk, see the DHL Express services for the parcel's route, create the shipment label, add the commercial invoice where customs needs one (including between Great Britain and Northern Ireland) and follow the tracking. Each business connects its own DHL Express account and MyDHL API credentials. NivaDesk does not book courier pickups.",
-  "integrations.note.dhl": "NivaDesk's label and commercial invoice tests in DHL's test environment are complete. Sample documents have been sent to DHL for verification. DHL verification and production access for real shipments are not yet complete. Until then, it is switched on for one business."
+  "integrations.note.dhl": "NivaDesk's label and commercial invoice tests in DHL's test environment are complete. DHL reviewed them and gave the first business production access on 27 October 2026. No real shipment has been sent through NivaDesk yet, so for now it is switched on for that business only."
 } as const;
 
 export type PublicSiteTranslationKey = keyof typeof PUBLIC_SITE_EN;
@@ -10972,7 +10972,7 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.note.instagram": "Meta uygulamaya Gelişmiş Erişim (App Review) verdiğinde kullanılabilir; ardından her işletme kendi Instagram profesyonel hesabını bağlar.",
     "integrations.summary.dhl": "Siparişlerinizden DHL Express gönderileri hazırlayın: etiket, gerektiğinde ticari fatura ve takip.",
     "integrations.detail.dhl": "NivaDesk'teki bir siparişten kolinin güzergâhı için DHL Express servislerini görün, gönderi etiketini oluşturun, gümrük gerektiğinde ticari faturayı ekleyin (Büyük Britanya ile Kuzey İrlanda arası dahil) ve takibi izleyin. Her işletme kendi DHL Express hesabı ve MyDHL API bilgileriyle bağlanır. NivaDesk kurye çağırmaz.",
-    "integrations.note.dhl": "NivaDesk'in DHL test ortamındaki etiket ve ticari fatura testleri tamamlandı. Örnek belgeler doğrulama için DHL'ye gönderildi. DHL doğrulaması ve gerçek gönderiler için production erişimi henüz tamamlanmadı. O zamana kadar yalnızca bir işletme için açık."
+    "integrations.note.dhl": "NivaDesk'in DHL test ortamındaki etiket ve ticari fatura testleri tamamlandı. DHL bunları inceledi ve 27 Ekim 2026'da ilk işletmeye production erişimi verdi. NivaDesk üzerinden henüz gerçek gönderi yapılmadı; şimdilik yalnızca o işletme için açık."
   },
   "Deutsch": {
     "integrations.state.live": "Live",
@@ -11001,7 +11001,7 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.note.instagram": "Verfügbar, sobald Meta der App den erweiterten Zugriff gewährt (App Review); danach verbindet jedes Unternehmen sein eigenes professionelles Instagram-Konto.",
     "integrations.summary.dhl": "Bereiten Sie DHL-Express-Sendungen aus Ihren Bestellungen vor: Etiketten, Handelsrechnungen bei Bedarf und Sendungsverfolgung.",
     "integrations.detail.dhl": "Aus einem Auftrag in NivaDesk heraus sehen Sie die DHL-Express-Services für die Strecke des Pakets, erstellen das Versandetikett, fügen die Handelsrechnung hinzu, wo der Zoll sie verlangt (auch zwischen Großbritannien und Nordirland), und verfolgen die Sendung. Jedes Unternehmen verbindet sein eigenes DHL-Express-Konto und seine eigenen MyDHL-API-Zugangsdaten. NivaDesk bucht keine Abholungen.",
-    "integrations.note.dhl": "Die Tests von NivaDesk für Etiketten und Handelsrechnungen in der DHL-Testumgebung sind abgeschlossen. Musterdokumente wurden DHL zur Prüfung gesendet. Die Prüfung durch DHL und der Produktionszugang für echte Sendungen sind noch nicht abgeschlossen. Bis dahin ist die Integration für ein Unternehmen freigeschaltet."
+    "integrations.note.dhl": "Die Tests von NivaDesk für Etiketten und Handelsrechnungen in der DHL-Testumgebung sind abgeschlossen. DHL hat sie geprüft und dem ersten Unternehmen am 27. Oktober 2026 den Produktionszugang erteilt. Über NivaDesk wurde noch keine echte Sendung verschickt, daher ist die Integration vorerst nur für dieses Unternehmen freigeschaltet."
   },
   "Français": {
     "integrations.state.live": "Disponible",
@@ -11030,7 +11030,7 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.note.instagram": "Disponible dès que Meta accorde à l'application l'accès avancé (App Review) ; chaque entreprise connecte ensuite son propre compte Instagram professionnel.",
     "integrations.summary.dhl": "Préparez des envois DHL Express à partir de vos commandes : étiquettes, factures commerciales si nécessaire et suivi.",
     "integrations.detail.dhl": "Depuis une commande dans NivaDesk, consultez les services DHL Express pour le trajet du colis, créez l'étiquette d'expédition, ajoutez la facture commerciale lorsque la douane l'exige (y compris entre la Grande-Bretagne et l'Irlande du Nord) et suivez l'acheminement. Chaque entreprise connecte son propre compte DHL Express et ses propres identifiants API MyDHL. NivaDesk ne réserve pas d'enlèvement.",
-    "integrations.note.dhl": "Les tests d'étiquettes et de factures commerciales de NivaDesk dans l'environnement de test de DHL sont terminés. Des documents d'exemple ont été envoyés à DHL pour vérification. La vérification par DHL et l'accès de production pour les envois réels ne sont pas encore terminés. D'ici là, l'intégration est activée pour une seule entreprise."
+    "integrations.note.dhl": "Les tests d'étiquettes et de factures commerciales de NivaDesk dans l'environnement de test de DHL sont terminés. DHL les a examinés et a ouvert l'accès de production à la première entreprise le 27 octobre 2026. Aucun envoi réel n'a encore été effectué via NivaDesk ; pour l'instant, l'intégration n'est activée que pour cette entreprise."
   },
   "Italiano": {
     "integrations.state.live": "Disponibile",
@@ -11059,7 +11059,7 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.note.instagram": "Disponibile quando Meta concede all'app l'accesso avanzato (App Review); ogni azienda collega poi il proprio account Instagram professionale.",
     "integrations.summary.dhl": "Prepara le spedizioni DHL Express dai tuoi ordini: etichette, fatture commerciali quando servono e tracciamento.",
     "integrations.detail.dhl": "Da un ordine in NivaDesk consulti i servizi DHL Express per la tratta del collo, crei l'etichetta di spedizione, aggiungi la fattura commerciale quando la dogana la richiede (anche tra Gran Bretagna e Irlanda del Nord) e segui il tracciamento. Ogni azienda collega il proprio account DHL Express e le proprie credenziali API MyDHL. NivaDesk non prenota ritiri.",
-    "integrations.note.dhl": "I test di NivaDesk su etichette e fatture commerciali nell'ambiente di test di DHL sono completati. Alcuni documenti di esempio sono stati inviati a DHL per la verifica. La verifica di DHL e l'accesso di produzione per le spedizioni reali non sono ancora completati. Fino ad allora l'integrazione è attiva per una sola azienda."
+    "integrations.note.dhl": "I test di NivaDesk su etichette e fatture commerciali nell'ambiente di test di DHL sono completati. DHL li ha esaminati e il 27 ottobre 2026 ha concesso l'accesso di produzione alla prima azienda. Nessuna spedizione reale è ancora partita tramite NivaDesk, quindi per ora l'integrazione è attiva solo per quell'azienda."
   },
   "Español (Spanish)": {
     "integrations.state.live": "Disponible",
@@ -11088,7 +11088,7 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.note.instagram": "Disponible cuando Meta conceda a la aplicación el acceso avanzado (App Review); después, cada empresa conecta su propia cuenta profesional de Instagram.",
     "integrations.summary.dhl": "Prepara envíos de DHL Express desde tus pedidos: etiquetas, facturas comerciales cuando hacen falta y seguimiento.",
     "integrations.detail.dhl": "Desde un pedido en NivaDesk, consulta los servicios de DHL Express para la ruta del bulto, crea la etiqueta de envío, añade la factura comercial cuando la aduana la exige (también entre Gran Bretaña e Irlanda del Norte) y sigue el envío. Cada empresa conecta su propia cuenta de DHL Express y sus propias credenciales de API de MyDHL. NivaDesk no reserva recogidas.",
-    "integrations.note.dhl": "Las pruebas de etiquetas y facturas comerciales de NivaDesk en el entorno de pruebas de DHL están completadas. Se han enviado documentos de muestra a DHL para su verificación. La verificación de DHL y el acceso de producción para envíos reales aún no están completados. Hasta entonces, la integración está activada para una sola empresa."
+    "integrations.note.dhl": "Las pruebas de etiquetas y facturas comerciales de NivaDesk en el entorno de pruebas de DHL están completadas. DHL las revisó y dio acceso de producción a la primera empresa el 27 de octubre de 2026. Todavía no se ha hecho ningún envío real a través de NivaDesk, así que por ahora la integración está activada solo para esa empresa."
   },
   "Português": {
     "integrations.state.live": "Disponível",
@@ -11117,7 +11117,7 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.note.instagram": "Disponível quando a Meta conceder à aplicação o acesso avançado (App Review); depois, cada empresa liga a sua própria conta profissional de Instagram.",
     "integrations.summary.dhl": "Prepare envios DHL Express a partir das suas encomendas: etiquetas, faturas comerciais quando necessárias e rastreio.",
     "integrations.detail.dhl": "A partir de uma encomenda no NivaDesk, veja os serviços DHL Express para o trajeto do volume, crie a etiqueta de envio, adicione a fatura comercial quando a alfândega a exige (incluindo entre a Grã-Bretanha e a Irlanda do Norte) e acompanhe o rastreio. Cada empresa liga a sua própria conta DHL Express e as suas próprias credenciais da API MyDHL. O NivaDesk não marca recolhas.",
-    "integrations.note.dhl": "Os testes de etiquetas e faturas comerciais do NivaDesk no ambiente de testes da DHL estão concluídos. Foram enviados documentos de exemplo à DHL para verificação. A verificação da DHL e o acesso de produção para envios reais ainda não estão concluídos. Até lá, a integração está ativada para uma única empresa."
+    "integrations.note.dhl": "Os testes de etiquetas e faturas comerciais do NivaDesk no ambiente de testes da DHL estão concluídos. A DHL analisou-os e deu acesso de produção à primeira empresa a 27 de outubro de 2026. Ainda não foi feito nenhum envio real através do NivaDesk, por isso, por agora, a integração está ativada apenas para essa empresa."
   },
   "Русский (Russian)": {
     "integrations.state.live": "Доступно",
@@ -11146,7 +11146,7 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.note.instagram": "Станет доступно, когда Meta предоставит приложению расширенный доступ (App Review); затем каждая компания подключает собственный профессиональный аккаунт Instagram.",
     "integrations.summary.dhl": "Готовьте отправления DHL Express из своих заказов: этикетки, коммерческие инвойсы при необходимости и отслеживание.",
     "integrations.detail.dhl": "Прямо из заказа в NivaDesk смотрите услуги DHL Express для маршрута посылки, создавайте транспортную этикетку, добавляйте коммерческий инвойс, когда его требует таможня (в том числе между Великобританией и Северной Ирландией), и отслеживайте доставку. Каждая компания подключает собственный аккаунт DHL Express и свои учётные данные MyDHL API. NivaDesk не заказывает забор курьером.",
-    "integrations.note.dhl": "Тесты NivaDesk для этикеток и коммерческих инвойсов в тестовой среде DHL завершены. Образцы документов отправлены в DHL на проверку. Проверка со стороны DHL и доступ к рабочей среде для реальных отправлений ещё не завершены. До этого момента интеграция включена для одной компании."
+    "integrations.note.dhl": "Тесты NivaDesk для этикеток и коммерческих инвойсов в тестовой среде DHL завершены. DHL проверила их и 27 октября 2026 года предоставила первой компании доступ к рабочей среде. Реальных отправлений через NivaDesk пока не было, поэтому сейчас интеграция включена только для этой компании."
   },
   "日本語 (Japanese)": {
     "integrations.state.live": "提供中",
@@ -11175,7 +11175,7 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.note.instagram": "Meta がアプリに高度なアクセス（App Review）を付与した時点で利用可能になります。その後、各事業者がご自身の Instagram プロアカウントを接続します。",
     "integrations.summary.dhl": "注文から DHL Express の発送を準備：ラベル、必要に応じたコマーシャルインボイス、配送追跡。",
     "integrations.detail.dhl": "NivaDesk の注文から、荷物の配送ルートで使える DHL Express のサービスを確認し、発送ラベルを作成し、税関で必要な場合はコマーシャルインボイスを添付して（グレートブリテンと北アイルランドの間を含む）、配送状況を追跡できます。各事業者が、ご自身の DHL Express アカウントと MyDHL API の認証情報で接続します。NivaDesk から集荷は予約しません。",
-    "integrations.note.dhl": "DHL のテスト環境での NivaDesk のラベルとコマーシャルインボイスのテストは完了しました。サンプル書類を確認のため DHL に送付しました。DHL による確認と、実際の発送に必要な本番環境へのアクセスは、まだ完了していません。それまでは1社でのみ有効です。"
+    "integrations.note.dhl": "DHL のテスト環境での NivaDesk のラベルとコマーシャルインボイスのテストは完了しました。DHL はその内容を確認し、2026年10月27日に最初の1社へ本番環境へのアクセスを付与しました。NivaDesk からの実際の発送はまだないため、現在はその1社でのみ有効です。"
   },
   "中文 (Chinese)": {
     "integrations.state.live": "已上线",
@@ -11204,7 +11204,7 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.note.instagram": "在 Meta 授予该应用高级访问权限（App Review）后即可使用；之后每家企业连接自己的 Instagram 专业账号。",
     "integrations.summary.dhl": "从订单准备 DHL Express 货件：面单、按需生成的商业发票和物流跟踪。",
     "integrations.detail.dhl": "在 NivaDesk 的订单中查看包裹线路可用的 DHL Express 服务、生成运单面单、在海关需要时添加商业发票（包括大不列颠与北爱尔兰之间），并跟踪物流。每家企业使用自己的 DHL Express 账户和 MyDHL API 凭据进行连接。NivaDesk 不预约取件。",
-    "integrations.note.dhl": "NivaDesk 在 DHL 测试环境中的面单和商业发票测试已完成。样本单据已发送给 DHL 进行核验。DHL 核验以及用于真实货件的生产环境访问尚未完成。在此之前，仅为一家企业开启。"
+    "integrations.note.dhl": "NivaDesk 在 DHL 测试环境中的面单和商业发票测试已完成。DHL 已审阅这些测试，并于 2026 年 10 月 27 日向第一家企业开通了生产环境访问。目前尚未通过 NivaDesk 发出任何真实货件，因此暂时仅为该企业开启。"
   },
   "العربية (Arabic)": {
     "integrations.state.live": "متاح",
@@ -11233,7 +11233,7 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.note.instagram": "يصبح متاحًا عندما تمنح Meta التطبيق الوصول المتقدم (App Review)؛ ثم تربط كل شركة حسابها المهني الخاص على Instagram.",
     "integrations.summary.dhl": "جهّز شحنات DHL Express من طلباتك: الملصقات، والفواتير التجارية عند الحاجة، والتتبّع.",
     "integrations.detail.dhl": "من الطلب داخل NivaDesk، اطّلع على خدمات DHL Express المتاحة لمسار الطرد، وأنشئ ملصق الشحنة، وأضف الفاتورة التجارية عندما تطلبها الجمارك (بما في ذلك بين بريطانيا العظمى وأيرلندا الشمالية)، وتابع التتبّع. تربط كل شركة حساب DHL Express الخاص بها وبيانات اعتماد MyDHL API الخاصة بها. لا يحجز NivaDesk استلامًا من قِبل المندوب.",
-    "integrations.note.dhl": "اكتملت اختبارات NivaDesk للملصقات والفواتير التجارية في بيئة الاختبار لدى DHL. أُرسلت مستندات نموذجية إلى DHL للتحقق منها. لم يكتمل بعد تحقق DHL والوصول إلى بيئة الإنتاج للشحنات الفعلية. وحتى ذلك الحين، يكون مفعّلًا لشركة واحدة فقط."
+    "integrations.note.dhl": "اكتملت اختبارات NivaDesk للملصقات والفواتير التجارية في بيئة الاختبار لدى DHL. راجعتها DHL ومنحت أول شركة حق الوصول إلى بيئة الإنتاج في 27 أكتوبر 2026. لم تُرسَل أي شحنة فعلية عبر NivaDesk حتى الآن، لذا فهو مفعّل حاليًا لتلك الشركة فقط."
   },
   "हिन्दी (Hindi)": {
     "integrations.state.live": "उपलब्ध",
@@ -11262,7 +11262,7 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
     "integrations.note.instagram": "Meta द्वारा ऐप को एडवांस्ड एक्सेस (App Review) मिलने पर उपलब्ध; उसके बाद हर व्यवसाय अपना Instagram प्रोफ़ेशनल अकाउंट जोड़ता है।",
     "integrations.summary.dhl": "अपने ऑर्डर से DHL Express शिपमेंट तैयार करें: लेबल, ज़रूरत होने पर कमर्शियल इनवॉइस, और ट्रैकिंग।",
     "integrations.detail.dhl": "NivaDesk में ऑर्डर से ही पार्सल के रूट के लिए DHL Express सेवाएँ देखें, शिपमेंट लेबल बनाएँ, जहाँ कस्टम्स को ज़रूरत हो वहाँ कमर्शियल इनवॉइस जोड़ें (ग्रेट ब्रिटेन और नॉर्दर्न आयरलैंड के बीच भी) और ट्रैकिंग देखें। हर व्यवसाय अपने DHL Express अकाउंट और अपने MyDHL API क्रेडेंशियल्स से जुड़ता है। NivaDesk कूरियर पिकअप बुक नहीं करता।",
-    "integrations.note.dhl": "DHL के टेस्ट एनवायरनमेंट में NivaDesk के लेबल और कमर्शियल इनवॉइस टेस्ट पूरे हो गए हैं। नमूना दस्तावेज़ सत्यापन के लिए DHL को भेजे गए हैं। DHL का सत्यापन और असली शिपमेंट के लिए प्रोडक्शन एक्सेस अभी पूरा नहीं हुआ है। तब तक यह केवल एक व्यवसाय के लिए चालू है।"
+    "integrations.note.dhl": "DHL के टेस्ट एनवायरनमेंट में NivaDesk के लेबल और कमर्शियल इनवॉइस टेस्ट पूरे हो गए हैं। DHL ने उनकी समीक्षा की और 27 अक्टूबर 2026 को पहले व्यवसाय को प्रोडक्शन एक्सेस दिया। NivaDesk से अभी तक कोई असली शिपमेंट नहीं भेजा गया है, इसलिए फ़िलहाल यह केवल उसी व्यवसाय के लिए चालू है।"
   }
 };
 

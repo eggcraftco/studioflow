@@ -243,7 +243,7 @@ export function DhlExpressIntegrationSection({ workspace, language = "English" }
   const accessStatus = (
     <p className="muted-copy" data-testid="dhl-access-status">
       <strong>{t("Limited access")}</strong>{" · "}
-      {t("NivaDesk's label and commercial invoice tests in DHL's test environment are complete. Sample documents have been sent to DHL for verification. DHL verification and production access for real shipments are not yet complete.")}{" "}
+      {t("NivaDesk's label and commercial invoice tests in DHL's test environment are complete. DHL reviewed them and gave the first business production access on 27 October 2026. No real shipment has been sent through NivaDesk yet.")}{" "}
       {t("Each business connects its own DHL Express account and MyDHL API credentials.")}
     </p>
   );

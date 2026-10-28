@@ -39,6 +39,13 @@ type Category = typeof categories[number];
  * main repository, §1 and §5): Etsy became live (commercial access approved
  * 24 October 2026, any seller connects on their own, read only), and sentences
  * the records no longer support were corrected or removed.
+ * DHL Express stays limited (re-read later on 28 October 2026): DHL gave the
+ * first business production access on 27 October 2026, but that business's
+ * connection still runs in DHL's test environment, no real shipment has been
+ * sent, and appConfig/shipping opens DHL to one workspace. Its note now says
+ * that instead of "sample documents sent for verification"; it becomes live
+ * only once a real label has been accepted in production and the switch is
+ * open to every workspace (scripts/check-dhl-texts.mts keeps it limited).
  * Shopify: the app was published on the Shopify App Store on 12 October 2026
  * (Shopify's e-mail, relayed by the owner); no per-workspace switch stands in
  * front of the connect (shopifyCompleteConnect checks the install and the

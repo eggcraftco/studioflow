@@ -6,10 +6,13 @@
 // each business's own DHL Express account + MyDHL key/secret, DHL services for the route
 // (GET /products: names and delivery estimates, no prices), label, commercial invoice for
 // declarable shipments (GB↔NI included), tracking. pickup.isRequested is always false.
-// Status (owner's wording, 23 Oct): NivaDesk's label and commercial invoice tests in DHL's test
-// environment are complete; sample documents were sent to DHL for verification (22 Oct 2026);
-// DHL verification + production access for real shipments are NOT yet complete. Never
-// "acceptance" / "kabul" — it reads as if DHL accepted or approved something.
+// Status (28 Oct 2026, docs/integrations/dhl-express.md §4): NivaDesk's label and commercial
+// invoice tests in DHL's test environment are complete; DHL reviewed them and gave the first
+// business production access on 27 Oct 2026 (that business's MyDHL API app only — other
+// businesses are not covered); NivaDesk's connection still runs in DHL's test environment, so
+// no real shipment has been sent. Card stays Limited access. Never "acceptance" / "approved" /
+// "kabul" / "onay" — it reads as if DHL endorsed NivaDesk itself, or opened it for everyone.
+// (23 Oct wording, replaced: "sample documents were sent to DHL for verification".)
 //
 // Never: "approved / certified / partner / official" (EN) or "onayladı / sertifika / ortak"
 // (TR); a price or quote claim; a pickup or courier mention that is not a negation.
@@ -27,7 +30,7 @@ const expect = (name: string, ok: boolean) => { checks += 1; if (!ok) failures.p
 const PUBLIC_KEYS = ["integrations.summary.dhl", "integrations.detail.dhl", "integrations.note.dhl"] as const;
 const APP_KEYS = [
   "See the DHL Express services for an order's route, create the label with the commercial invoice where customs needs one, and follow each parcel.",
-  "NivaDesk's label and commercial invoice tests in DHL's test environment are complete. Sample documents have been sent to DHL for verification. DHL verification and production access for real shipments are not yet complete.",
+  "NivaDesk's label and commercial invoice tests in DHL's test environment are complete. DHL reviewed them and gave the first business production access on 27 October 2026. No real shipment has been sent through NivaDesk yet.",
   "Each business connects its own DHL Express account and MyDHL API credentials.",
   "Limited access", "DHL services", "Commercial invoice", "Tracking",
   "NivaDesk never books a pickup, and never marks an order dispatched before DHL scans the parcel."
@@ -43,15 +46,15 @@ const NEGATION: Record<Lang, RegExp> = { en: /\b(not|never|no)\b/i, tr: /(maz|me
 const REQUIRED: Record<Lang, [string, RegExp][]> = {
   en: [
     ["NivaDesk's tests done", /NivaDesk's label and commercial invoice tests in DHL's test environment are complete/],
-    ["sent to DHL for verification", /sent to DHL for verification/i],
-    ["verification + production not yet complete", /DHL verification and production access for real shipments are not yet complete/],
+    ["DHL reviewed + first business only", /DHL reviewed them and gave the first business production access on 27 October 2026/],
+    ["no real shipment yet", /No real shipment has been sent through NivaDesk yet/],
     ["own account + API", /own DHL Express account and MyDHL API credentials/i],
     ["services", /DHL Express services/i], ["label", /\blabel\b/i], ["commercial invoice", /commercial invoice/i], ["tracking", /tracking/i]
   ],
   tr: [
     ["NivaDesk testleri tamam", /NivaDesk'in DHL test ortamındaki etiket ve ticari fatura testleri tamamlandı/],
-    ["doğrulama için DHL'ye gönderildi", /doğrulama için DHL'ye gönderildi/],
-    ["doğrulama + production henüz yok", /DHL doğrulaması ve gerçek gönderiler için production erişimi henüz tamamlanmadı/],
+    ["DHL inceledi + yalnız ilk işletme", /DHL bunları inceledi ve 27 Ekim 2026'da ilk işletmeye production erişimi verdi/],
+    ["henüz gerçek gönderi yok", /NivaDesk üzerinden henüz gerçek gönderi yapılmadı/],
     ["kendi hesap + API", /kendi DHL Express hesabı ve MyDHL API bilgileriyle/],
     ["servisler", /DHL Express servislerini/], ["etiket", /etiket/i], ["ticari fatura", /ticari fatura/i], ["takip", /takip/i]
   ]
@@ -79,16 +82,19 @@ const surfaces: [string, Lang, string][] = [
 const en = publicText("English");
 const tr = publicText("Türkçe");
 const mutants: [string, Lang, string][] = [
-  ["EN 'approved'", "en", en.replace("Sample documents have been sent to DHL for verification", "DHL approved the sample documents")],
+  ["EN 'approved'", "en", en.replace("DHL reviewed them and gave", "DHL approved NivaDesk and gave")],
   ["EN 'acceptance'", "en", en.replace("NivaDesk's label and commercial invoice tests in DHL's test environment are complete", "Label and customs document acceptance is complete in DHL's test environment")],
-  ["EN 'not yet complete' dropped", "en", en.replace("are not yet complete", "are underway")],
+  ["EN every business claimed", "en", en.replace("gave the first business production access", "gave every business production access")],
+  ["EN 'no real shipment' dropped", "en", en.replace("No real shipment has been sent through NivaDesk yet", "Real shipments are underway")],
   ["EN 'certified'", "en", `${en} NivaDesk is DHL certified.`],
   ["EN 'partner'", "en", `${en} An official DHL partner.`],
   ["EN positive pickup", "en", `${en} Book a DHL courier pickup from the order.`],
   ["EN price claim", "en", `${en} Compare DHL prices for each parcel.`],
-  ["EN production claimed done", "en", en.replace("are not yet complete", "are complete")],
+  ["EN real shipments claimed", "en", en.replace("No real shipment has been sent through NivaDesk yet", "Real shipments are live")],
   ["EN own account dropped", "en", en.replace("its own DHL Express account and MyDHL API credentials", "the NivaDesk DHL account")],
-  ["TR 'onayladı'", "tr", tr.replace("Örnek belgeler doğrulama için DHL'ye gönderildi", "DHL örnek belgeleri onayladı")],
+  ["TR 'onayladı'", "tr", tr.replace("DHL bunları inceledi", "DHL NivaDesk'i onayladı")],
+  ["TR tüm işletmeler", "tr", tr.replace("ilk işletmeye production erişimi verdi", "tüm işletmelere production erişimi verdi")],
+  ["TR gerçek gönderi var", "tr", tr.replace("NivaDesk üzerinden henüz gerçek gönderi yapılmadı", "Gerçek gönderiler başladı")],
   ["TR 'kabul'", "tr", tr.replace("etiket ve ticari fatura testleri tamamlandı", "etiket ve gümrük belgesi kabulü tamamlandı")],
   ["TR 'sertifikalı'", "tr", `${tr} NivaDesk DHL sertifikalı.`],
   ["TR positive courier", "tr", `${tr} Siparişten kurye çağırın.`],
