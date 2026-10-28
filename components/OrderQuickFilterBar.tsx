@@ -4,11 +4,9 @@ import { useEffect, useState } from "react";
 import {
   ORDER_QUICK_FILTERS,
   ORDER_SOURCE_FILTERS,
-  orderMatchesQuickFilter,
   orderMatchesSource,
-  orderSourcesPresent,
+  orderSourceChoices,
   quickFilterCount,
-  sourceFilterCount,
   type FilterableOrder,
   type OrderQuickFilterId,
   type OrderSortMode,
@@ -45,16 +43,14 @@ export function OrderQuickFilterBar({
   // Each row counts what picking it would show, the other choice kept: the
   // quick filters within the chosen source, the sources within the chosen filter.
   const inSource = source === "all" ? orders : orders.filter(order => orderMatchesSource(order, source));
-  const inFilter = filter === "trash" ? orders : orders.filter(order => orderMatchesQuickFilter(order, filter));
   const countFor = (id: OrderQuickFilterId) => id === "trash" ? deletedCount : quickFilterCount(inSource, id);
   const selectedCount = countFor(filter);
   const t = (text: string) => studioT(text, language);
-  // The source rows: every source the list really has, plus "All sources". A
+  // The source rows: every source the list really has, plus "All sources", each
+  // counted within the chosen filter. The same list the quick platform bar at the
+  // top of the column shows (orderSourceChoices), on the same `source` state. A
   // workspace that only ever adds orders by hand sees no source section at all.
-  const sourcesPresent = orderSourcesPresent(orders);
-  const sourceRows = onSourceChange && (sourcesPresent.length > 1 || source !== "all")
-    ? ORDER_SOURCE_FILTERS.filter(item => item.id === "all" || sourcesPresent.includes(item.id) || item.id === source)
-    : [];
+  const sourceRows = onSourceChange ? orderSourceChoices(orders, filter, source) : [];
   const selectedSource = ORDER_SOURCE_FILTERS.find(item => item.id === source) ?? ORDER_SOURCE_FILTERS[0];
 
   useEffect(() => {
@@ -154,7 +150,7 @@ export function OrderQuickFilterBar({
                   >
                     <span className="order-filter-menu-icon">{source === item.id ? "✓" : "◦"}</span>
                     <span>{t(item.label)}</span>
-                    <span className="order-filter-menu-count">({sourceFilterCount(inFilter, item.id)})</span>
+                    <span className="order-filter-menu-count">({item.count})</span>
                   </button>
                 ))}
               </>

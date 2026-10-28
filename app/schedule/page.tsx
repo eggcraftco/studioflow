@@ -7,6 +7,7 @@ import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { OrderListCard } from "@/components/OrderListCard";
 import { OrderQuickFilterBar } from "@/components/OrderQuickFilterBar";
+import { OrderPlatformBar } from "@/components/OrderPlatformBar";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -37,7 +38,8 @@ import {
   ORDER_QUICK_FILTERS,
   filterAndSortOrders,
   type OrderQuickFilterId,
-  type OrderSortMode
+  type OrderSortMode,
+  type OrderSourceId
 } from "@/lib/studioflow/orderFilters";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { studioCountLabel } from "@/lib/studioflow/countLabel";
@@ -440,6 +442,8 @@ export default function SchedulePage() {
   const [span, setSpan] = useState<ScheduleSpan>("weekly");
   const [filter, setFilter] = useState<ScheduleFilter>("all");
   const [sortMode, setSortMode] = useState<OrderSortMode>("smart");
+  // UX-010 / UX-006: the platform the list shows — one state for the quick platform bar and the Source rows in Order Filters.
+  const [source, setSource] = useState<OrderSourceId>("all");
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [timelineZoomHydrated, setTimelineZoomHydrated] = useState(false);
   const [search, setSearch] = useState("");
@@ -758,8 +762,8 @@ export default function SchedulePage() {
   );
 
   const filteredOrders = useMemo(() => {
-    return filterAndSortOrders(visibleSourceOrders, search, filter, sortMode);
-  }, [filter, visibleSourceOrders, search, sortMode]);
+    return filterAndSortOrders(visibleSourceOrders, search, filter, sortMode, source);
+  }, [filter, visibleSourceOrders, search, sortMode, source]);
 
   const visibleOrders = useMemo(() => filteredOrders.filter(order => {
     const start = orderStartDate(order);
@@ -1124,6 +1128,7 @@ export default function SchedulePage() {
                 placeholder={t("Search...")}
               />
             </label>
+            <OrderPlatformBar orders={visibleSourceOrders} filter={filter} source={source} onSourceChange={setSource} t={t} />
               <OrderQuickFilterBar
               orders={visibleSourceOrders}
               filter={filter}
@@ -1131,6 +1136,8 @@ export default function SchedulePage() {
               onFilterChange={setFilter}
               onSortModeChange={setSortMode}
               language={language}
+              source={source}
+              onSourceChange={setSource}
             />
           </div>
 
@@ -1232,7 +1239,7 @@ export default function SchedulePage() {
           <div className={mobileControlsCollapsed ? "schedule-control-card is-collapsed" : "schedule-control-card"}>
             <button
               type="button"
-              className={search.trim() || filter !== "all" || sortMode !== "smart" ? "schedule-controls-toggle active" : "schedule-controls-toggle"}
+              className={search.trim() || filter !== "all" || sortMode !== "smart" || source !== "all" ? "schedule-controls-toggle active" : "schedule-controls-toggle"}
               onClick={() => setMobileControlsCollapsed(value => !value)}
               aria-expanded={!mobileControlsCollapsed}
             >
@@ -1249,6 +1256,8 @@ export default function SchedulePage() {
                 onSortModeChange={setSortMode}
                 filters={filterOptions}
                 language={language}
+                source={source}
+                onSourceChange={setSource}
               />
             </div>
 

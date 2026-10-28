@@ -14,6 +14,7 @@ import { SALES_STORES_TRANSLATIONS } from "./salesStoresTranslations";
 import { WOO_STORES_TRANSLATIONS } from "./wooStoresTranslations";
 import { ETSY_ROUND_TWO_TRANSLATIONS } from "./etsyRoundTwoTranslations";
 import { ETSY_COMPLIANCE_TRANSLATIONS } from "./etsyComplianceTranslations";
+import { PLATFORM_BAR_TRANSLATIONS } from "./platformBarTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -9323,6 +9324,9 @@ mergeIntoTranslations(ETSY_ROUND_TWO_TRANSLATIONS);
 
 // Etsy API Terms compliance (24 Oct 2026): Etsy-order notes and the Etsy settings footer. After r2.
 mergeIntoTranslations(ETSY_COMPLIANCE_TRANSLATIONS);
+
+// UX-010 / UX-006 (28 Oct 2026): the quick platform bar's one new word ("By hand"). A key no other table has.
+mergeIntoTranslations(PLATFORM_BAR_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

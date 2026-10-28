@@ -7,6 +7,7 @@ import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { OrderListCard } from "@/components/OrderListCard";
 import { OrderQuickFilterBar } from "@/components/OrderQuickFilterBar";
+import { OrderPlatformBar } from "@/components/OrderPlatformBar";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { ORDER_CARD_FOCUS_EVENT } from "@/lib/studioflow/notificationSettings";
@@ -1204,6 +1205,8 @@ export default function OrdersPage() {
                 placeholder={t("Search...")}
               />
             </label>
+            {/* UX-010 / UX-006: one click on the column switches platform — the same `orderSource` the Source rows in Order Filters set. */}
+            <OrderPlatformBar orders={visibleOrders} filter={orderFilter} source={orderSource} onSourceChange={setOrderSource} t={t} />
             <OrderQuickFilterBar
               orders={visibleOrders}
               filter={orderFilter}
@@ -1680,6 +1683,7 @@ export default function OrdersPage() {
               ) : null}
             </label>
           ) : null}
+          <OrderPlatformBar orders={visibleOrders} filter={orderFilter} source={orderSource} onSourceChange={setOrderSource} t={t} className="orders-mobile-platform-bar" />
 
           {orderFilter === "trash" ? (
             <div className="orders-trash-banner">⚠ {t("Items in Trash are permanently deleted after 30 days.")}</div>

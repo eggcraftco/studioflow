@@ -108,9 +108,10 @@ export function orderSourceOf(order: OrderSourceInput): Exclude<OrderSourceId, "
 }
 
 /**
- * The platform chip's words for a source, or "" for an order added by hand (no chip).
- * Provider names are proper nouns and stay as written in every language; "Website"
- * goes through the same table the Source filter uses (`t` is the caller's studioT).
+ * A platform's full name, or "" for an order added by hand (no monogram): the monogram's tooltip and
+ * accessible name, and the order page's channel strip. Provider names are proper nouns and stay as
+ * written in every language; "Website" goes through the same table the Source filter uses (`t` is the
+ * caller's studioT).
  */
 export function orderSourceChipLabel(source: OrderSourceId, t: (text: string) => string = text => text): string {
   if (source === "all" || source === "manual") return "";
@@ -118,8 +119,53 @@ export function orderSourceChipLabel(source: OrderSourceId, t: (text: string) =>
   return source === "inbound" ? t(label) : label;
 }
 
+/** A platform the order can come from (every source but "all" and "manual"): the ones that get a monogram. */
+export type OrderPlatformId = Exclude<OrderSourceId, "all" | "manual">;
+
+/**
+ * UX-010 / UX-006 (28 Oct 2026): each platform's monogram — OUR OWN letters in the platform's palette
+ * colour (app/globals.css --order-source-<token>-rgb), never a third-party logo (eBay and Amazon license
+ * logo use in writing, Shopify only under strict rules, Etsy asks for a trademark notice). The public order
+ * form gets a globe we draw (components/OrderSourceMonogram.tsx), not a brand mark; "WEB" is its letters
+ * where a glyph cannot be drawn. An order added by hand has no monogram. The full name (orderSourceChipLabel)
+ * always rides along as the tooltip and the accessible name. One table, read by the order row, the Production
+ * board card and the quick platform bar.
+ */
+export const ORDER_SOURCE_MONOGRAMS: Readonly<Record<OrderPlatformId, { letters: string; glyph?: "globe" }>> = {
+  shopify: { letters: "SH" },
+  woocommerce: { letters: "WC" },
+  etsy: { letters: "ET" },
+  ebay: { letters: "EB" },
+  square: { letters: "SQ" },
+  amazon: { letters: "AM" },
+  inbound: { letters: "WEB", glyph: "globe" }
+};
+
+export function isOrderPlatform(source: OrderSourceId): source is OrderPlatformId {
+  return Object.prototype.hasOwnProperty.call(ORDER_SOURCE_MONOGRAMS, source);
+}
+
 export function orderMatchesSource(order: FilterableOrder, source: OrderSourceId) {
   return source === "all" || orderSourceOf(order) === source;
+}
+
+export type OrderSourceChoice = { id: OrderSourceId; label: string; count: number };
+
+/**
+ * The source choices of one order list, read by BOTH the quick platform bar at the top of the list and the
+ * Source rows inside Order Filters: the two always offer the same sources with the same counts and act on the
+ * page's one `source` state. "All sources" first, then every source the list really has (in the menu's order),
+ * plus the chosen one even when the list no longer has it (so it can be cleared). Each count is what picking it
+ * would show within the chosen quick filter. Empty when the list has one source and none is chosen: a workspace
+ * that only ever adds orders by hand sees no source choice at all.
+ */
+export function orderSourceChoices(orders: FilterableOrder[], filter: OrderQuickFilterId, source: OrderSourceId): OrderSourceChoice[] {
+  const present = orderSourcesPresent(orders);
+  if (present.length <= 1 && source === "all") return [];
+  const inFilter = filter === "trash" ? orders : orders.filter(order => orderMatchesQuickFilter(order, filter));
+  return ORDER_SOURCE_FILTERS
+    .filter(item => item.id === "all" || present.includes(item.id) || item.id === source)
+    .map(item => ({ id: item.id, label: item.label, count: sourceFilterCount(inFilter, item.id) }));
 }
 
 /** The sources present in a list, in the menu's order, so the menu offers only real choices. */
