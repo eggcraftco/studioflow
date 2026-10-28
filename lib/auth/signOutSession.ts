@@ -8,7 +8,8 @@
 //      anyway" question;
 //   2. the push registration goes while still authenticated (rules refuse it
 //      after sign-out);
-//   3. device-local UI state goes (deviceLocalCache.ts);
+//   3. device-local UI state goes (deviceLocalCache.ts), and the lock/activity
+//      record of the auto-lock (sessionLock.ts);
 //   4. signOut();
 //   5. the browser's Firestore copy (IndexedDB) is wiped — terminate() then
 //      clearIndexedDbPersistence() — and the page leaves with a full load,
@@ -19,6 +20,7 @@ import { signOut } from "firebase/auth";
 import { waitForPendingWrites } from "firebase/firestore";
 import { auth, clearFirestoreLocalCache, db } from "@/lib/firebase/client";
 import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
+import { clearSessionLockState } from "@/lib/auth/sessionLock";
 
 /** How long sign-out waits for undelivered writes before it asks. */
 export const PENDING_WRITES_WAIT_MS = 3_000;
@@ -82,6 +84,7 @@ export async function signOutAndWipe(options: SignOutSessionOptions = {}): Promi
   await settleWithin(import("@/lib/studioflow/pushNotifications").then(mod => mod.unregisterWebPush()), 2_500);
   try {
     clearDeviceLocalWorkspaceCache();
+    clearSessionLockState();
   } catch {
     /* nothing stored */
   }

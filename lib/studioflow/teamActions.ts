@@ -10,6 +10,7 @@ import {
 } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
 import { teamRefusalMessage } from "@/lib/studioflow/teamRefusal";
+import { ensureRecentAuthentication } from "@/lib/auth/recentAuth";
 
 export const WEB_TEAM_ROLES = [
   { value: "member", label: "Member" },
@@ -166,6 +167,8 @@ export async function setTeamMemberSuspended(
 }
 
 export async function removeTeamMember(workspace: WorkspaceContext, member: TeamMemberDetail) {
+  // Cannot be undone: the sign-in must be recent, or made again (audit #46).
+  await ensureRecentAuthentication();
   return callTeamFunction("removeWorkspaceTeamMember", {
     companyId: workspace.id,
     memberUid: member.id

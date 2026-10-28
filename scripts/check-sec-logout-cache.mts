@@ -39,15 +39,16 @@ export async function waitForPendingWrites() { return globalThis.__pending(); }
 export async function clearFirestoreLocalCache() { globalThis.__calls.push("clearFirestore"); return true; }
 export function clearDeviceLocalWorkspaceCache() { globalThis.__calls.push("clearDeviceLocal"); }
 export async function unregisterWebPush() { globalThis.__calls.push("unregisterPush"); }
+export function clearSessionLockState() { globalThis.__calls.push("clearLock"); }
 `);
 
 let mod: Record<string, any> | null = null;
 const source = read("lib/auth/signOutSession.ts");
 if (!source) {
-  failures.push("lib/auth/signOutSession.ts exists");
+  ok("lib/auth/signOutSession.ts exists", false);
 } else {
   let js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ES2020, target: ts.ScriptTarget.ES2020 } }).outputText;
-  js = js.replace(/(["'])(firebase\/auth|firebase\/firestore|@\/lib\/firebase\/client|@\/lib\/studioflow\/deviceLocalCache|@\/lib\/studioflow\/pushNotifications)\1/g, '"./stub.mjs"');
+  js = js.replace(/(["'])(firebase\/auth|firebase\/firestore|@\/lib\/firebase\/client|@\/lib\/studioflow\/deviceLocalCache|@\/lib\/studioflow\/pushNotifications|@\/lib\/auth\/sessionLock)\1/g, '"./stub.mjs"');
   const file = path.join(tmp, "signOutSession.mjs");
   fs.writeFileSync(file, js);
   const assigned: string[] = [];
@@ -70,8 +71,8 @@ if (!source) {
   let left = await mod!.signOutAndWipe({ confirmUnsynced: () => { asked += 1; return false; } });
   ok("nothing waiting: not asked", asked === 0);
   ok("nothing waiting: signed out (true)", left === true);
-  ok(`nothing waiting: order push → device-local → signOut → Firestore wipe → /login (got ${g.__calls.join(" ")})`,
-    g.__calls.join(" ") === "unregisterPush clearDeviceLocal signOut clearFirestore assign:/login");
+  ok(`nothing waiting: order push → device-local → lock record → signOut → Firestore wipe → /login (got ${g.__calls.join(" ")})`,
+    g.__calls.join(" ") === "unregisterPush clearDeviceLocal clearLock signOut clearFirestore assign:/login");
 
   // Writes waiting, the person stays.
   g.__calls = []; g.__pending = never;
@@ -89,7 +90,7 @@ if (!source) {
   left = await mod!.signOutAndWipe({ confirmUnsynced: async () => { asked += 1; return true; }, destination: "/invite/abc" });
   ok("writes waiting + Sign out anyway: signed out", left === true && asked === 1);
   ok(`writes waiting + Sign out anyway: full sequence to the destination (got ${g.__calls.join(" ")})`,
-    g.__calls.join(" ") === "unregisterPush clearDeviceLocal signOut clearFirestore assign:/invite/abc");
+    g.__calls.join(" ") === "unregisterPush clearDeviceLocal clearLock signOut clearFirestore assign:/invite/abc");
   (globalThis as any).setTimeout = realSetTimeout;
 
   // No question asked at all (account deleted / boot recovery): never waits.

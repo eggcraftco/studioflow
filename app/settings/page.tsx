@@ -24,6 +24,7 @@ import { SettingsDirtyProvider, useProvideSettingsDirty, useUnsavedGuard } from 
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth, db, functions, clearFirestoreLocalCache } from "@/lib/firebase/client";
 import { signOutAndWipe, UNSYNCED_SIGN_OUT_TEXT } from "@/lib/auth/signOutSession";
+import { ensureRecentAuthentication } from "@/lib/auth/recentAuth";
 import { useAppConfirm } from "@/components/AppConfirmDialog";
 import { collection, getDocs } from "firebase/firestore";
 import {
@@ -4844,6 +4845,8 @@ function DeleteAccountCard({ language = "English" }: { language?: string }) {
     setBusy(true);
     setError("");
     try {
+      // Cannot be undone: the sign-in must be recent, or made again (audit #46).
+      await ensureRecentAuthentication();
       const callable = httpsCallable<{ confirmation: string }, { ok: boolean }>(functions, "deleteMyAccount");
       await callable({ confirmation: "DELETE" });
       clearDeviceLocalWorkspaceCache();
@@ -4855,7 +4858,7 @@ function DeleteAccountCard({ language = "English" }: { language?: string }) {
       await clearFirestoreLocalCache();
       window.location.assign("/login");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not delete the account."));
+      setError(err instanceof Error ? t(err.message) : t("Could not delete the account."));
       setBusy(false);
     }
   }
@@ -6839,7 +6842,7 @@ function DataManagementSection({
       await onImported();
       setStatus(result.message || "Workspace orders and customers deleted.");
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : t("Workspace data could not be deleted."));
+      setError(deleteError instanceof Error ? t(deleteError.message) : t("Workspace data could not be deleted."));
     } finally {
       setDeleting(false);
     }

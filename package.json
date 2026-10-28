@@ -95,7 +95,8 @@
     "test:sales-list-requests": "node scripts/check-sales-list-requests.mjs",
     "test:sales-mc2-translations": "npx tsx scripts/check-sales-mc2-translations.mts",
     "test:sec-next-guard": "npx tsx scripts/check-sec-next-guard.mts",
-    "test:sec-logout-cache": "npx tsx scripts/check-sec-logout-cache.mts"
+    "test:sec-logout-cache": "npx tsx scripts/check-sec-logout-cache.mts",
+    "test:sec-session-lock": "npx tsx scripts/check-sec-session-lock.mts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

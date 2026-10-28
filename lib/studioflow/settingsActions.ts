@@ -10,6 +10,7 @@ import {
   type WorkspaceContext
 } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import { ensureRecentAuthentication } from "@/lib/auth/recentAuth";
 
 export type UploadSafetySettingsInput = {
   uploadSafetyRequirePolicyAcceptance: boolean;
@@ -590,6 +591,8 @@ export async function deleteWorkspaceData(workspace: WorkspaceContext, confirmat
   if (!canDeleteWorkspaceDataForRole(workspace.role)) {
     throw new Error("Only workspace Owner or Admin can delete workspace data.");
   }
+  // Cannot be undone: the sign-in must be recent, or made again (audit #46).
+  await ensureRecentAuthentication();
 
   try {
     return await withWebSyncStatus(async () => {

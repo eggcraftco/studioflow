@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import {
   EmailAuthProvider,
   reauthenticateWithCredential,
@@ -13,15 +13,28 @@ import { useAppConfirm } from "@/components/AppConfirmDialog";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import {
+  ACTIVITY_WRITE_GAP_MS,
   AUTO_LOCK_CHANGED_EVENT,
   AUTO_LOCK_MINUTES_KEY,
-  getAutoLockMinutes
+  getAutoLockMinutes,
+  readSessionActivity,
+  readSessionLockedAt,
+  sessionLockedAtKey,
+  shouldStartLocked,
+  writeSessionActivity,
+  writeSessionLockedAt
 } from "@/lib/auth/sessionLock";
+import { REAUTH_REQUEST_EVENT, type ReauthRequestDetail } from "@/lib/auth/recentAuth";
 
 // Watches for inactivity and, once the per-device interval elapses, drops a
 // full-screen lock over the app. The session stays signed in — the user simply
 // re-authenticates (password or their sign-in provider) to continue, mirroring the
 // native app-lock. Rendered once at the app root, inside AuthProvider.
+//
+// The lock survives a reload and reaches every tab (lib/auth/sessionLock.ts,
+// audit #46). The same card also answers "is it still you?" before an action
+// that cannot be undone (lib/auth/recentAuth.ts): same re-authentication, with
+// Cancel instead of Sign out.
 export function SessionAutoLock() {
   const { user, language } = useAuth();
   const t = useCallback((text: string) => studioT(text, language), [language]);
@@ -29,10 +42,14 @@ export function SessionAutoLock() {
 
   const [minutes, setMinutes] = useState(0);
   const [locked, setLocked] = useState(false);
+  const [reauthRequest, setReauthRequest] = useState<ReauthRequestDetail | null>(null);
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const lastActivityRef = useRef(Date.now());
+  const lastActivityWriteRef = useRef(0);
+  const uid = user?.uid ?? "";
+  const lastSignInMs = user?.metadata.lastSignInTime ? Date.parse(user.metadata.lastSignInTime) || 0 : 0;
 
   // Keep the interval in sync with the saved preference (this tab + other tabs).
   useEffect(() => {
@@ -55,20 +72,77 @@ export function SessionAutoLock() {
       setLocked(false);
       setPassword("");
       setError("");
+      setReauthRequest(current => {
+        current?.resolve(false);
+        return null;
+      });
     }
   }, [user]);
 
-  // Activity tracking + idle polling.
+  // A page that loads (F5, a new tab) for an account whose lock is down, or
+  // after the idle interval passed in every tab, starts locked. Layout effect,
+  // so nothing behind the lock is painted first.
+  useLayoutEffect(() => {
+    if (!uid) return;
+    const startLocked = shouldStartLocked({
+      lockedAt: readSessionLockedAt(uid),
+      lastActivity: readSessionActivity(uid),
+      lastSignIn: lastSignInMs,
+      minutes: getAutoLockMinutes(),
+      now: Date.now()
+    });
+    if (startLocked) {
+      writeSessionLockedAt(uid, readSessionLockedAt(uid) || Date.now());
+      setLocked(true);
+    } else {
+      lastActivityRef.current = Date.now();
+      writeSessionActivity(uid, lastActivityRef.current);
+      lastActivityWriteRef.current = lastActivityRef.current;
+    }
+  }, [uid, lastSignInMs]);
+
+  // Another tab locked or unlocked this account.
+  useEffect(() => {
+    if (!uid) return;
+    const key = sessionLockedAtKey(uid);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== key) return;
+      if (event.newValue) {
+        setLocked(true);
+      } else {
+        setLocked(false);
+        setPassword("");
+        setError("");
+        lastActivityRef.current = Date.now();
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [uid]);
+
+  const lockNow = useCallback(() => {
+    if (uid) writeSessionLockedAt(uid, Date.now());
+    setLocked(true);
+  }, [uid]);
+
+  // Activity tracking + idle polling. Activity is shared through localStorage,
+  // so the idle time is the whole browser's, not this tab's alone.
   useEffect(() => {
     if (!user || minutes <= 0 || locked) return;
 
-    lastActivityRef.current = Date.now();
+    lastActivityRef.current = Math.max(lastActivityRef.current, readSessionActivity(uid));
     const thresholdMs = minutes * 60_000;
     const markActive = () => {
-      lastActivityRef.current = Date.now();
+      const now = Date.now();
+      lastActivityRef.current = now;
+      if (now - lastActivityWriteRef.current >= ACTIVITY_WRITE_GAP_MS) {
+        lastActivityWriteRef.current = now;
+        writeSessionActivity(uid, now);
+      }
     };
     const checkIdle = () => {
-      if (Date.now() - lastActivityRef.current >= thresholdMs) setLocked(true);
+      const lastSeen = Math.max(lastActivityRef.current, readSessionActivity(uid));
+      if (Date.now() - lastSeen >= thresholdMs) lockNow();
     };
     const onVisibility = () => {
       if (document.visibilityState === "visible") checkIdle();
@@ -84,13 +158,51 @@ export function SessionAutoLock() {
       document.removeEventListener("visibilitychange", onVisibility);
       window.clearInterval(interval);
     };
-  }, [user, minutes, locked]);
+  }, [user, uid, minutes, locked, lockNow]);
+
+  // "Is it still you?" before an action that cannot be undone.
+  useEffect(() => {
+    const onRequest = (event: Event) => {
+      const detail = (event as CustomEvent<ReauthRequestDetail>).detail;
+      if (!detail || typeof detail.resolve !== "function") return;
+      if (!user) return;
+      detail.handled = true;
+      setPassword("");
+      setError("");
+      setReauthRequest(current => {
+        current?.resolve(false);
+        return detail;
+      });
+    };
+    window.addEventListener(REAUTH_REQUEST_EVENT, onRequest);
+    return () => window.removeEventListener(REAUTH_REQUEST_EVENT, onRequest);
+  }, [user]);
 
   const finishUnlock = useCallback(() => {
     setPassword("");
     setError("");
-    lastActivityRef.current = Date.now();
+    const now = Date.now();
+    lastActivityRef.current = now;
+    lastActivityWriteRef.current = now;
+    if (uid) {
+      writeSessionLockedAt(uid, null);
+      writeSessionActivity(uid, now);
+    }
     setLocked(false);
+    // A re-authentication answers a waiting "is it still you?" too.
+    setReauthRequest(current => {
+      current?.resolve(true);
+      return null;
+    });
+  }, [uid]);
+
+  const cancelReauth = useCallback(() => {
+    setPassword("");
+    setError("");
+    setReauthRequest(current => {
+      current?.resolve(false);
+      return null;
+    });
   }, []);
 
   const providerIds = user?.providerData.map(provider => provider.providerId) ?? [];
@@ -147,10 +259,12 @@ export function SessionAutoLock() {
     }
   }
 
-  if (!user || !locked) return null;
+  if (!user || (!locked && !reauthRequest)) return null;
+  const confirming = !locked && Boolean(reauthRequest);
+  const title = confirming ? t("Confirm it's you") : t("NivaDesk is locked");
 
   return (
-    <div className="session-lock-overlay" role="dialog" aria-modal="true" aria-label={t("NivaDesk is locked")}>
+    <div className="session-lock-overlay" role="dialog" aria-modal="true" aria-label={title}>
       <div className="card session-lock-card">
         <div className="session-lock-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
@@ -159,8 +273,12 @@ export function SessionAutoLock() {
             <circle cx="12" cy="15.5" r="1.3" />
           </svg>
         </div>
-        <h2 className="session-lock-title">{t("NivaDesk is locked")}</h2>
-        <p className="session-lock-copy">{t("Locked after inactivity. Re-authenticate to continue, you stay signed in.")}</p>
+        <h2 className="session-lock-title">{title}</h2>
+        <p className="session-lock-copy">
+          {confirming
+            ? t("This cannot be undone, so NivaDesk checks it is still you. Re-authenticate to continue.")
+            : t("Locked after inactivity. Re-authenticate to continue, you stay signed in.")}
+        </p>
 
         {hasPassword ? (
           <form className="session-lock-form" onSubmit={handlePasswordUnlock}>
@@ -175,7 +293,7 @@ export function SessionAutoLock() {
               onChange={event => setPassword(event.target.value)}
             />
             <button className="button session-lock-button" type="submit" disabled={busy || !password}>
-              {busy ? t("Unlocking...") : t("Unlock")}
+              {busy ? t("Unlocking...") : confirming ? t("Confirm") : t("Unlock")}
             </button>
           </form>
         ) : null}
@@ -194,9 +312,15 @@ export function SessionAutoLock() {
 
         {error ? <p className="session-lock-error">{t(error)}</p> : null}
 
-        <button className="session-lock-signout" type="button" onClick={handleSignOut} disabled={busy}>
-          {t("Sign out instead")}
-        </button>
+        {confirming ? (
+          <button className="session-lock-signout" type="button" onClick={cancelReauth} disabled={busy}>
+            {t("Cancel")}
+          </button>
+        ) : (
+          <button className="session-lock-signout" type="button" onClick={handleSignOut} disabled={busy}>
+            {t("Sign out instead")}
+          </button>
+        )}
       </div>
       {signOutConfirmDialog}
     </div>
