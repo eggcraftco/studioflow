@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
@@ -11,6 +11,7 @@ import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
 import { loadWorkspaceContext, loadRecentOrders, roleLabel, workspaceAccessAllows, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
+import { fitTextAreaToContent } from "@/lib/studioflow/noteTextArea";
 import { canEditOrderDetailsForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import {
@@ -1748,6 +1749,14 @@ function NoteEditor({
   const shownText = readOnly && !keptDraft ? (liveNote ?? note).text : text;
   const shownLinks = readOnly && !keptDraft ? (liveNote ?? note).links : links;
 
+  // The text area opens showing the whole note and grows while typing, up to
+  // 60% of the screen; past that the text scrolls inside it (owner, 28 Oct).
+  const textAreaRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const area = textAreaRef.current;
+    if (area) fitTextAreaToContent(area, area.closest<HTMLElement>('[role="dialog"]'));
+  }, [shownText]);
+
   // Mirror every change to the device (memory + localStorage) while editing.
   // Untouched again → the mirror goes; a never-saved note keeps its draft for
   // as long as it has any content.
@@ -1942,7 +1951,8 @@ function NoteEditor({
           color: "var(--text)",
           borderRadius: 14,
           padding: 20,
-          width: "min(560px, 92vw)",
+          // Wider than the 560px it was, so long notes wrap less while editing.
+          width: "min(760px, 92vw)",
           maxHeight: "90vh",
           overflow: "auto",
         }}
@@ -1984,6 +1994,7 @@ function NoteEditor({
           style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 10 }}
         />
         <textarea
+          ref={textAreaRef}
           value={shownText}
           disabled={saving}
           readOnly={readOnly}
@@ -1991,7 +2002,7 @@ function NoteEditor({
           onChange={(e) => { if (!readOnly) setText(e.target.value); }}
           placeholder={t("Note")}
           rows={6}
-          style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 12, resize: "vertical" }}
+          style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 8, marginBottom: 12, resize: "vertical", maxHeight: "60vh", overflowY: "auto" }}
         />
 
         {(() => {
