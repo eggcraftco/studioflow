@@ -98,6 +98,7 @@ import {
 } from "@/lib/studioflow/billingActions";
 import { CardIconGlyph, type CardIcon } from "@/components/CardTitle";
 import SupportChatWidget from "@/components/SupportChatWidget";
+import { safeNextFromLocation } from "@/lib/security/safeNext";
 
 type FeatureTone = "sage" | "clay" | "sky" | "lilac" | "rose" | "gold" | "graphite";
 
@@ -3541,12 +3542,12 @@ function PublicSignupPageContent() {
         clearLandingAttribution();
       }
       {
-        // Honour a same-site ?next= (e.g. the Shopify connect handshake).
-        const nextParam = new URLSearchParams(window.location.search).get("next") || "";
+        // Honour a same-site ?next= (e.g. the Shopify connect handshake), resolved
+        // against this origin and refused if it leaves it (audit #47).
         // Brand-new accounts land on Orders, not the dashboard: with no orders yet
         // the dashboard is a wall of zeros, and the first-project guide only ever
         // renders on /orders.
-        router.replace(nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/orders");
+        router.replace(safeNextFromLocation("/orders"));
       }
     } catch (signupError) {
       setError(signupErrorMessage(signupError, t));
