@@ -231,6 +231,10 @@ await section("3 wiring", async () => {
   expect("list: the cards are read as the customer page reads them", list.includes('getDoc(doc(db, "musteriler", id))'), true);
   expect("list: the inbound card loads the queue and keeps its channel", list.includes('(functions, "listCommerceReviewQueue")') && list.includes("reviewRowsForProvider(await loadCommerceReviewRows(companyId), provider)"), true);
   expect("list: the inbound card follows the list's own Orders gate (no card, not a refusal)", list.includes('const canSeeOrders = workspaceAccessAllows(workspace.memberAccess, "orders");') && list.includes("if (!canSeeOrders) return null;"), true);
+  const items = read("app/settings/CommerceReviewItems.tsx");
+  expect("items: Same person only opens the question; only Yes, merge sends 'same'; Different people answers at once",
+    [/onClick=\{\(\) => onAskSame\(row\)\} data-review-action="same"/.test(items), /onClick=\{\(\) => onDecide\(row, "same"\)\} data-review-action="confirm-same"/.test(items),
+     /onClick=\{\(\) => onDecide\(row, "different"\)\} data-review-action="different"/.test(items), (items.match(/onDecide\(row, "same"\)/g) || []).length], [true, true, true, 1]);
   const page = read("app/settings/page.tsx");
   const inbound = page.slice(page.indexOf("function InboundWebhookSection("), page.indexOf("function CopyableIntegrationValue("));
   expect("inbound: the review card sits in the inbound settings section", /<CommerceReviewCard\s+workspace=\{workspace\}\s+language=\{language\}\s+provider="inbound"/.test(inbound), true);
