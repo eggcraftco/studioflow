@@ -13,6 +13,7 @@ import {
   type WorkspaceContext,
 } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
+import { retryIdsFor, type HeldQueueRow } from "@/lib/studioflow/heldQueue";
 import type { WorkDayPatch } from "@/lib/studioflow/workDays";
 import { type UploadPolicyStamp, uploadPolicyMetadata } from "@/lib/studioflow/uploadPolicy";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
@@ -414,6 +415,69 @@ export async function updateOrderFromWeb(workspace: WorkspaceContext, input: Upd
   }
 }
 
+// K5 r3 (26 Oct 2026): the explicit shipping cost path for WooCommerce / Shopify / inbound orders in the pilot.
+// setDeliveryCostManual records the seller's own figure (owner "seller", source "manual") and refuses a stale edit:
+// expectedDeliveryCost is the value the screen showed; when the order holds something else the server answers
+// "aborted" and nothing is written. returnDeliveryCostToChannel hands the figure back to the channel.
+// r4: with the pilot switched off the server refuses (details.reason "pilot_off") unless the order's postage is explicit
+// manual; the screen then uses its live edit path. getDeliveryCostOwnershipState says whether the protection is on.
+export type DeliveryCostCallResult =
+  | { ok: true; applied?: boolean; deliveryCost?: number | null }
+  | { ok: false; stale: true }
+  | { ok: false; pilotOff: true };
+
+function isStaleDeliveryCostError(error: unknown) {
+  const code = String((error as { code?: unknown } | null)?.code || "");
+  return code === "functions/aborted" || code === "aborted";
+}
+
+function isPilotOffDeliveryCostError(error: unknown) {
+  const e = error as { code?: unknown; details?: { reason?: unknown } } | null;
+  const code = String(e?.code || "");
+  return (code === "functions/failed-precondition" || code === "failed-precondition") && e?.details?.reason === "pilot_off";
+}
+
+/** Whether K5's shipping cost protection applies in this workspace now (server answer; read straight from the switch). */
+export async function getDeliveryCostOwnershipStateFromWeb(workspace: WorkspaceContext): Promise<boolean> {
+  const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; protectionOn?: boolean }>(functions, "getDeliveryCostOwnershipState");
+  const response = await callable({ companyId: workspace.id });
+  return response.data?.protectionOn === true;
+}
+
+export async function setDeliveryCostManualFromWeb(
+  workspace: WorkspaceContext,
+  input: { orderId: string; deliveryCost: number; expectedDeliveryCost: number | null }
+): Promise<DeliveryCostCallResult> {
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; deliveryCost?: number }>(functions, "setDeliveryCostManual");
+      const response = await callable({ companyId: workspace.id, orderId: input.orderId, deliveryCost: input.deliveryCost, expectedDeliveryCost: input.expectedDeliveryCost });
+      return { ok: true as const, deliveryCost: typeof response.data?.deliveryCost === "number" ? response.data.deliveryCost : input.deliveryCost };
+    }, "Saving order changes to cloud.");
+  } catch (error) {
+    if (isStaleDeliveryCostError(error)) return { ok: false, stale: true };
+    if (isPilotOffDeliveryCostError(error)) return { ok: false, pilotOff: true };
+    throw new Error(friendlyUpdateOrderError(error));
+  }
+}
+
+export async function returnDeliveryCostToChannelFromWeb(
+  workspace: WorkspaceContext,
+  input: { orderId: string; expectedDeliveryCost: number | null }
+): Promise<DeliveryCostCallResult> {
+  try {
+    return await withWebSyncStatus(async () => {
+      const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; applied?: boolean; deliveryCost?: number | null }>(functions, "returnDeliveryCostToChannel");
+      const response = await callable({ companyId: workspace.id, orderId: input.orderId, expectedDeliveryCost: input.expectedDeliveryCost });
+      return { ok: true as const, applied: response.data?.applied === true, deliveryCost: typeof response.data?.deliveryCost === "number" ? response.data.deliveryCost : null };
+    }, "Saving order changes to cloud.");
+  } catch (error) {
+    if (isStaleDeliveryCostError(error)) return { ok: false, stale: true };
+    if (isPilotOffDeliveryCostError(error)) return { ok: false, pilotOff: true };
+    throw new Error(friendlyUpdateOrderError(error));
+  }
+}
+
 export type OrderTrackingResult = {
   ok?: boolean;
   provider?: string;
@@ -666,8 +730,12 @@ export async function uploadOrderPreviewImage({
 
 export type HeldIntegrationOrders = {
   ok?: boolean;
-  held?: { id: string; provider: string; externalId: string; heldAtMs: number }[];
+  // The per-row queue fields (queueState, stuckAtMs, stuckReason, failedImports,
+  // lastImport*) and stuckCount come only from a server with the stuck-row rule
+  // (capacity stage 1); without them nothing is stuck (lib/studioflow/heldQueue.ts).
+  held?: HeldQueueRow[];
   heldCount?: number;
+  stuckCount?: number;
   activeOrderCount?: number;
   orderLimit?: number | null;
   roomAvailable?: number;
@@ -679,13 +747,16 @@ export async function listHeldIntegrationOrders(workspace: WorkspaceContext) {
   return response.data ?? {};
 }
 
-export async function releaseHeldIntegrationOrders(workspace: WorkspaceContext) {
+export async function releaseHeldIntegrationOrders(workspace: WorkspaceContext, retryIds: string[] = []) {
   return withWebSyncStatus(async () => {
-    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; imported?: number; queued?: number; stillHeld?: number; message?: string }>(
+    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; imported?: number; queued?: number; stillHeld?: number; retried?: number; stuck?: number; newlyStuck?: number; message?: string }>(
       functions,
       "releaseHeldIntegrationOrders"
     );
-    const response = await callable({ companyId: workspace.id });
+    // retryIds: the owner's "Try again" on stuck rows — put back in their old
+    // place before this same Import reads the queue. Sent only when there are some.
+    const ids = retryIdsFor(retryIds);
+    const response = await callable(ids.length ? { companyId: workspace.id, retryIds: ids } : { companyId: workspace.id });
     if (response.data?.ok === false) throw new Error(response.data.message || "Could not import the waiting orders.");
     return response.data;
   }, "Importing waiting store orders.");

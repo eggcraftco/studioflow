@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useCondensedHeader } from "@/lib/studioflow/useCondensedHeader";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import OrderPaymentLinks from "@/components/OrderPaymentLinks";
@@ -98,6 +98,9 @@ import {
   ORDER_PREVIEW_IMAGE_ACCEPT,
   assignInvoiceNumberFromWeb,
   registerOrderTrackingFromWeb,
+  getDeliveryCostOwnershipStateFromWeb,
+  returnDeliveryCostToChannelFromWeb,
+  setDeliveryCostManualFromWeb,
   updateOrderFromWeb,
   uploadOrderPreviewImage,
   type CreateOrderInput,
@@ -143,16 +146,24 @@ import { EbayOrderRefreshButton } from "./EbayOrderRefreshButton";
 import { EbayOrderStock } from "./EbayOrderStock";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
-import { EtsySafe, EtsySourcePanel, EtsyProductPhoto, useEtsyListingPhotos, useEtsySource } from "./EtsySourcePanel";
+import { EtsyBlockChannelContext, EtsySafe, EtsySourcePanel, EtsyProductPhoto, useEtsyListingPhotos, useEtsySourceState } from "./EtsySourcePanel";
 import { etsyListingLink, etsyPhotoIsShowable } from "@/lib/studioflow/etsyListingPhotos";
 import { EtsyNotePhotoLinks } from "./EtsyText";
 import { etsyCardFold, etsyNoteDisplay } from "@/lib/studioflow/etsyFirstImport";
+import { ETSY_BLOCK_JUMP_ID, etsyAddTrackingLink, etsyBlockReplacesStrip, hiddenCardCount, orderJumpTargets } from "@/lib/studioflow/etsyOrderView";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
 import { canCorrectWorkTimeForRole, canDeleteWorkSession, checkCorrection, dateTimeLocalValue, latestCorrection, originalValues, parseDateTimeLocal, type WorkSessionAuditDetail } from "@/lib/studioflow/workSessionCorrections";
 import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
 import { ETSY_COPY_LINK_NOTE, ETSY_NO_BUYER_UPDATES_NOTE, isEtsyOrder as orderComesFromEtsy } from "@/lib/studioflow/etsyOrder";
+import { etsyOrderProfitIsEstimate, etsyShippingCostUnknown, etsyShippingNoteText } from "@/lib/studioflow/etsyShippingCost";
+import {
+  K5_SAVE_FAILED, K5_SAVED_MANUAL, K5_STALE,
+  channelShippingActionLabel, channelShippingFill, channelShippingNoteText, channelShippingProfitNote, channelShippingReturnedText,
+  channelShippingReviewHint, channelShippingState, channelShippingStatusText, needsDeliveryCostProtectionState,
+  type ChannelShippingAction
+} from "@/lib/studioflow/channelShippingCost";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, orderDetailFinance, platformFeeLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
@@ -751,6 +762,8 @@ function orderPdfHtml(
     statusSteps: OrderPdfItem[];
     statusToggles: OrderPdfItem[];
     materialItems: OrderPdfItem[];
+    /** K1: the screen's estimate rule for this order (Etsy fee/postage); the PDF prints the same label. */
+    profitIsEstimate?: boolean;
   }
 ) {
   const settings = options.settings;
@@ -844,9 +857,10 @@ function orderPdfHtml(
       const corporationTax = Math.round(Math.max(0, profitAfterVat) * ctRate) / 100;
       financeRows.push({ title: "Profit before Corporation Tax", value: formatMoney(profitAfterVat) });
       financeRows.push({ title: `Corporation Tax (${Math.round(ctRate)}%)`, value: formatMoney(corporationTax), tone: "red" });
-      financeRows.push({ title: "Net Profit (after CT)", value: formatMoney(profitAfterVat - corporationTax), tone: "green" });
-    } else if (pdfFinance.directCost === 0 && pdfFinance.otherExpenses === 0) {
+      financeRows.push({ title: "Net Profit (after CT)", value: formatMoney(profitAfterVat - corporationTax), tone: (pdfFinance.directCost === 0 && pdfFinance.otherExpenses === 0) || options.profitIsEstimate ? undefined : "green" });
+    } else if ((pdfFinance.directCost === 0 && pdfFinance.otherExpenses === 0) || options.profitIsEstimate) {
       // ETSY-E2E r3: the PDF says what the screen says — no cost entered, so the profit is an estimate.
+      // K5: the same for a channel order whose shipping cost is not a known postage cost.
       financeRows.push({ title: "Estimated profit", value: formatMoney(profitAfterVat) });
     } else {
       financeRows.push({ title: "Final Profit", value: formatMoney(profitAfterVat), tone: "green" });
@@ -2076,7 +2090,8 @@ export function OrderDetailContent({
   onOptimisticOrderPatch,
   onBlockHeadingSettingsChange,
   moneySettings,
-  showBackLink = false
+  showBackLink = false,
+  orderListToggle
 }: {
   order: OrderDetail;
   workspace: WorkspaceContext;
@@ -2085,6 +2100,8 @@ export function OrderDetailContent({
   onBlockHeadingSettingsChange?: (settings: BlockHeadingSettings | null) => void;
   moneySettings?: WorkspaceSettingsOverview | null;
   showBackLink?: boolean;
+  /** ETSY-UI-1 Phase B: the Orders page's own list collapse (its saved sidebar state), offered in the order header. */
+  orderListToggle?: { collapsed: boolean; onToggle: () => void };
 }) {
   const { user } = useAuth();
   const { hideNumbers } = usePricePrivacy();
@@ -2217,6 +2234,8 @@ export function OrderDetailContent({
   // Phone: the sticky header condenses to the name and Actions once scrolled past (review N14).
   const orderHeadRef = useRef<HTMLDivElement | null>(null);
   const orderHeadCondensed = useCondensedHeader(orderHeadRef);
+  // ETSY-UI-1: the Etsy block's place on the page, for the jump bar's "From Etsy".
+  const etsyBlockRef = useRef<HTMLDivElement | null>(null);
   const [assignProjectMenuOpen, setAssignProjectMenuOpen] = useState(false);
   const [savingAssignment, setSavingAssignment] = useState(false);
   const [headerDetailsMenuPosition, setHeaderDetailsMenuPosition] = useState<{ x: number; y: number } | null>(null);
@@ -5603,7 +5622,8 @@ export function OrderDetailContent({
         previewUrl: order.designLink,
         statusSteps,
         statusToggles,
-        materialItems: [...materialChecks, ...materialToggles]
+        materialItems: [...materialChecks, ...materialToggles],
+        profitIsEstimate: orderProfitIsEstimate
       });
     } catch (exportError) {
       setInlineError(exportError instanceof Error ? exportError.message : "Order PDF could not be opened.");
@@ -6013,7 +6033,11 @@ export function OrderDetailContent({
   const portal = order.customerPortal;
   // ETSY-E2E night: Etsy's copy of the order and its product photos, read once per open (never stored).
   const isEtsyOrder = String(order.customFields?.["Source"] || "") === "Etsy";
-  const etsySource = useEtsySource(order.id, isEtsyOrder);
+  const etsySourceState = useEtsySourceState(order.id, isEtsyOrder);
+  const etsySource = etsySourceState.source;
+  // ETSY-UI-1 follow-up (owner, 27 Oct): on an Etsy order the Etsy block replaces the old channel strip (and carries
+  // what the strip showed); every other channel keeps its strip exactly as before.
+  const etsyBlockOwnsStrip = etsyBlockReplacesStrip(order, etsySourceState);
   const etsyPhotos = useEtsyListingPhotos(order.id, isEtsyOrder && Boolean(etsySource));
   // Etsy API Terms §5: NivaDesk never sends an Etsy buyer status, delivery or tracking
   // messages. One rule (lib/studioflow/etsyOrder.ts) decides "Etsy order" for every
@@ -6031,6 +6055,105 @@ export function OrderDetailContent({
   const orderValueMoney = (value: number, hidden = false) => (hidden
     ? hiddenMoneyLabel(orderMoneySymbol(orderCurrencyRef, moneySettings))
     : formatOrderMoney(value, orderCurrencyRef, moneySettings));
+  // K5 (26 Oct 2026): whose shipping cost a WooCommerce / Shopify / inbound order holds. Labels and the review box
+  // only — no figure changes. null = not one of those channels. With the server's record the Shipping Cost edit goes
+  // through setDeliveryCostManual, which refuses a stale edit (expected = the value shown when the editor opened).
+  // r4 (D3): a record that is not explicit manual counts only while the server says the protection is on for this
+  // workspace (the web cannot read the switch itself). Unknown / failed / off = the order reads as before K5 and the
+  // Shipping Cost row saves through the live path. Explicit manual postage keeps its labels and path either way.
+  const deliveryCostRecordNeedsState = needsDeliveryCostProtectionState(order.deliveryCostOwner);
+  const [deliveryCostProtection, setDeliveryCostProtection] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!deliveryCostRecordNeedsState) return;
+    let cancelled = false;
+    getDeliveryCostOwnershipStateFromWeb(workspace).then(
+      (on) => { if (!cancelled) setDeliveryCostProtection(on); },
+      () => { if (!cancelled) setDeliveryCostProtection(false); }
+    );
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one read per order/workspace, not per render
+  }, [deliveryCostRecordNeedsState, workspace.id, order.id]);
+  const channelShipping = channelShippingState(order, deliveryCostProtection);
+  const channelShippingEstimate = Boolean(channelShipping?.estimate);
+  const channelShippingMoney = (value: number) => orderValueMoney(value, hideNumbers);
+  const [deliveryCostStale, setDeliveryCostStale] = useState(false);
+  async function runDeliveryCostCall(
+    call: () => ReturnType<typeof setDeliveryCostManualFromWeb>,
+    successText: (result: { applied: boolean; deliveryCost: number | null }) => string,
+    liveFallback?: () => Promise<void> | void
+  ) {
+    if (!canInlineEditFinance) {
+      setFinanceError("Your workspace role cannot edit financial info.");
+      return;
+    }
+    setFinanceError(null);
+    setFinanceStatus(null);
+    setDeliveryCostStale(false);
+    setSavingFinanceField("Shipping Cost");
+    let useLivePath = false;
+    try {
+      const result = await call();
+      await onReloadOrder();
+      if (!result.ok && "pilotOff" in result) {
+        // The pilot was switched off since this screen asked: read as off from now on; a typed edit still saves (live path).
+        setDeliveryCostProtection(false);
+        useLivePath = true;
+      } else if (!result.ok) setDeliveryCostStale(true);
+      else setFinanceStatus(successText({ applied: result.applied !== false, deliveryCost: typeof result.deliveryCost === "number" ? result.deliveryCost : null }));
+    } catch (failure) {
+      await onReloadOrder();
+      setFinanceError(failure instanceof Error && failure.message ? failure.message : t(K5_SAVE_FAILED));
+    } finally {
+      setSavingFinanceField(null);
+    }
+    if (useLivePath && liveFallback) await liveFallback();
+  }
+  // K5 r3 real-use acceptance (26 Oct 2026): the expected value is the figure the seller saw when the Shipping Cost
+  // editor OPENED. The order listens live, so a save from another tab/device lands under an open editor; reading the
+  // order at save time sent that new figure as "expected" and silently overwrote it (seen: tab A 6.00, tab B 5.00).
+  const deliveryCostShownRef = useRef<number | null | undefined>(undefined);
+  function noteDeliveryCostEditStart() {
+    deliveryCostShownRef.current = order.deliveryCostPresent === false ? null : order.deliveryCost;
+  }
+  function saveDeliveryCostManual(value: string | number, meta?: { edited: boolean }) {
+    const shown = deliveryCostShownRef.current;
+    deliveryCostShownRef.current = undefined;
+    // Opening the editor and leaving it without typing is not a choice: no call, the figure keeps its owner (seen:
+    // a click into the field and away made the channel's £3.00 "Your value").
+    if (meta && !meta.edited) return;
+    const parsed = parseFinanceNumber(value);
+    if (parsed === null) return;
+    const expectedDeliveryCost = shown !== undefined ? shown : (order.deliveryCostPresent === false ? null : order.deliveryCost);
+    return runDeliveryCostCall(
+      () => setDeliveryCostManualFromWeb(workspace, { orderId: order.id, deliveryCost: parsed, expectedDeliveryCost }),
+      () => t(K5_SAVED_MANUAL),
+      () => saveMoneyFinanceValue("deliveryCost", parsed, "Shipping Cost")
+    );
+  }
+  function runChannelShippingAction(action: ChannelShippingAction) {
+    const expected = order.deliveryCostPresent === false ? null : order.deliveryCost;
+    if (action.kind === "use_channel" || action.kind === "accept_channel") {
+      // r4: the message says what the server did — the channel's figure applied now, or the value stays until a sync.
+      const channel = channelShipping?.channel ?? "woocommerce";
+      return runDeliveryCostCall(
+        () => returnDeliveryCostToChannelFromWeb(workspace, { orderId: order.id, expectedDeliveryCost: expected }),
+        ({ applied, deliveryCost }) => channelShippingReturnedText(applied, channel, channelShippingMoney(applied && deliveryCost !== null ? deliveryCost : (expected ?? 0)), t)
+      );
+    }
+    const deliveryCost = action.kind === "confirm_zero" ? 0 : action.deliveryCost;
+    return runDeliveryCostCall(
+      () => setDeliveryCostManualFromWeb(workspace, { orderId: order.id, deliveryCost, expectedDeliveryCost: expected }),
+      () => t(K5_SAVED_MANUAL)
+    );
+  }
+  // ETSY-SHIP-2: the shipping cost on an Etsy order is what the buyer paid until the seller enters the real postage.
+  // Labels only — no figure changes. null = not Etsy, or the seller's own postage is on the order.
+  const etsyShippingUnknown = isEtsyOrder ? etsyShippingCostUnknown(order, etsySource) : null;
+  // K1 (26 Oct 2026): "Final Profit" only when nothing is a guess. Every order: no costs entered = estimate. An Etsy
+  // order also stays an estimate while its fee is the workspace percentage or its postage is the buyer's figure.
+  const orderCostsMissing = orderFinance.directCost === 0 && orderFinance.otherExpenses === 0;
+  // K5: a WooCommerce / Shopify / inbound order whose shipping cost is not a known postage cost is an estimate too.
+  const orderProfitIsEstimate = orderCostsMissing || (isEtsyOrder && etsyOrderProfitIsEstimate(orderFinance, etsyShippingUnknown)) || channelShippingEstimate;
   const [portalBusy, setPortalBusy] = useState(false);
   const [portalNotice, setPortalNotice] = useState("");
   const portalUrl = portalUrlForToken(portal.token, workspace.clientPortalHost);
@@ -7603,8 +7726,42 @@ export function OrderDetailContent({
                       tone="negative"
                       disabled={!canInlineEditFinance}
                       saving={savingFinanceField === "Shipping Cost"}
-                      onSave={value => saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost")}
+                      onEditStart={noteDeliveryCostEditStart}
+                      onSave={(value, meta) => (channelShipping?.manualEditPath ? saveDeliveryCostManual(value, meta) : saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost"))}
                     />
+                    {channelShipping?.hasRecord ? (
+                      // K5: what the figure is (the channel's, the seller's, or waiting for review) and the explicit actions.
+                      <div className="muted-copy" data-testid="k5-shipping-state" style={{ margin: "2px 0 6px", fontSize: 12 }}>
+                        {channelShipping.status !== "review" && channelShippingStatusText(channelShipping, order, t, channelShippingMoney) ? (
+                          <p style={{ margin: 0 }} data-testid="k5-shipping-status">{channelShippingStatusText(channelShipping, order, t, channelShippingMoney)}</p>
+                        ) : null}
+                        {channelShipping.status === "review" && channelShipping.note ? (
+                          <div className="layout-status" data-testid="k5-shipping-review" style={{ margin: "4px 0" }}>
+                            <p style={{ margin: 0 }}>{channelShippingNoteText(channelShipping.note, channelShipping.channel, t, channelShippingMoney)}</p>
+                            {channelShippingReviewHint(channelShipping.note, t) ? <p style={{ margin: "2px 0 0" }}>{channelShippingReviewHint(channelShipping.note, t)}</p> : null}
+                          </div>
+                        ) : null}
+                        {deliveryCostStale ? (
+                          <p className="layout-error" data-testid="k5-shipping-stale" style={{ margin: "4px 0" }}>{channelShippingFill(t(K5_STALE), { amount: channelShippingMoney(order.deliveryCost) })}</p>
+                        ) : null}
+                        {canInlineEditFinance && channelShipping.actions.length ? (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 4 }}>
+                            {channelShipping.actions.map(action => (
+                              <button
+                                key={`${action.kind}-${"deliveryCost" in action ? action.deliveryCost : ""}`}
+                                type="button"
+                                className="finance-heading-add"
+                                data-testid={`k5-shipping-action-${action.kind}`}
+                                disabled={savingFinanceField === "Shipping Cost"}
+                                onClick={() => { void runChannelShippingAction(action); }}
+                              >
+                                {channelShippingActionLabel(action, channelShipping.channel, t, channelShippingMoney)}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <div className="app-card-divider" />
                     <FinanceInlineRow
                       label={t("VAT Rule")}
@@ -7636,17 +7793,34 @@ export function OrderDetailContent({
                         <DetailRow label={t("Profit before Corporation Tax")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} />
                         <DetailRow label={`Corporation Tax (${Math.round(corporationTaxRate)}%, est.)`} value={orderValueMoney(corporationTaxAmount, hideNumbers)} tone="negative" />
                         {/* ETSY-E2E r3: with no cost entered the after-tax figure is an estimate too — not green, and said. */}
-                        <DetailRow label={t("Net Profit (after CT)")} value={orderValueMoney(netProfitAfterCT, hideNumbers)} tone={orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? undefined : "positive"} emphasis />
+                        <DetailRow label={t("Net Profit (after CT)")} value={orderValueMoney(netProfitAfterCT, hideNumbers)} tone={orderProfitIsEstimate ? undefined : "positive"} emphasis />
                         {orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? (
                           <p className="muted-copy" data-testid="finance-costs-missing" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
                         ) : null}
+                        {etsyShippingUnknown ? (
+                          <p className="muted-copy" data-testid="finance-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 12 }}>{etsyShippingNoteText(etsyShippingUnknown, detailLanguage, t, (value) => orderValueMoney(value, hideNumbers))}</p>
+                        ) : null}
+                        {channelShipping?.estimate && channelShipping.note ? (
+                          <p className="muted-copy" data-testid="finance-channel-shipping" style={{ margin: "4px 0 0", fontSize: 12 }}>{channelShippingProfitNote(channelShipping.note, channelShipping.channel, detailLanguage, t, channelShippingMoney)}</p>
+                        ) : null}
                       </>
-                    ) : orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? (
+                    ) : orderProfitIsEstimate ? (
                       // ETSY-E2E (24 Oct 2026): with no cost entered the "profit" is the sale minus an estimated fee — not
                       // a final number. An imported Etsy order showed a green "Final Profit" equal to almost the whole sale.
+                      // ETSY-SHIP-2: an Etsy order whose shipping cost is the buyer's figure is an estimate too, and says why.
+                      // K5 (26 Oct 2026): a WooCommerce / Shopify / inbound order whose shipping cost is not a known postage
+                      // cost (empty, a 0 nobody chose, or what the buyer paid) is an estimate too, and says why.
                       <>
                         <DetailRow label={t("Estimated profit")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} emphasis />
-                        <p className="muted-copy" data-testid="finance-costs-missing" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
+                        {orderFinance.directCost === 0 && orderFinance.otherExpenses === 0 ? (
+                          <p className="muted-copy" data-testid="finance-costs-missing" style={{ margin: "4px 0 0", fontSize: 12 }}>{t("No costs entered yet. Add materials and labour to see the real profit; the platform fee is an estimate.")}</p>
+                        ) : null}
+                        {etsyShippingUnknown ? (
+                          <p className="muted-copy" data-testid="finance-etsy-shipping-unknown" style={{ margin: "4px 0 0", fontSize: 12 }}>{etsyShippingNoteText(etsyShippingUnknown, detailLanguage, t, (value) => orderValueMoney(value, hideNumbers))}</p>
+                        ) : null}
+                        {channelShipping?.estimate && channelShipping.note ? (
+                          <p className="muted-copy" data-testid="finance-channel-shipping" style={{ margin: "4px 0 0", fontSize: 12 }}>{channelShippingProfitNote(channelShipping.note, channelShipping.channel, detailLanguage, t, channelShippingMoney)}</p>
+                        ) : null}
                       </>
                     ) : (
                       <DetailRow label={t("Final Profit")} value={orderValueMoney(orderFinance.netProfit, hideNumbers)} tone="positive" emphasis />
@@ -7909,6 +8083,13 @@ export function OrderDetailContent({
                 saving={savingInlineField === "Delivered"}
                 onSave={value => saveDetailsPatch({ isDelivered: value === "Yes" }, "Delivered")}
               />
+              {/* ETSY-UI-1: NivaDesk's Etsy access is read-only — Dispatched here does not reach Etsy. */}
+              {etsyBuyerMessagingBlocked ? (
+                <div className="order-etsy-tracking-note" data-etsy-tracking-note="" role="note">
+                  <p>{t("NivaDesk reads Etsy orders but can't mark them dispatched on Etsy. Add the tracking number on Etsy too.")}</p>
+                  <a href={etsyAddTrackingLink(etsySource)} target="_blank" rel="noopener noreferrer">{t("Add tracking on Etsy")} ↗</a>
+                </div>
+              ) : null}
               {/* DHL Express, only where the server has opened it for this workspace. */}
               <OrderShipmentsPanel workspace={workspace} orderId={order.id} language={detailLanguage} onOrderChanged={onReloadOrder} onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)}
                 addressRestricted={order.commerce?.provider === "ebay" && !String(order.shippingStreetAddress || "").trim() && !String(order.shippingPostalCode || "").trim()}
@@ -9550,6 +9731,223 @@ export function OrderDetailContent({
     );
   }
 
+  // The Customize cards entry (Actions menu and the jump bar): one way in, the first-project tour advances either way.
+  function openCustomizeCards() {
+    setOrderActionsOpen(false);
+    setCustomizeOpen(true);
+    if (firstProjectGuideStep === 4) {
+      const nextGuide: FirstProjectGuideState = {
+        ...(firstProjectGuide ?? {}),
+        step: 5,
+        orderId: order.id,
+        completed: false
+      };
+      updateFirstProjectGuideState(nextGuide);
+      setFirstProjectGuide(nextGuide);
+    }
+  }
+
+  // ETSY-E2E night: on an Etsy order the cards it does not use yet (preview, repair intake, estimate,
+  // portal) move under one fold at the end of the phone stack. Nothing is removed and the saved layout is
+  // not changed. Computed once here so the jump bar lists the phone cards in the order they are drawn.
+  const mobileCardFold = etsyCardFold(visibleMobileCards, {
+    isEtsy: isEtsyOrder,
+    used: {
+      preview: Boolean(order.designLink) || etsyPhotos.loading || Boolean(etsyFirstPhoto),
+      repairIntake: order.orderType === "repair" || Object.values(repairIntake?.fields ?? {}).some(v => String(v ?? "").trim()) || intakePhotos.length > 0,
+      estimate: Boolean(currentEstimate),
+      customerPortal: Boolean(portal.active)
+    }
+  });
+
+  // ETSY-UI-1: the jump bar. One link per card the page DRAWS, in the order it draws them (desktop: column by
+  // column; phone: the stack, folded cards last), under the card's own title (cardLabel: the workshop's renamed
+  // heading, translated). Hidden cards and cards this member may not see are not drawn, so they are not listed.
+  // "From Etsy" leads when the Etsy block is on the page. Derived only — nothing here writes the layout.
+  const etsyBlockShown = String(order.customFields?.["Source"] || "") === "Etsy" && Boolean(etsySource) && Array.isArray(etsySource?.items);
+  const jumpCardOrder: OrderDetailCardId[] = allCardsHidden
+    ? []
+    : isNarrowLayout
+      ? [...mobileCardFold.main, ...mobileCardFold.folded]
+      : desktopColumns.flatMap(column => column.cards);
+  const jumpTargets = orderJumpTargets(jumpCardOrder, cardId => cardLabel(cardId as OrderDetailCardId), { etsyBlock: etsyBlockShown, etsyLabel: t("From Etsy") });
+  const hiddenCards = hiddenCardCount(customizeCardOrder, cardLayout.visibility);
+
+  // ETSY-UI-1 follow-up 3: when the jump links do not fit (a laptop width, the order list open) a trailing "More" menu
+  // lists EVERY link, in order; choosing one jumps exactly like the bar. Phones keep the swipeable bar only. Read-only
+  // navigation: nothing here touches the layout.
+  const jumpNavRef = useRef<HTMLElement | null>(null);
+  const jumpMoreButtonRef = useRef<HTMLButtonElement | null>(null);
+  const jumpMoreMenuRef = useRef<HTMLDivElement | null>(null);
+  const [jumpOverflow, setJumpOverflow] = useState(false);
+  const [jumpMoreOpen, setJumpMoreOpen] = useState(false);
+  const jumpTargetsKey = jumpTargets.map(target => `${target.id}:${target.label}`).join("|");
+  useEffect(() => {
+    const nav = jumpNavRef.current;
+    if (!nav) return;
+    const measure = () => setJumpOverflow(nav.scrollWidth > nav.clientWidth + 1);
+    measure();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    observer?.observe(nav);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [jumpTargetsKey, isNarrowLayout]);
+  const jumpMoreShown = jumpOverflow && !isNarrowLayout;
+  useEffect(() => {
+    if (!jumpMoreShown) setJumpMoreOpen(false);
+  }, [jumpMoreShown]);
+  useEffect(() => {
+    if (!jumpMoreOpen) return;
+    // The menu hangs from the sticky header, so the page cannot scroll it into view: it is held inside the window
+    // (its own list scrolls instead), or the last entries of a long list would sit below the screen edge.
+    const fitToWindow = () => {
+      const menu = jumpMoreMenuRef.current;
+      if (menu) menu.style.maxHeight = `${Math.max(160, Math.floor(window.innerHeight - menu.getBoundingClientRect().top - 12))}px`;
+    };
+    fitToWindow();
+    jumpMoreMenuRef.current?.querySelector<HTMLButtonElement>("[role=menuitem]")?.focus();
+    const closeOnOutsidePress = (event: MouseEvent) => {
+      const node = event.target as Node;
+      if (jumpMoreMenuRef.current?.contains(node) || jumpMoreButtonRef.current?.contains(node)) return;
+      setJumpMoreOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsidePress);
+    window.addEventListener("resize", fitToWindow);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsidePress);
+      window.removeEventListener("resize", fitToWindow);
+    };
+  }, [jumpMoreOpen]);
+
+  function closeJumpMore(returnFocus: boolean) {
+    setJumpMoreOpen(false);
+    if (returnFocus) jumpMoreButtonRef.current?.focus();
+  }
+
+  function handleJumpMoreKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const items = Array.from(jumpMoreMenuRef.current?.querySelectorAll<HTMLButtonElement>("[role=menuitem]") ?? []);
+    const index = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeJumpMore(true);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      items[(index + 1) % items.length]?.focus();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      items[(index - 1 + items.length) % items.length]?.focus();
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      items[0]?.focus();
+    } else if (event.key === "End") {
+      event.preventDefault();
+      items[items.length - 1]?.focus();
+    } else if (event.key === "Tab") {
+      closeJumpMore(false);
+    }
+  }
+
+  function scrollParentOf(node: HTMLElement): HTMLElement {
+    let current = node.parentElement;
+    while (current && current !== document.body) {
+      const overflowY = window.getComputedStyle(current).overflowY;
+      if ((overflowY === "auto" || overflowY === "scroll") && current.scrollHeight > current.clientHeight) return current;
+      current = current.parentElement;
+    }
+    return (document.scrollingElement as HTMLElement | null) ?? document.documentElement;
+  }
+
+  function jumpToOrderCard(targetId: string) {
+    const refs = isNarrowLayout ? mobileCardFrameRefs.current : desktopCardFrameRefs.current;
+    const target = targetId === ETSY_BLOCK_JUMP_ID ? etsyBlockRef.current : refs.get(targetId as OrderDetailCardId) ?? null;
+    if (!target) return;
+    const fold = target.closest("details");
+    if (fold && !fold.open) fold.open = true;
+    const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Below the sticky order header, not under it.
+    const scroller = scrollParentOf(target);
+    const scrollerTop = scroller === document.scrollingElement || scroller === document.documentElement ? 0 : scroller.getBoundingClientRect().top;
+    const headBottom = orderHeadRef.current?.getBoundingClientRect().bottom ?? 0;
+    const offset = target.getBoundingClientRect().top - Math.max(headBottom, scrollerTop) - 12;
+    scroller.scrollBy({ top: offset, behavior: smooth ? "smooth" : "auto" });
+    // A card in a column off to the side: the card canvas pans to it.
+    const canvas = target.closest<HTMLElement>(".order-detail-workspace");
+    if (canvas && canvas.scrollWidth > canvas.clientWidth) {
+      const box = canvas.getBoundingClientRect();
+      const rect = target.getBoundingClientRect();
+      if (rect.left < box.left || rect.right > box.right) canvas.scrollBy({ left: rect.left - box.left - 12, behavior: smooth ? "smooth" : "auto" });
+    }
+    if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
+    target.focus({ preventScroll: true });
+    target.classList.add("is-notification-focus");
+    window.setTimeout(() => target.classList.remove("is-notification-focus"), 1600);
+  }
+
+  function renderJumpBar() {
+    return (
+      <div className="order-jump-bar" data-order-jump-bar="" data-has-stack-entry={allCardsHidden ? undefined : ""}>
+        <nav ref={jumpNavRef} className="order-jump-bar__links" aria-label={t("Jump to a card")}>
+          {jumpTargets.map(target => (
+            <button
+              key={target.id}
+              type="button"
+              className={target.id === ETSY_BLOCK_JUMP_ID ? "order-jump-link is-etsy" : "order-jump-link"}
+              data-jump-target={target.id}
+              onClick={() => jumpToOrderCard(target.id)}
+            >
+              {target.label}
+            </button>
+          ))}
+        </nav>
+        {jumpMoreShown ? (
+          <div className="order-jump-more">
+            <button
+              ref={jumpMoreButtonRef}
+              type="button"
+              className="order-jump-more__button"
+              data-jump-more=""
+              aria-haspopup="menu"
+              aria-expanded={jumpMoreOpen}
+              aria-controls="order-jump-more-menu"
+              aria-label={`${t("More")} · ${t("Jump to a card")}`}
+              onClick={() => setJumpMoreOpen(open => !open)}
+            >
+              {t("More")} <span aria-hidden="true">▾</span>
+            </button>
+            {jumpMoreOpen ? (
+              <div ref={jumpMoreMenuRef} id="order-jump-more-menu" className="order-jump-more__menu" role="menu" aria-label={t("Jump to a card")} onKeyDown={handleJumpMoreKeyDown}>
+                {jumpTargets.map(target => (
+                  <button
+                    key={target.id}
+                    type="button"
+                    role="menuitem"
+                    tabIndex={-1}
+                    className={target.id === ETSY_BLOCK_JUMP_ID ? "order-jump-more__item is-etsy" : "order-jump-more__item"}
+                    data-jump-more-target={target.id}
+                    onClick={() => {
+                      closeJumpMore(false);
+                      jumpToOrderCard(target.id);
+                    }}
+                  >
+                    {target.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+        <button type="button" className="order-jump-customize" data-jump-customize="" data-hidden-cards={hiddenCards} onClick={openCustomizeCards}>
+          {t("Customize cards")}
+          {hiddenCards > 0 ? <span className="order-jump-customize__count">{` · ${t("{count} hidden").replace("{count}", String(hiddenCards))}`}</span> : null}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <DetailLanguageContext.Provider value={detailLanguage}>
     <div className="order-detail-shell">
@@ -9568,6 +9966,21 @@ export function OrderDetailContent({
           });
         }}
       >
+        {/* ETSY-UI-1 Phase B: hide / show the order list (wide layouts) so the order can use the width. It is the
+            Orders page's existing collapse — the same saved sidebar state as the list's own "<" button. */}
+        {orderListToggle ? (
+          <button
+            type="button"
+            className={orderListToggle.collapsed ? "order-list-toggle is-collapsed" : "order-list-toggle"}
+            data-order-list-toggle=""
+            aria-expanded={!orderListToggle.collapsed}
+            aria-label={orderListToggle.collapsed ? t("Expand order list") : t("Collapse order list")}
+            title={orderListToggle.collapsed ? t("Expand order list") : t("Collapse order list")}
+            onClick={orderListToggle.onToggle}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M9 4v16" stroke="currentColor" strokeWidth="2" /></svg>
+          </button>
+        ) : null}
         {/* The customer/project header (spec §2, Area 3): image, names, the
             created date, the project number and the team, then the chips. */}
         <div className="order-detail-identity">
@@ -9774,20 +10187,7 @@ export function OrderDetailContent({
                 <div className="order-actions-menu-section-title">{t("Card layout")}</div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setOrderActionsOpen(false);
-                    setCustomizeOpen(true);
-                    if (firstProjectGuideStep === 4) {
-                      const nextGuide: FirstProjectGuideState = {
-                        ...(firstProjectGuide ?? {}),
-                        step: 5,
-                        orderId: order.id,
-                        completed: false
-                      };
-                      updateFirstProjectGuideState(nextGuide);
-                      setFirstProjectGuide(nextGuide);
-                    }
-                  }}
+                  onClick={openCustomizeCards}
                 >
                   {t("Customize cards")}
                 </button>
@@ -9823,6 +10223,7 @@ export function OrderDetailContent({
         </div>
       </section>
       {renderOrderTabs()}
+      {renderJumpBar()}
       </div>
       {headerDetailsMenuPosition ? (
         <div
@@ -10079,9 +10480,14 @@ export function OrderDetailContent({
 
 
       <ShopifySourceStrip order={order} workspaceCurrency={moneySettings?.selectedCurrency} />
-      <ChannelSourceStrip order={order} showMoney={canSeeFinance} />
+      {etsyBlockOwnsStrip ? null : <ChannelSourceStrip order={order} showMoney={canSeeFinance} />}
       {String(order.customFields?.["Source"] || "") === "Etsy" ? (
-        <EtsySourcePanel source={etsySource} photos={etsyPhotos} language={detailLanguage} showMoney={canSeeFinance} />
+        // ETSY-UI-1: in the page flow above the cards (never pinned, no inner scroll); not a card.
+        <div ref={etsyBlockRef} className="order-etsy-block" id="order-etsy-block">
+          <EtsyBlockChannelContext.Provider value={{ reviewRequired: Boolean(order.commerce?.reviewRequired), connectionName: order.commerce?.connectionDisplayName || "" }}>
+          <EtsySourcePanel source={etsySource} photos={etsyPhotos} language={detailLanguage} showMoney={canSeeFinance} />
+          </EtsyBlockChannelContext.Provider>
+        </div>
       ) : null}
       <EbayOrderBlock stamp={order.commerce} canSeeFinance={canSeeFinance} language={detailLanguage} />
       <RestrictedBuyerAddress order={order} canReveal={normalizeWorkspaceRole(workspace.role) === "owner"} />
@@ -10169,17 +10575,8 @@ export function OrderDetailContent({
 
           <div className="order-detail-mobile-stack">
             {(() => {
-              // ETSY-E2E night: on an Etsy order the cards it does not use yet (preview, repair intake, estimate,
-              // portal) move under one fold at the end. Nothing is removed and the saved layout is not changed.
-              const fold = etsyCardFold(visibleMobileCards, {
-                isEtsy: isEtsyOrder,
-                used: {
-                  preview: Boolean(order.designLink) || etsyPhotos.loading || Boolean(etsyFirstPhoto),
-                  repairIntake: order.orderType === "repair" || Object.values(repairIntake?.fields ?? {}).some(v => String(v ?? "").trim()) || intakePhotos.length > 0,
-                  estimate: Boolean(currentEstimate),
-                  customerPortal: Boolean(portal.active)
-                }
-              });
+              // ETSY-E2E night: the Etsy fold (mobileCardFold, computed above with the jump bar).
+              const fold = mobileCardFold;
               return (
                 <>
                   {fold.main.map(cardId => renderMobileCardFrame(cardId))}
@@ -10189,6 +10586,12 @@ export function OrderDetailContent({
                       {fold.folded.map(cardId => renderMobileCardFrame(cardId))}
                     </details>
                   ) : null}
+                  {/* ETSY-UI-1 (phone design): the same Customize cards entry closes the card stack, so the sticky header
+                      keeps only the jump links. */}
+                  <button type="button" className="order-jump-customize is-stack-end" data-jump-customize-stack="" onClick={openCustomizeCards}>
+                    {t("Customize cards")}
+                    {hiddenCards > 0 ? <span className="order-jump-customize__count">{` · ${t("{count} hidden").replace("{count}", String(hiddenCards))}`}</span> : null}
+                  </button>
                 </>
               );
             })()}
@@ -11730,6 +12133,7 @@ function FinanceInlineRow({
   disabled,
   saving,
   onSave,
+  onEditStart,
   labelRaw,
   onLabelSave,
   onRemove
@@ -11742,7 +12146,10 @@ function FinanceInlineRow({
   options?: string[];
   disabled: boolean;
   saving: boolean;
-  onSave: (value: string | number) => Promise<void> | void;
+  /** meta.edited: false when the editor was opened and left without typing (number mode). */
+  onSave: (value: string | number, meta?: { edited: boolean }) => Promise<void> | void;
+  /** Called when the editor opens (K5: the Shipping Cost row remembers the figure the seller saw). */
+  onEditStart?: () => void;
   labelRaw?: string;
   onLabelSave?: (value: string) => Promise<void> | void;
   onRemove?: () => void;
@@ -11752,6 +12159,7 @@ function FinanceInlineRow({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value ?? ""));
   const cancellingRef = useRef(false);
+  const editedRef = useRef(false);
 
   useEffect(() => {
     if (!editing) setDraft(String(value ?? ""));
@@ -11776,7 +12184,7 @@ function FinanceInlineRow({
         return;
       }
       setEditing(false);
-      await onSave(parsed);
+      await onSave(parsed, { edited: editedRef.current });
       return;
     }
     setEditing(false);
@@ -11801,6 +12209,8 @@ function FinanceInlineRow({
     if (disabled || saving) return;
     const shouldStartBlank = mode === "number" && parseFinanceNumber(value) === 0;
     setDraft(shouldStartBlank ? "" : String(value ?? ""));
+    editedRef.current = false;
+    onEditStart?.();
     setEditing(true);
   }
 
@@ -11840,7 +12250,7 @@ function FinanceInlineRow({
           disabled={saving}
           onFocus={event => event.currentTarget.select()}
           onBlur={saveOnBlur}
-          onChange={event => setDraft(event.target.value)}
+          onChange={event => { editedRef.current = true; setDraft(event.target.value); }}
           onKeyDown={event => {
             if (event.key === "Escape") cancelEdit();
             if (event.key === "Enter" || event.code === "NumpadEnter") {

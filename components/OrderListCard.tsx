@@ -10,6 +10,8 @@ import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
 import { type StudioMoneySettings } from "@/lib/studioflow/money";
 import { formatOrderMoney, orderMoneySymbol } from "@/lib/studioflow/orderCurrency";
 import { OrderSourceChip } from "@/components/OrderSourceChip";
+import { isEtsyOrder } from "@/lib/studioflow/etsyOrder";
+import { EtsyListThumbnail } from "@/components/EtsyListThumbnail";
 
 export type OrderListCardItem = {
   id: string;
@@ -270,6 +272,7 @@ function stepValue(order: OrderListCardItem, settings: BlockHeadingSettings | nu
 
 export function OrderListCard({
   order,
+  etsyPhoto = false,
   selected,
   canSeeFinance,
   onSelect,
@@ -285,6 +288,8 @@ export function OrderListCard({
   selectionActive = false
 }: {
   order: OrderListCardItem;
+  /** ETSY-UI-1 Phase B: an Etsy order without its own preview shows Etsy's photo, asked only while the row is on screen. */
+  etsyPhoto?: boolean;
   selected: boolean;
   canSeeFinance: boolean;
   canSeeAdvancedFinance: boolean;
@@ -377,7 +382,9 @@ export function OrderListCard({
   const content = (
     <div className="order-list-card-content">
       <div className="order-list-thumbnail" aria-hidden="true">
-        {order.previewImageUrl ? <img src={order.previewImageUrl} alt="" /> : <span className="image-placeholder-icon" aria-hidden="true"><CardIconGlyph icon="photo" /></span>}
+        {order.previewImageUrl ? <img src={order.previewImageUrl} alt="" /> : etsyPhoto && isEtsyOrder({ id: order.id, customFields: order.customFields }) ? (
+          <EtsyListThumbnail orderId={order.id} fallback={<span className="image-placeholder-icon" aria-hidden="true"><CardIconGlyph icon="photo" /></span>} />
+        ) : <span className="image-placeholder-icon" aria-hidden="true"><CardIconGlyph icon="photo" /></span>}
       </div>
 
       <div className="order-list-card-body">

@@ -65,6 +65,8 @@ import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
 import { useResizableSidebar } from "@/lib/studioflow/useResizableSidebar";
 import { OrderListRail } from "@/components/OrderListRail";
+import { HeldStuckOrders } from "@/components/HeldStuckOrders";
+import { importableHeldCount } from "@/lib/studioflow/heldQueue";
 import { OrderListPager, OrderListViewControl } from "@/components/OrderListViewControl";
 import {
   DEFAULT_ORDER_LIST_VIEW,
@@ -1055,6 +1057,37 @@ export default function OrdersPage() {
   // that person to "create your first order" hides the real problem.
   const workspaceHasNoOrders =
     !loadingOrders && !error && orders.length === 0 && orderFilter !== "trash";
+  // Import (and, with retryIds, the owner's "Try again" on stuck rows — the
+  // server puts those back in their old place before this same Import runs).
+  function importHeld(retryIds: string[] = []) {
+    if (!workspace) return;
+    const currentWorkspace = workspace;
+    setReleasingHeld(true);
+    void (async () => {
+      try {
+        const result = await releaseHeldIntegrationOrders(currentWorkspace, retryIds);
+        // eBay orders are handed to their own worker rather than
+        // imported inside the call, so they are on their way in
+        // rather than in — saying "0 imported" would be wrong.
+        const importedNow = result?.imported ?? 0;
+        const onTheWay = result?.queued ?? 0;
+        dispatchStudioToast({
+          message: onTheWay > 0
+            ? studioImportPhrase(importedNow + onTheWay, "ordersBeingImported", language)
+            : studioImportPhrase(importedNow, "ordersImported", language),
+        });
+        setHeldOrders(await listHeldIntegrationOrders(currentWorkspace).catch(() => null));
+        setOrders(await loadRecentOrders(currentWorkspace.id, currentWorkspace, user?.uid ?? ""));
+      } catch (failure) {
+        dispatchStudioToast({
+          message: failure instanceof Error ? failure.message : t("Could not import the waiting orders."),
+        });
+      } finally {
+        setReleasingHeld(false);
+      }
+    })();
+  }
+
   const canCreateFirstOrder = Boolean(
     workspace &&
     workspaceAccessAllows(workspace.memberAccess, "orders") &&
@@ -1097,53 +1130,40 @@ export default function OrdersPage() {
 
   // ETSY-E2E (24 Oct 2026): the parked-orders banner was only in the desktop list, so on a phone a demo
   // workspace that had just imported 8 of 40 Etsy orders saw 8 and nothing about the other 32.
+  const heldImportable = heldOrders ? importableHeldCount(heldOrders) : 0;
   const heldBanner = heldOrders && (heldOrders.heldCount ?? 0) > 0 && canCreateFirstOrder ? (
             <div className="orders-held-banner" role="status">
               <strong>
                 {studioImportPhrase(heldOrders.heldCount ?? 0, "heldStoreOrdersWaiting", language)}
               </strong>
-              <span>
-                {(heldOrders.roomAvailable ?? 0) > 0
-                  ? t("There is room on your plan now. Import the waiting orders when you are ready.")
-                  : t("Your plan is full, so new store orders are being kept safe rather than imported. Mark finished work delivered to make room, or choose a plan.")}
-              </span>
-              <button
-                type="button"
-                className="btn btn-sm"
-                disabled={releasingHeld || (heldOrders.roomAvailable ?? 0) === 0}
-                onClick={() => {
-                  if (!workspace) return;
-                  const currentWorkspace = workspace;
-                  setReleasingHeld(true);
-                  void (async () => {
-                    try {
-                      const result = await releaseHeldIntegrationOrders(currentWorkspace);
-                      // eBay orders are handed to their own worker rather than
-                      // imported inside the call, so they are on their way in
-                      // rather than in — saying "0 imported" would be wrong.
-                      const importedNow = result?.imported ?? 0;
-                      const onTheWay = result?.queued ?? 0;
-                      dispatchStudioToast({
-                        message: onTheWay > 0
-                          ? studioImportPhrase(importedNow + onTheWay, "ordersBeingImported", language)
-                          : studioImportPhrase(importedNow, "ordersImported", language),
-                      });
-                      setHeldOrders(await listHeldIntegrationOrders(currentWorkspace).catch(() => null));
-                      setOrders(await loadRecentOrders(currentWorkspace.id, currentWorkspace, user?.uid ?? ""));
-                    } catch (failure) {
-                      dispatchStudioToast({
-                        message: failure instanceof Error ? failure.message : t("Could not import the waiting orders."),
-                      });
-                    } finally {
-                      setReleasingHeld(false);
-                    }
-                  })();
-                }}
-              >
-                {(heldOrders.roomAvailable ?? 0) === 0
-                  ? t("No room yet")
-                  : `${t("Import")} ${Math.min(heldOrders.roomAvailable ?? 0, heldOrders.heldCount ?? 0)}`}
-              </button>
+              {(heldOrders.roomAvailable ?? 0) > 0 && heldImportable === 0 ? null : (
+                <span>
+                  {(heldOrders.roomAvailable ?? 0) > 0
+                    ? t("There is room on your plan now. Import the waiting orders when you are ready.")
+                    : t("Your plan is full, so new store orders are being kept safe rather than imported. Mark finished work delivered to make room, or choose a plan.")}
+                </span>
+              )}
+              {/* CAP-K12: Import counts only the rows it can bring in (it passes stuck rows over).
+                  With no stuck rows (today) this is exactly the old button. */}
+              {heldImportable > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={releasingHeld || (heldOrders.roomAvailable ?? 0) === 0}
+                  onClick={() => importHeld()}
+                >
+                  {(heldOrders.roomAvailable ?? 0) === 0
+                    ? t("No room yet")
+                    : `${t("Import")} ${Math.min(heldOrders.roomAvailable ?? 0, heldImportable)}`}
+                </button>
+              ) : null}
+              <HeldStuckOrders
+                list={heldOrders}
+                role={workspace?.role}
+                language={language}
+                busy={releasingHeld}
+                onRetry={ids => importHeld(ids)}
+              />
             </div>
   ) : null;
 
@@ -1279,6 +1299,7 @@ export default function OrdersPage() {
               >
                 <OrderListCard
                   order={order}
+                  etsyPhoto
                   selected={order.id === selectedOrderId}
                   canSeeFinance={canSeeFinance}
                   canSeeAdvancedFinance={canSeeAdvancedFinance}
@@ -1641,6 +1662,7 @@ export default function OrdersPage() {
               onOptimisticOrderPatch={applyOptimisticOrderPatch}
               onBlockHeadingSettingsChange={setBlockHeadingSettings}
               moneySettings={moneySettings}
+              orderListToggle={{ collapsed: sidebar.collapsed, onToggle: () => sidebar.setCollapsed(value => !value) }}
             />
           ) : null}
         </main>
@@ -1697,6 +1719,7 @@ export default function OrdersPage() {
               <OrderListCard
                 key={order.id}
                 order={order}
+                etsyPhoto
                 selected={order.id === selectedOrderId}
                 canSeeFinance={canSeeFinance}
                 canSeeAdvancedFinance={canSeeAdvancedFinance}

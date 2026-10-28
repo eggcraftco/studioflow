@@ -17,6 +17,7 @@ import {
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, db, functions } from "@/lib/firebase/client";
+import { parseDeliveryCostOwner, type DeliveryCostOwnerRecord } from "@/lib/studioflow/channelShippingCost";
 import { entitlementsForPlan, normalizeBillingPlan, type PlanEntitlements, type StudioBillingPlan } from "@/lib/studioflow/plans";
 import { activeAdditionalTeamSeats, teamSeatAllowance } from "@/lib/studioflow/teamSeats";
 import { FINANCE_ENGINE_VERSION, REMAINING_PREFIX, customLineTotal, type FinanceBlock } from "@/lib/studioflow/financeEngine";
@@ -250,6 +251,9 @@ export type DashboardFinanceOrder = {
   taxAmountKnown?: boolean;
   taxResponsibility?: string;
   taxIncludedInPrice?: boolean | null;
+  /** ETSY-SHIP-2: Etsy's shipping figure and whose cost the order holds (etsySource.shipping / .deliveryCostSource).
+   * Absent on every non-Etsy order. Read for a label only — no figure uses it. */
+  etsyShipping?: { shipping?: number; deliveryCostSource?: string } | null;
 };
 
 export type WorkspaceSettingsOverview = {
@@ -725,6 +729,11 @@ export type OrderDetail = {
   trackingEmail: TrackingEmailRecord | null;
   /** UX-010/012 — the common engine's stamp on an order it applied (Woo, Square, and Shopify/Etsy once primary): provider-agnostic channel details. */
   commerce: OrderChannelStamp | null;
+  /** K5 (26 Oct 2026): false when the document carries no deliveryCost at all (deliveryCost above is then 0). */
+  deliveryCostPresent?: boolean;
+  /** K5: whose shipping cost a Woo / Shopify / inbound order holds (server record, pilot workspaces only). Read for
+   *  labels and the review box — no figure uses it. lib/studioflow/channelShippingCost.ts */
+  deliveryCostOwner?: DeliveryCostOwnerRecord | null;
   customFields: Record<string, string>;
   customToggles: Record<string, boolean>;
   extraStatuses: Record<string, string>;
@@ -1613,7 +1622,13 @@ export async function loadDashboardFinanceOrders(companyId: string, workspace?: 
       platformFeeKnown: data.platformFeeKnown === true,
       taxAmountKnown: data.taxAmountKnown === true,
       taxResponsibility: typeof data.taxResponsibility === "string" ? data.taxResponsibility : undefined,
-      taxIncludedInPrice: typeof data.taxIncludedInPrice === "boolean" ? data.taxIncludedInPrice : undefined
+      taxIncludedInPrice: typeof data.taxIncludedInPrice === "boolean" ? data.taxIncludedInPrice : undefined,
+      etsyShipping: data.etsySource && typeof data.etsySource === "object"
+        ? {
+          shipping: typeof (data.etsySource as Record<string, unknown>).shipping === "number" ? (data.etsySource as Record<string, number>).shipping : undefined,
+          deliveryCostSource: typeof (data.etsySource as Record<string, unknown>).deliveryCostSource === "string" ? String((data.etsySource as Record<string, unknown>).deliveryCostSource) : undefined
+        }
+        : null
     };
   });
 }
@@ -2729,6 +2744,8 @@ function mapOrderDetailSnapshot(
     trackingEmail: trackingEmailRecordFrom(data.trackingEmail),
     customFields: stringMapValue(data.customFields),
     commerce: channelStampValue(data.commerce),
+    deliveryCostPresent: typeof data.deliveryCost === "number" && Number.isFinite(data.deliveryCost),
+    deliveryCostOwner: parseDeliveryCostOwner(data.deliveryCostOwner),
     customToggles: booleanMapValue(data.customToggles),
     extraStatuses: stringMapValue(data.extraStatuses),
     productionStageOverride: stringValue(data.productionStageOverride, ""),
