@@ -232,6 +232,9 @@ expect("production board: the chip sits beside the priority chip in the existing
 expect("one resolver: no second source rule in the chip", !/customFields\?\.\["Source"\]|commerceProvider ===|startsWith\("/.test(read("components/OrderSourceChip.tsx")), true);
 const detail = read("app/orders/OrderDetailContent.tsx");
 expect("detail strip: an inbound stamp shows the chip's word", detail.includes('const badge = (stamp?.provider || "").trim().toLowerCase() === "inbound" ? orderSourceChipLabel("inbound", t) : source;') && detail.includes('<span className="shopify-source-badge">{badge}</span>'), true);
+expect("detail strip: one Shopify strip — the channel strip stands aside on the Shopify strip's own test, stamp or not",
+  detail.includes('if ((cf["Source"] || "").trim() === "Shopify") return null;') && !detail.includes('if (source === "Shopify" && !stamp) return null;')
+    && detail.includes('if ((cf["Source"] || "").trim() !== "Shopify") return null;'), true);
 expect("detail strip: the field lookups still use the stored source", detail.includes("const field = (suffix: string) => (cf[`${source} ${suffix}`] || \"\").trim();"), true);
 
 // ---- 5. the palette

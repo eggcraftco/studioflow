@@ -1467,7 +1467,9 @@ function ChannelSourceStrip({
   // photo. A WooCommerce shop lives on its own domain, so its host is checked
   // against the workspace's connections before the link is offered.
   const connectedHosts = useConnectedStoreHosts(order.companyId || "", (stamp?.provider || source).toLowerCase() === "woocommerce");
-  if (source === "Shopify" && !stamp) return null;   // the Shopify strip above owns that case
+  // The Shopify strip above draws whenever the Source field says Shopify — with or without the
+  // server's stamp (S-C starts writing one) — so this strip stands aside on the same test.
+  if ((cf["Source"] || "").trim() === "Shopify") return null;
   if (stamp?.provider === "ebay" || (!stamp && source === "eBay")) return null;   // EbayOrderBlock below owns eBay
   if (!stamp && !CHANNEL_SOURCES.includes(source)) return null;
   const field = (suffix: string) => (cf[`${source} ${suffix}`] || "").trim();
