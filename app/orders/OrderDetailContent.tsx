@@ -39,6 +39,7 @@ import {
 import { getWorkspaceSmsSettings, type WorkspaceSmsSettings } from "@/lib/studioflow/sms";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { orderSourceLink, orderSourceLinkReasonText } from "@/lib/studioflow/orderSourceLink";
+import { orderSourceChipLabel } from "@/lib/studioflow/orderFilters";
 import { useConnectedStoreHosts } from "@/lib/studioflow/useConnectedStoreHosts";
 import { maskFileUrl, openSharedFile, downloadSharedFile } from "@/lib/studioflow/fileMask";
 import {
@@ -1466,7 +1467,9 @@ function ChannelSourceStrip({
   // photo. A WooCommerce shop lives on its own domain, so its host is checked
   // against the workspace's connections before the link is offered.
   const connectedHosts = useConnectedStoreHosts(order.companyId || "", (stamp?.provider || source).toLowerCase() === "woocommerce");
-  if (source === "Shopify" && !stamp) return null;   // the Shopify strip above owns that case
+  // The Shopify strip above draws whenever the Source field says Shopify — with or without the
+  // server's stamp (S-C starts writing one) — so this strip stands aside on the same test.
+  if ((cf["Source"] || "").trim() === "Shopify") return null;
   if (stamp?.provider === "ebay" || (!stamp && source === "eBay")) return null;   // EbayOrderBlock below owns eBay
   if (!stamp && !CHANNEL_SOURCES.includes(source)) return null;
   const field = (suffix: string) => (cf[`${source} ${suffix}`] || "").trim();
@@ -1480,9 +1483,12 @@ function ChannelSourceStrip({
   const sourceLink = orderSourceLink({ commerce: stamp, customFields: cf, connectedHosts });
   const linkReason = sourceLink.kind === "none" ? orderSourceLinkReasonText(sourceLink.reason) : "";
   const connection = stamp?.connectionDisplayName || "";
+  // UX-006 (27 Oct 2026): the badge says what the order row's platform chip says. The public order form's stamp
+  // carries the raw provider id ("inbound") and no display name, so the badge used to read "inbound".
+  const badge = (stamp?.provider || "").trim().toLowerCase() === "inbound" ? orderSourceChipLabel("inbound", t) : source;
   return (
     <div className="shopify-source-strip channel-source-strip">
-      <span className="shopify-source-badge">{source}</span>
+      <span className="shopify-source-badge">{badge}</span>
       {connection ? <span className="shopify-source-item">{connection}</span> : null}
       {number ? <span className="shopify-source-item">· #{number}</span> : null}
       {sourceName && sourceName !== source ? <span className="shopify-source-item">· {sourceName}</span> : null}
@@ -1493,7 +1499,7 @@ function ChannelSourceStrip({
       {stamp?.reviewRequired ? <span className="shopify-source-item">· {t("Needs attention")}</span> : null}
       {sourceLink.kind === "link" ? (
         <a className="shopify-source-link" href={sourceLink.href} target="_blank" rel="noopener noreferrer" data-order-source-link="1">
-          {t("Open in")} {source} ↗
+          {t("Open in")} {badge} ↗
         </a>
       ) : linkReason ? (
         <span className="shopify-source-link is-unavailable" aria-disabled="true" title={t(linkReason)} data-order-source-link="unavailable">

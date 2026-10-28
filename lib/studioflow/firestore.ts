@@ -215,6 +215,11 @@ export type DashboardFinanceOrder = {
   deliveryCost: number;
   taxAmount: number;
   customFields: Record<string, string>;
+  /** UX-010: the stamps the shared resolver (orderSourceOf) reads, so the Dashboard's channel
+   * pills file an order exactly as the order list's chip does. */
+  commerceProvider?: string;
+  orderSource?: string;
+  hasEtsySource?: boolean;
   customerName: string;
   designName: string;
   watchRef: string;
@@ -395,6 +400,8 @@ export type OrderListItem = {
   commerceProvider: string;
   /** `orderSource` as the public order form wrote it ("inbound"), "" otherwise. */
   orderSource: string;
+  /** True when the order carries Etsy's own copy (`etsySource`); the copy itself stays off the row (UX-010 platform chip). */
+  hasEtsySource: boolean;
 };
 
 export type ScheduleOrderItem = {
@@ -429,6 +436,10 @@ export type ScheduleOrderItem = {
   productionBlocker: { reason: string; note: string } | null;
   materialsDefaultToggles: Record<string, boolean>;
   materialsToggles: Record<string, boolean>;
+  /** UX-010 platform chip (orderSourceOf): read from the same document, no extra read. Absent on the Team Schedule callable's rows. */
+  commerceProvider?: string;
+  orderSource?: string;
+  hasEtsySource?: boolean;
 };
 
 export type OrderOptionItem = {
@@ -1583,6 +1594,7 @@ export async function loadDashboardFinanceOrders(companyId: string, workspace?: 
       deliveryCost: numberValue(data.deliveryCost, 0),
       taxAmount: numberValue(data.taxAmount, 0),
       customFields: stringMapValue(data.customFields),
+      ...orderSourceFieldsFrom(data),
       customerName: stringValue(data.customerName, ""),
       designName: stringValue(data.designName, ""),
       watchRef: stringValue(data.watchRef, ""),
@@ -2005,11 +2017,23 @@ function orderListItemFromDocument(orderDocument: QueryDocumentSnapshot<Document
       ),
       customFields: recordStringValue(data.customFields),
       extraStatuses: recordStringValue(data.extraStatuses),
-      commerceProvider: data.commerce && typeof data.commerce === "object" && !Array.isArray(data.commerce)
-        ? stringValue((data.commerce as Record<string, unknown>).provider, "")
-        : "",
-      orderSource: stringValue(data.orderSource, "")
+      ...orderSourceFieldsFrom(data)
     };
+}
+
+/**
+ * What orderSourceOf needs from an order document besides its id and custom fields
+ * (UX-010 platform chip): the engine's provider, the public form's `orderSource`, and
+ * whether Etsy's own copy is there. Read from the snapshot already in hand.
+ */
+function orderSourceFieldsFrom(data: DocumentData): { commerceProvider: string; orderSource: string; hasEtsySource: boolean } {
+  return {
+    commerceProvider: data.commerce && typeof data.commerce === "object" && !Array.isArray(data.commerce)
+      ? stringValue((data.commerce as Record<string, unknown>).provider, "")
+      : "",
+    orderSource: stringValue(data.orderSource, ""),
+    hasEtsySource: Boolean(data.etsySource && typeof data.etsySource === "object" && !Array.isArray(data.etsySource))
+  };
 }
 
 export async function loadScheduleOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<ScheduleOrderItem[]> {
@@ -2061,7 +2085,8 @@ export async function loadScheduleOrders(companyId: string, workspace?: Workspac
       productionStageOverride: stringValue(data.productionStageOverride, ""),
       productionBlocker: productionBlockerValue(data.productionBlocker),
       materialsDefaultToggles: booleanMapValue(data.materialsDefaultToggles),
-      materialsToggles: booleanMapValue(data.materialsToggles)
+      materialsToggles: booleanMapValue(data.materialsToggles),
+      ...orderSourceFieldsFrom(data)
     };
   });
 
