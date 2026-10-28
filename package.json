@@ -47,6 +47,7 @@
     "test:oauth-loopback": "node scripts/check-oauth-loopback-proxy.mts",
     "test:i18n-gaps": "npx tsx scripts/i18n-gap-report.ts --fail-on-placeholders",
     "test:review-fixes": "npx tsx scripts/check-bank-review-fixes.ts && npx tsx scripts/check-review-links.ts",
+    "test:receipt-vat": "node scripts/check-receipt-vat-web.mjs",
     "test:notes-autogrow": "node scripts/check-notes-editor-autogrow.mjs",
     "test:files-notes-account": "npx tsx scripts/check-files-notes-account.ts",
     "test:notes": "node scripts/check-notes-editor.mjs && node scripts/check-notes-editor-autogrow.mjs && npx tsx scripts/check-notes-roundtrip.ts && npx tsx scripts/check-notes-sharing.ts",

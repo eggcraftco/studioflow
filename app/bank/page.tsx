@@ -21,6 +21,7 @@ import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { db, functions, storage } from "@/lib/firebase/client";
 import { loadWorkspaceContext, loadWorkspaceOrderOptions, workspaceAccessAllows, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
+import { receiptVatFromDoc, receiptVatSplit, type ReceiptVat } from "@/lib/studioflow/bankReceiptVat";
 import { bankAttentionSummary, bankRowMissingReceipt, detectPossibleDuplicates, detectRecurringSpends, monthlyFixedTotal, recurringMerchantKey, rankOrdersForTransaction, suggestCategory, suggestOrderLink, vendorKeyMap, type BankAttentionKind, type BankVendor, type RecurringSpend } from "@/lib/studioflow/bankInsights";
 import { listLibraryFiles } from "@/lib/studioflow/filesLibrary";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
@@ -99,6 +100,8 @@ type BankTransaction = {
   linkedPaymentId: string;
   receiptFileRecordId: string;
   splits: Array<{ amount: number; category: string; vatCode?: string; note?: string; orderId?: string; orderLabel?: string }>;
+  /** VAT-DOC: what the attached receipt says about VAT (server-read; only when it belongs to the CURRENT receipt). */
+  receiptVat: ReceiptVat | null;
   pandleBankTransactionId: string;
   pandleLastError: string;
   firstImportedAt: Date | null;
@@ -505,6 +508,7 @@ function BankPageContent() {
             linkedPaymentId: String(data.linkedPaymentId || ""),
             receiptFileRecordId: String(data.receiptFileRecordId || ""),
             splits: Array.isArray(data.splits) ? (data.splits as BankTransaction["splits"]) : [],
+            receiptVat: receiptVatFromDoc(data),
             pandleBankTransactionId: String((data.pandle as { bankTransactionId?: string } | undefined)?.bankTransactionId || ""),
             pandleLastError: String((data.pandle as { lastError?: string } | undefined)?.lastError || ""),
             firstImportedAt: toDate(data.firstImportedAt),
@@ -1036,8 +1040,11 @@ function BankPageContent() {
   // ---- Split transaction ----------------------------------------------------
   function startSplitEditor(tx: BankTransaction) {
     const abs = Math.abs(tx.amount);
+    // VAT-DOC: a mixed receipt opens the editor already split by its VAT rates (same category on each line).
+    const byRate = tx.splits.length ? null : receiptVatSplit(tx);
     setDrawerSplits(tx.splits.length
       ? tx.splits.map(row => ({ amount: String(row.amount), category: row.category, vatCode: row.vatCode || "", note: row.note || "", orderId: row.orderId || "" }))
+      : byRate ? byRate.map(line => ({ amount: line.amount.toFixed(2), category: effectiveCategory(tx) || "", vatCode: line.vatCode, note: "", orderId: "" }))
       : [
         { amount: abs.toFixed(2), category: effectiveCategory(tx) || "", vatCode: tx.vatCode || "", note: "", orderId: "" },
         { amount: "0.00", category: "", vatCode: "", note: "", orderId: "" }
@@ -3684,7 +3691,17 @@ function BankPageContent() {
                       <option value="">{t("Use category default")}{drawerCategory && categoryTax[drawerCategory] ? ` (${t(vatLabel(categoryTax[drawerCategory]))})` : ""}</option>
                       {VAT_CODES.map(item => <option key={item.code} value={item.code}>{t(item.label)}</option>)}
                     </select>
-                    {!drawerTx.vatCode && drawerTx.vatCodeAuto ? <div style={{ fontSize: 10.5, opacity: 0.6, marginTop: 3 }}>⚡ {t("Auto-applied")}: {t(vatLabel(drawerTx.vatCodeAuto))}</div> : null}
+                    {drawerTx.receiptVat && drawerTx.receiptVat.code ? (
+                      <div style={{ fontSize: 10.5, opacity: 0.75, marginTop: 3 }}>
+                        🧾 {t("Read from the receipt")}: {t(vatLabel(drawerTx.receiptVat.code))}
+                        {drawerTx.receiptVat.code === "MX"
+                          ? drawerTx.receiptVat.lines.map(line => ` · ${line.rate}% ${line.gross != null ? money(line.gross, drawerTx.currency) : ""}`).join("")
+                          : drawerTx.receiptVat.vatAmount != null && drawerTx.receiptVat.vatAmount > 0 ? ` · ${t("VAT")} ${money(drawerTx.receiptVat.vatAmount, drawerTx.currency)}` : ""}
+                      </div>
+                    ) : drawerTx.receiptVat && drawerTx.receiptVat.foreign && !drawerTx.vatCode ? (
+                      <div style={{ fontSize: 10.5, opacity: 0.75, marginTop: 3 }}>🧾 {t("Foreign supplier's document: choose the VAT yourself (goods: Import VAT, services: Reverse charge).")}</div>
+                    ) : null}
+                    {!drawerTx.vatCode && drawerTx.vatCodeAuto && drawerTx.vatCodeAuto !== drawerTx.receiptVat?.code ? <div style={{ fontSize: 10.5, opacity: 0.6, marginTop: 3 }}>⚡ {t("Auto-applied")}: {t(vatLabel(drawerTx.vatCodeAuto))}</div> : null}
                   </label>
                 </div>
                 {isOwner || drawerTx.outgoingKind ? (
@@ -3888,7 +3905,7 @@ function BankPageContent() {
                   }
                   return isOwner ? (
                     <button type="button" style={{ ...attentionLink, fontSize: 12, textAlign: "left" }} onClick={() => startSplitEditor(drawerTx)}>
-                      ⑃ {t("Split this transaction into several categories or orders")}
+                      ⑃ {receiptVatSplit(drawerTx) ? t("Split by VAT rate (from the receipt)") : t("Split this transaction into several categories or orders")}
                     </button>
                   ) : null;
                 })()}
