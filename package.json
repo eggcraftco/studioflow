@@ -66,6 +66,7 @@
     "test:access-watch": "node scripts/check-access-watch.mjs",
     "test:workspace-lists-warm": "node scripts/check-workspace-lists-warm.mjs",
     "test:work-days": "node scripts/check-work-days.mjs",
+    "test:worktime-edit": "node scripts/check-worktime-edit.mjs",
     "test:review-n01-n05": "npx tsx scripts/check-review-n01-n05.mts",
     "test:review-n09-n25": "npx tsx scripts/check-review-n09-n25.mts",
     "test:n23-receipt-currency": "npx tsx scripts/check-n23-receipt-currency.mts",

@@ -150,6 +150,7 @@ import { etsyCardFold, etsyNoteDisplay } from "@/lib/studioflow/etsyFirstImport"
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
+import { canCorrectWorkTimeForRole, canDeleteWorkSession, checkCorrection, dateTimeLocalValue, latestCorrection, originalValues, parseDateTimeLocal, type WorkSessionAuditDetail } from "@/lib/studioflow/workSessionCorrections";
 import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
 import { ETSY_COPY_LINK_NOTE, ETSY_NO_BUYER_UPDATES_NOTE, isEtsyOrder as orderComesFromEtsy } from "@/lib/studioflow/etsyOrder";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, orderDetailFinance, platformFeeLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
@@ -2503,7 +2504,12 @@ export function OrderDetailContent({
   const [savingWorkTimeAction, setSavingWorkTimeAction] = useState<string | null>(null);
   const [workTimeNow, setWorkTimeNow] = useState(() => new Date());
   const [optimisticWorkSessions, setOptimisticWorkSessions] = useState<WorkSessionDetail[] | null>(null);
-  const pendingWorkTimeActionRef = useRef<{ action: NonNullable<UpdateOrderInput["workTime"]>["action"]; sessionId: string } | null>(null);
+  const pendingWorkTimeActionRef = useRef<{ action: NonNullable<UpdateOrderInput["workTime"]>["action"]; sessionId: string; expectStart?: number; expectEnd?: number | null } | null>(null);
+  // Owner/admin correction of one timer row (worktime-edit, lib/studioflow/workSessionCorrections.ts).
+  const [correctingWorkSession, setCorrectingWorkSession] = useState<WorkSessionDetail | null>(null);
+  const [correctionStartInput, setCorrectionStartInput] = useState("");
+  const [correctionEndInput, setCorrectionEndInput] = useState("");
+  const [showWorkSessionAudit, setShowWorkSessionAudit] = useState(false);
   // Day entries (full / half day) beside the timer — lib/studioflow/workDays.ts.
   const [workDayDateInput, setWorkDayDateInput] = useState(() => localDateKey());
   const [workDayKindInput, setWorkDayKindInput] = useState<WorkDayKind>("full_day");
@@ -2568,6 +2574,9 @@ export function OrderDetailContent({
   const canEditToDoItems = canEditWorkflowFields;
   const canEditScheduleItems = Boolean(canEditWorkflowFields && workspaceAccessAllows(workspace.memberAccess, "schedule"));
   const canEditWorkTime = canEditWorkflowFields;
+  // Correcting a timer row (start/end, closing a forgotten timer) and deleting anyone's row: owner and admins only.
+  // The server refuses everyone else (updateWebOrder workTime "edit"/"delete").
+  const canCorrectWorkTime = Boolean(canEditWorkTime && canCorrectWorkTimeForRole(normalizeWorkspaceRole(workspace.role)));
   const canEditCardLayout = Boolean(canCustomizeCards && canEditWorkflowFields);
   const canMoveResizeCards = Boolean(canEditCardLayout && layoutReady && !cardsLocked);
   const canNotifyScheduleItems = workspace.billingPlan !== "demo";
@@ -2786,6 +2795,8 @@ export function OrderDetailContent({
     setOptimisticWorkDays(null);
     setEditingWorkDay(null);
     setShowWorkDayHistory(false);
+    setCorrectingWorkSession(null);
+    setShowWorkSessionAudit(false);
   }, [order.id]);
 
   const serverWorkDaysSignature = (order.workDays ?? []).map(entry => `${entry.id}:${entry.kind}:${entry.note}`).join("|");
@@ -2801,6 +2812,12 @@ export function OrderDetailContent({
     const serverSession = order.workSessions.find(session => session.id === pending.sessionId);
     const resolved = pending.action === "delete"
       ? !serverSession
+      : pending.action === "edit"
+        ? Boolean(serverSession
+          && Math.abs((serverSession.startedAt?.getTime() ?? 0) - (pending.expectStart ?? 0)) < 1000
+          && (pending.expectEnd === null || pending.expectEnd === undefined
+            ? !serverSession.endedAt
+            : Math.abs((serverSession.endedAt?.getTime() ?? 0) - pending.expectEnd) < 1000))
       : pending.action === "stop"
         ? Boolean(serverSession?.endedAt)
         : Boolean(serverSession);
@@ -5360,6 +5377,16 @@ export function OrderDetailContent({
         return previousWorkSessions.filter(session => session.id !== patch.sessionId);
       }
 
+      if (patch.action === "edit" && patch.sessionId) {
+        return sortWorkSessions(previousWorkSessions.map(session => {
+          if (session.id !== patch.sessionId) return session;
+          const startedAt = patch.startedAt ? new Date(patch.startedAt) : session.startedAt;
+          const endedAt = patch.endedAt === undefined ? session.endedAt : patch.endedAt ? new Date(patch.endedAt) : null;
+          const durationSeconds = startedAt && endedAt ? Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)) : 0;
+          return { ...session, startedAt, endedAt, durationSeconds };
+        }));
+      }
+
       return previousWorkSessions;
     })();
 
@@ -5374,7 +5401,15 @@ export function OrderDetailContent({
     if (pendingSessionId) {
       pendingWorkTimeActionRef.current = {
         action: patch.action,
-        sessionId: pendingSessionId
+        sessionId: pendingSessionId,
+        ...(patch.action === "edit"
+          ? {
+            expectStart: (patch.startedAt ? new Date(patch.startedAt) : previousWorkSessions.find(session => session.id === pendingSessionId)?.startedAt)?.getTime() ?? 0,
+            expectEnd: patch.endedAt === undefined
+              ? (previousWorkSessions.find(session => session.id === pendingSessionId)?.endedAt?.getTime() ?? null)
+              : patch.endedAt ? new Date(patch.endedAt).getTime() : null
+          }
+          : {})
       };
     }
     setOptimisticWorkSessions(nextWorkSessions);
@@ -5391,6 +5426,10 @@ export function OrderDetailContent({
         setWorkTimeStatus("Work timer continued.");
       } else if (patch.action === "delete") {
         setWorkTimeStatus("Work session deleted.");
+      } else if (patch.action === "edit") {
+        const wasRunning = !previousWorkSessions.find(session => session.id === patch.sessionId)?.endedAt;
+        setWorkTimeStatus(wasRunning && patch.endedAt ? "Work timer closed." : "Work time corrected.");
+        setCorrectingWorkSession(null);
       } else {
         setWorkTimeStatus("Work timer stopped.");
       }
@@ -5484,7 +5523,46 @@ export function OrderDetailContent({
   }
 
   function deleteWorkTimer(session: WorkSessionDetail) {
+    // Owner's rule (23 Oct 2026): ask before a timer row goes; the server keeps its original values in workSessionAudit.
+    if (typeof window !== "undefined" && !window.confirm(t("Delete this work session? It will be removed from the totals."))) return;
+    if (correctingWorkSession?.id === session.id) setCorrectingWorkSession(null);
     void saveWorkTimePatch({ action: "delete", sessionId: session.id }, "Delete");
+  }
+
+  function beginWorkSessionCorrection(session: WorkSessionDetail) {
+    setCorrectingWorkSession(session);
+    setCorrectionStartInput(dateTimeLocalValue(session.startedAt));
+    // A running (forgotten) timer: offer "now" as the end; the owner moves it back to when work really stopped.
+    setCorrectionEndInput(dateTimeLocalValue(session.endedAt ?? new Date()));
+    setWorkTimeStatus(null);
+    setWorkTimeError(null);
+  }
+
+  function saveWorkSessionCorrection() {
+    const session = correctingWorkSession;
+    if (!session || !canCorrectWorkTime) return;
+    const wasRunning = !session.endedAt;
+    const start = parseDateTimeLocal(correctionStartInput, session.startedAt);
+    const end = parseDateTimeLocal(correctionEndInput, session.endedAt);
+    if (correctionStartInput && !start) {
+      setWorkTimeError("Enter a valid start time.");
+      return;
+    }
+    if (correctionEndInput && !end) {
+      setWorkTimeError("Enter a valid end time.");
+      return;
+    }
+    const check = checkCorrection(start, end, wasRunning);
+    if (!check.ok) {
+      setWorkTimeError(check.error);
+      setWorkTimeStatus(null);
+      return;
+    }
+    if (check.long && end && typeof window !== "undefined" && !window.confirm(t("This session is longer than 12 hours. Save anyway?"))) return;
+    const patch: NonNullable<UpdateOrderInput["workTime"]> = { action: "edit", sessionId: session.id, startedAt: start!.toISOString() };
+    if (end) patch.endedAt = end.toISOString();
+    else if (wasRunning) patch.endedAt = null;
+    void saveWorkTimePatch(patch, "Correct");
   }
 
   function exportOrderPdf() {
@@ -8031,7 +8109,31 @@ export function OrderDetailContent({
         const groups = groupWorkSessionsByDate(sessions);
         const workDays = optimisticWorkDays ?? order.workDays ?? [];
         const workDayHistory: WorkDayHistoryDetail[] = order.workDayHistory ?? [];
+        const workSessionAudit: WorkSessionAuditDetail[] = order.workSessionAudit ?? [];
         const myUid = user?.uid ?? "";
+        const auditTime = (date: Date | null) => (date ? new Intl.DateTimeFormat(detailLocale, { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(date) : "—");
+        const auditRange = (values: { startedAt: Date | null; endedAt: Date | null } | null) => (values ? `${auditTime(values.startedAt)} → ${values.endedAt ? auditTime(values.endedAt) : t("Running")}` : "—");
+        const auditActionLabel: Record<WorkSessionAuditDetail["action"], string> = { edited: "Time corrected", closed: "Timer closed", deleted: "Session deleted" };
+        const correctionForm = (session: WorkSessionDetail) => (
+          <div className="app-work-correction" data-testid={`work-session-correction-${session.id}`}>
+            <strong>{t("Correct work time")} · {session.title}{session.createdByEmail ? ` · ${session.createdByEmail}` : ""}</strong>
+            <div className="app-work-correction-row">
+              <label>
+                <span>{t("Start time")}</span>
+                <input type="datetime-local" data-testid="work-correction-start" value={correctionStartInput} max={dateTimeLocalValue(new Date())} onChange={event => setCorrectionStartInput(event.target.value)} disabled={Boolean(savingWorkTimeAction)} />
+              </label>
+              <label>
+                <span>{t("End time")}</span>
+                <input type="datetime-local" data-testid="work-correction-end" value={correctionEndInput} max={dateTimeLocalValue(new Date())} onChange={event => setCorrectionEndInput(event.target.value)} disabled={Boolean(savingWorkTimeAction)} />
+              </label>
+            </div>
+            {!session.endedAt ? <small>{t("Leave End time empty to keep the timer running.")}</small> : null}
+            <div className="app-work-correction-row">
+              <button type="button" data-testid="work-correction-save" disabled={Boolean(savingWorkTimeAction)} onClick={saveWorkSessionCorrection}>{t("Save time")}</button>
+              <button type="button" className="secondary" disabled={Boolean(savingWorkTimeAction)} onClick={() => setCorrectingWorkSession(null)}>{t("Cancel")}</button>
+            </div>
+          </div>
+        );
         // Someone else's entry: the workspace OWNER only (15 Oct 2026). Admins manage their own, like everyone.
         const isWorkspaceOwner = normalizeWorkspaceRole(workspace.role) === "owner";
         // Two measures, never added together: the timer's hours and the day entries' days.
@@ -8067,8 +8169,14 @@ export function OrderDetailContent({
                     <small>{t("{time} started").replace("{time}", formatTime(runningSession.startedAt, detailLocale))}</small>
                   </div>
                   <b>{formatWorkDuration(workSessionDurationSeconds(runningSession, workTimeNow))}</b>
+                  {canCorrectWorkTime ? (
+                    <button type="button" className="secondary app-work-correct-button" data-testid="work-active-correct" disabled={Boolean(savingWorkTimeAction)} onClick={() => beginWorkSessionCorrection(runningSession)}>
+                      {t("Correct time")}
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
+              {correctingWorkSession && runningSession && correctingWorkSession.id === runningSession.id ? correctionForm(correctingWorkSession) : null}
               {canEditWorkTime ? (
                 <div className="app-work-controls">
                   <input
@@ -8252,16 +8360,38 @@ export function OrderDetailContent({
                           <strong>{group.dateLabel}</strong>
                           <span>{formatWorkDuration(groupSeconds)}</span>
                         </div>
-                        {group.items.map(session => (
-                          <article key={session.id} className="app-work-session-row">
+                        {group.items.map(session => {
+                          const correction = latestCorrection(workSessionAudit, session.id);
+                          const original = correction ? originalValues(workSessionAudit, session.id) : null;
+                          const mayDelete = canDeleteWorkSession(session, myUid, canCorrectWorkTime, workSessionAudit);
+                          return (
+                          <Fragment key={session.id}>
+                          <article className={`app-work-session-row${correction ? " is-corrected" : ""}`} data-testid={`work-session-row-${session.id}`}>
                             <div>
                               <strong>{session.title}</strong>
                               <p>{formatTime(session.startedAt, detailLocale)} → {session.endedAt ? formatTime(session.endedAt, detailLocale) : t("Running")}</p>
                               <small>{session.createdByEmail || session.source || "NivaDesk"}</small>
+                              {correction ? (
+                                <small className="app-work-session-corrected" data-testid={`work-session-corrected-${session.id}`} title={`${t("Original")}: ${auditRange(original)}`}>
+                                  {t("Corrected by")}: {correction.byEmail || correction.byUid} · {t("Original")}: {auditRange(original)}
+                                </small>
+                              ) : null}
                             </div>
                             <b>{formatWorkDuration(workSessionDurationSeconds(session, workTimeNow))}</b>
                             {canEditWorkTime ? (
                               <div className="app-work-session-actions">
+                                {canCorrectWorkTime ? (
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(savingWorkTimeAction)}
+                                    onClick={() => beginWorkSessionCorrection(session)}
+                                    title={t("Correct time")}
+                                    aria-label={t("Correct time")}
+                                    data-testid={`work-session-correct-${session.id}`}
+                                  >
+                                    <WorkTimeActionIcon name="edit" />
+                                  </button>
+                                ) : null}
                                 {session.endedAt ? (
                                   <button
                                     type="button"
@@ -8284,25 +8414,53 @@ export function OrderDetailContent({
                                     <WorkTimeActionIcon name="stop" />
                                   </button>
                                 )}
-                                <button
-                                  type="button"
-                                  className="danger subtle"
-                                  disabled={Boolean(savingWorkTimeAction)}
-                                  onClick={() => deleteWorkTimer(session)}
-                                  title={t("Delete")}
-                                  aria-label={t("Delete work session")}
-                                >
-                                  <WorkTimeActionIcon name="delete" />
-                                </button>
+                                {mayDelete ? (
+                                  <button
+                                    type="button"
+                                    className="danger subtle"
+                                    disabled={Boolean(savingWorkTimeAction)}
+                                    onClick={() => deleteWorkTimer(session)}
+                                    title={t("Delete")}
+                                    aria-label={t("Delete work session")}
+                                    data-testid={`work-session-delete-${session.id}`}
+                                  >
+                                    <WorkTimeActionIcon name="delete" />
+                                  </button>
+                                ) : null}
                               </div>
                             ) : null}
                           </article>
-                        ))}
+                          {correctingWorkSession?.id === session.id && session.endedAt ? correctionForm(correctingWorkSession) : null}
+                          </Fragment>
+                          );
+                        })}
                       </div>
                     );
                   })}
                 </div>
               )}
+              {workSessionAudit.length > 0 ? (
+                <div className="app-work-day-history app-work-session-audit" data-testid="work-session-audit">
+                  <button type="button" className="app-work-day-history-toggle" aria-expanded={showWorkSessionAudit} onClick={() => setShowWorkSessionAudit(open => !open)}>
+                    {t("Work time corrections")} ({workSessionAudit.length}) {showWorkSessionAudit ? "▾" : "▸"}
+                  </button>
+                  {showWorkSessionAudit ? (
+                    <ol>
+                      {[...workSessionAudit].reverse().map(row => (
+                        <li key={row.id} data-action={row.action}>
+                          <strong>{t(auditActionLabel[row.action])} · {row.title || t("Work session")}</strong>
+                          <span>
+                            {auditRange(row.before)}{row.before?.endedAt ? ` (${formatWorkDuration(row.before.durationSeconds)})` : ""}
+                            {row.after ? ` → ${auditRange(row.after)} (${formatWorkDuration(row.after.durationSeconds)})` : ""}
+                            {` · ${row.memberEmail || row.memberUid}`}
+                          </span>
+                          <small>{t("By")}: {row.byEmail || row.byUid}{row.at ? ` · ${new Intl.DateTimeFormat(detailLocale, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(row.at)}` : ""}</small>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </section>
         );
@@ -11805,7 +11963,7 @@ function ClientFileActionIcon({ name }: { name: ClientFileActionIconName }) {
   );
 }
 
-type WorkTimeActionIconName = "continue" | "stop" | "delete";
+type WorkTimeActionIconName = "continue" | "stop" | "delete" | "edit";
 
 function WorkTimeActionIcon({ name }: { name: WorkTimeActionIconName }) {
   if (name === "continue") {
@@ -11820,6 +11978,15 @@ function WorkTimeActionIcon({ name }: { name: WorkTimeActionIconName }) {
     return (
       <svg className="app-work-action-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M7 7h10v10H7z" />
+      </svg>
+    );
+  }
+
+  if (name === "edit") {
+    return (
+      <svg className="app-work-action-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M4 20h4L19 9l-4-4L4 16v4z" />
+        <path d="M13.5 6.5l4 4" />
       </svg>
     );
   }
