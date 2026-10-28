@@ -101,6 +101,9 @@ export type InventoryItem = {
   /** MC-3 cost: true = the person entered the price (0 is a real zero); false = not entered (a store import). Absent on
    *  cards saved before 25 Oct 2026 — read through inventoryCostKind (lib/studioflow/inventoryCost.ts), never directly. */
   costEntered?: boolean;
+  /** MC-4: WooCommerce orders that need a look about this card, by order id (server-written; read through
+   *  wooCardAttentionOf in lib/studioflow/wooOrderStockRules.ts). */
+  wooStockAttention?: Record<string, { reason: string; reasons?: string[]; orderNumber?: string; storeName?: string; atMs?: number }>;
 };
 
 export type InventorySummary = {

@@ -40,6 +40,8 @@ import { libraryFileUrl, listLibraryFiles, type LibraryFile } from "@/lib/studio
 import { EbayItemLinks } from "./EbayItemLinks";
 import { wooInventoryT } from "@/lib/studioflow/wooInventory";
 import { inventoryCostKind } from "@/lib/studioflow/inventoryCost";
+import { wooOrderStockT } from "@/lib/studioflow/wooOrderStock";
+import { fillWooStock, wooCardAttentionOf, wooCardAttentionSentence } from "@/lib/studioflow/wooOrderStockRules";
 
 type PanelTab = "details" | "history" | "purchases" | "photos" | "files";
 
@@ -419,6 +421,23 @@ export function ItemDetailPanel({
 
           {/* Package E4: the eBay listings linked to this card (drawn only for a card that has any). */}
           <EbayItemLinks workspace={workspace} item={item} items={allItems} canEdit={canEdit} language={language} onChanged={onChanged} />
+
+          {/* MC-4: a WooCommerce order that needs a look about THIS card (oversold, refunded after dispatch). The order's
+              own page says what happened and offers the act; this only points there. */}
+          {wooCardAttentionOf(item).length ? (
+            <section className="inventory-panel-card" data-testid="woo-stock-attention">
+              <ul className="inventory-panel-list">
+                {wooCardAttentionOf(item).map((row) => (
+                  <li key={row.orderId}>
+                    <a className="inventory-link" href={`/orders/${encodeURIComponent(row.orderId)}`}>
+                      {fillWooStock(wooOrderStockT(wooCardAttentionSentence(row.reason), language), { order: row.orderNumber })}
+                    </a>
+                    {row.storeName ? <span className="inventory-sub"> · {row.storeName}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
           <section className="inventory-panel-card">
             <header><strong>{t("Basic Information")}</strong></header>
