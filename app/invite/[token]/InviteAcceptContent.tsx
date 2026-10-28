@@ -6,12 +6,12 @@ import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
   signInWithEmailAndPassword,
-  signOut,
   updateProfile
 } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { signOutAndWipe } from "@/lib/auth/signOutSession";
 import { acceptInvitation, previewInvitation, type InvitationPreview } from "@/lib/studioflow/invitations";
 import { studioT } from "@/lib/studioflow/language";
 
@@ -192,7 +192,8 @@ export function InviteAcceptContent({ token }: { token: string }) {
             {t("This invitation was sent to a different email address. Sign in with that address to accept it.")}
           </p>
           <div className="estimate-actions" style={{ marginTop: 16 }}>
-            <button className="estimate-secondary" type="button" onClick={() => void signOut(auth)}>
+            {/* A sign-out like any other (the browser's Firestore copy goes too), back to this invitation. */}
+            <button className="estimate-secondary" type="button" onClick={() => void signOutAndWipe({ destination: `${window.location.pathname}${window.location.search}` })}>
               {t("Sign out")}
             </button>
           </div>

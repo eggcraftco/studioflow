@@ -12,7 +12,7 @@ import { loadPlanOrderUsage } from "@/lib/studioflow/planOrderUsageLoader";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { signOut, sendEmailVerification } from "firebase/auth";
+import { sendEmailVerification } from "firebase/auth";
 import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { CustomRoleManager } from "@/components/CustomRoleManager";
@@ -23,6 +23,8 @@ import type { InboundWebhookTestResult, InboundPayloadCheck } from "@/lib/studio
 import { SettingsDirtyProvider, useProvideSettingsDirty, useUnsavedGuard } from "./unsavedChanges";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth, db, functions, clearFirestoreLocalCache } from "@/lib/firebase/client";
+import { signOutAndWipe, UNSYNCED_SIGN_OUT_TEXT } from "@/lib/auth/signOutSession";
+import { useAppConfirm } from "@/components/AppConfirmDialog";
 import { collection, getDocs } from "firebase/firestore";
 import {
   INTEGRATION_CATEGORIES,
@@ -4264,6 +4266,7 @@ function AccountSection({
   const logoUrl = settings?.appLogoUrl?.trim() ?? "";
   const accountLanguage = settings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, accountLanguage);
+  const [confirmSignOut, signOutConfirmDialog] = useAppConfirm(t);
   const canEditCompanyName = Boolean(user && (workspace.ownerUid === user.uid || workspace.role === "owner"));
   const googlePhotoUrl = user?.providerData.find(provider => provider.providerId === "google.com")?.photoURL?.trim() ?? "";
   // OAuth-only accounts (Google / Apple, no password provider) can't change their
@@ -4456,20 +4459,19 @@ function AccountSection({
     setProfileStatus("");
     setProfileError("");
     try {
-      // Remove the push registration while still authenticated — Firestore
-      // rules reject the delete after signOut.
-      try {
-        const mod = await import("@/lib/studioflow/pushNotifications");
-        await mod.unregisterWebPush();
-      } catch {
-        /* ignore */
-      }
-      clearDeviceLocalWorkspaceCache();
-      await signOut(auth);
-      // Wipe this browser's Firestore copy (bank rows included) and leave with a
-      // full load: the Firestore instance is terminated by the clear.
-      await clearFirestoreLocalCache();
-      window.location.assign("/login");
+      // lib/auth/signOutSession.ts: push registration, device-local state,
+      // signOut, then this browser's Firestore copy (bank rows included) and a
+      // full load. Undelivered writes are asked about first.
+      const left = await signOutAndWipe({
+        confirmUnsynced: () => confirmSignOut({
+          title: t(UNSYNCED_SIGN_OUT_TEXT.title),
+          message: t(UNSYNCED_SIGN_OUT_TEXT.message),
+          cancelLabel: t(UNSYNCED_SIGN_OUT_TEXT.stay),
+          confirmLabel: t(UNSYNCED_SIGN_OUT_TEXT.leave),
+          danger: true
+        })
+      });
+      if (!left) setSigningOut(false);
     } catch (signOutError) {
       setProfileError(signOutError instanceof Error ? signOutError.message : t("Could not sign out."));
       setSigningOut(false);
@@ -4588,6 +4590,7 @@ function AccountSection({
 
   return (
     <div className="settings-card-stack settings-profile-page">
+      {signOutConfirmDialog}
       <section className="card app-card settings-profile-card">
         <SettingsCardHead title={t("Profile")} />
         <div className="settings-profile-photo">

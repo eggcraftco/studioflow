@@ -1,15 +1,15 @@
 "use client";
 
-import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   EmailAuthProvider,
   reauthenticateWithCredential,
   reauthenticateWithPopup,
-  signOut,
   type AuthProvider as FirebaseAuthProvider
 } from "firebase/auth";
-import { auth, googleProvider, appleProvider, clearFirestoreLocalCache } from "@/lib/firebase/client";
+import { googleProvider, appleProvider } from "@/lib/firebase/client";
+import { signOutAndWipe, UNSYNCED_SIGN_OUT_TEXT } from "@/lib/auth/signOutSession";
+import { useAppConfirm } from "@/components/AppConfirmDialog";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import {
@@ -25,6 +25,7 @@ import {
 export function SessionAutoLock() {
   const { user, language } = useAuth();
   const t = useCallback((text: string) => studioT(text, language), [language]);
+  const [confirmSignOut, signOutConfirmDialog] = useAppConfirm(t);
 
   const [minutes, setMinutes] = useState(0);
   const [locked, setLocked] = useState(false);
@@ -129,21 +130,18 @@ export function SessionAutoLock() {
 
   async function handleSignOut() {
     try {
-      // Remove the push registration while still authenticated — Firestore
-      // rules reject the delete after signOut.
-      try {
-        const mod = await import("@/lib/studioflow/pushNotifications");
-        await mod.unregisterWebPush();
-      } catch {
-        /* ignore */
-      }
-      clearDeviceLocalWorkspaceCache();
-      await signOut(auth);
-      // The lock screen's sign-out is a sign-out like any other: the browser's
-      // Firestore copy goes with it, and the page reloads because the instance
-      // is terminated by the clear.
-      await clearFirestoreLocalCache();
-      window.location.assign("/login");
+      // The lock screen's sign-out is a sign-out like any other
+      // (lib/auth/signOutSession.ts): the browser's Firestore copy goes with
+      // it, after asking about writes that have not reached the server.
+      await signOutAndWipe({
+        confirmUnsynced: () => confirmSignOut({
+          title: t(UNSYNCED_SIGN_OUT_TEXT.title),
+          message: t(UNSYNCED_SIGN_OUT_TEXT.message),
+          cancelLabel: t(UNSYNCED_SIGN_OUT_TEXT.stay),
+          confirmLabel: t(UNSYNCED_SIGN_OUT_TEXT.leave),
+          danger: true
+        })
+      });
     } catch {
       // Ignore — the auth listener will reconcile state.
     }
@@ -200,6 +198,7 @@ export function SessionAutoLock() {
           {t("Sign out instead")}
         </button>
       </div>
+      {signOutConfirmDialog}
     </div>
   );
 }

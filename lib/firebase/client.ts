@@ -80,15 +80,29 @@ export const db = createDb();
 // person was allowed to read — bank transactions included. It must not outlive
 // the sign-in: once the Firestore instance is stopped the IndexedDB store can be
 // wiped. Call AFTER signOut(); the page must then navigate with a full load
-// (window.location), because the instance is gone. Best effort: another tab may
-// still hold the cache (the multi-tab manager refuses the clear), and in that
-// case the next sign-in on this browser starts from the old copy until that tab
-// closes — which is why the callers also hard-reload.
+// (window.location), because the instance is gone. Another open tab that holds
+// the store is stopped by the SDK itself (its versionchange listener terminates
+// it), so the delete normally completes at once; if a tab cannot let go in time
+// and the caller leaves first, the marker below makes the next page load finish
+// the wipe before Firestore is used (retryPendingFirestoreWipe).
+const FIRESTORE_WIPE_PENDING_KEY = "nv_fs_wipe_pending";
+
+function markFirestoreWipePending(pending: boolean) {
+  try {
+    if (pending) window.localStorage.setItem(FIRESTORE_WIPE_PENDING_KEY, "1");
+    else window.localStorage.removeItem(FIRESTORE_WIPE_PENDING_KEY);
+  } catch {
+    /* storage unavailable: the wipe is still attempted now */
+  }
+}
+
 export async function clearFirestoreLocalCache(): Promise<boolean> {
   if (typeof window === "undefined") return false;
+  markFirestoreWipePending(true);
   try {
     await terminate(db);
     await clearIndexedDbPersistence(db);
+    markFirestoreWipePending(false);
     return true;
   } catch {
     return false;
@@ -101,6 +115,18 @@ if (USE_EMULATOR) {
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);
   connectStorageEmulator(storage, "127.0.0.1", 9199);
+}
+
+// A wipe that did not finish before the last page left (sign-out with another
+// tab still holding the store): finish it now, before anything reads Firestore.
+// Allowed because the instance has not been started yet; anything that uses it
+// later queues behind the delete on the same queue.
+if (typeof window !== "undefined") {
+  let wipePending = false;
+  try { wipePending = window.localStorage.getItem(FIRESTORE_WIPE_PENDING_KEY) === "1"; } catch { wipePending = false; }
+  if (wipePending) {
+    clearIndexedDbPersistence(db).then(() => markFirestoreWipePending(false), () => undefined);
+  }
 }
 
 // Emulator only: lets a local script sign a test workspace in with a custom
