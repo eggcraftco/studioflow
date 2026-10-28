@@ -284,6 +284,8 @@ expect("card: the count is an aggregation over the connector's stamp", FS.record
 // ---- 4. the gates, from the source
 const card = read("app/settings/EbayIntegrationSection.tsx");
 const health = read("app/settings/CommerceSyncHealthCard.tsx");
+// The card's review list moved into its own files (28 Oct 2026, S-B client): the same gates, read where they now live.
+const reviewList = [health, read("app/settings/CommerceReviewList.tsx"), read("app/settings/CommerceReviewItems.tsx"), read("lib/studioflow/commerceReview.ts")].join("\n");
 // (A marketplace row's own currency code — "EBAY_GB · GBP" in the sites list — is not an amount.)
 expect("card: never prints a buyer or an amount", /customerName|grandTotal|paidAmount|orderValue|remainingAmount|refundedAmount/.test(card), false);
 expect("card: reads the counts through the number-only helpers", ["countEbayReviewItems(companyId)", "countEbayHeldOrders(companyId)", "countEbayOrders(companyId)", "getEbayHealthOrders(companyId, live.id)"].every((c) => card.includes(c)), true);
@@ -295,9 +297,9 @@ expect("card: the two times carry the clock and a relative time worded by Intl i
 expect("health: a bare callable code word is never the message on screen", health.includes('setError(message && !/^[a-z]+(-[a-z]+)*$/.test(message) ? message : t("Could not load."))'), true);
 expect("card: faults red, things to look at amber", card.includes('item.kind === "plan_full" || item.kind === "review" || item.kind === "quota" || item.kind === "transient"'), true);
 expect("card: Sync health keeps its lists but not a second freshness answer", card.includes('provider="ebay" freshness={false}'), true);
-expect("health: review row name follows Orders", health.includes("canSeeOrders && row.customerName"), true);
-expect("health: review row total follows Orders + Financial Info", health.includes("canSeeMoney && row.grandTotal") && /const canSeeMoney = canSeeOrders && workspaceAccessAllows\(workspace\.memberAccess, "financialInfo"\)/.test(health), true);
-expect("health: the eBay review reason has words", health.includes('tax_responsibility_unknown: "Who collects the tax is unknown"'), true);
+expect("health: review row name follows Orders", reviewList.includes("canSeeOrders && row.customerName"), true);
+expect("health: review row total follows Orders + Financial Info", reviewList.includes("canSeeMoney && row.grandTotal") && /const canSeeMoney = canSeeOrders && workspaceAccessAllows\(workspace\.memberAccess, "financialInfo"\)/.test(reviewList), true);
+expect("health: the eBay review reason has words", reviewList.includes('tax_responsibility_unknown: "Who collects the tax is unknown"'), true);
 const detailPage = read("app/orders/[orderId]/page.tsx");
 const listPage = read("app/orders/page.tsx");
 // Workflow orders contract (9 Oct 2026): Orders off turns away everyone except the Workflow role's limited lane.

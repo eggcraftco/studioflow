@@ -99,6 +99,42 @@ expect("shopify stamp: the store's own admin address", orderSourceLink({ commerc
 expect("shopify stamp: another host is refused", orderSourceLink({ commerce: { provider: "shopify", externalId: "1", externalAdminUrl: "https://eggcraft.example.com/admin/orders/1" } }).reason, "host-mismatch");
 
 expect("etsy: the server writes no seller address, so no link", orderSourceLink({ commerce: { provider: "etsy", providerDisplayName: "Etsy", externalId: "3344", externalAdminUrl: "" } }), { kind: "none", reason: "no-address", provider: "etsy", source: "Etsy" });
+// SD-3 (28 Oct 2026): the SD-ETSY server may stamp commerce.externalAdminUrl (= etsySource.viewOnEtsyUrl). Accepted only as
+// Etsy's sold-order page for THIS receipt; anything else is ignored (never opened) and the link is built from the receipt as before.
+{
+  const R = "3100000011";
+  const GOOD = `https://www.etsy.com/your/orders/sold?order_id=${R}`;
+  const etsyStamp = (url, extra = {}) => ({ provider: "etsy", providerDisplayName: "Etsy", externalId: R, externalAdminUrl: url, ...extra });
+  const field = { Source: "Etsy", "Etsy Receipt ID": R };
+  const built = { kind: "link", href: GOOD, provider: "etsy", source: "Etsy" };
+  const noLink = { kind: "none", reason: "no-address", provider: "etsy", source: "Etsy" };
+  expect("etsy SD-3: the stored sold-order page of this receipt opens (stamp only, no receipt field)", orderSourceLink({ commerce: etsyStamp(GOOD) }), built);
+  expect("etsy SD-3: stamp without externalId — the receipt field is the order it must name", orderSourceLink({ commerce: { provider: "etsy", externalAdminUrl: GOOD }, customFields: field }), built);
+  expect("etsy SD-3: extra parameters and a fragment do not travel", orderSourceLink({ commerce: etsyStamp(`${GOOD}&ref=mail&utm_source=x#top`) }).href, GOOD);
+  expect("etsy SD-3: the default https port is the same page", orderSourceLink({ commerce: etsyStamp(`https://www.etsy.com:443/your/orders/sold?order_id=${R}`) }).href, GOOD);
+  const bad = {
+    "wrong host (look-alike)": `https://www.etsy.com.evil.example/your/orders/sold?order_id=${R}`,
+    "wrong host (bare etsy.com)": `https://etsy.com/your/orders/sold?order_id=${R}`,
+    "wrong host (another subdomain)": `https://pay.etsy.com/your/orders/sold?order_id=${R}`,
+    "wrong path": `https://www.etsy.com/listing/123?order_id=${R}`,
+    "wrong path (trailing segment)": `https://www.etsy.com/your/orders/sold/extra?order_id=${R}`,
+    "wrong order_id": "https://www.etsy.com/your/orders/sold?order_id=3100000099",
+    "two order_id values": `https://www.etsy.com/your/orders/sold?order_id=${R}&order_id=3100000099`,
+    "no order_id": "https://www.etsy.com/your/orders/sold",
+    "http": `http://www.etsy.com/your/orders/sold?order_id=${R}`,
+    "credentials": `https://seller:secret@www.etsy.com/your/orders/sold?order_id=${R}`,
+    "another port": `https://www.etsy.com:8443/your/orders/sold?order_id=${R}`,
+    "javascript": `javascript:alert(1)//www.etsy.com/your/orders/sold?order_id=${R}`
+  };
+  for (const [label, url] of Object.entries(bad)) {
+    // With the receipt field: today's built link, never the stored address. Without it: no link, as today.
+    expect(`etsy SD-3 ${label}: ignored, today's link from the receipt field`, orderSourceLink({ commerce: etsyStamp(url), customFields: field }), built);
+    expect(`etsy SD-3 ${label}: ignored, no receipt field means no link`, orderSourceLink({ commerce: { provider: "etsy", providerDisplayName: "Etsy", externalAdminUrl: url } }), noLink);
+  }
+  expect("etsy SD-3: stamp and receipt field disagree — the stored address is not trusted, the field's link stays",
+    orderSourceLink({ commerce: etsyStamp(GOOD), customFields: { Source: "Etsy", "Etsy Receipt ID": "3100000012" } }).href, "https://www.etsy.com/your/orders/sold?order_id=3100000012");
+  expect("etsy SD-3: a non-numeric receipt never qualifies", orderSourceLink({ commerce: { provider: "etsy", externalId: "31x", externalAdminUrl: "https://www.etsy.com/your/orders/sold?order_id=31x" } }).kind, "none");
+}
 expect("ebay: built from the order id through the eBay builder", orderSourceLink({ commerce: { provider: "ebay", providerDisplayName: "eBay", externalId: "12-34567-89012", externalAdminUrl: "https://www.ebay.de/mesh/ord/details?orderid=12-34567-89012" } }).href,
   "https://www.ebay.de/sh/ord/details?orderid=12-34567-89012");
 expect("amazon: Seller Central on a marketplace host", orderSourceLink({ commerce: { provider: "amazon", providerDisplayName: "Amazon", externalId: "026-1234567-1234567", externalAdminUrl: "https://sellercentral.amazon.co.uk/orders-v3/order/026-1234567-1234567" } }).href,

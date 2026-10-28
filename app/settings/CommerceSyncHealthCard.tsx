@@ -4,8 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { studioT } from "@/lib/studioflow/language";
-import { workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
+import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
+import { reviewRowsForProvider, type CommerceReviewRow } from "@/lib/studioflow/commerceReview";
+import { CommerceReviewList } from "./CommerceReviewList";
+import { healthCardShown } from "@/lib/studioflow/commerceHealthCard";
 
 // Faz 2 / OBS-003+004 — freshness per data type per connection, and the
 // events behind it, read from the common engine's health and event records.
@@ -31,16 +34,8 @@ type CommerceEventRow = {
   key: string; provider: string; connectionId: string; externalId: string; eventType: string; source: string; status: string;
   attempt: number; errorClass: string | null; message: string | null; orderId: string | null; startedAt: string | null; finishedAt: string | null; nextRetryAt: string | null;
 };
-type CommerceReviewRow = {
-  orderId: string; provider: string; providerDisplayName: string; connectionId: string; externalId: string; orderNumber: string;
-  customerName: string | null; grandTotal: string | null; currency: string | null; reasons: string[]; resolved: boolean; updatedAtMs: number;
-};
-// §10.5 — the review reasons the engine writes, in the merchant's words.
-const REVIEW_REASON_LABELS: Record<string, string> = {
-  ad_hoc_line_item: "Item not in the catalogue", no_line_items: "No line items", missing_total: "Missing total", unresolved_variation: "Unresolved variation",
-  // eBay writes this one for every order whose tax side it cannot tell (1 Oct 2026: the real connection's only review item).
-  tax_responsibility_unknown: "Who collects the tax is unknown"
-};
+// §10.5 — the review rows (the engine's, and S-B's "possible duplicate customer"), their reasons in the
+// merchant's words and their actions: lib/studioflow/commerceReview.ts + CommerceReviewList.tsx.
 const COMMERCE_STATUS_LABELS: Record<string, string> = {
   applied: "Applied", retrying: "Retrying", dead: "Dead", skipped: "Skipped", duplicate: "Duplicate", stale: "Stale", noop: "No change",
   held: "Held", queued: "Queued", processing: "Processing", received: "Received", failed: "Dead"
@@ -69,8 +64,13 @@ function commerceAgoText(ms: number | null | undefined, t: (text: string) => str
   return `${Math.round(diff / 86400000)} ${t("days ago")}`;
 }
 
-export function CommerceSyncHealthCard({ workspace, language = "English", provider, freshness = true }: {
+export function CommerceSyncHealthCard({ workspace, language = "English", provider, freshness = true, onlyWhenInstrumented = false, connectionLabels }: {
   workspace: WorkspaceContext; language?: string; provider: string;
+  /**
+   * SD-4 (Etsy): show the card only once the server says it records this channel's health (never_synced / rows);
+   * nothing while loading, on a failed read, or for not_supported / not_connected. See lib/studioflow/commerceHealthCard.ts.
+   */
+  onlyWhenInstrumented?: boolean;
   /**
    * False when the provider's own card states the connection's freshness (eBay,
    * package E3). The connector's connect flow stamps this record as a "success"
@@ -79,15 +79,16 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
    * truthful one, and one screen must not carry two different answers.
    */
   freshness?: boolean;
+  /**
+   * The name the section already shows for each connection (e.g. the Etsy shop name), keyed by the
+   * connection id the health record carries. An Etsy connection id is an opaque document id, so
+   * without this the row's heading read like "rv-ws_55500011".
+   */
+  connectionLabels?: Record<string, string>;
 }) {
   const t = (text: string) => studioT(text, language);
   const companyId = workspace.id.trim();
   const isOwner = workspace.role === "owner";
-  // The review rows carry the buyer's name and the order's total. A member without
-  // Orders sees neither; without Financial Info, no total (package E3, the gates
-  // the order screens already apply).
-  const canSeeOrders = workspaceAccessAllows(workspace.memberAccess, "orders");
-  const canSeeMoney = canSeeOrders && workspaceAccessAllows(workspace.memberAccess, "financialInfo");
   const [connections, setConnections] = useState<CommerceHealthConnection[] | null>(null);
   const [card, setCard] = useState<CommerceHealthCard | null>(null);
   const [events, setEvents] = useState<CommerceEventRow[]>([]);
@@ -107,7 +108,7 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
       setConnections((health.data?.connections ?? []).filter((row) => row.provider === provider));
       setCard(health.data?.card ?? null);
       setEvents((activity.data?.events ?? []).filter((row) => row.provider === provider).slice(0, 20));
-      setReview((queue.data?.items ?? []).filter((row) => row.provider === provider));
+      setReview(reviewRowsForProvider(queue.data?.items, provider));
       setError("");
     } catch (err) {
       // A callable that fails without a sentence of its own answers a bare code word
@@ -133,23 +134,11 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
     }
   }
 
-  async function resolve(orderId: string) {
-    setBusyKey(`review:${orderId}`); setNotice("");
-    try {
-      await httpsCallable<{ companyId: string; orderId: string }, { ok: boolean }>(functions, "resolveCommerceReview")({ companyId, orderId });
-      setNotice(t("Resolved."));
-      await load();
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : t("Could not load."));
-    } finally {
-      setBusyKey("");
-    }
-  }
-
   const entityLabel: Record<string, string> = { orders: "Orders", products: "Products", inventory: "Inventory", finance: "Finance" };
   const stateLabel: Record<string, string> = { fresh: "Fresh", stale: "Stale", never: "Never synced", unsupported: "Not supported" };
   const stateClass: Record<string, string> = { fresh: "due-pill success", stale: "due-pill warning", never: "due-pill", unsupported: "due-pill" };
 
+  if (!healthCardShown({ onlyWhenInstrumented, loaded: connections !== null, failed: Boolean(error), state: card?.state ?? "", rowCount: connections?.length ?? 0 })) return null;
   return (
     <section className="card app-card" id="commerce-sync-health">
       <CardTitle icon="dashboard" eyebrow={t("Sync health")} title={t("Sync health")} />
@@ -170,7 +159,7 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
         <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
           {connections.map((row) => (
             <div key={`${row.provider}:${row.connectionId}`} style={{ border: "1px solid var(--border)", borderRadius: 12, padding: "12px 14px" }}>
-              <strong>{row.connectionId}</strong>
+              <strong>{connectionLabels?.[row.connectionId]?.trim() || row.connectionId}</strong>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
                 {(["orders", "products", "inventory", "finance"] as const).map((entity) => {
                   const cell = row.health[entity] || { state: "unsupported" as const };
@@ -193,25 +182,7 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
         <div style={{ marginTop: 14 }}>
           <strong style={{ fontSize: 13 }}>{t("Needs review")}</strong>
           <p className="muted-copy" style={{ fontSize: 12.5, margin: "2px 0 6px" }}>{t("Orders the sync could apply but could not vouch for: an item not in the catalogue, a missing total. Check the order, then resolve.")}</p>
-          {review.length === 0 ? (
-            <p className="muted-copy" style={{ fontSize: 12.5 }}>{t("Nothing needs review.")}</p>
-          ) : (
-            <div style={{ display: "grid", gap: 6 }}>
-              {review.map((row) => (
-                <div key={row.orderId} style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", fontSize: 12.5 }}>
-                  <span className="due-pill warning">{row.providerDisplayName || row.provider}</span>
-                  <span>#{row.orderNumber || row.externalId}{canSeeOrders && row.customerName ? ` · ${row.customerName}` : ""}{canSeeMoney && row.grandTotal ? ` · ${row.grandTotal} ${row.currency || ""}` : ""}</span>
-                  <span className="muted-copy">{row.reasons.map((r) => t(REVIEW_REASON_LABELS[r] || r)).join(", ")}</span>
-                  <a className="button secondary" style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700 }} href={`/orders/${encodeURIComponent(row.orderId)}`}>{t("Open order")}</a>
-                  {isOwner ? (
-                    <button type="button" className="button" style={{ padding: "4px 10px", borderRadius: 999, fontSize: 12, fontWeight: 700 }} disabled={busyKey === `review:${row.orderId}`} onClick={() => { void resolve(row.orderId); }}>
-                      {t("Resolve")}
-                    </button>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          )}
+          <CommerceReviewList rows={review} workspace={workspace} language={language} onChanged={load} />
           <strong style={{ fontSize: 13, display: "block", marginTop: 12 }}>{t("Recent activity")}</strong>
           {events.length === 0 ? (
             <p className="muted-copy" style={{ fontSize: 12.5 }}>{t("No events yet.")}</p>

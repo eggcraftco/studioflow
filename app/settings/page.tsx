@@ -53,6 +53,7 @@ import { getShippingConnection, type ShippingConnectionView } from "@/lib/studio
 import { QuickBooksIntegrationSection, XeroIntegrationSection } from "./QuickBooksIntegrationSection";
 import { SettingsPageHeader, SettingsHeaderActionsContext, SettingsCardHead, useSettingsHeaderActions, type SettingsHeaderStatus } from "./pageHeader";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
+import { CommerceReviewCard } from "./CommerceReviewList";
 import { ClientDomainSection } from "./ClientDomainSection";
 import { SmsNotificationsSection } from "./SmsNotificationsSection";
 import { SalesSettingsSection } from "./SalesSettingsSection";
@@ -6443,6 +6444,17 @@ function InboundWebhookSection({ workspace, language = "English" }: { workspace:
           </div>
         ) : null}
       </section>
+
+      {/* S-B (CUST-005/006): a buyer posted to the Delivery URL can be a "possible duplicate customer".
+          The inbound channel has no Sync health card, so its review items get this one — the same list,
+          the same gates as the WooCommerce, Shopify, Square and eBay cards. */}
+      <CommerceReviewCard
+        workspace={workspace}
+        language={language}
+        provider="inbound"
+        eyebrow="Website orders"
+        description="Orders posted to your Delivery URL whose buyer may already be one of your customers."
+      />
     </div>
   );
 }

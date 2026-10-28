@@ -35,6 +35,7 @@ import {
 import { EtsyText } from "@/app/orders/EtsyText";
 import { etsyActionErrorText, etsyCanPreview, etsyImportNotice, etsyPersonalisationLine, shouldAutoPreviewEtsy } from "@/lib/studioflow/etsyFirstImport";
 import { workspaceAccessAllows } from "@/lib/studioflow/firestore";
+import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
 
 type Props = { workspace: WorkspaceContext; language?: string };
 
@@ -975,6 +976,18 @@ export function EtsyIntegrationSection({ workspace, language = "English" }: Prop
           {renderPreviewActions()}
         </section>
       ) : null}
+
+      {/* ── Sync health (SD-4, UX-004) ─────────────────────────────────────
+          The same card as WooCommerce, Shopify, Square and eBay. It appears once the server records Etsy health
+          (SD-ETSY: never_synced, then rows); against a server that answers not_supported it renders nothing, so
+          this panel never shows a "Not supported" frame (E6). */}
+      <CommerceSyncHealthCard
+        workspace={workspace}
+        language={language}
+        provider="etsy"
+        onlyWhenInstrumented
+        connectionLabels={Object.fromEntries(connections.map((row) => [row.id, row.shopName || row.shopId || ""]))}
+      />
 
       {/* ── Screen 8 · Disconnect ────────────────────────────────────────── */}
       <section className="card app-card quick-reply-settings-card" data-etsy-card="">

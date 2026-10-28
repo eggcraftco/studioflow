@@ -65,6 +65,29 @@ function safeHttpsUrl(value: string): URL | null {
   }
 }
 
+const ETSY_HOST = "www.etsy.com";
+const ETSY_SOLD_ORDER_PATH = "/your/orders/sold";
+
+/**
+ * SD-3: a stored Etsy seller address, when it is Etsy's sold-order page for this receipt — rebuilt from its parts
+ * (no other parameter or fragment travels). "" when there is none or it does not qualify. The receipt it must name
+ * is the stamp's externalId; without one, the order's receipt field; when both exist they must agree.
+ */
+export function etsyStoredOrderLink(storedUrl: string, stampReceipt: string, fieldReceipt: string): string {
+  const raw = String(storedUrl || "").trim();
+  if (!raw) return "";
+  const stampId = /^\d{1,20}$/.test(stampReceipt) ? stampReceipt : "";
+  const fieldId = /^\d{1,20}$/.test(fieldReceipt) ? fieldReceipt : "";
+  if (stampId && fieldId && stampId !== fieldId) return "";
+  const receipt = stampId || fieldId;
+  if (!receipt) return "";
+  const url = safeHttpsUrl(raw);
+  if (!url || url.port || url.hostname.toLowerCase() !== ETSY_HOST || url.pathname !== ETSY_SOLD_ORDER_PATH) return "";
+  const orderIds = url.searchParams.getAll("order_id");
+  if (orderIds.length !== 1 || orderIds[0] !== receipt) return "";
+  return `https://${ETSY_HOST}${ETSY_SOLD_ORDER_PATH}?order_id=${receipt}`;
+}
+
 function none(reason: OrderSourceLinkReason, provider: string, source: string): OrderSourceLink {
   return { kind: "none", reason, provider, source };
 }
@@ -88,8 +111,16 @@ export function orderSourceLink(input: OrderSourceLinkInput): OrderSourceLink {
   // ETSY-E2E (24 Oct 2026): Etsy orders carry no commerce stamp, so the detail said "Order link not
   // available". The receipt id is enough: Etsy's sold-orders page opens one receipt by id (the same
   // address the server stores as etsySource.viewOnEtsyUrl). Digits only, fixed host.
-  if (provider === "etsy" && !stamp?.externalAdminUrl) {
+  //
+  // SD-3 (28 Oct 2026): the SD-ETSY server can also stamp commerce.externalAdminUrl (= etsySource.viewOnEtsyUrl,
+  // behind appConfig/etsyCommerceStamp). A stored address is accepted only when it is that same page for THIS
+  // order: https, no credentials, host exactly www.etsy.com, path /your/orders/sold, and order_id equal to the
+  // receipt id (the stamp's externalId, else the receipt field the link is built from). Anything else is ignored —
+  // never opened — and the link is built from the receipt exactly as before.
+  if (provider === "etsy") {
     const receipt = (cf["Etsy Receipt ID"] || "").trim();
+    const stored = etsyStoredOrderLink(stamp?.externalAdminUrl || "", (stamp?.externalId || "").trim(), receipt);
+    if (stored) return { kind: "link", href: stored, provider, source };
     return /^\d{1,20}$/.test(receipt)
       ? { kind: "link", href: `https://www.etsy.com/your/orders/sold?order_id=${receipt}`, provider, source }
       : none("no-address", provider, source);
@@ -140,9 +171,6 @@ export function orderSourceLink(input: OrderSourceLinkInput): OrderSourceLink {
       if (!match || (externalId && decodeURIComponent(match[1]) !== externalId)) return none("wrong-order", provider, source);
       return { kind: "link", href: `https://${host}${url.pathname}`, provider, source };
     }
-    case "etsy":
-      // The server writes no seller address for Etsy (adapters/etsy.js: external_admin_url null).
-      return none("no-address", provider, source);
     default:
       return none("no-address", provider, source);
   }
