@@ -16,6 +16,7 @@
     "test:bell-acl": "node scripts/check-bell-acl.mjs",
     "test:gn0809-notifications": "node scripts/check-gn0809-notifications.mjs",
     "test:delivery-push-link": "node scripts/check-delivery-push-link.mjs",
+    "test:portal-link-copy": "node scripts/check-portal-link-copy.mjs",
     "test:meta-signup": "node scripts/check-meta-signup.mjs",
     "test:home-cards": "node scripts/check-home-cards.mjs",
     "test:inbox-translations": "node scripts/check-inbox-translations.mjs",

@@ -768,7 +768,10 @@ export type OrderDetail = {
 };
 
 export type CustomerPortalDetail = {
+  // The order's own copy of the link — only for apps and links from before getOrderPortalLink (SEC-NAME C-portal).
   token: string;
+  // The live link's id (its hash): when it changes, the card asks for the link again.
+  tokenId: string;
   active: boolean;
   createdAtMs: number;
   visibility: {
@@ -2588,8 +2591,9 @@ function mapCustomerPortal(data: Record<string, unknown>): CustomerPortalDetail 
   const autoUpdates = data.portalAutoUpdates;
   return {
     token: stringValue(data.portalToken, ""),
-    // A token id with no revoke stamp is what makes a link live; the plaintext
-    // is only there so the workspace can copy it again.
+    tokenId: stringValue(data.portalTokenId, ""),
+    // A token id with no revoke stamp is what makes a link live. The link to copy
+    // comes from getOrderPortalLink; the plaintext here is the old apps' copy.
     active: Boolean(stringValue(data.portalTokenId, "")),
     createdAtMs: numberValue(data.portalCreatedAtMs),
     visibility: {

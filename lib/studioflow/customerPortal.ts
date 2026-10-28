@@ -38,6 +38,32 @@ export async function createOrderPortalLink(workspace: WorkspaceContext, orderId
   );
 }
 
+export type PortalLinkLookup =
+  | { kind: "link"; url: string }
+  | { kind: "none" }
+  | { kind: "denied"; reason: "customers_off" | "financial_off" | "other" }
+  | { kind: "unavailable" };
+
+// SEC-NAME C-portal (28 Oct 2026): Copy Link asks the server for the live link, behind the gates that mint one
+// (Customers, Financial Info, the member's assigned scope). The order document still carries the plaintext for
+// apps released before getOrderPortalLink; "unavailable" (the call got no answer) is the only case in which the
+// card may fall back to that copy — a "no" from the server is final. Never throws.
+export async function getOrderPortalLink(workspace: WorkspaceContext, orderId: string): Promise<PortalLinkLookup> {
+  try {
+    const callable = httpsCallable<Record<string, unknown>, { ok?: boolean; active?: boolean; url?: string }>(functions, "getOrderPortalLink");
+    const { data } = await callable({ companyId: workspace.id, orderId });
+    const url = typeof data?.url === "string" ? data.url : "";
+    return data?.active === true && url ? { kind: "link", url } : { kind: "none" };
+  } catch (error) {
+    const code = String((error as { code?: unknown } | null)?.code ?? "");
+    if (code === "functions/permission-denied" || code === "functions/unauthenticated") {
+      const reason = String((error as { details?: { reason?: unknown } } | null)?.details?.reason ?? "");
+      return { kind: "denied", reason: reason === "customers_off" || reason === "financial_off" ? reason : "other" };
+    }
+    return { kind: "unavailable" };
+  }
+}
+
 export async function revokeOrderPortalLink(workspace: WorkspaceContext, orderId: string) {
   return call<{ ok?: boolean }>(
     "revokeOrderPortalLink",
