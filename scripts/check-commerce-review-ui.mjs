@@ -23,6 +23,9 @@
 //    no hard-coded English text in the new components.
 // 4. Every sentence the list can show, in all eleven other languages (studioT's merged table), and the
 //    new table overwrites no older translation.
+// 5. SD-4: the Sync health card under Etsy appears only once the server records Etsy health (never_synced /
+//    rows) — nothing while loading, on a failed read, or for the live server's not_supported; every other
+//    channel's card is unchanged.
 //
 //   node scripts/check-commerce-review-ui.mjs
 // Control: the same script on the live tree (e2c75207) must fail.
@@ -50,7 +53,9 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "commerce-review-ui-check-"));
 const FAKES = {
   "firebase/functions": `export function httpsCallable() { return async () => ({ data: {} }); }`,
   "firebase/firestore": `export function doc() { return {}; } export async function getDoc() { return { exists: () => false, data: () => null }; }`,
-  "@/lib/firebase/client": `export const auth = { currentUser: null }; export const db = {}; export const functions = {};`
+  "@/lib/firebase/client": `export const auth = { currentUser: null }; export const db = {}; export const functions = {};`,
+  // The real module pulls the whole Firestore client; the card only needs the access rule (copied from firestore.ts).
+  "@/lib/studioflow/firestore": `export function workspaceAccessAllows(access, key) { if (key === "assignedProjectsOnly" || key === "manageProjectAssignments") return access?.[key] === true; return access?.[key] !== false; }`
 };
 for (const [name, source] of Object.entries(FAKES)) fs.writeFileSync(path.join(tmp, `${name.replace(/[^a-z]/gi, "_")}.mjs`), source);
 const reactUrl = pathToFileURL(require.resolve("react")).href;
@@ -275,6 +280,34 @@ await section("4 translations", async () => {
   expect("the new table adds keys only", Object.keys(COMMERCE_REVIEW_TRANSLATIONS).filter((key) => base.studioTranslationRow(key)), []);
   expect("Turkish probe", studioT("Same person", "Türkçe"), "Aynı kişi");
   expect("Arabic probe", studioT("Different people", "العربية (Arabic)"), "أشخاص مختلفون");
+});
+
+// ---- 5. SD-4 (Etsy): the Sync health card under Etsy shows only once the server records Etsy health
+await section("5 SD-4 Etsy health card", async () => {
+  const { healthCardShown } = await load("lib/studioflow/commerceHealthCard.ts");
+  const shown = (over) => healthCardShown({ onlyWhenInstrumented: true, loaded: true, failed: false, state: "", rowCount: 0, ...over });
+  expect("etsy card: live server (not_supported) → nothing", shown({ state: "not_supported" }), false);
+  expect("etsy card: not_connected → nothing", shown({ state: "not_connected" }), false);
+  expect("etsy card: SD server, connected, nothing recorded yet (never_synced) → the card", shown({ state: "never_synced" }), true);
+  expect("etsy card: SD server with a health row → the card", [shown({ state: "rows", rowCount: 1 }), shown({ state: "", rowCount: 1 })], [true, true]);
+  expect("etsy card: while loading and after a failed read → nothing (no empty frame, no error)", [shown({ loaded: false, state: "never_synced" }), shown({ failed: true, state: "never_synced" }), shown({ state: "" })], [false, false, false]);
+  expect("other channels: every state still shows (Not connected / Not supported / Never synced / rows)",
+    ["not_connected", "not_supported", "never_synced", "rows", ""].map((state) => healthCardShown({ onlyWhenInstrumented: false, loaded: true, failed: false, state, rowCount: 0 }))
+      .concat([healthCardShown({ onlyWhenInstrumented: false, loaded: false, failed: false, state: "", rowCount: 0 })]), [true, true, true, true, true, true]);
+  const React = (await import(reactUrl)).default;
+  const { renderToStaticMarkup } = await import(pathToFileURL(require.resolve("react-dom/server")).href);
+  const { CommerceSyncHealthCard } = await load("app/settings/CommerceSyncHealthCard.tsx");
+  const ws = { id: "ws", role: "owner", memberAccess: {} };
+  expect("render: Etsy's card is not even a frame while the first answer is on its way", renderToStaticMarkup(React.createElement(CommerceSyncHealthCard, { workspace: ws, provider: "etsy", onlyWhenInstrumented: true })), "");
+  const woo = renderToStaticMarkup(React.createElement(CommerceSyncHealthCard, { workspace: ws, provider: "woocommerce" }));
+  expect("render: WooCommerce's card is unchanged (frame + Loading…)", woo.includes('id="commerce-sync-health"') && woo.includes(">Loading…<"), true);
+  const health = read("app/settings/CommerceSyncHealthCard.tsx");
+  expect("health card: the visibility rule is the shared one, decided after every hook", health.includes('if (!healthCardShown({ onlyWhenInstrumented, loaded: connections !== null, failed: Boolean(error), state: card?.state ?? "", rowCount: connections?.length ?? 0 })) return null;')
+    && health.indexOf("healthCardShown({") > health.lastIndexOf("useEffect("), true);
+  const etsy = read("app/settings/EtsyIntegrationSection.tsx");
+  expect("etsy section: the card is mounted once, provider etsy, instrumented-only", [(etsy.match(/<CommerceSyncHealthCard/g) || []).length, etsy.includes('<CommerceSyncHealthCard workspace={workspace} language={language} provider="etsy" onlyWhenInstrumented />')], [1, true]);
+  const mounts = ["app/settings/WooCommerceIntegrationSection.tsx", "app/settings/SquareIntegrationSection.tsx", "app/settings/EbayIntegrationSection.tsx", "app/settings/page.tsx"].map(read).join("\n");
+  expect("other channels: mounted as before, without the flag", [mounts.includes('provider="woocommerce" />'), mounts.includes('provider="square" />'), mounts.includes('provider="shopify" />'), mounts.includes('provider="ebay" freshness={false} />'), /onlyWhenInstrumented/.test(mounts)], [true, true, true, true, false]);
 });
 
 fs.rmSync(tmp, { recursive: true, force: true });

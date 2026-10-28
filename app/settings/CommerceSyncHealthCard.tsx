@@ -8,6 +8,7 @@ import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
 import { reviewRowsForProvider, type CommerceReviewRow } from "@/lib/studioflow/commerceReview";
 import { CommerceReviewList } from "./CommerceReviewList";
+import { healthCardShown } from "@/lib/studioflow/commerceHealthCard";
 
 // Faz 2 / OBS-003+004 — freshness per data type per connection, and the
 // events behind it, read from the common engine's health and event records.
@@ -63,8 +64,13 @@ function commerceAgoText(ms: number | null | undefined, t: (text: string) => str
   return `${Math.round(diff / 86400000)} ${t("days ago")}`;
 }
 
-export function CommerceSyncHealthCard({ workspace, language = "English", provider, freshness = true }: {
+export function CommerceSyncHealthCard({ workspace, language = "English", provider, freshness = true, onlyWhenInstrumented = false }: {
   workspace: WorkspaceContext; language?: string; provider: string;
+  /**
+   * SD-4 (Etsy): show the card only once the server says it records this channel's health (never_synced / rows);
+   * nothing while loading, on a failed read, or for not_supported / not_connected. See lib/studioflow/commerceHealthCard.ts.
+   */
+  onlyWhenInstrumented?: boolean;
   /**
    * False when the provider's own card states the connection's freshness (eBay,
    * package E3). The connector's connect flow stamps this record as a "success"
@@ -126,6 +132,7 @@ export function CommerceSyncHealthCard({ workspace, language = "English", provid
   const stateLabel: Record<string, string> = { fresh: "Fresh", stale: "Stale", never: "Never synced", unsupported: "Not supported" };
   const stateClass: Record<string, string> = { fresh: "due-pill success", stale: "due-pill warning", never: "due-pill", unsupported: "due-pill" };
 
+  if (!healthCardShown({ onlyWhenInstrumented, loaded: connections !== null, failed: Boolean(error), state: card?.state ?? "", rowCount: connections?.length ?? 0 })) return null;
   return (
     <section className="card app-card" id="commerce-sync-health">
       <CardTitle icon="dashboard" eyebrow={t("Sync health")} title={t("Sync health")} />

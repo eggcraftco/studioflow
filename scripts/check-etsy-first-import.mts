@@ -113,8 +113,10 @@ check("E5 Preview/Import follow the server: owner, or admin/member with orders+c
   assert.match(section, /\{isOwner \? \(\s*<button[\s\S]{0,200}busy === "import"/);
   assert.match(section, /t\("Only the workspace owner can import Etsy orders\."\)/);
 });
-check("E6 the Etsy panel has its own row layout and no 'Not supported' Sync health card", () => {
-  assert.doesNotMatch(section, /<CommerceSyncHealthCard/);
+check("E6 the Etsy panel has its own row layout and never a 'Not supported' Sync health card", () => {
+  // SD-4 (28 Oct 2026): the card is mounted, but only shows once the server records Etsy health (never_synced / rows).
+  assert.equal((section.match(/<CommerceSyncHealthCard/g) || []).length, 1);
+  assert.match(section, /<CommerceSyncHealthCard workspace=\{workspace\} language=\{language\} provider="etsy" onlyWhenInstrumented \/>/);
   assert.match(section, /data-etsy-card=""/);
   assert.match(css, /\[data-etsy-card\] \.settings-rule-list > li \{/);
   assert.match(css, /\[data-etsy-card\] li\[data-etsy-row\]/);
