@@ -16,6 +16,7 @@ import {
   isInventoryLowStock,
   listInventoryItems,
   listInventoryLocations,
+  loadInventoryWorkKinds,
   type InventoryListCursor,
   saveInventoryItem,
   setInventoryItemStatus,
@@ -46,23 +47,20 @@ import { SuppliersPanel } from "./SuppliersPanel";
 import { EbayListingsPanel } from "./EbayListingsPanel";
 import { getEbayListingLinks, ebayInventoryT } from "@/lib/studioflow/ebayInventory";
 import { WooProductsPanel } from "./WooProductsPanel";
+import { InventoryThumb } from "./InventoryThumb";
+import { categoryGlyph, thumbPath, workspaceCategoryIcons } from "@/lib/studioflow/inventoryThumbs";
+import { shouldSuggestTradeSet } from "@/lib/studioflow/inventoryCategoryTemplates";
+import { inventoryListText } from "@/lib/studioflow/inventoryListText";
 import { getWooProductLinks, wooInventoryT } from "@/lib/studioflow/wooInventory";
 
 type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "locations" | "recipes" | "reports" | "categories" | "ebay" | "woo";
 
-// Small glyphs so a long list scans by shape, not by reading every word.
-const CATEGORY_ICON: Record<string, string> = {
-  "Watches": "\u231A",
-  "Dials": "\u25CE",
-  "Movements": "\u2699",
-  "Parts": "\u2692",
-  "Consumables": "\u2697",
-  "Straps & Bracelets": "\u27B0",
-  "Packaging": "\u25A7",
-  "Tools": "\u2704",
-  "Stones & Gems": "\u25C7",
-  "Other": "\u25AA"
-};
+// Small glyphs so a long list scans by shape, not by reading every word. 27 Oct 2026: the row, the sidebar and the
+// picture placeholder all read the WORKSPACE's own icon (Inventory ▸ Categories); this hard-coded table used to win in
+// the rows, so a renamed or new category always showed "▪" there, and Bracelets/Straps did too.
+
+// Statuses whose items are no longer on the shelf: not on hand, not in the inventory value (server getInventorySummary).
+const OFF_SHELF: string[] = ["sold", "used", "removed", "archived"];
 
 const STATUS_LABEL: Record<InventoryStatus, string> = {
   available: "Available",
@@ -75,10 +73,12 @@ const STATUS_LABEL: Record<InventoryStatus, string> = {
   archived: "Archived"
 };
 
-function emptyDraft(trackingType: InventoryTrackingType): InventoryItemInput {
+function emptyDraft(trackingType: InventoryTrackingType, category = ""): InventoryItemInput {
   return {
     name: "",
-    category: trackingType === "quantity" ? "Consumables" : "Watches",
+    // 27 Oct 2026: the workspace's default category, else its first one — never a hard-coded "Watches" (a baker's new
+    // item used to start in a category the baker does not have).
+    category,
     trackingType,
     ownership: "business",
     brand: "",
@@ -116,6 +116,8 @@ export function InventoryContent({
   const canSeeCost = useCanSeeCost();
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
+  // This round's own sentences (lib/studioflow/inventoryListText.ts), then the app's.
+  const invT = (text: string) => inventoryListText(text, language) || studioT(text, language);
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [listCursor, setListCursor] = useState<InventoryListCursor | null>(null);
@@ -186,6 +188,13 @@ export function InventoryContent({
   // only a fallback for the first render before that arrives.
   const [categories, setCategories] = useState<InventoryCategory[]>([]);
   const [defaultCategory, setDefaultCategory] = useState("");
+  // The trade the onboarding wizard recorded — only to say, once, that the category list is a watch workshop's.
+  const [workKinds, setWorkKinds] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    loadInventoryWorkKinds(workspace).then((kinds) => { if (!cancelled) setWorkKinds(kinds); });
+    return () => { cancelled = true; };
+  }, [workspace]);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -305,11 +314,24 @@ export function InventoryContent({
     [visible, page, pageSize]
   );
 
+  // 27 Oct 2026: the sidebar is ONE navigation, so one entry is active at a time — a quick view clears the category it
+  // would otherwise silently keep (Low Stock under a stale "Watches" filter showed only low watches, with no category
+  // highlighted), and All Items is all items: every list filter is cleared, the search too.
   function openQuickView(next: "all" | "low" | "incoming" | "reserved") {
     setTab("items");
     setQuickView(next);
     setStatusFilter("");
+    setCategoryFilter("");
     setSelectedId("");
+  }
+  function openAllItems() {
+    openQuickView("all");
+    setTypeFilter(""); setLocationFilter(""); setSupplierFilter(""); setSearch("");
+  }
+  // The card a WooCommerce import just made or linked: the list, unfiltered, with that card's panel open.
+  function openCard(itemId: string) {
+    openAllItems();
+    setSelectedId(itemId);
   }
 
   function openCategory(category: string) {
@@ -338,9 +360,13 @@ export function InventoryContent({
     const rows = categories.filter(row => !row.archived && row.title.trim());
     if (rows.length > 0) return rows;
     return INVENTORY_CATEGORIES.map(title => ({
-      id: title.toLowerCase(), title, icon: CATEGORY_ICON[title] ?? CATEGORY_ICON.Other, archived: false
+      id: title.toLowerCase(), title, icon: categoryGlyph(title, {}), archived: false
     }));
   }, [categories]);
+  const categoryIcons = useMemo(() => workspaceCategoryIcons(categories), [categories]);
+  const suggestTradeSet = useMemo(() => shouldSuggestTradeSet(categories, workKinds), [categories, workKinds]);
+  // A new item starts in the workspace's default category, else its first visible one (27 Oct 2026).
+  const newItemCategory = defaultCategory || visibleCategories[0]?.title || "Other";
 
   // The picker also offers whatever an item already says, so a category that
   // was archived or removed elsewhere cannot silently rewrite the item on save.
@@ -471,7 +497,7 @@ export function InventoryContent({
       <div className="inventory-shell">
       <nav className="inventory-nav" aria-label={t("Inventory")}>
         <p className="inventory-nav-group">{t("Overview")}</p>
-        <button type="button" data-active={tab === "items" && quickView === "all" && !categoryFilter} onClick={() => { openQuickView("all"); setCategoryFilter(""); }}>
+        <button type="button" data-testid="inventory-nav-all" data-active={tab === "items" && quickView === "all" && !categoryFilter} onClick={openAllItems}>
           {t("All Items")}
         </button>
         <button type="button" data-active={tab === "items" && quickView === "low"} onClick={() => openQuickView("low")}>
@@ -491,9 +517,19 @@ export function InventoryContent({
             data-active={tab === "items" && categoryFilter === category.title}
             onClick={() => openCategory(category.title)}
           >
-            <span aria-hidden="true">{category.icon || CATEGORY_ICON[category.title] || CATEGORY_ICON.Other}</span> {t(category.title)}
+            <span aria-hidden="true">{category.icon || categoryGlyph(category.title, categoryIcons)}</span> {t(category.title)}
           </button>
         ))}
+        {/* 27 Oct 2026: categories are the workspace's own and editable — said where the list is, not only under Manage. */}
+        <button type="button" className="inventory-nav-manage" data-testid="inventory-nav-manage-categories" data-active={tab === "categories"} onClick={() => { setTab("categories"); setSelectedId(""); }}>
+          <span aria-hidden="true">✎</span> {invT("Manage categories")}
+        </button>
+        {suggestTradeSet && tab !== "categories" ? (
+          <p className="inventory-nav-hint" data-testid="inventory-nav-trade-hint">
+            {invT("These are a watch workshop's categories.")}{" "}
+            <button type="button" className="inventory-link" onClick={() => { setTab("categories"); setSelectedId(""); }}>{invT("Use your trade's set")}</button>
+          </p>
+        ) : null}
         <p className="inventory-nav-group">{t("Purchasing")}</p>
         <button type="button" data-active={tab === "purchases"} onClick={() => { setTab("purchases"); setSelectedId(""); }}>{t("Purchases")}</button>
         <button type="button" data-active={tab === "suppliers"} onClick={() => { setTab("suppliers"); setSelectedId(""); }}>{t("Suppliers")}</button>
@@ -508,7 +544,7 @@ export function InventoryContent({
         <button type="button" data-active={tab === "locations"} onClick={() => { setTab("locations"); setSelectedId(""); }}>{t("Locations")}</button>
         <button type="button" data-active={tab === "recipes"} onClick={() => { setTab("recipes"); setSelectedId(""); }}>{t("Recipes")}</button>
         <button type="button" data-active={tab === "reports"} onClick={() => { setTab("reports"); setSelectedId(""); }}>{t("Reports")}</button>
-        <button type="button" data-active={tab === "categories"} onClick={() => { setTab("categories"); setSelectedId(""); }}>{t("Categories")}</button>
+        {/* Categories moved up to "Manage categories" under the category list (27 Oct 2026): one entry, where the list is. */}
       </nav>
 
       <div className="inventory-main">
@@ -518,8 +554,10 @@ export function InventoryContent({
           language={language}
           canEdit={canEdit}
           items={items}
-          categoryOptions={categoryOptions}
+          categoryOptions={visibleCategories.map(row => row.title)}
+          defaultCategory={defaultCategory}
           onStockChanged={() => void reload()}
+          onOpenCard={openCard}
         />
       ) : tab === "ebay" ? (
         <EbayListingsPanel
@@ -562,6 +600,7 @@ export function InventoryContent({
         <CategoriesPanel
           workspace={workspace}
           canEdit={canEdit}
+          workKinds={workKinds}
           onCategoriesChanged={() => void reload()}
         />
       ) : tab === "suppliers" ? (
@@ -696,8 +735,10 @@ export function InventoryContent({
           <thead>
             <tr>
               <th className="inventory-check-col" aria-label={t("Select")} />
-              <th>{t("Item")}</th><th>{t("Type")}</th><th>{t("Category")}</th><th>{t("Status")}</th>
-              <th className="r">{t("On Hand")}</th><th className="r">{t("Value")}</th><th>{t("Location")}</th><th>{t("Updated")}</th><th /><th />
+              <th>{t("Item")}</th><th className="inventory-col-optional">{t("Type")}</th><th className="inventory-col-optional">{t("Category")}</th><th>{t("Status")}</th>
+              <th className="r inventory-col-onhand">{t("On Hand")}</th>
+              <th className="r" title={invT("What it cost: purchase price plus extra costs, times the number on hand. Not a sale price.")}>{t("Value")}</th>
+              <th className="inventory-col-optional">{t("Location")}</th><th className="inventory-col-optional inventory-col-updated">{t("Updated")}</th><th className="inventory-col-actions" /><th className="inventory-col-actions" />
             </tr>
           </thead>
           <tbody>
@@ -733,16 +774,25 @@ export function InventoryContent({
                   />
                 </td>
                 <td>
-                  <strong>{item.name}</strong>
-                  <span className="inventory-sub">
-                    {[item.number, item.reference && `Ref. ${item.reference}`, item.serialNumber]
-                      .filter(Boolean).join(" · ")}
-                  </span>
+                  <div className="inventory-item-cell">
+                    <InventoryThumb path={thumbPath(item)} glyph={categoryGlyph(item.category, categoryIcons)} />
+                    <div className="inventory-item-text">
+                      <strong>{item.name}</strong>
+                      <span className="inventory-sub">
+                        {[item.number, item.reference && `${invT("Ref.")} ${item.reference}`, item.serialNumber]
+                          .filter(Boolean).join(" · ")}
+                      </span>
+                      {/* At phone width the Type and Category columns fold into this line. */}
+                      <span className="inventory-sub inventory-item-folded">
+                        {t(item.category)} · {item.trackingType === "unique" ? t("Unique") : `${t("On Hand")}: ${inventoryOnHand(item)}${item.quantity?.unit ? ` ${item.quantity.unit}` : ""}`}
+                      </span>
+                    </div>
+                  </div>
                 </td>
-                <td><span className="inventory-chip">{item.trackingType === "unique" ? t("Unique") : t("Quantity")}</span></td>
-                <td>
+                <td className="inventory-col-optional"><span className="inventory-chip">{item.trackingType === "unique" ? t("Unique") : t("Quantity")}</span></td>
+                <td className="inventory-col-optional">
                   <span className="inventory-category">
-                    <span aria-hidden="true">{CATEGORY_ICON[item.category] ?? CATEGORY_ICON.Other}</span> {t(item.category)}
+                    <span aria-hidden="true">{categoryGlyph(item.category, categoryIcons)}</span> {t(item.category)}
                   </span>
                 </td>
                 <td>
@@ -752,21 +802,23 @@ export function InventoryContent({
                       : t(STATUS_LABEL[item.status] ?? item.status)}
                   </span>
                 </td>
-                <td className="r">
-                  {inventoryOnHand(item)}{item.trackingType === "quantity" && item.quantity?.unit ? ` ${item.quantity.unit}` : ""}
+                <td className={OFF_SHELF.includes(item.status) ? "r inventory-col-onhand inventory-value-off" : "r inventory-col-onhand"}>
+                  {/* 27 Oct 2026: a one-off piece that is sold/used/removed/archived is not on hand (it read 1). */}
+                  {item.trackingType === "unique" && OFF_SHELF.includes(item.status) ? 0 : inventoryOnHand(item)}{item.trackingType === "quantity" && item.quantity?.unit ? ` ${item.quantity.unit}` : ""}
                 </td>
-                <td className="r">
+                <td className={OFF_SHELF.includes(item.status) ? "r inventory-value-off" : "r"}
+                  title={OFF_SHELF.includes(item.status) ? invT("Not counted in the inventory value: this item is no longer on the shelf.") : undefined}>
                   {item.ownership === "customer"
                     ? <span className="inventory-sub">{t("Customer's")}</span>
                     : inventoryCostKind(item) === "notEntered" && inventoryLineValue(item) === 0
                       ? <span className="inventory-sub" data-testid="inventory-row-cost-not-entered">{wooInventoryT("Not entered", language)}</span>
                       : money(currencySymbol, inventoryLineValue(item))}
                 </td>
-                <td>{item.location || "—"}</td>
-                <td className="inventory-sub">
+                <td className="inventory-col-optional">{item.location || "—"}</td>
+                <td className="inventory-sub inventory-col-optional inventory-col-updated">
                   {item.updatedAtMs ? new Date(item.updatedAtMs).toLocaleDateString() : "—"}
                 </td>
-                <td className="r" onClick={event => event.stopPropagation()}>
+                <td className="r inventory-col-actions" onClick={event => event.stopPropagation()}>
                   <button
                     type="button"
                     className="inventory-link"
@@ -785,7 +837,7 @@ export function InventoryContent({
                     🏷
                   </button>
                 </td>
-                <td className="r" onClick={event => event.stopPropagation()}>
+                <td className="r inventory-col-actions" onClick={event => event.stopPropagation()}>
                   {canEdit ? (
                     <select
                       className="inventory-status-select"
@@ -892,7 +944,7 @@ export function InventoryContent({
           tagSuggestions={allTags}
           locationSuggestions={Array.from(new Set([...locationPaths, ...locationOptions]))}
           categoryOptions={categoryOptions}
-          defaultCategory={defaultCategory}
+          defaultCategory={newItemCategory}
           onClose={() => setModalOpen(false)}
           onSaved={async () => { setModalOpen(false); await reload(); }}
         />
@@ -905,7 +957,7 @@ export function InventoryContent({
           tagSuggestions={allTags}
           locationSuggestions={Array.from(new Set([...locationPaths, ...locationOptions]))}
           categoryOptions={categoryOptions}
-          defaultCategory={defaultCategory}
+          defaultCategory={newItemCategory}
           initialItem={editing}
           onClose={() => setEditing(null)}
           onSaved={async () => { setEditing(null); await reload(); }}
@@ -952,8 +1004,7 @@ function NewItemModal({
   const editingId = initialItem?.id || "";
   const [draft, setDraft] = useState<InventoryItemInput>(() => {
     if (initialItem) return inventoryItemToInput(initialItem);
-    const blank = emptyDraft("unique");
-    return defaultCategory ? { ...blank, category: defaultCategory } : blank;
+    return emptyDraft("unique", defaultCategory);
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -986,7 +1037,7 @@ function NewItemModal({
   function chooseType(trackingType: InventoryTrackingType) {
     // Keep what still makes sense so switching type mid-entry is not punished.
     setDraft(current => ({
-      ...emptyDraft(trackingType),
+      ...emptyDraft(trackingType, current.category),
       name: current.name,
       location: current.location,
       supplierName: current.supplierName,

@@ -23,6 +23,12 @@ import {
   type InventoryCategoryDisposition
 } from "@/lib/studioflow/inventory";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { ONBOARDING_WORK_KINDS } from "@/lib/studioflow/onboardingWizard";
+import { inventoryListText } from "@/lib/studioflow/inventoryListText";
+import {
+  CATEGORY_TEMPLATES, applyCategoryTemplate, isTemplateKind, templateKindFromWorkKinds, templateTitle,
+  type CategoryTemplateKind
+} from "@/lib/studioflow/inventoryCategoryTemplates";
 
 // A short, deliberately plain set — enough to tell rows apart at a glance
 // without turning the sidebar into a sticker album.
@@ -34,14 +40,23 @@ const ICON_CHOICES = [
 export function CategoriesPanel({
   workspace,
   canEdit,
+  workKinds = [],
   onCategoriesChanged
 }: {
   workspace: WorkspaceContext;
   canEdit: boolean;
+  /** The trade the onboarding wizard recorded (companySettings.onboardingWorkKinds); preselects the starting set. */
+  workKinds?: string[];
   onCategoriesChanged: () => void;
 }) {
   const { language } = useAuth();
-  const t = (text: string) => studioT(text, language);
+  const t = (text: string) => inventoryListText(text, language) || studioT(text, language);
+  // A starting set for the trade (27 Oct 2026, lib/studioflow/inventoryCategoryTemplates.ts): it only ADDS to the table
+  // below (and can hide unused watch-workshop rows); nothing is saved until Save changes.
+  const [tradeKind, setTradeKind] = useState<CategoryTemplateKind>("made_to_order");
+  useEffect(() => { const kind = templateKindFromWorkKinds(workKinds); if (kind) setTradeKind(kind); }, [workKinds]);
+  const [hideUnusedSeed, setHideUnusedSeed] = useState(true);
+  const [templateNote, setTemplateNote] = useState("");
 
   const [rows, setRows] = useState<InventoryCategory[]>([]);
   const [defaultCategory, setDefaultCategory] = useState("");
@@ -101,6 +116,14 @@ export function CategoriesPanel({
     setDirty(true);
   }
 
+  function applyTradeSet() {
+    const result = applyCategoryTemplate(rows, tradeKind, language, { hideUnusedSeed, now: Date.now() });
+    if (!result.added.length && !result.hidden.length) { setTemplateNote(t("This list already has every category of that set.")); return; }
+    setRows(result.rows);
+    setDirty(true);
+    setTemplateNote(t("{added} added · {hidden} hidden — check the list, then Save changes.").replace("{added}", String(result.added.length)).replace("{hidden}", String(result.hidden.length)));
+  }
+
   function addRow() {
     if (rows.length >= 40) return;
     setRows(current => [
@@ -124,6 +147,7 @@ export function CategoriesPanel({
       const result = await saveInventoryCategories(workspace, cleaned, defaultCategory);
       setRows(result.categories ?? cleaned);
       setDirty(false);
+      setTemplateNote("");
       onCategoriesChanged();
       dispatchStudioToast({
         message: result.renamedItems
@@ -194,7 +218,12 @@ export function CategoriesPanel({
             <button type="button" className="btn" onClick={addRow} disabled={busy || rows.length >= 40}>
               ＋ {t("Add category")}
             </button>
-            <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={busy || !dirty}>
+            {dirty ? (
+              <button type="button" className="btn" data-testid="categories-undo" onClick={() => { setTemplateNote(""); void reload(); }} disabled={busy}>
+                {t("Undo changes")}
+              </button>
+            ) : null}
+            <button type="button" className="btn btn-primary" data-testid="categories-save" onClick={() => void save()} disabled={busy || !dirty}>
               {busy ? t("Saving…") : t("Save changes")}
             </button>
           </div>
@@ -202,6 +231,36 @@ export function CategoriesPanel({
       </header>
 
       {notice ? <p className="inventory-notice">{t(notice)}</p> : null}
+
+      {canEdit ? (
+        <div className="inv-categories-template" data-testid="categories-template">
+          <div>
+            <strong>{t("A starting set for your trade")}</strong>
+            <p className="inventory-sub">{t("Adds your trade's categories to this list. Nothing is renamed or deleted, and every item stays where it is.")}</p>
+          </div>
+          <div className="inv-categories-template-row">
+            <label className="inv-categories-template-trade">
+              <span>{t("Your trade")}</span>
+              <select className="input" data-testid="categories-template-trade" value={tradeKind} onChange={(event) => { if (isTemplateKind(event.target.value)) { setTradeKind(event.target.value); setTemplateNote(""); } }}>
+                {ONBOARDING_WORK_KINDS.map((kind) => <option key={kind.id} value={kind.id}>{t(kind.label)}</option>)}
+              </select>
+            </label>
+            <span className="inv-categories-template-preview" data-testid="categories-template-preview">
+              {CATEGORY_TEMPLATES[tradeKind].map(([english, icon]) => (
+                <span key={english} className="inventory-chip">{icon} {english === "Other" ? t("Other") : templateTitle(english, language)}</span>
+              ))}
+            </span>
+          </div>
+          <label className="inventory-check">
+            <input type="checkbox" checked={hideUnusedSeed} onChange={(event) => setHideUnusedSeed(event.target.checked)} />
+            {t("Hide the watch-workshop categories that hold no items")}
+          </label>
+          <div className="inv-categories-template-row">
+            <button type="button" className="btn" data-testid="categories-template-apply" disabled={busy} onClick={applyTradeSet}>{t("Add these categories")}</button>
+            {templateNote ? <span className="inventory-sub" data-testid="categories-template-note">{templateNote}</span> : null}
+          </div>
+        </div>
+      ) : null}
 
       {orphans.length > 0 ? (
         <p className="inv-categories-orphans">
@@ -235,11 +294,13 @@ export function CategoriesPanel({
               <td>
                 <select
                   className="input inv-categories-icon"
-                  value={ICON_CHOICES.includes(row.icon) ? row.icon : ICON_CHOICES[0]}
+                  value={row.icon || ICON_CHOICES[ICON_CHOICES.length - 1]}
                   disabled={!canEdit}
                   onChange={event => update(index, { icon: event.target.value })}
                   aria-label={t("Icon")}
                 >
+                  {/* 27 Oct: an icon outside the short list (set on another device) is shown as itself, not as ⌚. */}
+                  {row.icon && !ICON_CHOICES.includes(row.icon) ? <option value={row.icon}>{row.icon}</option> : null}
                   {ICON_CHOICES.map(icon => <option key={icon} value={icon}>{icon}</option>)}
                 </select>
               </td>
@@ -278,7 +339,8 @@ export function CategoriesPanel({
                   <button
                     type="button"
                     className="btn btn-sm"
-                    disabled={!canEdit || busy || rows.length < 2}
+                    disabled={!canEdit || busy || rows.length < 2 || dirty}
+                    title={dirty ? t("Save or undo your changes first.") : undefined}
                     onClick={() => setMerging(row)}
                   >
                     {t("Merge")}
@@ -286,7 +348,8 @@ export function CategoriesPanel({
                   <button
                     type="button"
                     className="btn btn-sm btn-danger"
-                    disabled={!canEdit || busy}
+                    disabled={!canEdit || busy || dirty}
+                    title={dirty ? t("Save or undo your changes first.") : undefined}
                     onClick={() => {
                       // An empty category needs no ceremony; a full one does.
                       if ((row.itemCount ?? 0) === 0) void remove(row, "other", "");

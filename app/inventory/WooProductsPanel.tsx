@@ -14,7 +14,7 @@ import type { InventoryItem } from "@/lib/studioflow/inventory";
 import { studioLocaleTag } from "@/lib/studioflow/language";
 import { getWooProductLinks, previewWooProducts, importWooProducts, wooInventoryT, type WooLinksAnswer } from "@/lib/studioflow/wooInventory";
 import {
-  canChoose, countsOf, decisionProblem, decisionsToSend, fill, filterRows, productRowsOf, reasonSentence, rowStateSentence, startingDecision, storeStockSentence,
+  applyImportResults, canChoose, countsOf, decisionProblem, decisionsToSend, fill, filterRows, preselectCategory, productRowsOf, reasonSentence, rowsToMatch, rowStateSentence, startingDecision, storeStockSentence,
   type WooDecision, type WooImportRow, type WooProductRow
 } from "@/lib/studioflow/wooInventoryRules";
 
@@ -24,7 +24,11 @@ type Props = {
   canEdit: boolean;
   items: InventoryItem[];
   categoryOptions: string[];
+  /** The workspace's default category (Inventory ▸ Categories), the last fallback for a new card's category. */
+  defaultCategory?: string;
   onStockChanged?: () => void | Promise<void>;
+  /** Opens a card in the item list (27 Oct: the row that was just brought in says which card, and opens it). */
+  onOpenCard?: (inventoryItemId: string) => void;
 };
 
 function priceText(price: { value: string; currency: string } | null, locale: string): string {
@@ -36,7 +40,7 @@ function priceText(price: { value: string; currency: string } | null, locale: st
 const FILTERS: Array<[string, string]> = [["active", "For sale"], ["needs_choice", "Needs a choice"], ["sku_match", "Same SKU"], ["linked", "Linked"], ["inactive", "Sold out or archived"]];
 const EMPTY: WooDecision = { action: "", inventoryItemId: "", trackingType: "", openingCount: "", inHand: false, confirmAmbiguous: false, category: "" };
 
-export function WooProductsPanel({ workspace, language, canEdit, items, categoryOptions, onStockChanged }: Props) {
+export function WooProductsPanel({ workspace, language, canEdit, items, categoryOptions, defaultCategory = "", onStockChanged, onOpenCard }: Props) {
   const t = useCallback((sentence: string) => wooInventoryT(sentence, language), [language]);
   const locale = studioLocaleTag(language);
   const companyId = workspace.id.trim();
@@ -83,7 +87,8 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
   }, [companyId, t]);
   useEffect(() => { void load(); }, [load]);
 
-  const rows = useMemo(() => productRowsOf(answer), [answer]);
+  // What was brought in is linked NOW (27 Oct): the rows carry the import's answers until the store is read again.
+  const rows = useMemo(() => applyImportResults(productRowsOf(answer), results), [answer, results]);
   const shown = useMemo(() => filterRows(rows, filter), [rows, filter]);
   const counts = useMemo(() => countsOf(rows), [rows]);
   const liveConnections = (status?.connections || []).filter((c) => c.status === "connected");
@@ -110,7 +115,7 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
   function toggle(row: WooProductRow) {
     if (!canChoose(row)) return;
     setChosen((current) => (current.includes(row.linkId) ? current.filter((id) => id !== row.linkId) : [...current, row.linkId]));
-    setDecisions((current) => (current[row.linkId] ? current : { ...current, [row.linkId]: startingDecision(row) }));
+    setDecisions((current) => (current[row.linkId] ? current : { ...current, [row.linkId]: startingDecision(row, preselectCategory(row, categoryOptions, defaultCategory).category) }));
   }
   const setDecision = (linkId: string, patch: Partial<WooDecision>) => setDecisions((current) => ({ ...current, [linkId]: { ...(current[linkId] || EMPTY), ...patch } }));
 
@@ -175,7 +180,7 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
         <>
           <p className="ebay-inv__summary" data-testid="woo-products-summary">
             {answer.storeName || answer.host ? <strong data-testid="woo-products-store-read">{String(answer.storeName || answer.host)} · </strong> : null}
-            {fill(t("{count} products read · {rows} to match"), { count: Number(answer.products || 0), rows: rows.length })}
+            {fill(t("{count} products read · {rows} to match"), { count: Number(answer.products || 0), rows: rowsToMatch(rows) })}
           </p>
           {answer.truncated === true ? <p className="ebay-inv__warn">{t("More than 1,000 products: only the first 1,000 were read.")}</p> : null}
           {Number(answer.variationsTruncated || 0) > 0 ? <p className="ebay-inv__warn">{t("Some products have more than 300 variations: only the first 300 were read.")}</p> : null}
@@ -205,7 +210,7 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
                         <input type="checkbox" checked={picked} disabled={!editable || !canChoose(row) || busy !== ""} onChange={() => toggle(row)} aria-label={`${t("Choose")}: ${row.title}`} />
                         {row.imageUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img className="ebay-inv__pic" src={row.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.visibility = "hidden"; }} title={t("Picture shown from your store; not copied into NivaDesk")} />
+                          <img className="ebay-inv__pic" src={row.imageUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.visibility = "hidden"; }} title={t("Picture shown from your store; bringing it in copies it onto the new card")} />
                         ) : <span className="ebay-inv__pic is-empty" aria-hidden="true" />}
                         <div className="ebay-inv__what">
                           <strong className="ebay-inv__title">{row.title}</strong>
@@ -217,10 +222,21 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
                           <span className="inventory-sub">{fill(t(stock.sentence), stock.values)}</span>
                           {row.lifecycle !== "active" ? <span className="inventory-sub"><strong>{t(row.lifecycle === "sold" ? "Sold out in the store" : "Archived in the store")}</strong></span> : null}
                           {money && row.price ? <span className="inventory-sub">{t("Sale price in the store")}: <strong>{priceText(row.price, locale)}</strong></span> : null}
+                          {row.categories.length ? <span className="inventory-sub" data-testid="woo-store-categories">{fill(t("In the store: {categories}"), { categories: row.categories.join(", ") })}</span> : null}
+                          {picked && decision?.action === "create" ? (
+                            <span className="inventory-sub woo-row-category" data-testid="woo-row-category" data-category={decision.category}>
+                              {t("Category")}: <strong>{decision.category ? t(decision.category) : t("Choose…")}</strong>
+                            </span>
+                          ) : null}
                         </div>
                         <div className="ebay-inv__state">
                           <span className={`ebay-inv__chip is-${row.state}`}>{t(rowStateSentence(row))}</span>
-                          {row.linkedItem ? <span className="inventory-sub">{cardLabel(row.linkedItem)}</span> : null}
+                          {row.linkedItem ? (
+                            <span className="inventory-sub" data-testid="woo-row-linked-card">
+                              → {cardLabel(row.linkedItem)}
+                              {onOpenCard && row.state === "linked" && row.linkedItem.id ? <> <button type="button" className="inventory-link" data-testid="woo-open-card" onClick={() => onOpenCard(row.linkedItem!.id)}>{t("Open the card")}</button></> : null}
+                            </span>
+                          ) : null}
                           {!picked && row.candidates.length ? <span className="inventory-sub">{row.candidates.map((c) => cardLabel(c)).join(" · ")}</span> : null}
                         </div>
                       </div>
@@ -254,10 +270,20 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
                               {decision.trackingType === "unique" ? (
                                 <label><input type="checkbox" data-testid="woo-in-hand" checked={decision.inHand} onChange={(event) => setDecision(row.linkId, { inHand: event.target.checked })} /> {t("This one item is here, on my shelf")}</label>
                               ) : null}
-                              <select className="input" value={decision.category} onChange={(event) => setDecision(row.linkId, { category: event.target.value })} aria-label={t("Category")}>
-                                <option value="">{t("Category")}</option>
-                                {categoryOptions.map((c) => <option key={c} value={c}>{t(c)}</option>)}
-                              </select>
+                              <label className="ebay-inv__count woo-category-field">{t("Category for the new card")}
+                                <select className="input" data-testid="woo-category" value={decision.category} onChange={(event) => setDecision(row.linkId, { category: event.target.value })}>
+                                  {decision.category ? null : <option value="" disabled>{t("Choose…")}</option>}
+                                  {categoryOptions.map((c) => <option key={c} value={c}>{t(c)}</option>)}
+                                  {decision.category && !categoryOptions.includes(decision.category) ? <option value={decision.category}>{decision.category}</option> : null}
+                                </select>
+                              </label>
+                              {(() => {
+                                const why = preselectCategory(row, categoryOptions, defaultCategory);
+                                if (!decision.category || why.category !== decision.category) return null;
+                                if (why.from) return <span className="inventory-sub" data-testid="woo-category-why">{fill(t("Suggested from the store's category “{from}”"), { from: why.from })}</span>;
+                                if (why.basis === "default") return <span className="inventory-sub" data-testid="woo-category-why">{t("Your default category")}</span>;
+                                return null;
+                              })()}
                               <span className="inventory-sub">{row.proposed.name}</span>
                               <span className="inventory-sub">{t("Cost: not entered — the store's price is a sale price, not what you paid.")}</span>
                             </div>
@@ -274,6 +300,9 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
                             : done.result === "linked" ? fill(t("Linked to {number}"), { number: done.number })
                               : done.result === "already_linked" ? t("Already linked")
                                 : t(reasonSentence(done.reason))}
+                          {done.result === "created" && done.category ? <> · {t(done.category)}</> : null}
+                          {done.photo === "copied" ? <> · <span data-testid="woo-photo-copied">{t("Picture copied from the store")}</span></> : null}
+                          {done.photo === "not_copied" ? <> · <span data-testid="woo-photo-not-copied" data-reason={done.photoReason}>{t("The store's picture was not copied")}</span></> : null}
                         </p>
                       ) : null}
                     </li>
