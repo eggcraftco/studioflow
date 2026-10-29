@@ -12,6 +12,11 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { finishCalendarConnect } from "@/lib/studioflow/calendarExternal";
 import { studioT } from "@/lib/studioflow/language";
 
+// Microsoft's answers that mean "an administrator of this organisation has to approve the app first" (work/school
+// accounts). Passed on as one plain code, to the web message below and to the apps.
+const ADMIN_CONSENT = /AADSTS(65001|90094|90095|90008)\b/;
+const ADMIN_TEXT = "Your organisation has to approve NivaDesk before this Outlook account can be connected. Ask your IT administrator, or connect a personal Outlook account.";
+
 function CalendarConnectReturn() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -26,7 +31,8 @@ function CalendarConnectReturn() {
 
   // Read once, then clear the address bar (the code is single-use, but it should not sit in history either).
   if (params.current === null && typeof window !== "undefined") {
-    params.current = { code: searchParams.get("code") || "", state: searchParams.get("state") || "", error: searchParams.get("error") || "" };
+    const error = searchParams.get("error") || "";
+    params.current = { code: searchParams.get("code") || "", state: searchParams.get("state") || "", error: error && ADMIN_CONSENT.test(searchParams.get("error_description") || "") ? "admin_consent_required" : error };
   }
 
   useEffect(() => {
@@ -50,7 +56,8 @@ function CalendarConnectReturn() {
     if (!user) { setFailed(true); setMessage(t("Sign in to NivaDesk in this browser, then connect your calendar again from the Calendar page.")); return; }
     if (p.error || !p.code || !p.state) {
       setFailed(true);
-      setMessage(p.error === "access_denied" ? t("Calendar access was not allowed. Nothing was connected.") : t("The calendar provider did not return a sign-in code. Nothing was connected."));
+      setMessage(p.error === "admin_consent_required" ? t(ADMIN_TEXT)
+        : p.error === "access_denied" ? t("Calendar access was not allowed. Nothing was connected.") : t("The calendar provider did not return a sign-in code. Nothing was connected."));
       return;
     }
     let cancelled = false;
