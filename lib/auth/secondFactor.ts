@@ -25,8 +25,11 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 
-/** Off on the live site until the owner enables TOTP in Identity Platform (README, owner steps). */
-export const TOTP_MFA_UI_ENABLED = process.env.NEXT_PUBLIC_NIVADESK_TOTP_MFA === "1";
+/**
+ * On since 29 Oct 2026: TOTP is enabled in Identity Platform and 2.3 is in the App Store (iOS + Mac) and on Play.
+ * NEXT_PUBLIC_NIVADESK_TOTP_MFA=0 at build time hides the card again (an account with a factor still sees it).
+ */
+export const TOTP_MFA_UI_ENABLED = process.env.NEXT_PUBLIC_NIVADESK_TOTP_MFA !== "0";
 
 export const SECOND_FACTOR_CANCELLED = "nivadesk/second-factor-cancelled";
 export const SECOND_FACTOR_REMOVED_BY_RECOVERY = "nivadesk/second-factor-removed";

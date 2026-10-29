@@ -2,7 +2,7 @@
 
 // GN-10 — Settings ▸ Profile & Security ▸ Two-step verification (authenticator app, TOTP).
 //
-// Shown when NEXT_PUBLIC_NIVADESK_TOTP_MFA=1 AND the active workspace role is owner or
+// Shown unless NEXT_PUBLIC_NIVADESK_TOTP_MFA=0, AND only when the active workspace role is owner or
 // admin (owner instruction 23 Oct: optional, owners/admins first), and ALWAYS when the
 // account already has a factor (so nobody is left unable to see or remove one).
 // Enrolment needs a tick that the person's NivaDesk apps are on NATIVE_MFA_MIN_VERSION+:
