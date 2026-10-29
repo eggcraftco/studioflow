@@ -66,7 +66,8 @@ expect("SW: a team push still opens Messages", r.opened[0], "/messages");
 const page = fs.readFileSync(path.join(root, "app/inbox/page.tsx"), "utf8");
 must("inbox/page.tsx: a signed-out visit is sent to /login?next=<the inbox link>", /router\.replace\(back\.startsWith\("\/inbox"\) \? `\/login\?next=\$\{encodeURIComponent\(back\)\}` : "\/login"\)/.test(page));
 const login = fs.readFileSync(path.join(root, "app/login/page.tsx"), "utf8");
-must("login/page.tsx: still honours a same-site ?next=", /next\.startsWith\("\/"\) && !next\.startsWith\("\/\/"\)/.test(login));
+// Security audit #47 (28 Oct 2026): the same-site test moved to lib/security/safeNext.ts (origin check, no backslash).
+must("login/page.tsx: still honours a same-site ?next=", /safeNextFromLocation\(fallback\)/.test(login) && /url\.origin !== base\.origin/.test(fs.readFileSync(path.join(root, "lib/security/safeNext.ts"), "utf8")));
 
 // 3. One workspace, always.
 const inbox = fs.readFileSync(path.join(root, "app/inbox/InboxContent.tsx"), "utf8");
