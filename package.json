@@ -103,6 +103,7 @@
     "test:sec-session-lock": "npx tsx scripts/check-sec-session-lock.mts",
     "test:sec-oauth-connect": "npx tsx scripts/check-sec-oauth-connect.mts",
     "test:sec-bundle-emails": "npx tsx scripts/check-sec-bundle-emails.mts",
+    "test:qa-hooks-prod": "npx tsx scripts/check-qa-hooks-not-in-prod.mts",
     "test:sec-csp": "npx tsx scripts/check-sec-csp.mts",
     "test:security-headers": "node scripts/check-security-headers.js 3091",
     "test:sec-connect-claim": "npx tsx scripts/check-sec-connect-claim.mts",
