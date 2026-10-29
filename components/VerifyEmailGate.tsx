@@ -3,16 +3,16 @@
 // Blocks email/password accounts until the address is verified. OAuth users
 // (Google, Apple) pass straight through — their providers verify the email.
 
-import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import { useState } from "react";
-import { sendEmailVerification, signOut, type User } from "firebase/auth";
+import { sendEmailVerification, type User } from "firebase/auth";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 
 // After clicking the verification link, land users back on the app instead of
 // a bare Firebase page.
 const VERIFY_CONTINUE = { url: "https://nivadesk.app/login" };
-import { auth, clearFirestoreLocalCache } from "@/lib/firebase/client";
+import { auth } from "@/lib/firebase/client";
+import { signOutAndWipe } from "@/lib/auth/signOutSession";
 
 const VERIFICATION_GRACE_DAYS = 3;
 
@@ -205,7 +205,7 @@ export function VerifyEmailScreen({ user }: { user: User }) {
           </button>
           <button
             type="button"
-            onClick={() => { clearDeviceLocalWorkspaceCache(); void signOut(auth).then(() => clearFirestoreLocalCache()).then(() => window.location.replace("/login")); }}
+            onClick={() => { void signOutAndWipe(); }}
             style={{ background: "none", border: 0, color: "var(--muted)", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: 8 }}
           >
             {t("Sign out")}

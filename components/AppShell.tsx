@@ -1,6 +1,5 @@
 "use client";
 
-import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
 import { AppShellMountedContext } from "@/components/AppShellMounted";
 import {
   useContext,
@@ -12,7 +11,6 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { signOut } from "firebase/auth";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { inAppLink, OPEN_IN_APP_EVENT } from "@/lib/studioflow/openInApp";
@@ -22,14 +20,16 @@ import { localizeActivityNotification } from "@/lib/studioflow/notificationText"
 import { bootMark } from "@/lib/studioflow/bootTrace";
 import { useQuickActionEvent, type QuickActionPayload } from "@/lib/studioflow/quickActions";
 import { OPEN_ACTIVITY_CENTRE_EVENT } from "@/lib/studioflow/homeCards";
-import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
+import { useNivaDeskAdmin } from "@/lib/security/adminGate";
 import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
 import { messagesNavHref } from "@/lib/studioflow/messagingAccess";
 import { PAGE_ACCESS_BY_PATH } from "@/lib/studioflow/pageAccess";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { endOfLocalDayMillis, isStoredAsPlainDate } from "@/lib/studioflow/localDate";
-import { auth, db, clearFirestoreLocalCache } from "@/lib/firebase/client";
+import { db } from "@/lib/firebase/client";
+import { signOutAndWipe, UNSYNCED_SIGN_OUT_TEXT, wipeCacheAfterAccessLost } from "@/lib/auth/signOutSession";
+import { useAppConfirm } from "@/components/AppConfirmDialog";
 import { doc, getDoc } from "firebase/firestore";
 import {
   loadCustomerPickerOptions,
@@ -1230,6 +1230,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function AppShellFrame({ children }: { children: ReactNode }) {
   const { user, language: personalLanguage, theme: personalTheme } = useAuth();
+  // View gate for the Admin item (digests, lib/security/adminGate.ts); the server gates the data.
+  const isAdmin = useNivaDeskAdmin(user?.email) === true;
 
   // The page's reading direction and language tag, from the person's own
   // setting. Nothing inside the app set these: `dir` was written only by the
@@ -1504,6 +1506,11 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         if (!cancelled) {
           setFinanceOrdersTrusted(false);
           const accessLost = error instanceof WorkspaceAccessLostError;
+          // The server says this workspace no longer admits this person: what this
+          // browser cached from it (orders, customers, bank rows) is wiped once and
+          // the page loads again from the server (security audit #17). A second
+          // refusal within ten minutes falls through to the message below.
+          if (accessLost && await wipeCacheAfterAccessLost(currentUser.uid, error.companyId)) return;
           if (!accessLost && hasCachedShellForUser(currentUser.uid) && cachedWorkspace) {
             setWorkspace(cachedWorkspace);
             setSettings(cachedSettings);
@@ -2138,7 +2145,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     // inbox (`messages`) or team messages (`teamChat`) is allowed.
     if (item.href === "/inbox") return workspace ? messagesNavHref(workspace.memberAccess) === null : false;
     if (item.href === "/quick-reply" && workspace?.quickReplyMenuEnabled === false) return true;
-    if (item.href === "/admin" && !isNivaDeskAdminEmail(user?.email)) return true;
+    if (item.href === "/admin" && !isAdmin) return true;
     if (
       item.href === "/sales" &&
       !(salesMenu?.companyId === workspace?.id && salesMenu?.showInMenu === true)
@@ -2192,6 +2199,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     settings?.selectedLanguage ||
     studioLanguageForLocaleTag(typeof navigator !== "undefined" ? navigator.language : "");
   const t = (text: string) => studioT(text, language);
+  const [confirmSignOut, signOutConfirmDialog] = useAppConfirm(t);
   // held-notify-i18n: the held-orders row in the reader's language (its count from the server's params.count).
   const notificationsShown = useMemo(() => notifications.map((item) => localizeActivityNotification(item, language)), [notifications, language]);
   const sidebarUserName =
@@ -2653,21 +2661,18 @@ function AppShellFrame({ children }: { children: ReactNode }) {
 
   async function handleToolbarSignOut() {
     setAvatarMenuOpen(false);
-    // Remove the push registration while still authenticated — Firestore rules
-    // reject the delete after signOut, and the stale token would keep routing
-    // this workspace's pushes to the browser.
-    try {
-      const mod = await import("@/lib/studioflow/pushNotifications");
-      await mod.unregisterWebPush();
-    } catch {
-      /* ignore */
-    }
-    clearDeviceLocalWorkspaceCache();
-    await signOut(auth);
-    // Wipe this browser's Firestore copy (bank rows included) and leave with a
-    // full load: the Firestore instance is terminated by the clear.
-    await clearFirestoreLocalCache();
-    window.location.assign("/login");
+    // lib/auth/signOutSession.ts: push registration, device-local state, signOut,
+    // then this browser's Firestore copy (bank rows included) and a full load.
+    // Undelivered writes are asked about first: the wipe would delete them.
+    await signOutAndWipe({
+      confirmUnsynced: () => confirmSignOut({
+        title: t(UNSYNCED_SIGN_OUT_TEXT.title),
+        message: t(UNSYNCED_SIGN_OUT_TEXT.message),
+        cancelLabel: t(UNSYNCED_SIGN_OUT_TEXT.stay),
+        confirmLabel: t(UNSYNCED_SIGN_OUT_TEXT.leave),
+        danger: true
+      })
+    });
   }
 
   const [finishedAnswers, setFinishedAnswers] = useState<OnboardingAnswers | null>(null);
@@ -2911,6 +2916,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
 
   return (
     <AppShellMountedContext.Provider value={true}>
+      {signOutConfirmDialog}
       <main className="page-shell app-shell-fixed">
         {workspace &&
           workspace.billingStatus === "trialing" &&

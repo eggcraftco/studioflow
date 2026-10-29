@@ -12,7 +12,7 @@ import { loadPlanOrderUsage } from "@/lib/studioflow/planOrderUsageLoader";
 import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { signOut, sendEmailVerification } from "firebase/auth";
+import { sendEmailVerification } from "firebase/auth";
 import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { CustomRoleManager } from "@/components/CustomRoleManager";
@@ -23,6 +23,22 @@ import type { InboundWebhookTestResult, InboundPayloadCheck } from "@/lib/studio
 import { SettingsDirtyProvider, useProvideSettingsDirty, useUnsavedGuard } from "./unsavedChanges";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth, db, functions, clearFirestoreLocalCache } from "@/lib/firebase/client";
+import { signOutAndWipe, UNSYNCED_SIGN_OUT_TEXT } from "@/lib/auth/signOutSession";
+import { ensureRecentAuthentication } from "@/lib/auth/recentAuth";
+import {
+  addressWithoutClaim,
+  connectClaimRefusalKeepsClaim,
+  connectClaimRefusalSentence,
+  connectClaimUrl,
+  dropStashedConnectClaim,
+  readConnectClaim,
+  readStashedConnectClaim,
+  sendConnectClaim,
+  settingsAddressForAnswer,
+  stashConnectClaim,
+  type PendingConnectClaim
+} from "@/lib/studioflow/connectClaim";
+import { useAppConfirm } from "@/components/AppConfirmDialog";
 import { collection, getDocs } from "firebase/firestore";
 import {
   INTEGRATION_CATEGORIES,
@@ -660,6 +676,43 @@ export default function SettingsPage() {
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
+  // #9 (28 Oct 2026, lib/studioflow/connectClaim.ts): a provider's return now
+  // carries a claim (?<provider>=confirm&claim=…). It leaves the address bar
+  // before anything else reads it — before the sign-in redirect below copies
+  // the address into ?next= — and waits in sessionStorage for the signed-in
+  // person to finish it.
+  const connectClaimFromAddressRef = useRef<PendingConnectClaim | null>(null);
+  const connectClaimStartedRef = useRef(false);
+  const [connectClaimNotice, setConnectClaimNotice] = useState<{ text: string; tone: "info" | "error" } | null>(null);
+  useEffect(() => {
+    const pending = readConnectClaim(window.location.search);
+    if (!pending) return;
+    connectClaimFromAddressRef.current = pending;
+    stashConnectClaim(pending, window.sessionStorage);
+    window.history.replaceState(window.history.state, "", addressWithoutClaim(window.location.href));
+  }, []);
+
+  useEffect(() => {
+    if (loading || !user || connectClaimStartedRef.current) return;
+    const pending = readStashedConnectClaim(window.sessionStorage);
+    if (!pending) return;
+    connectClaimStartedRef.current = true;
+    setConnectClaimNotice({ text: "Finishing the connection…", tone: "info" });
+    void (async () => {
+      const idToken = await user.getIdToken().catch(() => "");
+      const answer = await sendConnectClaim(pending, { idToken, url: connectClaimUrl(pending.provider, auth.app.options.projectId) });
+      if (answer.kind === "result") {
+        // The provider panel says what happened, from the same parameters the
+        // callback's own redirect carries (and the older server still sends).
+        dropStashedConnectClaim(window.sessionStorage);
+        window.location.replace(settingsAddressForAnswer(pending, answer.params, answer.outcome));
+        return;
+      }
+      if (!connectClaimRefusalKeepsClaim(answer.status)) dropStashedConnectClaim(window.sessionStorage);
+      setConnectClaimNotice({ text: connectClaimRefusalSentence(answer.status), tone: "error" });
+    })();
+  }, [loading, user]);
+
   useEffect(() => {
     // Keep where the person was going: Etsy's approval returns here in whatever browser
     // the phone opens, often signed out, and "/login" alone dropped ?etsy=connected.
@@ -676,6 +729,14 @@ export default function SettingsPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const rawRequested = params.get("section");
+    // #9: a claim return (its confirm word already taken out of the address)
+    // opens the provider's panel, where its result will be shown.
+    const claimReturn = connectClaimFromAddressRef.current;
+    if (claimReturn) {
+      setIntegrationProvider(claimReturn.provider);
+      setActiveSection("integrations");
+      setMobileDetail(true);
+    }
     setIntegrationIntent(params.get("intent") ?? "");
     setIntegrationCategory(params.get("category") ?? "");
     if (
@@ -1154,6 +1215,11 @@ export default function SettingsPage() {
             <span aria-hidden="true">‹</span> {t("Settings")}
           </button>
           <div className="settings-mobile-title">{t(selectedSection.title)}</div>
+          {connectClaimNotice ? (
+            <p className={connectClaimNotice.tone === "error" ? "settings-notice is-caution" : "settings-notice"} role={connectClaimNotice.tone === "error" ? "alert" : "status"} data-testid="connect-claim-notice">
+              {t(connectClaimNotice.text)}
+            </p>
+          ) : null}
           {error ? (
             <div className="card app-card">
               <CardTitle icon="lock" eyebrow={t("Settings error")} title={t("Could not load workspace settings")} />
@@ -4264,6 +4330,7 @@ function AccountSection({
   const logoUrl = settings?.appLogoUrl?.trim() ?? "";
   const accountLanguage = settings?.selectedLanguage ?? "English";
   const t = (text: string) => studioT(text, accountLanguage);
+  const [confirmSignOut, signOutConfirmDialog] = useAppConfirm(t);
   const canEditCompanyName = Boolean(user && (workspace.ownerUid === user.uid || workspace.role === "owner"));
   const googlePhotoUrl = user?.providerData.find(provider => provider.providerId === "google.com")?.photoURL?.trim() ?? "";
   // OAuth-only accounts (Google / Apple, no password provider) can't change their
@@ -4456,20 +4523,19 @@ function AccountSection({
     setProfileStatus("");
     setProfileError("");
     try {
-      // Remove the push registration while still authenticated — Firestore
-      // rules reject the delete after signOut.
-      try {
-        const mod = await import("@/lib/studioflow/pushNotifications");
-        await mod.unregisterWebPush();
-      } catch {
-        /* ignore */
-      }
-      clearDeviceLocalWorkspaceCache();
-      await signOut(auth);
-      // Wipe this browser's Firestore copy (bank rows included) and leave with a
-      // full load: the Firestore instance is terminated by the clear.
-      await clearFirestoreLocalCache();
-      window.location.assign("/login");
+      // lib/auth/signOutSession.ts: push registration, device-local state,
+      // signOut, then this browser's Firestore copy (bank rows included) and a
+      // full load. Undelivered writes are asked about first.
+      const left = await signOutAndWipe({
+        confirmUnsynced: () => confirmSignOut({
+          title: t(UNSYNCED_SIGN_OUT_TEXT.title),
+          message: t(UNSYNCED_SIGN_OUT_TEXT.message),
+          cancelLabel: t(UNSYNCED_SIGN_OUT_TEXT.stay),
+          confirmLabel: t(UNSYNCED_SIGN_OUT_TEXT.leave),
+          danger: true
+        })
+      });
+      if (!left) setSigningOut(false);
     } catch (signOutError) {
       setProfileError(signOutError instanceof Error ? signOutError.message : t("Could not sign out."));
       setSigningOut(false);
@@ -4588,6 +4654,7 @@ function AccountSection({
 
   return (
     <div className="settings-card-stack settings-profile-page">
+      {signOutConfirmDialog}
       <section className="card app-card settings-profile-card">
         <SettingsCardHead title={t("Profile")} />
         <div className="settings-profile-photo">
@@ -4841,6 +4908,8 @@ function DeleteAccountCard({ language = "English" }: { language?: string }) {
     setBusy(true);
     setError("");
     try {
+      // Cannot be undone: the sign-in must be recent, or made again (audit #46).
+      await ensureRecentAuthentication();
       const callable = httpsCallable<{ confirmation: string }, { ok: boolean }>(functions, "deleteMyAccount");
       await callable({ confirmation: "DELETE" });
       clearDeviceLocalWorkspaceCache();
@@ -4852,7 +4921,7 @@ function DeleteAccountCard({ language = "English" }: { language?: string }) {
       await clearFirestoreLocalCache();
       window.location.assign("/login");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not delete the account."));
+      setError(err instanceof Error ? t(err.message) : t("Could not delete the account."));
       setBusy(false);
     }
   }
@@ -6836,7 +6905,7 @@ function DataManagementSection({
       await onImported();
       setStatus(result.message || "Workspace orders and customers deleted.");
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : t("Workspace data could not be deleted."));
+      setError(deleteError instanceof Error ? t(deleteError.message) : t("Workspace data could not be deleted."));
     } finally {
       setDeleting(false);
     }

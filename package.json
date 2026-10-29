@@ -93,7 +93,17 @@
     "test:gn12-order-finance": "npx tsx scripts/check-gn12-order-finance.mts",
     "test:k5-channel-shipping": "npx tsx scripts/check-k5-channel-shipping.mts",
     "test:sales-list-requests": "node scripts/check-sales-list-requests.mjs",
-    "test:sales-mc2-translations": "npx tsx scripts/check-sales-mc2-translations.mts"
+    "test:sales-mc2-translations": "npx tsx scripts/check-sales-mc2-translations.mts",
+    "test:sec-next-guard": "npx tsx scripts/check-sec-next-guard.mts",
+    "test:sec-logout-cache": "npx tsx scripts/check-sec-logout-cache.mts",
+    "test:sec-session-lock": "npx tsx scripts/check-sec-session-lock.mts",
+    "test:sec-oauth-connect": "npx tsx scripts/check-sec-oauth-connect.mts",
+    "test:sec-bundle-emails": "npx tsx scripts/check-sec-bundle-emails.mts",
+    "test:sec-csp": "npx tsx scripts/check-sec-csp.mts",
+    "test:security-headers": "node scripts/check-security-headers.js 3091",
+    "test:sec-connect-claim": "npx tsx scripts/check-sec-connect-claim.mts",
+    "test:sec-storage-read": "npx tsx scripts/check-sec-storage-read.mts",
+    "test:sec-web": "npm run -s test:sec-next-guard && npm run -s test:sec-logout-cache && npm run -s test:sec-session-lock && npm run -s test:sec-oauth-connect && npm run -s test:sec-bundle-emails && npm run -s test:sec-csp && npm run -s test:sec-connect-claim && npm run -s test:sec-storage-read"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

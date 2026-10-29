@@ -13,6 +13,7 @@ import QRCode from "qrcode";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import { inventoryItemQrValue, type InventoryItem } from "@/lib/studioflow/inventory";
+import { escapeHtml } from "@/lib/security/escapeHtml";
 
 export function ItemLabelModal({
   item,
@@ -44,9 +45,12 @@ export function ItemLabelModal({
     if (!label) return;
     // Its own window, so the label prints alone rather than the whole app
     // behind it. Same-origin, opened and written by us — nothing external.
+    // Every value is escaped (the item number used to go in raw, audit #18),
+    // and the window has no script of its own: it inherits this page's CSP,
+    // so printing is started from here instead.
     const win = window.open("", "_blank", "width=420,height=320");
     if (!win) return;
-    win.document.write(`<!doctype html><html><head><title>${item.number}</title>
+    win.document.write(`<!doctype html><html><head><title>${escapeHtml(item.number)}</title>
       <style>
         body { margin: 0; display: grid; place-items: center; min-height: 100vh;
                font-family: -apple-system, system-ui, sans-serif; }
@@ -62,15 +66,17 @@ export function ItemLabelModal({
       <div class="label">
         <div>${qrSvg}</div>
         <div>
-          <div class="num">${item.number}</div>
-          <div class="name">${item.name.replace(/</g, "&lt;")}</div>
-          ${item.location ? `<div class="loc">${item.location.replace(/</g, "&lt;")}</div>` : ""}
-          <div class="ws">${workspaceName.replace(/</g, "&lt;")}</div>
+          <div class="num">${escapeHtml(item.number)}</div>
+          <div class="name">${escapeHtml(item.name)}</div>
+          ${item.location ? `<div class="loc">${escapeHtml(item.location)}</div>` : ""}
+          <div class="ws">${escapeHtml(workspaceName)}</div>
         </div>
       </div>
-      <script>window.onload = () => { window.print(); }</script>
       </body></html>`);
     win.document.close();
+    // The label is inline SVG and text: nothing to wait for once it is written.
+    win.focus();
+    win.print();
   }
 
   return (

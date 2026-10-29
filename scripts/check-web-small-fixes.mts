@@ -238,7 +238,8 @@ for (const key of ["Open file", "Delete", "Add", "Email", "Cancel", "Sign in", "
 ok("AppHelpAssistant intro is translated", translatedEverywhere("Ask how something in NivaDesk works — where a button lives, what a card is for, how to set something up. This assistant reads the guide, not your workspace, so it never sees your orders or figures."));
 ok("Order detail: task menu Delete goes through t()", /<span>⌫<\/span>\{t\("Delete"\)\}/.test(detail));
 ok("Order detail: channel labels Add goes through t()", /"Channel"\]\)\}\s*>\s*\{t\("Add"\)\}/.test(detail));
-ok("Order detail: file viewer Open is the verb key", /openSharedFile\(activeFile\.downloadURL, brandedHost\); \}\}>\{t\("Open file"\)\}<\/a>/.test(detail) && !/brandedHost\); \}\}>Open<\/a>/.test(detail));
+// #19 A1 (28 Oct 2026): the viewer opens through openStoredFile (Storage decides); the label check is unchanged.
+ok("Order detail: file viewer Open is the verb key", /openStoredFile\(activeFile, brandedHost\)\.then\(status => setOpenProblem\(openOutcomeProblem\(status\)\)\); \}\}>\{t\("Open file"\)\}<\/a>/.test(detail) && !/brandedHost\); \}\}>Open<\/a>/.test(detail));
 ok("Order detail: portal channel Email goes through t()", /<div className="portal-channels">\s*<span>\{t\("Email"\)\}<\/span>/.test(detail));
 ok("Order detail: status dialog Cancel goes through t()", /onClick=\{onClose\} disabled=\{saving\}>\{t\("Cancel"\)\}<\/button>/.test(detail));
 const gptConnect = read("app/chatgpt/connect/ChatGPTConnectClient.tsx");

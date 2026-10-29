@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Inter, Manrope } from "next/font/google";
 import "./globals.css";
 
@@ -41,7 +42,12 @@ export const metadata: Metadata = {
     : undefined
 };
 
-function ThemeBootstrapScript() {
+// The one inline script of our own. It carries the response's CSP nonce
+// (middleware.ts, security audit #18) so the policy can list no 'unsafe-inline'.
+// Browsers hide a nonce from the DOM once the element is parsed (it reads as
+// ""), so React would report the attribute as a hydration mismatch; the warning
+// is suppressed on this one element.
+function ThemeBootstrapScript({ nonce }: { nonce?: string }) {
   const script = `
 try {
   var storedTheme = window.localStorage.getItem("studioflow-app-theme");
@@ -52,14 +58,15 @@ try {
 } catch (error) {}
 `;
 
-  return <script dangerouslySetInnerHTML={{ __html: script }} />;
+  return <script nonce={nonce} suppressHydrationWarning dangerouslySetInnerHTML={{ __html: script }} />;
 }
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang="en" className={`${inter.variable} ${manrope.variable}`} suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <ThemeBootstrapScript />
+        <ThemeBootstrapScript nonce={nonce} />
         <AuthProvider>
           <PricePrivacyProvider>
             <AppRouteFrame>{children}</AppRouteFrame>

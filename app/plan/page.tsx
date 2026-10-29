@@ -101,13 +101,13 @@ function isWorkspaceOwner(role: string) {
   return role.toLowerCase() === "owner";
 }
 
-function showInternalBillingControls(email: string) {
-  if (process.env.NEXT_PUBLIC_NIVADESK_INTERNAL_BILLING_TESTS !== "true") return false;
-  const allowedEmails = String(process.env.NEXT_PUBLIC_NIVADESK_INTERNAL_BILLING_TEST_EMAILS || "")
-    .split(",")
-    .map(value => value.trim().toLowerCase())
-    .filter(Boolean);
-  return allowedEmails.includes(email.trim().toLowerCase());
+// Internal Stripe test purchases (a staging build with NEXT_PUBLIC_NIVADESK_BILLING_LIVE=false).
+// Only the build flag lives here: a NEXT_PUBLIC_ value is written into the page's
+// JavaScript, so the list of test accounts must not be one (security audit #50).
+// Who may complete a test checkout is the server's STRIPE_INTERNAL_TEST_EMAILS
+// (stripeBilling.js requireBillingEnvironmentAccess), which refuses everyone else.
+function showInternalBillingControls(signedIn: boolean) {
+  return signedIn && process.env.NEXT_PUBLIC_NIVADESK_INTERNAL_BILLING_TESTS === "true";
 }
 
 export default function PlanPage() {
@@ -173,7 +173,7 @@ export default function PlanPage() {
     return usagePercent(counts.estimatedFileUsageMB, workspace.billingStorageLimitMB);
   }, [counts, workspace]);
 
-  const allowInternalBillingTests = showInternalBillingControls(user?.email || "");
+  const allowInternalBillingTests = showInternalBillingControls(Boolean(user));
   // Live billing is enabled when the public flag is set OR when the backend has
   // gone live (default true in production). Internal-test mode still works for
   // the gated test accounts. Purchase buttons are shown to workspace owners;

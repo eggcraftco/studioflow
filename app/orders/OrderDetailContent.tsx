@@ -41,7 +41,9 @@ import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { orderSourceLink, orderSourceLinkReasonText } from "@/lib/studioflow/orderSourceLink";
 import { orderSourceChipLabel } from "@/lib/studioflow/orderFilters";
 import { useConnectedStoreHosts } from "@/lib/studioflow/useConnectedStoreHosts";
-import { maskFileUrl, openSharedFile, downloadSharedFile } from "@/lib/studioflow/fileMask";
+import { maskFileUrl } from "@/lib/studioflow/fileMask";
+import { downloadStoredFile, openOutcomeProblem, openStoredFile, resolvedFileProblem, useResolvedFileUrl } from "@/lib/studioflow/storageFileUrl";
+import { StoredFileImage } from "@/components/StoredFileImage";
 import {
   CLIENT_FILE_ACCEPT,
   canManageClientFilesForRole,
@@ -169,6 +171,8 @@ import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseC
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
 import { ORDER_CARD_FOCUS_EVENT, orderCardForFocus } from "@/lib/studioflow/notificationSettings";
+import { escapeHtml } from "@/lib/security/escapeHtml";
+import { safePreviewFrameUrl } from "@/lib/security/framePreview";
 
 /** The notes the Payment Links rail writes on a TEST row (functions/payments/orderLedger.js, S2). */
 const TEST_PAYMENT_NOTES = new Set(["Stripe TEST payment - no real money moved", "Stripe TEST refund - no real money moved"]);
@@ -494,14 +498,6 @@ function downloadTodoReminderFile(order: OrderDetail, task: ToDoDetail) {
   URL.revokeObjectURL(url);
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
 
 function todoPdfStatus(task: ToDoDetail) {
   if (task.isDone) return "Done";
@@ -2970,7 +2966,7 @@ export function OrderDetailContent({
     });
   }, [order.clientFiles]);
   const previewableClientFiles = useMemo(
-    () => clientFileItems.filter(file => canUseClientFiles && Boolean(file.downloadURL)),
+    () => clientFileItems.filter(file => canUseClientFiles && Boolean(file.downloadURL || file.storagePath)),
     [canUseClientFiles, clientFileItems]
   );
   const activeClientFilePreview = previewingClientFileId
@@ -6893,8 +6889,16 @@ export function OrderDetailContent({
                           onClick={() => setPreviewingClientFileId(photo.id)}
                           title={photo.note || photo.fileName}
                         >
-                          {photo.downloadURL
-                            ? <img src={photo.downloadURL} alt={photo.note || photo.fileName} />
+                          {photo.downloadURL || photo.storagePath
+                            ? (
+                              // Asked of Storage (audit #19 A1); the empty tile stands in until then, or when refused.
+                              <StoredFileImage
+                                storagePath={photo.storagePath}
+                                fallbackUrl={photo.downloadURL}
+                                alt={photo.note || photo.fileName}
+                                placeholder={<span className="repair-intake-photo-empty" aria-hidden="true"><CardIconGlyph icon="photo" /></span>}
+                              />
+                            )
                             : <span className="repair-intake-photo-empty" aria-hidden="true"><CardIconGlyph icon="photo" /></span>}
                         </button>
                       ))}
@@ -12441,9 +12445,11 @@ function ClientFileCard({
   onUseAsPreview: () => void;
 }) {
   const t = useDetailT();
-  const canPreviewImage = canUseClientFiles && Boolean(file.downloadURL) && isClientFileImage(file);
-  const canUseAsPreview = canManageClientFiles && canPreviewImage;
-  const canOpenPreview = canUseClientFiles && Boolean(file.downloadURL);
+  const canOpenPreview = canUseClientFiles && Boolean(file.downloadURL || file.storagePath);
+  const canPreviewImage = canOpenPreview && isClientFileImage(file);
+  // "Use in Preview" writes the stored link into the order's preview photo; it needs one.
+  const canUseAsPreview = canManageClientFiles && canPreviewImage && Boolean(file.downloadURL);
+  const [openProblem, setOpenProblem] = useState("");
   const byline = clientFileByline(file);
   const detailLocale = useDetailLocale();
 
@@ -12457,7 +12463,14 @@ function ClientFileCard({
         title={t(canOpenPreview ? "Preview file" : "Preview is locked for this plan.")}
       >
         {canPreviewImage ? (
-          <img src={file.downloadURL} alt={file.fileName} className="file-preview compact-file-preview" />
+          // Asked of Storage (audit #19 A1); the badge stands in until then, or when refused.
+          <StoredFileImage
+            storagePath={file.storagePath}
+            fallbackUrl={file.downloadURL}
+            alt={file.fileName}
+            className="file-preview compact-file-preview"
+            placeholder={<div className="file-token compact-file-preview">{fileBadge(file)}</div>}
+          />
         ) : (
           <div className="file-token compact-file-preview">
             {fileBadge(file)}
@@ -12470,13 +12483,15 @@ function ClientFileCard({
             {clientFileSizeLabel(file.fileSize)} · {t("Uploaded {date}").replace("{date}", formatDate(file.uploadedAt, detailLocale))}
           </p>
           {byline ? <p className="muted-copy">{byline}</p> : null}
+          {openProblem ? <p className="layout-error" role="alert">{t(openProblem)}</p> : null}
         </div>
       </button>
 
       <div className="client-file-icon-actions">
         {canUseClientFiles ? (
-          file.downloadURL ? (
-            <a className="client-file-icon-button is-primary" href={maskFileUrl(file.downloadURL, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(file.downloadURL, brandedHost); }} title={t("Open / Download")} aria-label={t("Open or download file")}>
+          file.downloadURL || file.storagePath ? (
+            // Opened through Storage when the file has a path (audit #19 A1); the href is only the older records' link.
+            <a className="client-file-icon-button is-primary" href={file.storagePath ? "#" : maskFileUrl(file.downloadURL, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openStoredFile(file, brandedHost).then(status => setOpenProblem(openOutcomeProblem(status))); }} title={t("Open / Download")} aria-label={t("Open or download file")}>
               <ClientFileActionIcon name="download" />
             </a>
           ) : (
@@ -12542,7 +12557,14 @@ function ClientFilePreviewModal({
   const currentIndex = Math.max(0, files.findIndex(file => file.id === activeFile.id));
   const isImage = isClientFileImage(activeFile);
   const isPdf = isClientFilePdf(activeFile);
-  const canUseAsPreview = canManageClientFiles && isImage && Boolean(activeFile.downloadURL);
+  // Asked of Storage now, with this person's sign-in (audit #19 A1); a refusal shows no file.
+  const resolved = useResolvedFileUrl(activeFile.storagePath, activeFile.downloadURL);
+  const activeUrl = resolved.status === "ready" ? resolved.url : "";
+  const problem = resolvedFileProblem(resolved);
+  const [openProblem, setOpenProblem] = useState("");
+  useEffect(() => { setOpenProblem(""); }, [activeFile.id]);
+  const previewFrameUrl = safePreviewFrameUrl(activeUrl, typeof window !== "undefined" ? window.location.origin : "https://nivadesk.app");
+  const canUseAsPreview = canManageClientFiles && isImage && Boolean(activeFile.downloadURL) && Boolean(activeUrl);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -12575,10 +12597,20 @@ function ClientFilePreviewModal({
         </header>
 
         <div className="client-file-preview-stage">
-          {isImage ? (
-            <img src={activeFile.downloadURL} alt={activeFile.fileName} />
-          ) : isPdf ? (
-            <iframe src={activeFile.downloadURL} title={activeFile.fileName} />
+          {problem ? (
+            <div className="client-file-preview-unavailable" role="alert">
+              <span>{fileBadge(activeFile)}</span>
+              <strong>{t(problem)}</strong>
+            </div>
+          ) : resolved.status === "loading" ? (
+            <div className="client-file-preview-unavailable" aria-busy="true">
+              <span>{fileBadge(activeFile)}</span>
+            </div>
+          ) : isImage && activeUrl ? (
+            <img src={activeUrl} alt={activeFile.fileName} />
+          ) : isPdf && previewFrameUrl ? (
+            // Storage or this site's /f/ links only (lib/security/framePreview.ts, audit #18).
+            <iframe src={previewFrameUrl} title={activeFile.fileName} referrerPolicy="no-referrer" />
           ) : (
             <div className="client-file-preview-unavailable">
               <span>{fileBadge(activeFile)}</span>
@@ -12586,6 +12618,7 @@ function ClientFilePreviewModal({
               <p>{t("Use Open or Download to view this file in another app.")}</p>
             </div>
           )}
+          {openProblem && !problem ? <p className="layout-error" role="alert">{t(openProblem)}</p> : null}
         </div>
 
         <footer className="client-file-preview-actions">
@@ -12611,8 +12644,12 @@ function ClientFilePreviewModal({
               {t(actioning ? "Working..." : "Use in Preview")}
             </button>
           ) : null}
-          <a className="button secondary" href={maskFileUrl(activeFile.downloadURL, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(activeFile.downloadURL, brandedHost); }}>{t("Open file")}</a>
-          <a className="button" href={maskFileUrl(activeFile.downloadURL, brandedHost)} onClick={event => { event.preventDefault(); void downloadSharedFile(activeFile.downloadURL, activeFile.fileName, brandedHost); }}>{t("Download")}</a>
+          {activeUrl ? (
+            <>
+              <a className="button secondary" href={maskFileUrl(activeUrl, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openStoredFile(activeFile, brandedHost).then(status => setOpenProblem(openOutcomeProblem(status))); }}>{t("Open file")}</a>
+              <a className="button" href={maskFileUrl(activeUrl, brandedHost)} onClick={event => { event.preventDefault(); void downloadStoredFile(activeFile, activeFile.fileName, brandedHost).then(status => setOpenProblem(openOutcomeProblem(status))); }}>{t("Download")}</a>
+            </>
+          ) : null}
         </footer>
       </section>
     </div>

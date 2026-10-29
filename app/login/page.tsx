@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { studioT, type StudioLanguage } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
+import { safeNextFromLocation } from "@/lib/security/safeNext";
 import {
   PublicSiteLanguageProvider,
   usePublicSiteLanguage
@@ -24,9 +25,8 @@ import {
 const HOME_AFTER_SIGN_IN = "/home";
 
 function nextDestination(fallback: string) {
-  if (typeof window === "undefined") return fallback;
-  const next = new URLSearchParams(window.location.search).get("next") || "";
-  return next.startsWith("/") && !next.startsWith("//") ? next : fallback;
+  // Resolved against this origin and refused if it leaves it (lib/security/safeNext.ts, audit #47).
+  return safeNextFromLocation(fallback);
 }
 
 function LoginLanguageSelector() {
