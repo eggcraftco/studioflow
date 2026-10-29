@@ -98,7 +98,10 @@
     "test:sec-logout-cache": "npx tsx scripts/check-sec-logout-cache.mts",
     "test:sec-session-lock": "npx tsx scripts/check-sec-session-lock.mts",
     "test:sec-oauth-connect": "npx tsx scripts/check-sec-oauth-connect.mts",
-    "test:sec-bundle-emails": "npx tsx scripts/check-sec-bundle-emails.mts"
+    "test:sec-bundle-emails": "npx tsx scripts/check-sec-bundle-emails.mts",
+    "test:sec-csp": "npx tsx scripts/check-sec-csp.mts",
+    "test:security-headers": "node scripts/check-security-headers.js 3091",
+    "test:sec-web": "npm run -s test:sec-next-guard && npm run -s test:sec-logout-cache && npm run -s test:sec-session-lock && npm run -s test:sec-oauth-connect && npm run -s test:sec-bundle-emails && npm run -s test:sec-csp"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

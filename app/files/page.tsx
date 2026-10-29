@@ -52,6 +52,7 @@ import { FilesLibraryView, type LibraryView } from "./FilesLibraryView";
 import { maskFileUrl, openSharedFile } from "@/lib/studioflow/fileMask";
 import { UploadQueuePanel } from "@/components/UploadQueuePanel";
 import { useUploadQueue } from "@/lib/studioflow/useUploadQueue";
+import { safePreviewFrameUrl } from "@/lib/security/framePreview";
 import {
   dragCarriesFiles,
   emptyFileSelection,
@@ -135,6 +136,7 @@ function FilesPreviewModal({
   const currentIndex = Math.max(0, files.findIndex(file => file.id === activeFile.id));
   const isImage = isClientFileImage(activeFile);
   const isPdf = isFilePdf(activeFile);
+  const previewFrameUrl = safePreviewFrameUrl(activeFile.downloadURL, typeof window !== "undefined" ? window.location.origin : "https://nivadesk.app");
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -171,8 +173,9 @@ function FilesPreviewModal({
         <div className="client-file-preview-stage">
           {isImage ? (
             <img src={activeFile.downloadURL} alt={activeFile.fileName} />
-          ) : isPdf ? (
-            <iframe src={activeFile.downloadURL} title={activeFile.fileName} />
+          ) : isPdf && previewFrameUrl ? (
+            // Storage or this site's /f/ links only (lib/security/framePreview.ts, audit #18).
+            <iframe src={previewFrameUrl} title={activeFile.fileName} referrerPolicy="no-referrer" />
           ) : (
             <div className="client-file-preview-unavailable">
               <span>{fileBadgeLabel(activeFile)}</span>

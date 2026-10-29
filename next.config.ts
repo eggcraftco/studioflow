@@ -5,7 +5,9 @@ const firebaseFunctionsBaseUrl = "https://europe-west2-eggcraft-studio.cloudfunc
 // Sent on every response. None of these can change what a page does — they
 // narrow what a browser is willing to do with it — so they go on now, while the
 // Content-Security-Policy that CAN break a page is introduced separately, in
-// report-only first.
+// report-only first: Content-Security-Policy-Report-Only is set by middleware.ts
+// (lib/security/contentSecurityPolicy.ts), not here, because it carries a fresh
+// nonce per response and a static header cannot (security audit #18).
 //
 // Checked before writing them: nothing in this app is embedded in an iframe
 // (there is no Shopify-admin embedded page here), and nothing asks for a

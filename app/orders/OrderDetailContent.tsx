@@ -169,6 +169,8 @@ import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseC
 import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
 import { ORDER_CARD_FOCUS_EVENT, orderCardForFocus } from "@/lib/studioflow/notificationSettings";
+import { escapeHtml } from "@/lib/security/escapeHtml";
+import { safePreviewFrameUrl } from "@/lib/security/framePreview";
 
 /** The notes the Payment Links rail writes on a TEST row (functions/payments/orderLedger.js, S2). */
 const TEST_PAYMENT_NOTES = new Set(["Stripe TEST payment - no real money moved", "Stripe TEST refund - no real money moved"]);
@@ -494,14 +496,6 @@ function downloadTodoReminderFile(order: OrderDetail, task: ToDoDetail) {
   URL.revokeObjectURL(url);
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
 
 function todoPdfStatus(task: ToDoDetail) {
   if (task.isDone) return "Done";
@@ -12542,6 +12536,7 @@ function ClientFilePreviewModal({
   const currentIndex = Math.max(0, files.findIndex(file => file.id === activeFile.id));
   const isImage = isClientFileImage(activeFile);
   const isPdf = isClientFilePdf(activeFile);
+  const previewFrameUrl = safePreviewFrameUrl(activeFile.downloadURL, typeof window !== "undefined" ? window.location.origin : "https://nivadesk.app");
   const canUseAsPreview = canManageClientFiles && isImage && Boolean(activeFile.downloadURL);
 
   useEffect(() => {
@@ -12577,8 +12572,9 @@ function ClientFilePreviewModal({
         <div className="client-file-preview-stage">
           {isImage ? (
             <img src={activeFile.downloadURL} alt={activeFile.fileName} />
-          ) : isPdf ? (
-            <iframe src={activeFile.downloadURL} title={activeFile.fileName} />
+          ) : isPdf && previewFrameUrl ? (
+            // Storage or this site's /f/ links only (lib/security/framePreview.ts, audit #18).
+            <iframe src={previewFrameUrl} title={activeFile.fileName} referrerPolicy="no-referrer" />
           ) : (
             <div className="client-file-preview-unavailable">
               <span>{fileBadge(activeFile)}</span>
