@@ -31,10 +31,10 @@ type Category = typeof categories[number];
  *   "comingSoon"  not available to customers: not deployed, or deployed only
  *                 against the provider's test environment.
  *
- * Today: 7 live (Shopify since 14 October 2026, Etsy from the 28 October 2026
- * pass, WooCommerce, Square, PayPal, TrueLayer, ChatGPT), 8 limited (Xero,
- * QuickBooks, Twilio, WhatsApp, Instagram Direct, Amazon, DHL Express, eBay
- * since 1 October 2026) — 15 cards. The 28 October 2026 pass re-read every card
+ * Today: 8 live (Shopify since 14 October 2026, Etsy from the 28 October 2026
+ * pass, eBay once the switch below is open, WooCommerce, Square, PayPal,
+ * TrueLayer, ChatGPT), 7 limited (Xero, QuickBooks, Twilio, WhatsApp, Instagram
+ * Direct, Amazon, DHL Express) — 15 cards. The 28 October 2026 pass re-read every card
  * against the integration status records (docs/integrations/<slug>.md in the
  * main repository, §1 and §5): Etsy became live (commercial access approved
  * 24 October 2026, any seller connects on their own, read only), and sentences
@@ -46,6 +46,15 @@ type Category = typeof categories[number];
  * that instead of "sample documents sent for verification"; it becomes live
  * only once a real label has been accepted in production and the switch is
  * open to every workspace (scripts/check-dhl-texts.mts keeps it limited).
+ * eBay is live from the day appConfig/commerce.connectors.workspaces carries
+ * "ebay:*": true (29 October 2026 package; until then this page is not
+ * published). Read on 29 October 2026: every eBay function runs against eBay
+ * production, the first seller account has been connected there since
+ * 1 October and syncs every fifteen minutes, eBay's marketplace account
+ * deletion notices are processed, and the only switch in front of Connect was
+ * that list of named workspaces. Connecting needs no plan; a plan's order limit
+ * parks new orders as it does for every channel. Listing and stock links stay
+ * a per-workspace pilot (appConfig/ebayInventory) and are not on this card.
  * Shopify: the app was published on the Shopify App Store on 12 October 2026
  * (Shopify's e-mail, relayed by the owner); no per-workspace switch stands in
  * front of the connect (shopifyCompleteConnect checks the install and the
@@ -104,8 +113,9 @@ const integrations: Integration[] = [
   // keep an initial, as the app's own integration tiles do.
   { name: "Instagram Direct", mark: "I", website: "https://www.instagram.com/", category: "Communication", summary: { key: "integrations.summary.instagram" }, detail: { key: "integrations.detail.instagram" }, state: "limited", note: "integrations.note.instagram" },
   // eBay, 1 October 2026: a production, read-only connection accepted by eBay on a
-  // real seller account; open to named workspaces (appConfig/commerce.connectors.workspaces).
-  { name: "eBay", logo: "/integration-logos/ebay.svg", website: "https://www.ebay.com/", category: "Commerce", summary: { key: "integrations.summary.ebay" }, detail: { key: "integrations.detail.ebay" }, state: "limited", note: "integrations.note.ebay" },
+  // real seller account; open to every workspace once "ebay:*" is true in
+  // appConfig/commerce.connectors.workspaces (the owner's switch, 29 October 2026 package).
+  { name: "eBay", logo: "/integration-logos/ebay.svg", website: "https://www.ebay.com/", category: "Commerce", summary: { key: "integrations.summary.ebay" }, detail: { key: "integrations.detail.ebay" }, state: "live", note: "integrations.note.ebay" },
   { name: "Amazon", logo: "/integration-logos/amazon.png", website: "https://www.amazon.com/", category: "Commerce", summary: "Marketplace order visibility, with a careful approach to customer data.", detail: "The Amazon connection is complete on our side, with customer data kept in a separate, hardened environment. Amazon approved our developer profile on 17 September 2026; the app itself is still in Amazon's review, so a seller cannot authorise it yet. General connection and listing management are not offered.", state: "limited", note: "integrations.note.amazon" },
   { name: "DHL Express", mark: "D", website: "https://www.dhl.com/", category: "Shipping", summary: { key: "integrations.summary.dhl" }, detail: { key: "integrations.detail.dhl" }, state: "limited", note: "integrations.note.dhl" },
 ];

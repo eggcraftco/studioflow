@@ -1108,7 +1108,7 @@ export const PUBLIC_SITE_EN = {
   "integrations.note.whatsapp": "Running for one business today; other businesses can connect once Meta's approvals are in place.",
   "integrations.note.amazon": "Available on request while Amazon completes its review of the app; sellers cannot authorise it until then.",
   "integrations.note.xero": "Available on request until the first customer organisation is connected; proven so far with Xero's demo company.",
-  "integrations.note.ebay": "Available on request: the connection is switched on per workspace while eBay call limits and early use are watched. Orders are read only; nothing is written to eBay.",
+  "integrations.note.ebay": "Connect your eBay seller account yourself from Settings → Integrations; the workspace owner approves NivaDesk on eBay once. Orders are read only and nothing is written to eBay. On a plan with an order limit, new orders wait once the limit is full.",
   "integrations.summary.ebay": "Bring your eBay orders into the workshop, read only.",
   "integrations.detail.ebay": "A read-only eBay connection: approve NivaDesk on eBay once, preview what an import would bring, import, then sync to pick up new orders and changes to payments, refunds and cancellations. The buyer's details stay in a protected store and are shown on request only. Listings, prices, stock, fees and payouts, messages and tracking uploads are not part of this connection.",
   // Second pass, 28 September 2026: the corrected Shopify detail, and the two
@@ -11268,61 +11268,64 @@ const FILL_TRANSLATIONS_18: Partial<Record<StudioLanguage, Partial<Record<Public
 
 
 // eBay on the public directory (1 October 2026, package E3): the connection is
-// production, read-only and open to named workspaces, so its three sentences
-// say exactly that in every language.
+// production and read-only, so its three sentences say exactly that in every
+// language. 29 October 2026: the note no longer says "on request" — the card is
+// live once "ebay:*" opens appConfig/commerce.connectors.workspaces to every
+// workspace — and sends the owner to Settings → Integrations instead.
+// (FILL_TRANSLATIONS_18's older eBay note rows are overridden by this batch.)
 const FILL_TRANSLATIONS_19: Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>> = {
   "Türkçe": {
-    "integrations.note.ebay": "İstek üzerine kullanılabilir: eBay çağrı sınırları ve ilk kullanım izlenirken bağlantı çalışma alanı bazında açılıyor. Siparişler yalnızca okunur; eBay'e hiçbir şey yazılmaz.",
+    "integrations.note.ebay": "eBay satıcı hesabınızı Ayarlar → Entegrasyonlar bölümünden kendiniz bağlayın; çalışma alanı sahibi NivaDesk'i eBay'de bir kez onaylar. Siparişler yalnızca okunur ve eBay'e hiçbir şey yazılmaz. Sipariş sınırı olan bir planda sınır dolunca yeni siparişler bekler.",
     "integrations.summary.ebay": "eBay siparişlerinizi salt okunur olarak atölyeye getirin.",
     "integrations.detail.ebay": "Salt okunur bir eBay bağlantısı: NivaDesk'i eBay'de bir kez onaylayın, içe aktarmanın neler getireceğini önizleyin, içe aktarın; ardından senkronla yeni siparişleri ve ödeme, iade ve iptal değişikliklerini alın. Alıcının bilgileri korumalı bir depoda kalır ve yalnızca istendiğinde gösterilir. İlanlar, fiyatlar, stok, ücretler ve ödemeler, mesajlar ve takip yüklemeleri bu bağlantının parçası değildir."
   },
   "Deutsch": {
-    "integrations.note.ebay": "Auf Anfrage verfügbar: Die Verbindung wird pro Workspace freigeschaltet, während eBay-Aufruflimits und die erste Nutzung beobachtet werden. Bestellungen werden nur gelesen; nichts wird an eBay geschrieben.",
+    "integrations.note.ebay": "Verbinden Sie Ihr eBay-Verkäuferkonto selbst unter Einstellungen → Integrationen; der Inhaber des Workspace gibt NivaDesk einmal bei eBay frei. Bestellungen werden nur gelesen und nichts wird an eBay geschrieben. In einem Tarif mit Bestelllimit warten neue Bestellungen, sobald das Limit erreicht ist.",
     "integrations.summary.ebay": "Holen Sie Ihre eBay-Bestellungen nur lesend in die Werkstatt.",
     "integrations.detail.ebay": "Eine rein lesende eBay-Verbindung: NivaDesk einmal bei eBay freigeben, in der Vorschau sehen, was ein Import bringen würde, importieren und dann synchronisieren, um neue Bestellungen sowie Änderungen bei Zahlungen, Erstattungen und Stornierungen zu übernehmen. Die Käuferdaten bleiben in einem geschützten Speicher und werden nur auf Anfrage angezeigt. Angebote, Preise, Bestand, Gebühren und Auszahlungen, Nachrichten und das Hochladen von Sendungsnummern gehören nicht zu dieser Verbindung."
   },
   "Français": {
-    "integrations.note.ebay": "Disponible sur demande : la connexion est activée par espace de travail pendant que les limites d'appels eBay et les premiers usages sont surveillés. Les commandes sont en lecture seule ; rien n'est écrit sur eBay.",
+    "integrations.note.ebay": "Connectez vous-même votre compte vendeur eBay depuis Paramètres → Intégrations ; le propriétaire de l'espace de travail autorise NivaDesk une seule fois sur eBay. Les commandes sont en lecture seule et rien n'est écrit sur eBay. Avec une offre limitée en nombre de commandes, les nouvelles commandes sont mises en attente une fois la limite atteinte.",
     "integrations.summary.ebay": "Faites entrer vos commandes eBay dans l'atelier, en lecture seule.",
     "integrations.detail.ebay": "Une connexion eBay en lecture seule : approuvez NivaDesk une fois sur eBay, prévisualisez ce qu'un import apporterait, importez, puis synchronisez pour récupérer les nouvelles commandes et les changements de paiements, remboursements et annulations. Les coordonnées de l'acheteur restent dans un espace protégé et ne s'affichent que sur demande. Les annonces, les prix, le stock, les frais et versements, les messages et l'envoi des numéros de suivi ne font pas partie de cette connexion."
   },
   "Italiano": {
-    "integrations.note.ebay": "Disponibile su richiesta: la connessione viene attivata per singolo spazio di lavoro mentre si osservano i limiti di chiamata di eBay e i primi utilizzi. Gli ordini sono in sola lettura; nulla viene scritto su eBay.",
+    "integrations.note.ebay": "Collega tu stesso il tuo account venditore eBay da Impostazioni → Integrazioni; il proprietario dello spazio di lavoro approva NivaDesk su eBay una sola volta. Gli ordini sono in sola lettura e nulla viene scritto su eBay. Con un piano che ha un limite di ordini, i nuovi ordini restano in attesa quando il limite è raggiunto.",
     "integrations.summary.ebay": "Porta i tuoi ordini eBay nel laboratorio, in sola lettura.",
     "integrations.detail.ebay": "Una connessione eBay in sola lettura: approva NivaDesk su eBay una volta, visualizza in anteprima cosa porterebbe un'importazione, importa e poi sincronizza per ricevere i nuovi ordini e le modifiche a pagamenti, rimborsi e annullamenti. I dati dell'acquirente restano in un archivio protetto e vengono mostrati solo su richiesta. Inserzioni, prezzi, scorte, commissioni e pagamenti, messaggi e caricamento dei numeri di tracciamento non fanno parte di questa connessione."
   },
   "Español (Spanish)": {
-    "integrations.note.ebay": "Disponible bajo petición: la conexión se activa por espacio de trabajo mientras se vigilan los límites de llamadas de eBay y el primer uso. Los pedidos son de solo lectura; no se escribe nada en eBay.",
+    "integrations.note.ebay": "Conecta tú mismo tu cuenta de vendedor de eBay desde Ajustes → Integraciones; el propietario del espacio de trabajo autoriza NivaDesk en eBay una sola vez. Los pedidos son de solo lectura y no se escribe nada en eBay. En un plan con límite de pedidos, los pedidos nuevos esperan cuando se alcanza el límite.",
     "integrations.summary.ebay": "Trae tus pedidos de eBay al taller, en solo lectura.",
     "integrations.detail.ebay": "Una conexión de eBay de solo lectura: aprueba NivaDesk en eBay una vez, previsualiza lo que traería una importación, importa y luego sincroniza para recibir los pedidos nuevos y los cambios en pagos, reembolsos y cancelaciones. Los datos del comprador permanecen en un almacén protegido y solo se muestran bajo petición. Los anuncios, precios, existencias, comisiones y pagos, mensajes y la carga de números de seguimiento no forman parte de esta conexión."
   },
   "Português": {
-    "integrations.note.ebay": "Disponível a pedido: a ligação é ativada por espaço de trabalho enquanto os limites de chamadas do eBay e a utilização inicial são acompanhados. As encomendas são apenas de leitura; nada é escrito no eBay.",
+    "integrations.note.ebay": "Ligue a sua conta de vendedor eBay em Definições → Integrações; o proprietário do espaço de trabalho aprova o NivaDesk no eBay uma única vez. As encomendas são apenas de leitura e nada é escrito no eBay. Num plano com limite de encomendas, as novas encomendas ficam em espera quando o limite é atingido.",
     "integrations.summary.ebay": "Traga as suas encomendas do eBay para a oficina, apenas em leitura.",
     "integrations.detail.ebay": "Uma ligação ao eBay apenas de leitura: aprove o NivaDesk no eBay uma vez, pré-visualize o que uma importação traria, importe e depois sincronize para receber novas encomendas e alterações de pagamentos, reembolsos e cancelamentos. Os dados do comprador ficam num armazenamento protegido e só são mostrados a pedido. Anúncios, preços, stock, taxas e pagamentos, mensagens e envio de números de rastreio não fazem parte desta ligação."
   },
   "Русский (Russian)": {
-    "integrations.note.ebay": "Доступно по запросу: подключение включается для отдельных рабочих пространств, пока отслеживаются лимиты вызовов eBay и первое использование. Заказы только читаются; в eBay ничего не записывается.",
+    "integrations.note.ebay": "Подключите свой аккаунт продавца eBay сами в разделе Настройки → Интеграции; владелец рабочего пространства один раз одобряет NivaDesk в eBay. Заказы только читаются, в eBay ничего не записывается. На тарифе с лимитом заказов новые заказы ждут, когда лимит исчерпан.",
     "integrations.summary.ebay": "Переносите заказы eBay в мастерскую — только для чтения.",
     "integrations.detail.ebay": "Подключение eBay только для чтения: один раз одобрите NivaDesk в eBay, посмотрите, что принесёт импорт, импортируйте, а затем синхронизируйте, чтобы получать новые заказы и изменения платежей, возвратов и отмен. Данные покупателя хранятся в защищённом хранилище и показываются только по запросу. Объявления, цены, остатки, комиссии и выплаты, сообщения и передача трек-номеров не входят в это подключение."
   },
   "日本語 (Japanese)": {
-    "integrations.note.ebay": "リクエストに応じて利用可能: eBay の API 呼び出し上限と初期の利用状況を見ながら、ワークスペース単位で接続を有効にしています。注文は読み取りのみで、eBay には何も書き込みません。",
+    "integrations.note.ebay": "eBay の出品者アカウントは 設定 → 連携 からご自身で接続できます。ワークスペースのオーナーが eBay で NivaDesk を一度承認します。注文は読み取りのみで、eBay には何も書き込みません。注文数に上限があるプランでは、上限に達すると新しい注文は待機します。",
     "integrations.summary.ebay": "eBay の注文を読み取り専用で工房に取り込みます。",
     "integrations.detail.ebay": "読み取り専用の eBay 連携です。eBay で NivaDesk を一度承認し、インポートで何が取り込まれるかをプレビューしてからインポートし、その後は同期で新しい注文と支払い・返金・キャンセルの変更を取り込みます。購入者の情報は保護された保管領域に置かれ、必要なときだけ表示されます。出品、価格、在庫、手数料と入金、メッセージ、追跡番号の送信はこの連携に含まれません。"
   },
   "中文 (Chinese)": {
-    "integrations.note.ebay": "按需提供：在关注 eBay 调用限额和早期使用情况的同时，按工作区逐个开通连接。订单仅可读取；不会向 eBay 写入任何内容。",
+    "integrations.note.ebay": "您可以在 设置 → 集成 中自行连接 eBay 卖家账户；由工作区所有者在 eBay 上授权 NivaDesk 一次。订单仅可读取，不会向 eBay 写入任何内容。在有订单上限的套餐中，达到上限后新订单会等待处理。",
     "integrations.summary.ebay": "以只读方式把您的 eBay 订单带进工作室。",
     "integrations.detail.ebay": "只读的 eBay 连接：在 eBay 上授权 NivaDesk 一次，预览导入会带来什么，导入后再通过同步获取新订单以及付款、退款和取消的变化。买家信息保存在受保护的存储中，仅在需要时显示。刊登、价格、库存、费用与结算、消息以及上传追踪号都不属于此连接。"
   },
   "العربية (Arabic)": {
-    "integrations.note.ebay": "متاح عند الطلب: يتم تفعيل الاتصال لكل مساحة عمل على حدة أثناء متابعة حدود استدعاءات eBay والاستخدام الأول. الطلبات للقراءة فقط؛ ولا يُكتب أي شيء إلى eBay.",
+    "integrations.note.ebay": "اربط حساب البائع الخاص بك في eBay بنفسك من الإعدادات ← التكاملات؛ ويوافق مالك مساحة العمل على NivaDesk في eBay مرة واحدة. الطلبات للقراءة فقط ولا يُكتب أي شيء إلى eBay. وفي خطة ذات حد للطلبات، تنتظر الطلبات الجديدة عند بلوغ الحد.",
     "integrations.summary.ebay": "أحضر طلبات eBay إلى الورشة، للقراءة فقط.",
     "integrations.detail.ebay": "اتصال eBay للقراءة فقط: وافق على NivaDesk في eBay مرة واحدة، واستعرض ما سيجلبه الاستيراد، ثم استورد، وبعدها زامن لتلقي الطلبات الجديدة والتغييرات على المدفوعات والمبالغ المستردة والإلغاءات. تبقى بيانات المشتري في مخزن محمي ولا تُعرض إلا عند الطلب. القوائم والأسعار والمخزون والرسوم والدفعات والرسائل ورفع أرقام التتبع ليست جزءًا من هذا الاتصال."
   },
   "हिन्दी (Hindi)": {
-    "integrations.note.ebay": "अनुरोध पर उपलब्ध: eBay की कॉल सीमाओं और शुरुआती उपयोग पर नज़र रखते हुए कनेक्शन हर वर्कस्पेस के लिए अलग से चालू किया जाता है। ऑर्डर केवल पढ़े जाते हैं; eBay पर कुछ भी नहीं लिखा जाता।",
+    "integrations.note.ebay": "अपना eBay सेलर अकाउंट Settings → Integrations से खुद कनेक्ट करें; वर्कस्पेस का मालिक eBay पर NivaDesk को एक बार स्वीकृत करता है। ऑर्डर केवल पढ़े जाते हैं और eBay पर कुछ भी नहीं लिखा जाता। ऑर्डर सीमा वाले प्लान में सीमा भरने पर नए ऑर्डर प्रतीक्षा करते हैं।",
     "integrations.summary.ebay": "अपने eBay ऑर्डर केवल-पढ़ने के लिए वर्कशॉप में लाएँ।",
     "integrations.detail.ebay": "केवल-पढ़ने वाला eBay कनेक्शन: eBay पर NivaDesk को एक बार स्वीकृत करें, देखें कि इम्पोर्ट क्या लाएगा, इम्पोर्ट करें, फिर सिंक करके नए ऑर्डर और भुगतान, रिफ़ंड व रद्दीकरण में बदलाव पाएँ। खरीदार का विवरण एक सुरक्षित स्टोर में रहता है और केवल अनुरोध पर दिखाया जाता है। लिस्टिंग, कीमतें, स्टॉक, फ़ीस और भुगतान, संदेश और ट्रैकिंग अपलोड इस कनेक्शन का हिस्सा नहीं हैं।"
   }
