@@ -76,7 +76,7 @@ ok("middleware puts the policy on the response", /response\.headers\.set\(CSP_RE
 ok("middleware keeps the /r/ rewrite", /url\.pathname = `\/track\/\$\{match\[1\]\}`/.test(middleware) && /"\/r\/:path\*"/.test(middleware));
 ok("middleware matcher is a literal that skips static chunks and prefetches", /source: "\/\(\(\?!_next\/static/.test(middleware) && /next-router-prefetch/.test(middleware));
 const layout = read("app/layout.tsx");
-ok("layout reads x-nonce and puts it on the theme bootstrap", /\(await headers\(\)\)\.get\("x-nonce"\)/.test(layout) && /<script nonce=\{nonce\}/.test(layout) && /<ThemeBootstrapScript nonce=\{nonce\} \/>/.test(layout));
+ok("layout reads x-nonce and puts it on the theme bootstrap", /\(await headers\(\)\)\.get\("x-nonce"\)/.test(layout) && /<script nonce=\{nonce\} suppressHydrationWarning/.test(layout) && /<ThemeBootstrapScript nonce=\{nonce\} \/>/.test(layout));
 const nextConfig = read("next.config.ts");
 ok("next.config.ts sends no static Content-Security-Policy header (it would carry no nonce)", !/key: "Content-Security-Policy/.test(nextConfig));
 
