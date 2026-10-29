@@ -594,19 +594,23 @@ export default function CalendarPage() {
     const visMark = vis === "private" ? "🔒" : vis === "selected" ? "🔗" : vis === "workspace" ? "🏢" : "";
     const visNote = vis === "private" ? t("Only you can see this.") : vis === "workspace" ? t(item.entry?.workspaceRole === "edit" ? "Everyone in the workspace can edit this." : "Everyone in the workspace can see this.") : vis === "selected" ? t("Selected people") : "";
     const metaNote = `${rowMeta?.pending ? ` · ${t("Not synced yet — only on this device until the connection is back.")}` : ""}${rowMeta?.archived ? ` · ${t("Archived: made by someone who has left the workspace.")}` : ""}`;
+    // A meeting from Google / Outlook says where it came from, and that it has a join link, on the card itself (V1.1).
+    const source = item.external ? t(PROVIDER_META[item.external.provider].label) : "";
+    const sourceNote = item.external ? ` · ${source}${item.external.joinUrl ? ` · ${t("Join meeting")}` : ""}` : "";
     return (
       <button
         key={`${item.id}${asCompletion ? ":done" : ""}`}
         type="button"
         className={`cal-chip cal-tone-${meta.tone}${state ? ` cal-state-${state}` : ""}${asCompletion ? " is-completion" : ""}${selectedId === item.id ? " is-selected" : ""}`}
         onClick={(e) => { e.stopPropagation(); detailOpener.current = e.currentTarget; setSelectedId(item.id); }}
-        title={`${t(meta.label)}${stateText ? ` · ${stateText}` : ""} · ${label}${completionNote}${metaNote}${visNote ? ` · ${visNote}` : ""}`}
+        title={`${t(meta.label)}${stateText ? ` · ${stateText}` : ""} · ${label}${completionNote}${metaNote}${visNote ? ` · ${visNote}` : ""}${sourceNote}`}
       >
         <span className="cal-chip-icon" aria-hidden="true">{iconFor(item.kind, state)}</span>
         <span className="cal-chip-text">{label}{marks ? <span aria-hidden="true">{marks}</span> : null}</span>
         {!compact && stateText ? <span className="cal-chip-state">{stateText}</span> : null}
         {visMark && !compact ? <span className="cal-chip-vis" aria-hidden="true">{visMark}</span> : null}
-        <span className="visually-hidden-file">{t(meta.label)}{spokenCompletion ? completionNote : ""}{metaNote}{visNote ? ` · ${visNote}` : ""}</span>
+        {item.external && !compact ? <span className="cal-chip-vis" aria-hidden="true">{item.external.joinUrl ? "🎥 " : ""}{source}</span> : null}
+        <span className="visually-hidden-file">{t(meta.label)}{spokenCompletion ? completionNote : ""}{metaNote}{visNote ? ` · ${visNote}` : ""}{sourceNote}</span>
       </button>
     );
   }
