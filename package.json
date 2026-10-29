@@ -39,6 +39,7 @@
     "test:payment-links": "node scripts/check-payment-links-panel.mjs",
     "test:request-amount": "node scripts/check-request-amount.mjs",
     "test:payment-links-pilot": "node scripts/check-payment-links-pilot.mjs",
+    "test:payment-return": "node scripts/check-payment-return.mts",
     "test:stripe-resume": "node scripts/check-stripe-resume.mjs",
     "test:inventory-notes": "node scripts/check-inventory-notes.mjs",
     "test:inventory-fixes": "node scripts/check-inventory-fixes.mjs",

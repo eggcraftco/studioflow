@@ -1,0 +1,66 @@
+.page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: #f6f7f9;
+  color: #1c2430;
+  font-family: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.card {
+  width: 100%;
+  max-width: 440px;
+  padding: 32px 28px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #e3e6eb;
+  box-shadow: 0 8px 28px rgba(20, 30, 45, 0.06);
+  text-align: center;
+}
+
+.card h1 {
+  margin: 16px 0 10px;
+  font-size: 1.35rem;
+  line-height: 1.3;
+  font-weight: 650;
+}
+
+.card p {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.mark {
+  display: inline-grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.paid { background: #e3f4ea; color: #1d7a45; }
+.cancelled { background: #fbeaea; color: #a83232; }
+.unknown { background: #e8eef8; color: #2f5596; }
+
+.close { color: #4a5565; }
+
+.secure {
+  margin-top: 20px !important;
+  font-size: 0.85rem !important;
+  color: #6b7482;
+}
+
+@media (prefers-color-scheme: dark) {
+  .page { background: #12161c; color: #e8ecf2; }
+  .card { background: #1b2028; border-color: #2a313c; box-shadow: none; }
+  .close { color: #b5bdc9; }
+  .secure { color: #8e98a6; }
+  .paid { background: #18382a; color: #7fd7a3; }
+  .cancelled { background: #3d1f1f; color: #f0a0a0; }
+  .unknown { background: #1f2c44; color: #9dbbf0; }
+}
