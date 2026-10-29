@@ -316,7 +316,7 @@ export default function CalendarPage() {
       }
       dispatchStudioToast({ message: event.type === "saved"
         ? t("Saved after the connection came back: {title}").replace("{title}", title)
-        : `${failedText(item.errorCode, t)} ${item.draft ? t("Not saved: {title}. Your text is kept — open it from the list above the calendar.").replace("{title}", title) : ""}`.trim() });
+        : item.draft ? t("Not saved: {title}. Your text is kept — open it from the list above the calendar.").replace("{title}", title) : failedText(item.errorCode, t) });
     });
     return () => {
       stop();
@@ -751,7 +751,7 @@ export default function CalendarPage() {
                 {pendingCount ? <p className="muted-copy cal-loading" role="status">⏳ {t("Waiting to be confirmed: {count}").replace("{count}", String(pendingCount))}</p> : null}
                 {failedDrafts.map((item) => (
                   <div key={item.key} className="layout-error" role="alert">
-                    {t("Not saved: {title}").replace("{title}", item.title || t("Untitled entry"))} — {failedText(item.errorCode, t)}{" "}
+                    <strong>{item.title || t("Untitled entry")}</strong> — {failedText(item.errorCode, t)}{" "}
                     <button type="button" className="button secondary" onClick={() => openDraft(item)}>{t("Open")}</button>{" "}
                     <button type="button" className="cal-link-button" onClick={() => dropCalendarOutboxItem(item.key)}>{t("Discard")}</button>
                   </div>
