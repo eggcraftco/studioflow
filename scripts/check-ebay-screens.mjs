@@ -17,8 +17,10 @@
 // 4. The gates the screens reuse, read from the source: Orders-off never reaches the order page or
 //    the list; the Sync health card's review rows follow Orders and Financial Info.
 // 5. Every sentence the new blocks print, in all eleven other languages, through the app's studioT.
-// 6. /integrations: eBay is "limited" (available on request), and its three sentences say read-only,
-//    preview / import / sync, and name what is NOT part of it, in twelve languages.
+// 6. /integrations: eBay is "live" (29 Oct 2026: open to every workspace by "ebay:*" in
+//    appConfig/commerce.connectors.workspaces), and its three sentences say read-only, preview /
+//    import / sync, name what is NOT part of it, and send the owner to Settings → Integrations, in
+//    twelve languages, with no "on request" wording left.
 //
 //   node scripts/check-ebay-screens.mjs
 import fs from "fs";
@@ -353,7 +355,7 @@ expect("Arabic renders through the same table", studioT("Last successful order s
 // ---- 6. /integrations
 const dir = read("app/integrations/IntegrationsDirectory.tsx");
 const row = dir.split("\n").find((l) => l.includes('name: "eBay"')) || "";
-expect("/integrations: eBay is available on request (limited), not coming soon", /state: "limited"/.test(row) && !/comingSoon/.test(row), true);
+expect("/integrations: eBay is live, not limited or coming soon", /state: "live"/.test(row) && !/limited|comingSoon/.test(row), true);
 expect("/integrations: eBay's three sentences come from the translation table", ['summary: { key: "integrations.summary.ebay" }', 'detail: { key: "integrations.detail.ebay" }', 'note: "integrations.note.ebay"'].every((k) => row.includes(k)), true);
 const P = await load("lib/publicSite/translations.ts");
 const EN = P.PUBLIC_SITE_EN;
@@ -361,12 +363,20 @@ expect("/integrations EN: read-only, preview / import / sync", /read-only/i.test
 expect("/integrations EN: names what is not part of it", ["Listings", "prices", "stock", "fees and payouts", "messages", "tracking uploads"].every((w) => EN["integrations.detail.ebay"].includes(w)), true);
 expect("/integrations EN: no test-environment wording left", /test environment|sandbox/i.test(`${EN["integrations.note.ebay"]} ${EN["integrations.detail.ebay"]} ${EN["integrations.summary.ebay"]}`), false);
 expect("/integrations EN: nothing is written to eBay", /nothing is written to eBay/.test(EN["integrations.note.ebay"]), true);
+expect("/integrations EN: the owner connects from Settings → Integrations", /Settings → Integrations/.test(EN["integrations.note.ebay"]) && /workspace owner/.test(EN["integrations.note.ebay"]), true);
+expect("/integrations EN: no on-request wording left", /on request|per workspace/i.test(EN["integrations.note.ebay"]), false);
+// The phrase each language used for "available on request" before 29 Oct 2026.
+const ON_REQUEST = /İstek üzerine|Auf Anfrage|sur demande|su richiesta|bajo petición|a pedido|по запросу|リクエストに応じて|按需|عند الطلب|अनुरोध पर/;
 for (const language of LANGUAGES) {
   const table = P.PUBLIC_SITE_TRANSLATIONS[language] || {};
   for (const key of ["integrations.summary.ebay", "integrations.detail.ebay", "integrations.note.ebay"]) {
     expect(`/integrations ${language} ${key}: translated`, Boolean(table[key]) && table[key] !== EN[key], true);
   }
   expect(`/integrations ${language}: the old test-environment note is gone`, /test|Test|тест|テスト|测试|الاختبار|टेस्ट|Testumgebung|essai|prueba|testes/.test(table["integrations.note.ebay"] || ""), false);
+  expect(`/integrations ${language}: the on-request note is gone`, ON_REQUEST.test(table["integrations.note.ebay"] || ""), false);
+  // The note names the same Settings → Integrations path the legend's "Live" line does in that language.
+  const path = ((table["integrations.legend.live"] || "").match(/\S+ [→←] \S+?(?=[.。।]?$|[ ,，。]| से)/u) || [""])[0];
+  expect(`/integrations ${language}: the note names the legend's path (${path})`, Boolean(path) && (table["integrations.note.ebay"] || "").includes(path), true);
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });
@@ -375,4 +385,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  - ${f}`);
   process.exit(1);
 }
-console.log(`check-ebay-screens: all ${checks} checks pass — the card's two times and server-only counts, one fix per error class, the source filter, the order's eBay block behind Financial Info and without the buyer (rendered), ${said.size} sentences in twelve languages, /integrations read-only in twelve languages`);
+console.log(`check-ebay-screens: all ${checks} checks pass — the card's two times and server-only counts, one fix per error class, the source filter, the order's eBay block behind Financial Info and without the buyer (rendered), ${said.size} sentences in twelve languages, /integrations live and read-only in twelve languages`);
