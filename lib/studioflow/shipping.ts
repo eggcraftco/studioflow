@@ -233,6 +233,8 @@ export type ShipmentProduct = {
   customerAgreementOnly: boolean;
   estimatedDelivery: string;
   totalTransitDays: number | null;
+  /** DHL's price for the account (POST /rates); only sent to a member with financial info. */
+  price?: { amount: number; currency: string; currencyType?: string };
 };
 
 export type ShipmentProductsResult = {
@@ -241,6 +243,8 @@ export type ShipmentProductsResult = {
   problems: ShipmentIssue[];
   pieceCount: number;
   detail: string;
+  /** Present only for a member with financial info: "priced", or "unknown" when DHL gave no prices. */
+  priceOutcome?: "priced" | "unknown";
 };
 
 function call<Req extends Record<string, unknown>, Res>(name: string) {

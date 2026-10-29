@@ -58,6 +58,14 @@ type ItemInput = {
 const DHL_INCOTERMS = ["DAP", "DDP", "EXW", "FCA", "CPT", "CIP", "DPU", "FAS", "FOB", "CFR", "CIF"];
 const IMPLIED_INCOTERM: Record<string, string> = { receiver: "DAP", sender: "DDP" };
 
+// DHL's price in its own currency (the account's billing currency), in the reader's number format.
+const formatShipmentPrice = (price: { amount: number; currency: string }, locale: string) => {
+  try {
+    return new Intl.NumberFormat(locale, { style: "currency", currency: price.currency }).format(price.amount);
+  } catch {
+    return `${price.amount.toFixed(2)} ${price.currency}`;
+  }
+};
 const asInput = (value: number | null | undefined) => (value === null || value === undefined || !Number.isFinite(value) ? "" : String(value));
 const asNumber = (value: string) => {
   const trimmed = value.trim();
@@ -737,6 +745,7 @@ export function ShipmentDraftDialog({
                     <input type="radio" name={`product-${shipment.id}`} value={product.productCode} checked={productCode === product.productCode} onChange={() => change(setProductCode)(product.productCode)} />
                     <span>
                       <strong>{product.productName}</strong> <code className="shipment-mono">{product.productCode}</code>
+                      {product.price ? <> · <strong className="shipment-price">{formatShipmentPrice(product.price, locale)}</strong></> : null}
                       <small>
                         {product.estimatedDelivery ? `${t("Estimated delivery")} ${product.estimatedDelivery.replace("T", " ").slice(0, 16)}` : ""}
                         {product.totalTransitDays !== null ? ` · ${product.totalTransitDays === 1 ? t("1 day in transit") : t("{count} days in transit").replace("{count}", String(product.totalTransitDays))}` : ""}
@@ -745,6 +754,8 @@ export function ShipmentDraftDialog({
                   </label>
                 ))}
                 {products.pieceCount > 1 ? <p className="shipment-muted">{t("DHL lists services for one parcel, the heaviest. It checks every parcel again when the label is created.")}</p> : null}
+                {products.priceOutcome === "priced" ? <p className="shipment-muted">{t("Prices are DHL's quote for your account and every parcel, at the time of asking. Your DHL invoice can differ, for example with surcharges or duties.")}</p> : null}
+                {products.priceOutcome === "unknown" ? <p className="shipment-muted">{t("DHL gave no prices this time. The services are still correct; ask again to see prices.")}</p> : null}
               </div>
             ) : products.outcome === "invalid" ? (
               <ul className="shipment-issues">{products.problems.map(problem => <li key={`${problem.code}:${problem.field}`}>{shipmentIssueMessage(problem, t)}</li>)}</ul>
