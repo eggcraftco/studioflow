@@ -23,6 +23,7 @@
     "test:inbox-empty-state": "node scripts/check-inbox-empty-state.mjs",
     "test:inbox-push-link": "node scripts/check-inbox-push-link.mjs",
     "test:inbox-scan-poll": "node scripts/check-inbox-scan-poll.mjs",
+    "test:inbox-placeholders": "npx tsx scripts/check-inbox-placeholders.mts",
     "test:ui-workspace-translations": "node scripts/check-ui-workspace-translations.mjs",
     "test:live-tracking": "node scripts/check-live-tracking.mjs",
     "test:tracking-email": "node scripts/check-tracking-email.mjs",
