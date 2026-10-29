@@ -17,12 +17,12 @@ import {
   reauthenticateWithCredential,
   reauthenticateWithPopup,
   sendEmailVerification,
-  signOut,
   type MultiFactorInfo,
   type TotpSecret
 } from "firebase/auth";
 import { auth, appleProvider, googleProvider } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { signOutAndWipe } from "@/lib/auth/signOutSession";
 import { studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import {
@@ -153,8 +153,8 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
       if (code(err) === "auth/requires-recent-login") setStep({ kind: "reauth", then: "remove", factor });
       else if (code(err) === "auth/user-token-expired") {
         // Removing the factor you signed in with ends this session (Firebase behaviour).
-        await signOut(auth).catch(() => undefined);
-        window.location.assign("/login");
+        // Through the shared sign-out so this browser's Firestore copy goes too (audit #17).
+        await signOutAndWipe({ destination: "/login" }).catch(() => window.location.assign("/login"));
       } else fail(err, "Could not remove two-step verification.");
     } finally {
       setBusy(false);
@@ -181,8 +181,7 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
     setBusy(true);
     try {
       await signOutEverywhere();
-      await signOut(auth).catch(() => undefined);
-      window.location.assign("/login");
+      await signOutAndWipe({ destination: "/login" }).catch(() => window.location.assign("/login"));
     } catch (err) {
       fail(err, "Could not sign out everywhere.");
       setBusy(false);
