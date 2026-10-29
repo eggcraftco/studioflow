@@ -91,9 +91,12 @@ const call = <TIn, TOut>(name: string) => httpsCallable<TIn, TOut>(functions, na
  * finish it: the nonce below never leaves this device, and a callback that
  * arrives without it is refused. See docs/ebay-connector-design.md §5.
  */
-export async function beginEbayConnect(companyId: string) {
-  return (await call<{ companyId: string }, { ok: boolean; authorizeUrl: string; state: string; nonce: string; ticket: string; scopes: string[]; environment: string; handoff?: string }>(
-    "beginEbayConnect")({ companyId })).data;
+export async function beginEbayConnect(companyId: string, connectionId?: string) {
+  // A Reconnect names the connection it renews, so the server accepts only the SAME eBay seller on the way back
+  // (signing in with another eBay account is refused instead of quietly adding a second connection). A first
+  // Connect names none.
+  return (await call<{ companyId: string; connectionId?: string }, { ok: boolean; authorizeUrl: string; state: string; nonce: string; ticket: string; scopes: string[]; environment: string; handoff?: string }>(
+    "beginEbayConnect")({ companyId, ...(connectionId ? { connectionId } : {}) })).data;
 }
 /** The native start page's half: the uid that began the flow claims it once. */
 export async function claimEbayConnectState(state: string) {

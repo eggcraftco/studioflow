@@ -379,10 +379,24 @@ for (const language of LANGUAGES) {
   expect(`/integrations ${language}: the note names the legend's path (${path})`, Boolean(path) && (table["integrations.note.ebay"] || "").includes(path), true);
 }
 
+// ---- 7. Reconnect renews the SAME seller (EB-10, 29 Oct 2026)
+// The server refuses a different eBay seller on a renewal only when begin names the connection; the card used to call
+// beginEbayConnect(companyId) for Reconnect too, so a Reconnect signed in with another eBay account opened a second
+// connection instead of being refused.
+const section = read("app/settings/EbayIntegrationSection.tsx");
+const ebayLib = read("lib/studioflow/ebay.ts");
+const beginFn = (ebayLib.match(/export async function beginEbayConnect\([^)]*\)[\s\S]*?\n}/) || [""])[0];
+expect("begin takes an optional connection to renew", /beginEbayConnect\(companyId: string, connectionId\?: string\)/.test(beginFn), true);
+expect("begin sends connectionId only when one is given", /\.\.\.\(connectionId \? \{ connectionId \} : \{\}\)/.test(beginFn), true);
+expect("no button passes its click event as the connection (onClick={startConnect})", /onClick=\{startConnect\}/.test(section), false);
+expect("both Reconnect buttons renew the card's own connection", (section.match(/onClick=\{\(\) => startConnect\(connection\.id\)\}/g) || []).length, 2);
+expect("the first Connect names no connection", /onClick=\{\(\) => startConnect\(\)\}/.test(section), true);
+expect("startConnect hands the renewed connection to begin", /beginEbayConnect\(companyId, renewing\)/.test(section), true);
+
 fs.rmSync(tmp, { recursive: true, force: true });
 if (failures.length) {
   console.error(`check-ebay-screens: ${failures.length} failure(s) of ${checks} checks`);
   for (const f of failures) console.error(`  - ${f}`);
   process.exit(1);
 }
-console.log(`check-ebay-screens: all ${checks} checks pass — the card's two times and server-only counts, one fix per error class, the source filter, the order's eBay block behind Financial Info and without the buyer (rendered), ${said.size} sentences in twelve languages, /integrations live and read-only in twelve languages`);
+console.log(`check-ebay-screens: all ${checks} checks pass — the card's two times and server-only counts, one fix per error class, the source filter, the order's eBay block behind Financial Info and without the buyer (rendered), ${said.size} sentences in twelve languages, /integrations live and read-only in twelve languages, Reconnect renews the same seller`);

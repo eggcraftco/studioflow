@@ -133,8 +133,9 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
   // no code exists yet and the state expires by TTL — whereas sending them on
   // when we already know the return leg will be refused manufactures a live
   // authorization code that nothing on our side can then invalidate.
-  const startConnect = () => guard("connect", async () => {
-    const result = await beginEbayConnect(companyId);
+  // `renewing`: the connection a Reconnect renews (the server then accepts only that seller); none for a first Connect.
+  const startConnect = (renewing?: string) => guard("connect", async () => {
+    const result = await beginEbayConnect(companyId, renewing);
     if (!result?.authorizeUrl || !result?.ticket) { setError(t("eBay did not complete the connection. Try again.")); return; }
     // A production (edge) flow returns through connect.nivadesk.app, so its
     // binding is sealed THERE: the Worker receives it in a same-site form POST,
@@ -187,7 +188,7 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
         <p className="muted-copy">{t("NivaDesk will read your orders. It will not change listings, prices or stock.")}</p>
         {environment === "sandbox" ? <p className="muted-copy"><strong>{t("Sandbox — test orders only")}</strong></p> : null}
         <div className="settings-action-row">
-          <button type="button" className="button" disabled={!isOwner || busy === "connect"} onClick={startConnect}>
+          <button type="button" className="button" disabled={!isOwner || busy === "connect"} onClick={() => startConnect()}>
             {busy === "connect" ? t("Opening eBay…") : t("Connect eBay")}
           </button>
         </div>
@@ -243,7 +244,7 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
   });
   const previewNow = () => guard("preview", async () => { setImported(null); setPreview(await previewEbayImport(companyId, connection.id, sinceDays)); });
   const attentionButton = (item: EbayAttention) => {
-    if (item.action === "reconnect" && isOwner) return <button type="button" className="button" disabled={busy === "connect"} onClick={startConnect}>{busy === "connect" ? t("Opening eBay…") : t("Reconnect eBay")}</button>;
+    if (item.action === "reconnect" && isOwner) return <button type="button" className="button" disabled={busy === "connect"} onClick={() => startConnect(connection.id)}>{busy === "connect" ? t("Opening eBay…") : t("Reconnect eBay")}</button>;
     if (item.action === "disconnect" && isOwner) return <button type="button" className="button secondary" onClick={() => setConfirmDisconnect(true)}>{t("Disconnect eBay")}</button>;
     if (item.action === "retry" && isOwner) return <button type="button" className="button secondary" disabled={busy === "retry"} onClick={retryNow}>{busy === "retry" ? t("Retrying…") : t("Retry")}</button>;
     if (item.action === "parked") return canOpenOrders ? <a className="button secondary" href="/orders">{t("See parked orders")}</a> : null;
@@ -322,7 +323,7 @@ export function EbayIntegrationSection({ workspace, language = "English" }: Prop
             <button type="button" className="button secondary" disabled={busy === "retry"} onClick={retryNow}>{busy === "retry" ? t("Retrying…") : t("Retry")}</button>
           ) : null}
           {isOwner && !attention.some((item) => item.action === "reconnect") ? (
-            <button type="button" className={connection.needsReconnect ? "button" : "button secondary"} disabled={busy === "connect"} onClick={startConnect}>
+            <button type="button" className={connection.needsReconnect ? "button" : "button secondary"} disabled={busy === "connect"} onClick={() => startConnect(connection.id)}>
               {busy === "connect" ? t("Opening eBay…") : t("Reconnect eBay")}
             </button>
           ) : null}
