@@ -25,6 +25,19 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { auth, db, functions, clearFirestoreLocalCache } from "@/lib/firebase/client";
 import { signOutAndWipe, UNSYNCED_SIGN_OUT_TEXT } from "@/lib/auth/signOutSession";
 import { ensureRecentAuthentication } from "@/lib/auth/recentAuth";
+import {
+  addressWithoutClaim,
+  connectClaimRefusalKeepsClaim,
+  connectClaimRefusalSentence,
+  connectClaimUrl,
+  dropStashedConnectClaim,
+  readConnectClaim,
+  readStashedConnectClaim,
+  sendConnectClaim,
+  settingsAddressForAnswer,
+  stashConnectClaim,
+  type PendingConnectClaim
+} from "@/lib/studioflow/connectClaim";
 import { useAppConfirm } from "@/components/AppConfirmDialog";
 import { collection, getDocs } from "firebase/firestore";
 import {
@@ -663,6 +676,43 @@ export default function SettingsPage() {
     return () => mq.removeEventListener("change", onChange);
   }, []);
 
+  // #9 (28 Oct 2026, lib/studioflow/connectClaim.ts): a provider's return now
+  // carries a claim (?<provider>=confirm&claim=…). It leaves the address bar
+  // before anything else reads it — before the sign-in redirect below copies
+  // the address into ?next= — and waits in sessionStorage for the signed-in
+  // person to finish it.
+  const connectClaimFromAddressRef = useRef<PendingConnectClaim | null>(null);
+  const connectClaimStartedRef = useRef(false);
+  const [connectClaimNotice, setConnectClaimNotice] = useState<{ text: string; tone: "info" | "error" } | null>(null);
+  useEffect(() => {
+    const pending = readConnectClaim(window.location.search);
+    if (!pending) return;
+    connectClaimFromAddressRef.current = pending;
+    stashConnectClaim(pending, window.sessionStorage);
+    window.history.replaceState(window.history.state, "", addressWithoutClaim(window.location.href));
+  }, []);
+
+  useEffect(() => {
+    if (loading || !user || connectClaimStartedRef.current) return;
+    const pending = readStashedConnectClaim(window.sessionStorage);
+    if (!pending) return;
+    connectClaimStartedRef.current = true;
+    setConnectClaimNotice({ text: "Finishing the connection…", tone: "info" });
+    void (async () => {
+      const idToken = await user.getIdToken().catch(() => "");
+      const answer = await sendConnectClaim(pending, { idToken, url: connectClaimUrl(pending.provider, auth.app.options.projectId) });
+      if (answer.kind === "result") {
+        // The provider panel says what happened, from the same parameters the
+        // callback's own redirect carries (and the older server still sends).
+        dropStashedConnectClaim(window.sessionStorage);
+        window.location.replace(settingsAddressForAnswer(pending, answer.params, answer.outcome));
+        return;
+      }
+      if (!connectClaimRefusalKeepsClaim(answer.status)) dropStashedConnectClaim(window.sessionStorage);
+      setConnectClaimNotice({ text: connectClaimRefusalSentence(answer.status), tone: "error" });
+    })();
+  }, [loading, user]);
+
   useEffect(() => {
     // Keep where the person was going: Etsy's approval returns here in whatever browser
     // the phone opens, often signed out, and "/login" alone dropped ?etsy=connected.
@@ -679,6 +729,14 @@ export default function SettingsPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const rawRequested = params.get("section");
+    // #9: a claim return (its confirm word already taken out of the address)
+    // opens the provider's panel, where its result will be shown.
+    const claimReturn = connectClaimFromAddressRef.current;
+    if (claimReturn) {
+      setIntegrationProvider(claimReturn.provider);
+      setActiveSection("integrations");
+      setMobileDetail(true);
+    }
     setIntegrationIntent(params.get("intent") ?? "");
     setIntegrationCategory(params.get("category") ?? "");
     if (
@@ -1157,6 +1215,11 @@ export default function SettingsPage() {
             <span aria-hidden="true">‹</span> {t("Settings")}
           </button>
           <div className="settings-mobile-title">{t(selectedSection.title)}</div>
+          {connectClaimNotice ? (
+            <p className={connectClaimNotice.tone === "error" ? "settings-notice is-caution" : "settings-notice"} role={connectClaimNotice.tone === "error" ? "alert" : "status"} data-testid="connect-claim-notice">
+              {t(connectClaimNotice.text)}
+            </p>
+          ) : null}
           {error ? (
             <div className="card app-card">
               <CardTitle icon="lock" eyebrow={t("Settings error")} title={t("Could not load workspace settings")} />
