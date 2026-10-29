@@ -66,6 +66,8 @@
     "test:upload-translations": "node scripts/check-upload-translations.mjs",
     "test:upload-policy": "node scripts/check-upload-policy.mjs",
     "test:menu-card-strings": "node scripts/check-menu-card-strings.mjs",
+    "test:calendar-core": "npx tsx scripts/check-calendar-core.mts",
+    "test:calendar-view": "npx tsx scripts/check-calendar-view.mts",
     "test:card-purposes": "node scripts/check-card-purposes.mjs",
     "test:owner-assignment": "node scripts/check-owner-assignment.mjs",
     "test:card-stacking": "node scripts/check-card-stacking.mjs",

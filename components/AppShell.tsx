@@ -120,6 +120,7 @@ type NavIconName =
   | "production"
   | "dashboard"
   | "schedule"
+  | "calendar"
   | "customers"
   | "inventory"
   | "files"
@@ -157,6 +158,9 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/production", label: "Production", icon: "production" },
   { href: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { href: "/bank", label: "Banking", icon: "bank" },
+  // Calendar V1 (28 Oct 2026): the personal / shared agenda. No member key of its own: what each
+  // person reads is decided per entry by the rules (calendarEntries).
+  { href: "/calendar", label: "Calendar", icon: "calendar" },
   { href: "/schedule", label: "Schedule", icon: "schedule" },
   { href: "/team-schedule", label: "Team Schedule", icon: "customers" },
   { href: "/notes", label: "Notes", icon: "notes" },
@@ -482,6 +486,11 @@ function NavIcon({ name }: { name: NavIconName }) {
       "M4 18h.01",
     ],
     dashboard: ["M4 20V10", "M10 20V4", "M16 20v-7", "M22 20H2"],
+    calendar: [
+      "M7 2v3M17 2v3M4 9h16",
+      "M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z",
+      "M8 13h3v3H8z",
+    ],
     schedule: [
       "M7 2v3M17 2v3M4 9h16",
       "M5 4h14a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z",
@@ -1294,6 +1303,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     pathname === "/files" ||
     pathname === "/export" ||
     pathname === "/schedule" ||
+    pathname === "/calendar" ||
     pathname === "/team-schedule" ||
     pathname === "/dashboard" ||
     pathname === "/quick-reply" ||
@@ -1389,6 +1399,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     import("@/lib/studioflow/notifications").StudioActivityNotification[]
   >([]);
   const [notifDismissedLocal, setNotifDismissedLocal] = useState<Set<string>>(new Set());
+  // Calendar V1: the person's own reminders that went off (companies/{cid}/calendarInbox).
+  const [calendarInbox, setCalendarInbox] = useState<import("@/lib/studioflow/calendarData").CalendarInboxRow[]>([]);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [notesReminderCount, setNotesReminderCount] = useState(0);
   const [creatingOrder, setCreatingOrder] = useState(false);
@@ -1773,6 +1785,24 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     };
   }, [workspace, user]);
 
+  useEffect(() => {
+    if (!workspace || !user) {
+      setCalendarInbox([]);
+      return;
+    }
+    let cancelled = false;
+    let unsub: (() => void) | null = null;
+    (async () => {
+      const mod = await import("@/lib/studioflow/calendarData");
+      if (cancelled) return;
+      unsub = mod.listenToCalendarInbox(workspace.id, user.uid, setCalendarInbox);
+    })();
+    return () => {
+      cancelled = true;
+      if (unsub) unsub();
+    };
+  }, [workspace, user]);
+
   // Listen to message threads only when the current plan and assigned role
   // are permitted to read Messages. This avoids Firestore permission errors in
   // Free/Lite/Pro workspaces and for Workflow Only members.
@@ -1870,8 +1900,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       if (n.readByMillis[uidClean]) return false;
       if (emailClean && n.readByMillis[emailClean]) return false;
       return true;
-    }).length;
-  }, [notifications, notifDismissedLocal, user, workspace?.memberAccess]);
+    }).length + calendarInbox.filter((row) => !row.read).length;
+  }, [notifications, notifDismissedLocal, user, workspace?.memberAccess, calendarInbox]);
 
   useEffect(() => {
     function refreshFirstProjectGuide() {
@@ -3593,6 +3623,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         uid={user?.uid ?? ""}
         email={user?.email ?? ""}
         notifications={notificationsShown}
+        calendarRows={calendarInbox}
         dismissedLocally={notifDismissedLocal}
         onClose={() => setNotifDrawerOpen(false)}
         onLocalDismiss={(ids) => setNotifDismissedLocal((prev) => {
