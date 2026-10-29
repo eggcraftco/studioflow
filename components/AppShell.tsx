@@ -20,7 +20,7 @@ import { localizeActivityNotification } from "@/lib/studioflow/notificationText"
 import { bootMark } from "@/lib/studioflow/bootTrace";
 import { useQuickActionEvent, type QuickActionPayload } from "@/lib/studioflow/quickActions";
 import { OPEN_ACTIVITY_CENTRE_EVENT } from "@/lib/studioflow/homeCards";
-import { isNivaDeskAdminEmail } from "@/components/AdminInsightsHub";
+import { useNivaDeskAdmin } from "@/lib/security/adminGate";
 import { emailVerificationPending, emailVerificationRequired, VerifyEmailBanner, VerifyEmailScreen } from "@/components/VerifyEmailGate";
 import { NotificationsDrawer } from "@/components/NotificationsDrawer";
 import { messagesNavHref } from "@/lib/studioflow/messagingAccess";
@@ -1230,6 +1230,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function AppShellFrame({ children }: { children: ReactNode }) {
   const { user, language: personalLanguage, theme: personalTheme } = useAuth();
+  // View gate for the Admin item (digests, lib/security/adminGate.ts); the server gates the data.
+  const isAdmin = useNivaDeskAdmin(user?.email) === true;
 
   // The page's reading direction and language tag, from the person's own
   // setting. Nothing inside the app set these: `dir` was written only by the
@@ -2143,7 +2145,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     // inbox (`messages`) or team messages (`teamChat`) is allowed.
     if (item.href === "/inbox") return workspace ? messagesNavHref(workspace.memberAccess) === null : false;
     if (item.href === "/quick-reply" && workspace?.quickReplyMenuEnabled === false) return true;
-    if (item.href === "/admin" && !isNivaDeskAdminEmail(user?.email)) return true;
+    if (item.href === "/admin" && !isAdmin) return true;
     if (
       item.href === "/sales" &&
       !(salesMenu?.companyId === workspace?.id && salesMenu?.showInMenu === true)

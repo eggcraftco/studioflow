@@ -4,7 +4,7 @@
 // inside the app, newest first, with a status the admin can move. Reads and
 // writes go through the admin callables; nothing here e-mails the person back.
 // Access is the support-admin allowlist (functions/index.js SUPPORT_ADMIN_EMAILS,
-// mirrored for the page gate in AdminInsightsHub NIVADESK_ADMIN_EMAILS) — not
+// mirrored for the page gate as digests in lib/security/adminGate.ts) — not
 // the pilot list, which only says whose form is on.
 
 import { useCallback, useEffect, useMemo, useState } from "react";

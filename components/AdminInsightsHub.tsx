@@ -22,12 +22,6 @@ import {
   type ActivationEvidence
 } from "@/lib/studioflow/adminInsightsMetrics";
 
-export const NIVADESK_ADMIN_EMAILS = new Set(["nivadesk@gmail.com", "eggcraftco@gmail.com", "contact@eggcraft.co.uk"]);
-
-export function isNivaDeskAdminEmail(email: string | null | undefined) {
-  return Boolean(email && NIVADESK_ADMIN_EMAILS.has(email.trim().toLowerCase()));
-}
-
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="settings-info-tile" style={{ display: "grid", gap: 3, padding: 12, borderRadius: 12, background: "rgba(17,24,39,0.04)" }}>

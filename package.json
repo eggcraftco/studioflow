@@ -97,7 +97,8 @@
     "test:sec-next-guard": "npx tsx scripts/check-sec-next-guard.mts",
     "test:sec-logout-cache": "npx tsx scripts/check-sec-logout-cache.mts",
     "test:sec-session-lock": "npx tsx scripts/check-sec-session-lock.mts",
-    "test:sec-oauth-connect": "npx tsx scripts/check-sec-oauth-connect.mts"
+    "test:sec-oauth-connect": "npx tsx scripts/check-sec-oauth-connect.mts",
+    "test:sec-bundle-emails": "npx tsx scripts/check-sec-bundle-emails.mts"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
