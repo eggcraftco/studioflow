@@ -11,6 +11,13 @@ export const TYPE_META: Record<CalendarItemKind, { label: string; icon: string; 
   unavailable: { label: "Unavailable", icon: "⛔", tone: "unavailable" },
   orderDue: { label: "Order due", icon: "📦", tone: "order" },
   noteReminder: { label: "Note reminder", icon: "🔔", tone: "noteReminder" },
+  external: { label: "From your calendar", icon: "🌐", tone: "external" },
+};
+
+/** The source an external meeting came from (V1.1). */
+export const PROVIDER_META: Record<"google" | "microsoft", { label: string; open: string }> = {
+  google: { label: "Google Calendar", open: "Open in Google Calendar" },
+  microsoft: { label: "Outlook", open: "Open in Outlook" },
 };
 
 export const TASK_STATE_META: Record<CalendarTaskState, { label: string; icon: string }> = {

@@ -10,7 +10,8 @@
 import * as core from "./calendarCore";
 import type { CalendarEntry, CalendarEntryType, CalendarOccurrence, CalendarTaskState } from "./calendarCore";
 
-export type CalendarItemKind = CalendarEntryType | "orderDue" | "noteReminder";
+export type CalendarItemKind = CalendarEntryType | "orderDue" | "noteReminder" | "external";
+export type CalendarProvider = "google" | "microsoft";
 export type CalendarScope = "mine" | "shared" | "team";
 
 export type CalendarItem = {
@@ -33,6 +34,25 @@ export type CalendarItem = {
   /** Viewer-local day a task was ticked done, when it differs from the planned day. */
   completedDay: string | null;
   readOnly: boolean;
+  /** V1.1: a meeting read from the person's own Google / Outlook calendar (read only, never a NivaDesk entry). */
+  external?: CalendarExternalLike | null;
+};
+
+/** One row of companies/{cid}/calendarConnections/{uid}_{provider}/externalEvents (V1.1). */
+export type CalendarExternalLike = {
+  id: string;
+  provider: CalendarProvider;
+  calendarName: string;
+  title: string;
+  location: string;
+  joinUrl: string;
+  openUrl: string;
+  allDay: boolean;
+  dateKey: string;
+  endDateKey: string;
+  startMs: number | null;
+  endMs: number | null;
+  recurring: boolean;
 };
 
 export type CalendarOrderLike = {
@@ -71,6 +91,7 @@ export type BuildInput = {
   toKey: string;
   viewerTimeZone: string;
   todayKey: string;
+  externals?: CalendarExternalLike[];
 };
 
 export function buildCalendarItems(input: BuildInput): CalendarItem[] {
@@ -175,7 +196,49 @@ export function buildCalendarItems(input: BuildInput): CalendarItem[] {
       readOnly: true,
     });
   }
+  for (const ext of input.externals || []) {
+    const days = externalDays(ext, fromKey, toKey, viewerTimeZone);
+    if (!days.length) continue;
+    items.push({
+      id: `ext:${ext.id}`,
+      kind: "external",
+      title: ext.title,
+      subtitle: ext.calendarName,
+      days,
+      allDay: ext.allDay,
+      startMs: ext.allDay ? null : ext.startMs,
+      endMs: ext.allDay ? null : ext.endMs,
+      occurrence: null,
+      entry: null,
+      orderId: null,
+      noteId: null,
+      taskState: null,
+      scope: "mine",
+      personUid: null,
+      personLabel: null,
+      completedDay: null,
+      readOnly: true,
+      external: ext,
+    });
+  }
   return items.sort(compareItems);
+}
+
+/** The viewer-local days an external event covers inside [fromKey, toKey]: an all-day one its own dates (never shifted
+ *  by a zone), a timed one from its start to just before its end in the viewer's zone. */
+export function externalDays(ext: CalendarExternalLike, fromKey: string, toKey: string, viewerTimeZone: string): string[] {
+  let first: string;
+  let last: string;
+  if (ext.allDay || ext.startMs === null) {
+    first = ext.dateKey;
+    last = ext.endDateKey || ext.dateKey;
+  } else {
+    first = core.localParts(ext.startMs, viewerTimeZone).dateKey;
+    last = core.localParts(Math.max(ext.startMs, (ext.endMs ?? ext.startMs) - 1), viewerTimeZone).dateKey;
+  }
+  const out: string[] = [];
+  for (let n = Math.max(core.dayNumber(first), core.dayNumber(fromKey)); n <= Math.min(core.dayNumber(last), core.dayNumber(toKey)) && out.length < 62; n += 1) out.push(core.keyFromDayNumber(n));
+  return out;
 }
 
 export function compareItems(a: CalendarItem, b: CalendarItem): number {
@@ -235,7 +298,7 @@ export function searchCalendarItems(items: CalendarItem[], text: string): Calend
   if (!needle) return items;
   return items.filter((item) => {
     const occ = item.occurrence;
-    const hay = [item.title, item.subtitle, item.personLabel || "", occ?.description || "", occ?.location || ""].map(fold).join("\n");
+    const hay = [item.title, item.subtitle, item.personLabel || "", occ?.description || "", occ?.location || "", item.external?.location || ""].map(fold).join("\n");
     return hay.includes(needle);
   });
 }
@@ -245,7 +308,7 @@ export function parseCalendarFilters(raw: unknown): CalendarFilters {
   const d = DEFAULT_CALENDAR_FILTERS;
   if (!raw || typeof raw !== "object") return d;
   const r = raw as Record<string, unknown>;
-  const kinds: CalendarItemKind[] = ["event", "task", "note", "workday", "unavailable", "orderDue", "noteReminder"];
+  const kinds: CalendarItemKind[] = ["event", "task", "note", "workday", "unavailable", "orderDue", "noteReminder", "external"];
   return {
     mine: typeof r.mine === "boolean" ? r.mine : d.mine,
     shared: typeof r.shared === "boolean" ? r.shared : d.shared,

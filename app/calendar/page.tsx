@@ -72,11 +72,14 @@ import {
 } from "@/lib/studioflow/calendarView";
 import { CalendarEntryForm, type CalendarFormMode, type CalendarSeriesScope } from "./CalendarEntryForm";
 import { CalendarDetailPanel } from "./CalendarDetailPanel";
-import { TASK_STATE_META, TYPE_META, dayLabel, iconFor, timeLabel } from "./calendarUi";
+import { CalendarConnectionsPanel, CalendarExternalDetail } from "./CalendarExternalPanels";
+import { calendarConnectorsAvailable, listenToCalendarConnections, listenToExternalEvents, type CalendarConnection } from "@/lib/studioflow/calendarExternal";
+import type { CalendarExternalLike, CalendarProvider } from "@/lib/studioflow/calendarView";
+import { PROVIDER_META, TASK_STATE_META, TYPE_META, dayLabel, iconFor, timeLabel } from "./calendarUi";
 
 const VIEW_KEY = (uid: string) => `nivadesk.calendar.view.v1.${uid}`;
 const SEARCH_SPAN_DAYS = 180;
-const KINDS: CalendarItemKind[] = ["event", "task", "note", "workday", "unavailable", "orderDue", "noteReminder"];
+const KINDS: CalendarItemKind[] = ["event", "task", "note", "workday", "unavailable", "orderDue", "noteReminder", "external"];
 
 /** QA only: an emulator build on this computer (localhost + NEXT_PUBLIC_FIREBASE_EMULATOR=1) may show the calendar in
  *  another zone (`localStorage["nivadesk.qa.timeZone"]`) so a screen check needs no change to the computer's settings.
@@ -199,6 +202,11 @@ export default function CalendarPage() {
 
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [workspaceError, setWorkspaceError] = useState(false);
+  // V1.1: the person's own Google / Outlook calendars (read only; only they see them).
+  const [connections, setConnections] = useState<Partial<Record<CalendarProvider, CalendarConnection>>>({});
+  const [connectorsOn, setConnectorsOn] = useState<Record<CalendarProvider, boolean> | null>(null);
+  const [externals, setExternals] = useState<CalendarExternalLike[]>([]);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
   const [members, setMembers] = useState<NoteWorkspaceMember[]>([]);
   const [orders, setOrders] = useState<CalendarOrderLike[]>([]);
   const [notes, setNotes] = useState<CalendarNoteLike[]>([]);
@@ -363,12 +371,28 @@ export default function CalendarPage() {
     return listenToCalendarRange(workspace.id, user.uid, range.fromKey, range.toKey, setRangeState);
   }, [workspace, user, range.fromKey, range.toKey, reloadTick]);
 
+  useEffect(() => {
+    if (!workspace || !user) return;
+    return listenToCalendarConnections(workspace.id, user.uid, setConnections);
+  }, [workspace, user]);
+  useEffect(() => {
+    if (!workspace || !user) return;
+    let live = true;
+    calendarConnectorsAvailable(workspace.id).then((a) => { if (live) setConnectorsOn(a); }, () => { if (live) setConnectorsOn({ google: false, microsoft: false }); });
+    return () => { live = false; };
+  }, [workspace, user]);
+  const connectedProviders = (Object.keys(connections) as CalendarProvider[]).sort().join(",");
+  useEffect(() => {
+    if (!workspace || !user || !connectedProviders) { setExternals([]); return; }
+    return listenToExternalEvents(workspace.id, user.uid, connectedProviders.split(",") as CalendarProvider[], range.fromKey, range.toKey, setExternals);
+  }, [workspace, user, connectedProviders, range.fromKey, range.toKey]);
+
   const items = useMemo(() => {
     if (!user) return [];
     // An archived entry (a former member's, archived by the business owner) shows only when asked for.
     const entries = rangeState.entries.filter((e) => showArchived || !rangeState.meta.get(e.id)?.archived);
-    return buildCalendarItems({ entries, orders, notes, uid: user.uid, fromKey: range.fromKey, toKey: range.toKey, viewerTimeZone: viewerTz, todayKey });
-  }, [rangeState.entries, rangeState.meta, showArchived, orders, notes, user, range.fromKey, range.toKey, viewerTz, todayKey]);
+    return buildCalendarItems({ entries, orders, notes, uid: user.uid, fromKey: range.fromKey, toKey: range.toKey, viewerTimeZone: viewerTz, todayKey, externals });
+  }, [rangeState.entries, rangeState.meta, showArchived, orders, notes, user, range.fromKey, range.toKey, viewerTz, todayKey, externals]);
   const shown = useMemo(() => searchCalendarItems(applyCalendarFilters(items, filters), searchText), [items, filters, searchText]);
   // The Today view (V1.1): open tasks planned in the last OVERDUE_WINDOW_DAYS days, from the entries already loaded for the
   // day (the range read covers the 64 days before it) — no extra read.
@@ -763,10 +787,16 @@ export default function CalendarPage() {
                 <label className="cal-inline-field"><span>{t("Search until")}</span><input type="date" className="input" aria-label={t("Search until")} value={searchTo} onChange={(e) => { if (core.isDateKey(e.target.value)) setSearchTo(e.target.value); }} /></label>
               </>
             ) : null}
+            <button type="button" className="button secondary" aria-expanded={connectionsOpen} onClick={() => setConnectionsOpen((v) => !v)}>
+              🌐 {t("Your other calendars")}{Object.values(connections).some((c) => c && c.status !== "active") ? " ⚠" : ""}
+            </button>
             <button type="button" className={`button secondary${filtersActive(filters) ? " is-active" : ""}`} aria-expanded={filtersOpen} onClick={() => setFiltersOpen((v) => !v)}>
               {t("Filters")}{filtersActive(filters) ? " •" : ""}
             </button>
           </div>
+          {connectionsOpen && workspace ? (
+            <CalendarConnectionsPanel companyId={workspace.id} connections={connections} available={connectorsOn} locale={locale} timeZone={viewerTz} t={t} onNotice={(message) => dispatchStudioToast({ message })} />
+          ) : null}
           {filtersOpen ? (
             <div className="cal-filters" role="group" aria-label={t("Filters")}>
               <label className="cal-check"><input type="checkbox" checked={filters.mine} onChange={(e) => setFilters({ ...filters, mine: e.target.checked })} /> <span>{t("My entries")}</span></label>
@@ -821,6 +851,21 @@ export default function CalendarPage() {
                   </div>
                 ))}
                 {rangeState.loading ? <p className="muted-copy cal-loading" role="status">{t("Loading calendar…")}</p> : null}
+                {(Object.values(connections) as CalendarConnection[]).map((c) => {
+                  // What is not loaded is said, never shown as "nothing there" (V1.1).
+                  const label = t(PROVIDER_META[c.provider].label);
+                  const before = c.windowStartKey && range.fromKey < c.windowStartKey;
+                  const after = c.windowEndKey && range.toKey > c.windowEndKey;
+                  const stale = c.status !== "active";
+                  if (!before && !after && !stale) return null;
+                  return (
+                    <p key={c.provider} className="muted-copy cal-loading" role="status">
+                      🌐 {stale ? `${label}: ${t(c.status === "reconnect" ? "Connect again to keep this calendar up to date. The meetings shown may be out of date." : "Could not sync just now. NivaDesk will try again; the meetings shown may be out of date.")} ` : ""}
+                      {before ? `${label}: ${t("meetings before {date} are not loaded.").replace("{date}", dayLabel(c.windowStartKey || "", locale, { day: "numeric", month: "short", year: "numeric" }))} ` : ""}
+                      {after ? `${label}: ${t("meetings after {date} are not loaded.").replace("{date}", dayLabel(c.windowEndKey || "", locale, { day: "numeric", month: "short", year: "numeric" }))}` : ""}
+                    </p>
+                  );
+                })}
                 {rangeState.error ? (
                   <div className="layout-error" role="alert">{t("The calendar could not be loaded.")} <button type="button" className="button secondary" onClick={() => setReloadTick((n) => n + 1)}>{t("Try again")}</button></div>
                 ) : null}
@@ -829,7 +874,9 @@ export default function CalendarPage() {
               </>
             )}
           </main>
-          {selected && workspace ? (
+          {selected && workspace && selected.kind === "external" ? (
+            <CalendarExternalDetail item={selected} locale={locale} timeZone={viewerTz} t={t} onClose={() => setSelectedId(null)} />
+          ) : selected && workspace ? (
             <CalendarDetailPanel
               item={selected}
               uid={uid}

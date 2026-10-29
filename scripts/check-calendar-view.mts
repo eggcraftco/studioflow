@@ -133,6 +133,28 @@ check("filters: a saved choice is read back", JSON.stringify(v.parseCalendarFilt
 check("filters: junk falls back to the defaults", JSON.stringify(v.parseCalendarFilters({ mine: "no", types: ["bogus"], status: "weird", orderLink: 3 })) === JSON.stringify(v.DEFAULT_CALENDAR_FILTERS));
 check("filters: nothing saved = defaults", JSON.stringify(v.parseCalendarFilters(null)) === JSON.stringify(v.DEFAULT_CALENDAR_FILTERS));
 
+// V1.1: meetings from the person's own Google / Outlook calendar — read only, placed in the viewer's zone.
+{
+  const ext = (id: string, raw: Partial<v.CalendarExternalLike>): v.CalendarExternalLike => ({ id, provider: "google", calendarName: "Mem", title: id, location: "", joinUrl: "", openUrl: "https://calendar.google.com/x", allDay: false, dateKey: "", endDateKey: "", startMs: null, endMs: null, recurring: false, ...raw });
+  const its = v.buildCalendarItems({ entries: [], orders: [], notes: [], uid: "me", fromKey: "2026-10-19", toKey: "2026-11-01", viewerTimeZone: "Europe/London", todayKey: "2026-10-28",
+    externals: [
+      ext("late-call", { startMs: Date.parse("2026-10-21T22:00:00Z"), endMs: Date.parse("2026-10-21T22:45:00Z") }),  // 23:00–23:45 BST, 21 Oct
+      ext("midnight", { startMs: Date.parse("2026-10-21T22:30:00Z"), endMs: Date.parse("2026-10-21T23:30:00Z") }),   // 23:30–00:30 BST: two days
+      ext("ny", { startMs: Date.parse("2026-10-27T01:00:00Z"), endMs: Date.parse("2026-10-27T02:00:00Z") }),            // 01:00 GMT 27 Oct
+      ext("fair", { allDay: true, dateKey: "2026-10-31", endDateKey: "2026-11-02" }),
+      ext("outside", { startMs: Date.parse("2026-12-01T10:00:00Z"), endMs: Date.parse("2026-12-01T11:00:00Z") }),
+    ] });
+  const byId = Object.fromEntries(its.map((i) => [i.id, i]));
+  check("external: timed meetings land on the viewer's local day", byId["ext:late-call"]?.days.join() === "2026-10-21" && byId["ext:ny"]?.days.join() === "2026-10-27");
+  check("external: a meeting running past midnight shows on both days", byId["ext:midnight"]?.days.join() === "2026-10-21,2026-10-22");
+  check("external: an all-day event keeps its dates, clipped to the range", byId["ext:fair"]?.days.join() === "2026-10-31,2026-11-01");
+  check("external: outside the range is left out", !byId["ext:outside"]);
+  check("external: read only, never a task, mine, carries its source", its.filter((i) => i.kind === "external").every((i) => i.readOnly && !i.taskState && i.scope === "mine" && i.external?.provider === "google"));
+  check("external: Tokyo viewer sees the London 23:30 call on the next day", v.externalDays(ext("t", { startMs: Date.parse("2026-10-21T22:30:00Z"), endMs: Date.parse("2026-10-21T23:30:00Z") }), "2026-10-19", "2026-11-01", "Asia/Tokyo").join() === "2026-10-22");
+  check("external: the type filter can pick them", v.applyCalendarFilters(its, { ...v.DEFAULT_CALENDAR_FILTERS, types: ["external"] }).length === 4);
+  check("filters: a saved external type is read back", JSON.stringify(v.parseCalendarFilters({ types: ["external"] }).types) === JSON.stringify(["external"]));
+}
+
 for (const f of fails) console.log(`FAIL ${f}`);
 console.log(`calendar view (web): ${pass}/${pass + fails.length} pass${fails.length ? "" : "; reds: none"}`);
 process.exit(fails.length ? 1 : 0);
