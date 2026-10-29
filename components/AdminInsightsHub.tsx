@@ -3,7 +3,7 @@
 // Admin Insights hub: top-level admin-only analytics area with a left sidebar.
 // Hosts the cross-workspace insight pages and the public-site Global Statistics.
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import { httpsCallable } from "firebase/functions";
@@ -11,6 +11,8 @@ import { functions } from "@/lib/firebase/client";
 import { CardTitle } from "@/components/CardTitle";
 import { isAnalyticsExcluded, setAnalyticsExclusion } from "@/lib/landingTracking";
 import { AdminFeedbackInbox } from "@/components/AdminFeedbackInbox";
+import { AdminLivePanel, useLiveAppNow } from "@/components/AdminLivePanel";
+import { PRESENCE_APPS, appBuckets, downloadCsv, toCsv } from "@/lib/studioflow/adminLivePresence";
 import {
   countryShares,
   pageRowLabels,
@@ -24,7 +26,7 @@ import {
 
 function InfoTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="settings-info-tile" style={{ display: "grid", gap: 3, padding: 12, borderRadius: 12, background: "rgba(17,24,39,0.04)" }}>
+    <div className="settings-info-tile admin-info-tile">
       <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{label}</span>
       <strong style={{ fontSize: 14, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis" }}>{value}</strong>
     </div>
@@ -138,10 +140,11 @@ function StatsSparkline({ values, color }: { values: number[]; color: string }) 
 function StatsDeltaBadge({ delta, invertGood }: { delta: number | null; invertGood?: boolean }) {
   if (delta === null) return null;
   const isGood = invertGood ? delta <= 0 : delta >= 0;
+  // The sign is in the text, not only in the arrow: a screen reader read a drop as "12.5%".
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, fontWeight: 800, color: isGood ? "#1d8f43" : "#d92d20" }}>
+    <span className={isGood ? "admin-delta is-good" : "admin-delta is-bad"}>
       <span aria-hidden="true">{delta >= 0 ? "▲" : "▼"}</span>
-      {Math.abs(delta).toFixed(1)}%
+      {delta >= 0 ? "+" : "−"}{Math.abs(delta).toFixed(1)}%
     </span>
   );
 }
@@ -226,7 +229,7 @@ function StatsRankedList({ entries, flags }: { entries: [string, number][]; flag
       {entries.map(([key, value], index) => (
         <div
           key={key}
-          style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)" }}
         >
           {flags ? (
             <>
@@ -272,17 +275,20 @@ function LiveOnSiteCard() {
   const [active, setActive] = useState(0);
   const [pages, setPages] = useState<{ path: string; count: number }[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const callable = httpsCallable<Record<string, never>, { active: number; pages: { path: string; count: number }[] }>(functions, "getSitePresence");
     const poll = () => {
+      if (document.visibilityState !== "visible") return;
       callable({}).then(result => {
         if (cancelled) return;
         setActive(Number(result.data?.active) || 0);
         setPages(result.data?.pages ?? []);
         setLoaded(true);
-      }).catch(() => undefined);
+        setFailed(false);
+      }).catch(() => { if (!cancelled) setFailed(true); });
     };
     poll();
     const interval = window.setInterval(poll, 30000);
@@ -292,27 +298,19 @@ function LiveOnSiteCard() {
     };
   }, []);
 
-  const bars = Array.from({ length: 28 }, (_, index) =>
-    active > 0 ? 10 + Math.abs(Math.sin(index * 1.7 + active)) * 22 : 6
-  );
-
   return (
     <section className="card app-card site-stats-live">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <strong style={{ fontSize: 15, color: "#fff" }}>On Site Now</strong>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 800, color: "#30d158" }}>
-          <span style={{ width: 7, height: 7, borderRadius: 99, background: "#30d158" }} />
-          Live
+        {/* "Live" only while the last poll answered; a failed poll used to keep the green dot. */}
+        <span role="status" aria-live="polite" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 800, color: failed ? "#ffb340" : "#30d158" }}>
+          <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 99, background: failed ? "#ffb340" : "#30d158" }} />
+          {failed ? "Not updating" : loaded ? "Live" : "Connecting"}
         </span>
       </div>
       <div>
         <div style={{ fontSize: 40, fontWeight: 900, color: "#fff", lineHeight: 1.05 }}>{active}</div>
-        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.55)" }}>Active users</div>
-      </div>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 34 }}>
-        {bars.map((height, index) => (
-          <span key={index} style={{ width: 8, height, borderRadius: 99, background: active > 0 ? "#8a5cf6" : "rgba(255,255,255,0.14)", transition: "height 0.5s ease" }} />
-        ))}
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.62)" }}>Public-site visitors in the last 2 minutes (anonymous sessions; people in the apps are on the Live page)</div>
       </div>
       {pages.length > 0 ? (
         <div>
@@ -458,13 +456,14 @@ function AdminCustomOrderLandingSection() {
       key={key}
       type="button"
       className="button"
+      aria-pressed={rangeKey === key}
       onClick={() => setRangeKey(key)}
       style={{
         padding: "7px 14px",
         borderRadius: 999,
         fontSize: 13,
         fontWeight: 700,
-        background: rangeKey === key ? "#0a84ff" : "rgba(17,24,39,0.06)",
+        background: rangeKey === key ? "#0a84ff" : "var(--admin-chip-bg)",
         color: rangeKey === key ? "#fff" : "var(--text)"
       }}
     >
@@ -523,12 +522,10 @@ function AdminCustomOrderLandingSection() {
         </div>
         {rangeKey === "custom" ? (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "10px 0 0", alignItems: "center", fontSize: 13 }}>
-            <label style={{ fontWeight: 700, color: "var(--muted)" }}>From</label>
-            <input type="date" value={customStart} max={customEnd} onChange={event => setCustomStart(event.target.value)}
-              style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid var(--border)" }} />
-            <label style={{ fontWeight: 700, color: "var(--muted)" }}>to</label>
-            <input type="date" value={customEnd} min={customStart} max={landingDayStr(0)} onChange={event => setCustomEnd(event.target.value)}
-              style={{ padding: "6px 8px", borderRadius: 8, border: "1px solid var(--border)" }} />
+            <label htmlFor="landing-range-from" style={{ fontWeight: 700, color: "var(--muted)" }}>From</label>
+            <input id="landing-range-from" className="admin-date-input" type="date" value={customStart} max={customEnd} onChange={event => setCustomStart(event.target.value)} />
+            <label htmlFor="landing-range-to" style={{ fontWeight: 700, color: "var(--muted)" }}>to</label>
+            <input id="landing-range-to" className="admin-date-input" type="date" value={customEnd} min={customStart} max={landingDayStr(0)} onChange={event => setCustomEnd(event.target.value)} />
           </div>
         ) : null}
 
@@ -544,12 +541,12 @@ function AdminCustomOrderLandingSection() {
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "12px 0 0", alignItems: "center" }}>
           <button type="button" className="button" disabled={resetBusy} onClick={() => applyReset("today")}
-            style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: "rgba(220,38,38,0.08)", color: "#b91c1c" }}>
+            style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: "var(--danger-soft)", color: "var(--danger)" }}>
             Start fresh from today
           </button>
           {reportFromDate ? (
             <button type="button" className="button" disabled={resetBusy} onClick={() => applyReset("clear")}
-              style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: "rgba(17,24,39,0.06)", color: "var(--text)" }}>
+              style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12, fontWeight: 700, background: "var(--admin-chip-bg)", color: "var(--text)" }}>
               Show all history
             </button>
           ) : null}
@@ -600,7 +597,7 @@ function AdminCustomOrderLandingSection() {
                         ↓ {landingRate(step.value, prev.value)} of {prev.label.toLowerCase()}
                       </div>
                     ) : null}
-                    <div style={{ border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", position: "relative", background: "rgba(17,24,39,0.04)" }}>
+                    <div style={{ border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", position: "relative", background: "var(--admin-tile-bg)" }}>
                       <div style={{ position: "absolute", inset: 0, width: `${Math.round((step.value / maxFunnel) * 100)}%`, background: "rgba(10,132,255,0.16)" }} />
                       <div style={{ position: "relative", display: "flex", justifyContent: "space-between", padding: "10px 14px", fontWeight: 800, fontSize: 14 }}>
                         <span>{step.label}</span>
@@ -771,7 +768,9 @@ function AdminCustomOrderLandingSection() {
 function AdminSiteStatsSection() {
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
-  const todayKey = new Date().toISOString().slice(0, 10);
+  // The server files each visit under its UK date (siteStatsDateKey), so "today" is the UK date too —
+  // the UTC date was a day behind between midnight and 01:00 in summer.
+  const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date());
   const [rangeMode, setRangeMode] = useState<number>(30); // 7 / 30 / 90, -1 = custom
   const [customStart, setCustomStart] = useState(() => new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10));
   const [customEnd, setCustomEnd] = useState(todayKey);
@@ -785,8 +784,11 @@ function AdminSiteStatsSection() {
       const start = new Date(end.getTime() - (rangeMode - 1) * 86400000);
       return { start, end };
     }
-    let start = new Date(`${customStart}T12:00:00Z`);
-    let end = new Date(`${customEnd}T12:00:00Z`);
+    // A cleared or half-typed date field gives an empty string; it used to become an Invalid Date
+    // whose toISOString() threw inside the effect and took the page down. Fall back to the last 30 days.
+    const validDay = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T12:00:00Z`));
+    let start = new Date(`${validDay(customStart) ? customStart : new Date(Date.parse(`${todayKey}T12:00:00Z`) - 29 * 86400000).toISOString().slice(0, 10)}T12:00:00Z`);
+    let end = new Date(`${validDay(customEnd) ? customEnd : todayKey}T12:00:00Z`);
     if (start > end) [start, end] = [end, start];
     const today = new Date(`${todayKey}T12:00:00Z`);
     if (end > today) end = today;
@@ -834,13 +836,14 @@ function AdminSiteStatsSection() {
       key={option}
       type="button"
       className="button"
+      aria-pressed={rangeMode === option}
       onClick={() => setRangeMode(option)}
       style={{
         padding: "7px 14px",
         borderRadius: 999,
         fontSize: 13,
         fontWeight: 700,
-        background: rangeMode === option ? "#0a84ff" : "rgba(17,24,39,0.06)",
+        background: rangeMode === option ? "#0a84ff" : "var(--admin-chip-bg)",
         color: rangeMode === option ? "#fff" : "var(--text)"
       }}
     >
@@ -872,8 +875,22 @@ function AdminSiteStatsSection() {
             <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", alignSelf: "end", paddingBottom: 8 }}>{rangeLength} days</span>
           </div>
         ) : null}
-        {loading ? <p className="muted-copy">Loading statistics...</p> : null}
-        {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p> : null}
+        {loading ? <p className="muted-copy" role="status">Loading statistics...</p> : null}
+        {error ? <p role="alert" style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p> : null}
+        {!loading && !error && current.length ? (
+          <button
+            type="button"
+            className="button secondary admin-small-button"
+            style={{ marginTop: 10 }}
+            onClick={() => downloadCsv(
+              `nivadesk-site-stats-${current[0].date}-${current[current.length - 1].date}.csv`,
+              toCsv(["uk_date", "page_views", "sessions", "engaged_sessions", "duration_seconds"], current.map(day => [day.date, day.total, day.sessions, day.engagedSessions, day.durationSeconds]))
+            )}
+          >
+            Export CSV
+          </button>
+        ) : null}
+        <p className="muted-copy admin-footnote">A session is one browser tab&apos;s visit, so one person with two tabs counts twice. Admin browsers are left out once Insights has been opened in them.</p>
       </section>
 
       <LiveOnSiteCard />
@@ -881,7 +898,7 @@ function AdminSiteStatsSection() {
       {!loading && !error ? (
         <>
           <div className="site-stats-grid">
-            <StatsCard title="Total Visitors" value={curSessions.toLocaleString()} delta={statsDeltaPercent(curSessions, prevSessions)} spark={current.map(day => day.sessions)} color="#8a5cf6" />
+            <StatsCard title="Visitor sessions" value={curSessions.toLocaleString()} delta={statsDeltaPercent(curSessions, prevSessions)} spark={current.map(day => day.sessions)} color="#8a5cf6" />
             <StatsCard title="Page Views" value={curViews.toLocaleString()} delta={statsDeltaPercent(curViews, prevViews)} spark={current.map(day => day.total)} color="#0a84ff" />
             <StatsCard title="Avg. Session Duration" value={statsDurationText(curDuration)} delta={statsDeltaPercent(curDuration, prevDuration)} spark={current.map(day => (day.sessions > 0 ? day.durationSeconds / day.sessions : 0))} color="#30d158" />
             <StatsCard title="Bounce Rate" value={`${curBounce.toFixed(1)}%`} delta={statsDeltaPercent(curBounce, prevBounce)} invertGood spark={current.map(day => (day.sessions > 0 ? ((day.sessions - Math.min(day.engagedSessions, day.sessions)) / day.sessions) * 100 : 0))} color="#ff9f0a" />
@@ -924,10 +941,6 @@ function AdminSiteStatsSection() {
             </section>
           </div>
 
-          <section className="card app-card">
-            <CardTitle icon="notes" eyebrow="Support" title="Support inbox" />
-            <p className="muted-copy">Messages sent via Contact NivaDesk Support appear in the Support / Tickets section — as an admin you see every user&apos;s tickets there.</p>
-          </section>
         </>
       ) : null}
     </div>
@@ -1062,15 +1075,16 @@ function SearchPositionChart({ data }: { data: SearchConsoleDay[] }) {
 // worse, so positionDelta > 0 (we rose toward #1) is good → green ▲.
 function PositionDeltaBadge({ delta, isNew }: { delta: number | null; isNew?: boolean }) {
   if (isNew) {
-    return <span style={{ fontSize: 11, fontWeight: 800, color: "#1d8f43", background: "rgba(29,143,67,0.12)", borderRadius: 6, padding: "2px 6px" }}>New</span>;
+    return <span className="admin-delta is-good admin-new-badge">New</span>;
   }
   if (delta === null || Math.abs(delta) < 0.05) {
     return <span style={{ fontSize: 12, color: "var(--muted)" }}>–</span>;
   }
   const improved = delta > 0;
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, fontWeight: 800, color: improved ? "#1d8f43" : "#d92d20" }}>
+    <span className={improved ? "admin-delta is-good" : "admin-delta is-bad"} title={improved ? "Ranks higher than in the previous period" : "Ranks lower than in the previous period"}>
       <span aria-hidden="true">{improved ? "▲" : "▼"}</span>
+      <span className="visually-hidden">{improved ? "up " : "down "}</span>
       {Math.abs(delta).toFixed(1)}
     </span>
   );
@@ -1112,13 +1126,14 @@ function AdminSearchConsoleSection() {
       key={option}
       type="button"
       className="button"
+      aria-pressed={rangeDays === option}
       onClick={() => setRangeDays(option)}
       style={{
         padding: "7px 14px",
         borderRadius: 999,
         fontSize: 13,
         fontWeight: 700,
-        background: rangeDays === option ? "#0a84ff" : "rgba(17,24,39,0.06)",
+        background: rangeDays === option ? "#0a84ff" : "var(--admin-chip-bg)",
         color: rangeDays === option ? "#fff" : "var(--text)"
       }}
     >
@@ -1164,7 +1179,7 @@ function AdminSearchConsoleSection() {
               In Search Console → <em>Settings → Users and permissions</em>, add this service account as a <strong>Full</strong> (or Restricted) user:
               {result.serviceAccountEmail ? (
                 <div style={{ marginTop: 6 }}>
-                  <code style={{ display: "inline-block", padding: "4px 8px", borderRadius: 8, background: "rgba(17,24,39,0.06)", fontSize: 12.5, wordBreak: "break-all" }}>{result.serviceAccountEmail}</code>
+                  <code style={{ display: "inline-block", padding: "4px 8px", borderRadius: 8, background: "var(--admin-chip-bg)", fontSize: 12.5, wordBreak: "break-all" }}>{result.serviceAccountEmail}</code>
                 </div>
               ) : <em> (service account email unavailable — check function logs)</em>}
             </li>
@@ -1200,7 +1215,7 @@ function AdminSearchConsoleSection() {
               <CardTitle icon="dashboard" eyebrow="Search" title="Biggest ranking movers" />
               <div style={{ display: "grid" }}>
                 {movers.map((q, index) => (
-                  <div key={q.query} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                  <div key={q.query} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)" }}>
                     <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{q.query}</span>
                     <span style={{ fontSize: 12, color: "var(--muted)" }}>{q.prevPosition?.toFixed(1)} → {q.position.toFixed(1)}</span>
                     <PositionDeltaBadge delta={q.positionDelta} />
@@ -1230,7 +1245,7 @@ function AdminSearchConsoleSection() {
                   </thead>
                   <tbody>
                     {queries.map((q, index) => (
-                      <tr key={q.query} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                      <tr key={q.query} style={{ borderTop: "1px solid var(--border)" }}>
                         <td style={{ padding: "8px 6px", color: "var(--muted)", fontWeight: 800 }}>{index + 1}</td>
                         <td style={{ padding: "8px 6px", fontWeight: 650, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q.query}</td>
                         <td style={{ padding: "8px 6px", textAlign: "right" }}>{q.impressions.toLocaleString()}</td>
@@ -1267,11 +1282,11 @@ function AdminSearchConsoleSection() {
                   <tbody>
                     {pageRowLabels(pages).map((p, index) => {
                       return (
-                        <tr key={p.page} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                        <tr key={p.page} style={{ borderTop: "1px solid var(--border)" }}>
                           <td style={{ padding: "8px 6px", color: "var(--muted)", fontWeight: 800 }}>{index + 1}</td>
                           <td style={{ padding: "8px 6px", fontWeight: 650, maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             <span title={p.page}>{p.label}</span>
-                            {p.samePathElsewhere ? <span title="The same path also appears under another host / slash / protocol — listed separately, not merged" style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 800, color: "#b36b00" }}>same path, other URL</span> : null}
+                            {p.samePathElsewhere ? <span title="The same path also appears under another host / slash / protocol — listed separately, not merged" style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 800, color: "var(--admin-warn-text)" }}>same path, other URL</span> : null}
                           </td>
                           <td style={{ padding: "8px 6px", textAlign: "right" }}>{p.impressions.toLocaleString()}</td>
                           <td style={{ padding: "8px 6px", textAlign: "right" }}>{p.clicks.toLocaleString()}</td>
@@ -1301,14 +1316,14 @@ function AdminSearchConsoleSection() {
                         {shares.rows.slice(0, 8).map((c, index) => {
                           const { flag, name } = searchCountryLabel(c.country);
                           return (
-                            <div key={c.country} style={{ display: "grid", gap: 3, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                            <div key={c.country} style={{ display: "grid", gap: 3, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)" }}>
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                                 <span aria-hidden="true">{flag}</span>
                                 <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
                                 <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--muted)" }} title="Share of all impressions in the listed countries">{c.sharePct.toFixed(1)}%</span>
                                 <strong style={{ fontSize: 13, minWidth: 44, textAlign: "right" }}>{c.impressions.toLocaleString()}</strong>
                               </div>
-                              <div aria-hidden="true" style={{ height: 4, borderRadius: 999, background: "rgba(17,24,39,0.06)", overflow: "hidden" }}>
+                              <div aria-hidden="true" style={{ height: 4, borderRadius: 999, background: "var(--admin-chip-bg)", overflow: "hidden" }}>
                                 <span style={{ display: "block", height: "100%", width: `${c.relativePct}%`, background: "#0a84ff", borderRadius: 999 }} />
                               </div>
                             </div>
@@ -1358,7 +1373,7 @@ function AdminViewToggle({ view, onChange }: { view: AdminView; onChange: (view:
       title={hint}
       aria-pressed={view === value}
       onClick={() => onChange(value)}
-      style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, background: view === value ? "#0a84ff" : "rgba(17,24,39,0.06)", color: view === value ? "#fff" : "var(--text)" }}
+      style={{ padding: "6px 12px", borderRadius: 999, fontSize: 12.5, fontWeight: 700, background: view === value ? "#0a84ff" : "var(--admin-chip-bg)", color: view === value ? "#fff" : "var(--text)" }}
     >
       {label}
     </button>
@@ -1445,14 +1460,40 @@ const ADMIN_PLAN_COLORS: Record<string, string> = {
   team_monthly: "#ff9f0a"
 };
 
-function adminKpiTile(label: string, value: string, hint?: string) {
-  return (
-    <section key={label} className="card app-card" style={{ display: "grid", gap: 4 }}>
-      <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{label}</span>
-      <strong style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.05 }}>{value}</strong>
-      {hint ? <span style={{ fontSize: 11, color: "var(--muted)" }}>{hint}</span> : null}
-    </section>
+/* The plan colours above are chart fills; as text on a card they fail contrast (#30d158 on white is
+   about 1.9:1). Text uses these per-theme variables instead (app/globals.css, Admin Insights). */
+const ADMIN_PLAN_TEXT_COLORS: Record<string, string> = {
+  demo: "var(--admin-plan-free)",
+  lifetime_lite: "var(--admin-plan-starter)",
+  pro_monthly: "var(--admin-plan-pro)",
+  team_monthly: "var(--admin-plan-team)"
+};
+
+function planTextColor(plan: string, fallback = "var(--text)") {
+  return ADMIN_PLAN_TEXT_COLORS[plan] || fallback;
+}
+
+function adminKpiTile(label: string, value: string, hint?: string, onOpen?: () => void) {
+  const body = (
+    <>
+      <span className="admin-kpi-label">{label}</span>
+      <strong className="admin-kpi-value">{value}</strong>
+      {hint ? <span className="admin-kpi-hint">{hint}</span> : null}
+    </>
   );
+  return onOpen ? (
+    <button key={label} type="button" className="card app-card admin-kpi is-link" onClick={onOpen}>
+      {body}
+      <span className="admin-kpi-open" aria-hidden="true">→</span>
+    </button>
+  ) : (
+    <section key={label} className="card app-card admin-kpi">{body}</section>
+  );
+}
+
+/** A count the server could not produce is unknown, never zero. */
+function countText(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value.toLocaleString() : "—";
 }
 
 type AdminUsersDetail = {
@@ -1514,7 +1555,7 @@ function ActivityHeatmap({ heatmap, caption }: { heatmap: number[][]; caption: s
                 style={{
                   aspectRatio: "1",
                   borderRadius: 3,
-                  background: value === 0 ? "rgba(17,24,39,0.06)" : `rgba(138, 92, 246, ${0.25 + (value / max) * 0.75})`
+                  background: value === 0 ? "var(--admin-chip-bg)" : `rgba(138, 92, 246, ${0.25 + (value / max) * 0.75})`
                 }}
               />
             ))}
@@ -1553,7 +1594,7 @@ function AdminUsersWorkspacesDetail({ onBack, view }: { onBack: () => void; view
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
-      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
       {" › "}Users & Workspaces
     </p>
   );
@@ -1636,11 +1677,11 @@ function AdminUsersWorkspacesDetail({ onBack, view }: { onBack: () => void; view
               </thead>
               <tbody>
                 {data.topWorkspaces.map((workspace, index) => (
-                  <tr key={workspace.id} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                  <tr key={workspace.id} style={{ borderTop: "1px solid var(--border)" }}>
                     <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
                     <td style={{ padding: "7px 8px", fontWeight: 700 }}>{workspace.name}</td>
                     <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{workspace.ownerEmail || "—"}</td>
-                    <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
+                    <td style={{ padding: "7px 8px", fontWeight: 800, color: planTextColor(workspace.plan, "var(--text)") }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }} title={workspace.membersSource || ""}>
                       {unknownOr(workspace.members, "not_available")}
                       {workspace.membersSuspended ? <span style={{ color: "var(--muted)" }}> ({workspace.membersSuspended} suspended)</span> : null}
@@ -1676,13 +1717,13 @@ function AdminUsersWorkspacesDetail({ onBack, view }: { onBack: () => void; view
                 </thead>
                 <tbody>
                   {recent.map((u, index) => (
-                    <tr key={u.uid} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                    <tr key={u.uid} style={{ borderTop: "1px solid var(--border)" }}>
                       <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
                       <td style={{ padding: "7px 8px", fontWeight: 700 }}>{u.email || "—"}</td>
                       <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{u.displayName || "—"}</td>
                       <td style={{ padding: "7px 8px" }}>{u.createdAtMs ? new Date(u.createdAtMs).toLocaleDateString() : "—"}</td>
                       <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{u.lastSignInMs ? new Date(u.lastSignInMs).toLocaleDateString() : "never"}</td>
-                      <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[u.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[u.plan] || u.plan}</td>
+                      <td style={{ padding: "7px 8px", fontWeight: 800, color: planTextColor(u.plan, "var(--text)") }}>{ADMIN_PLAN_LABELS[u.plan] || u.plan}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1753,7 +1794,7 @@ function AdminSubscriptionsDetail({ onBack, view }: { onBack: () => void; view: 
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
-      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
       {" › "}Subscriptions
     </p>
   );
@@ -1864,10 +1905,10 @@ function AdminSubscriptionsDetail({ onBack, view }: { onBack: () => void; view: 
               </thead>
               <tbody>
                 {data.recent.map(item => (
-                  <tr key={item.id} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                  <tr key={item.id} style={{ borderTop: "1px solid var(--border)" }}>
                     <td style={{ padding: "7px 8px", fontWeight: 700 }}>{item.name}</td>
                     <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{item.ownerEmail || "—"}</td>
-                    <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[item.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[item.plan] || item.plan}</td>
+                    <td style={{ padding: "7px 8px", fontWeight: 800, color: planTextColor(item.plan, "var(--text)") }}>{ADMIN_PLAN_LABELS[item.plan] || item.plan}</td>
                     <td style={{ padding: "7px 8px", color: "var(--muted)" }}>
                       {item.state ? BILLING_STATE_LABELS[item.state] || item.state : "—"}
                       {item.provider ? ` · ${ADMIN_PROVIDER_LABELS[item.provider] || item.provider}` : ""}
@@ -1940,7 +1981,7 @@ function AdminRevenueDetail({ onBack, view }: { onBack: () => void; view: AdminV
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
-      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
       {" › "}Revenue
     </p>
   );
@@ -2015,7 +2056,7 @@ function AdminRevenueDetail({ onBack, view }: { onBack: () => void; view: AdminV
           ) : (
             <div style={{ display: "grid" }}>
               {data.addons.seatWorkspaces.map((workspace, index) => (
-                <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)" }}>
                   <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: "#ff9f0a" }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{workspace.name}</div>
@@ -2035,7 +2076,7 @@ function AdminRevenueDetail({ onBack, view }: { onBack: () => void; view: AdminV
           ) : (
             <div style={{ display: "grid" }}>
               {data.addons.storageWorkspaces.map((workspace, index) => (
-                <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)" }}>
                   <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: workspace.addonGB >= 200 ? "#8a5cf6" : "#0a84ff" }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{workspace.name}</div>
@@ -2072,11 +2113,11 @@ function AdminRevenueDetail({ onBack, view }: { onBack: () => void; view: AdminV
               </thead>
               <tbody>
                 {data.topPaying.map((workspace, index) => (
-                  <tr key={workspace.id} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                  <tr key={workspace.id} style={{ borderTop: "1px solid var(--border)" }}>
                     <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
                     <td style={{ padding: "7px 8px", fontWeight: 700 }}>{workspace.name}</td>
                     <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{workspace.ownerEmail || "—"}</td>
-                    <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--text)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
+                    <td style={{ padding: "7px 8px", fontWeight: 800, color: planTextColor(workspace.plan, "var(--text)") }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
                     <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{workspace.state ? `${BILLING_STATE_LABELS[workspace.state] || workspace.state}${workspace.provider ? ` · ${ADMIN_PROVIDER_LABELS[workspace.provider] || workspace.provider}` : ""}` : "—"}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }}>£{workspace.baseGbp}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }}>{workspace.seatGbp ? `£${workspace.seatGbp}` : "—"}</td>
@@ -2174,7 +2215,7 @@ function AdminOnboardingDetail({ onBack, view }: { onBack: () => void; view: Adm
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
-      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
       {" › "}Setup Answers
     </p>
   );
@@ -2291,7 +2332,7 @@ function AdminPlansDetail({ onBack, view }: { onBack: () => void; view: AdminVie
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
-      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
       {" › "}Plans
     </p>
   );
@@ -2327,7 +2368,7 @@ function AdminPlansDetail({ onBack, view }: { onBack: () => void; view: AdminVie
           const bucket = data.stats[key] || { workspaces: 0, newThisMonth: 0, active30d: 0, orders30d: 0 };
           return (
             <section key={key} className="card app-card" style={{ display: "grid", gap: 4 }}>
-              <span style={{ fontSize: 12, fontWeight: 800, color: ADMIN_PLAN_COLORS[key] || "var(--muted)" }}>{ADMIN_PLAN_LABELS[key] || key}</span>
+              <span style={{ fontSize: 12, fontWeight: 800, color: planTextColor(key, "var(--muted)") }}>{ADMIN_PLAN_LABELS[key] || key}</span>
               <strong style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.05 }}>{bucket.workspaces.toLocaleString()}</strong>
               <span style={{ fontSize: 11, color: "var(--muted)" }}>{((bucket.workspaces / total) * 100).toFixed(1)}% of total · {bucket.active30d} active 30d · +{bucket.newThisMonth} this month</span>
               {key !== "demo" && (typeof bucket.trialActive === "number" || typeof bucket.trialExpiredAssigned === "number") ? (
@@ -2357,7 +2398,7 @@ function AdminPlansDetail({ onBack, view }: { onBack: () => void; view: AdminVie
               <tr style={{ textAlign: "left", color: "var(--muted)" }}>
                 <th style={{ padding: "6px 8px" }}>Feature / Limit</th>
                 {data.comparison.map(plan => (
-                  <th key={plan.plan} style={{ padding: "6px 8px", color: ADMIN_PLAN_COLORS[plan.plan] || "var(--text)" }}>{plan.label}</th>
+                  <th key={plan.plan} style={{ padding: "6px 8px", color: planTextColor(plan.plan, "var(--text)") }}>{plan.label}</th>
                 ))}
               </tr>
             </thead>
@@ -2370,7 +2411,7 @@ function AdminPlansDetail({ onBack, view }: { onBack: () => void; view: AdminVie
                 ["Price (monthly)", plan => (plan.monthly ? `£${plan.monthly}` : "£0")],
                 ["Price (yearly)", plan => (plan.yearly ? `£${plan.yearly}` : "£0")]
               ] as [string, (plan: AdminPlansDetail["comparison"][number]) => string][]).map(([label, pick]) => (
-                <tr key={label} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                <tr key={label} style={{ borderTop: "1px solid var(--border)" }}>
                   <td style={{ padding: "7px 8px", fontWeight: 700 }}>{label}</td>
                   {data.comparison.map(plan => (
                     <td key={plan.plan} style={{ padding: "7px 8px" }}>{pick(plan)}</td>
@@ -2400,8 +2441,8 @@ function AdminPlansDetail({ onBack, view }: { onBack: () => void; view: AdminVie
               {ADMIN_PLAN_ORDER.map(key => {
                 const bucket = data.stats[key] || { workspaces: 0, newThisMonth: 0, active30d: 0, orders30d: 0 };
                 return (
-                  <tr key={key} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
-                    <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[key] || "var(--text)" }}>{ADMIN_PLAN_LABELS[key] || key}</td>
+                  <tr key={key} style={{ borderTop: "1px solid var(--border)" }}>
+                    <td style={{ padding: "7px 8px", fontWeight: 800, color: planTextColor(key, "var(--text)") }}>{ADMIN_PLAN_LABELS[key] || key}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }}>{bucket.workspaces}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }}>{bucket.active30d}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }}>{bucket.newThisMonth}</td>
@@ -2458,7 +2499,7 @@ function AdminFeatureUsageDetail({ onBack, view }: { onBack: () => void; view: A
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
-      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
       {" › "}Feature Usage
     </p>
   );
@@ -2529,14 +2570,14 @@ function AdminFeatureUsageDetail({ onBack, view }: { onBack: () => void; view: A
               <tr style={{ textAlign: "left", color: "var(--muted)" }}>
                 <th style={{ padding: "6px 8px" }}>Feature</th>
                 {["demo", "lifetime_lite", "pro_monthly", "team_monthly"].map(plan => (
-                  <th key={plan} style={{ padding: "6px 8px", textAlign: "right", color: ADMIN_PLAN_COLORS[plan] }}>{ADMIN_PLAN_LABELS[plan]}</th>
+                  <th key={plan} style={{ padding: "6px 8px", textAlign: "right", color: planTextColor(plan) }}>{ADMIN_PLAN_LABELS[plan]}</th>
                 ))}
                 <th style={{ padding: "6px 8px", textAlign: "right" }}>Total</th>
               </tr>
             </thead>
             <tbody>
               {data.features.map(feature => (
-                <tr key={feature.key} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                <tr key={feature.key} style={{ borderTop: "1px solid var(--border)" }}>
                   <td style={{ padding: "7px 8px", fontWeight: 700 }}>{feature.label}</td>
                   {["demo", "lifetime_lite", "pro_monthly", "team_monthly"].map(plan => (
                     <td key={plan} style={{ padding: "7px 8px", textAlign: "right" }}>{(feature.byPlan[plan] || 0).toLocaleString()}</td>
@@ -2561,7 +2602,7 @@ function AdminFeatureUsageDetail({ onBack, view }: { onBack: () => void; view: A
                     {value !== null ? `${value.toLocaleString()} (${((value / funnelMax) * 100).toFixed(1)}%)` : "—"}
                   </span>
                 </div>
-                <div style={{ height: 10, borderRadius: 999, background: "rgba(17,24,39,0.07)", overflow: "hidden", marginTop: 4 }}>
+                <div style={{ height: 10, borderRadius: 999, background: "var(--border)", overflow: "hidden", marginTop: 4 }}>
                   <span style={{ display: "block", height: "100%", borderRadius: 999, width: `${value !== null ? Math.max((value / funnelMax) * 100, 2) : 0}%`, background: ADMIN_FEATURE_COLORS[index % ADMIN_FEATURE_COLORS.length] }} />
                 </div>
               </div>
@@ -2640,7 +2681,7 @@ function AdminStorageDetail({ onBack, view }: { onBack: () => void; view: AdminV
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
-      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
       {" › "}Storage
     </p>
   );
@@ -2710,11 +2751,11 @@ function AdminStorageDetail({ onBack, view }: { onBack: () => void; view: AdminV
           ) : (
             <div style={{ display: "grid" }}>
               {data.nearLimit.map((workspace, index) => (
-                <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)" }}>
                   <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: workspace.percent >= 95 ? "#d92d20" : "#ff9f0a" }} />
                   <span style={{ fontSize: 13, fontWeight: 650, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{workspace.name}</span>
                   <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{formatBytes(workspace.bytes)} / {workspace.limitMB >= 1024 ? `${workspace.limitMB / 1024} GB` : `${workspace.limitMB} MB`}</span>
-                  <strong style={{ fontSize: 12.5, color: workspace.percent >= 95 ? "#d92d20" : "#b36b00" }}>{workspace.percent}%</strong>
+                  <strong style={{ fontSize: 12.5, color: workspace.percent >= 95 ? "var(--admin-bad-text)" : "var(--admin-warn-text)" }}>{workspace.percent}%</strong>
                 </div>
               ))}
             </div>
@@ -2741,16 +2782,16 @@ function AdminStorageDetail({ onBack, view }: { onBack: () => void; view: AdminV
               </thead>
               <tbody>
                 {data.topWorkspaces.map((workspace, index) => (
-                  <tr key={workspace.id} style={{ borderTop: "1px solid rgba(17,24,39,0.07)" }}>
+                  <tr key={workspace.id} style={{ borderTop: "1px solid var(--border)" }}>
                     <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
                     <td style={{ padding: "7px 8px", fontWeight: 700 }}>{workspace.name}</td>
-                    <td style={{ padding: "7px 8px", fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--text)" }}>{workspace.plan === "unknown" ? "Unknown" : ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
+                    <td style={{ padding: "7px 8px", fontWeight: 800, color: planTextColor(workspace.plan, "var(--text)") }}>{workspace.plan === "unknown" ? "Unknown" : ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right" }}>{workspace.files}</td>
                     <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 700 }}>{formatBytes(workspace.bytes)}</td>
                     <td style={{ padding: "7px 8px" }}>
                       {workspace.percent === null ? <span style={{ fontSize: 11.5, color: "var(--muted)" }}>— (workspace no longer exists)</span> : (
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ flex: 1, height: 7, borderRadius: 999, background: "rgba(17,24,39,0.08)", overflow: "hidden" }}>
+                        <div style={{ flex: 1, height: 7, borderRadius: 999, background: "var(--admin-track-bg)", overflow: "hidden" }}>
                           <span style={{ display: "block", height: "100%", borderRadius: 999, width: `${Math.min(workspace.percent, 100)}%`, background: workspace.percent >= 95 ? "#d92d20" : workspace.percent >= 80 ? "#ff9f0a" : "#0a84ff" }} />
                         </div>
                         <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", minWidth: 42, textAlign: "right" }}>{workspace.percent}%</span>
@@ -2773,7 +2814,7 @@ function AdminStorageDetail({ onBack, view }: { onBack: () => void; view: AdminV
           ) : (
             <div style={{ display: "grid" }}>
               {data.recentUploads.map((file, index) => (
-                <div key={`${file.fileName}-${file.uploadedAtMs}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                <div key={`${file.fileName}-${file.uploadedAtMs}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)" }}>
                   <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: ADMIN_TYPE_COLORS[file.type] || "#9ca3af" }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.fileName}</div>
@@ -2846,7 +2887,7 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
 
   const crumb = (
     <p className="muted-copy" style={{ margin: "0 0 4px" }}>
-      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
+      <button type="button" onClick={onBack} style={{ background: "none", border: 0, padding: 0, color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}>Admin Insights</button>
       {" › "}User Lookup
     </p>
   );
@@ -2892,12 +2933,12 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
         ) : (
           <div style={{ display: "grid" }}>
             {memberships.map((membership, index) => (
-              <div key={membership.companyId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+              <div key={membership.companyId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)" }}>
                 <span style={{ fontSize: 13, fontWeight: 650, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{membership.name}</span>
-                <span style={{ fontSize: 11.5, fontWeight: 800, color: ADMIN_PLAN_COLORS[membership.plan] || "var(--muted)" }}>{ADMIN_PLAN_LABELS[membership.plan] || membership.plan}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: planTextColor(membership.plan, "var(--muted)") }}>{ADMIN_PLAN_LABELS[membership.plan] || membership.plan}</span>
                 <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{membership.role}</span>
                 {membership.sources?.length ? <span style={{ fontSize: 10.5, color: "var(--muted)" }} title="Where this membership was found">{membership.sources.join(" · ")}</span> : null}
-                <button type="button" disabled={membership.workspaceExists === false} onClick={() => openDetail("workspace", membership.companyId)} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>
+                <button type="button" disabled={membership.workspaceExists === false} onClick={() => openDetail("workspace", membership.companyId)} style={{ background: "none", border: 0, padding: 0, color: "var(--accent)", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>
                   Stats →
                 </button>
               </div>
@@ -2936,7 +2977,7 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
         </div>
         <p className="muted-copy" style={{ margin: "12px 0 6px", fontWeight: 700 }}>Storage</p>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ flex: 1, height: 9, borderRadius: 999, background: "rgba(17,24,39,0.08)", overflow: "hidden" }}>
+          <div style={{ flex: 1, height: 9, borderRadius: 999, background: "var(--admin-track-bg)", overflow: "hidden" }}>
             <span style={{ display: "block", height: "100%", borderRadius: 999, width: `${Math.min(percent, 100)}%`, background: percent >= 95 ? "#d92d20" : percent >= 80 ? "#ff9f0a" : "#0a84ff" }} />
           </div>
           <span style={{ fontSize: 12.5, fontWeight: 700 }}>
@@ -3005,13 +3046,13 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
                     key={user.uid}
                     type="button"
                     onClick={() => openDetail("user", user.uid)}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)", background: "none", border: 0, cursor: "pointer", textAlign: "left", width: "100%", color: "var(--text)" }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)", background: "none", border: 0, cursor: "pointer", textAlign: "left", width: "100%", color: "var(--text)" }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email || user.uid}</div>
                       <div style={{ fontSize: 11, color: "var(--muted)" }}>{user.displayName || "—"} · last sign-in {user.lastSignInMs ? new Date(user.lastSignInMs).toLocaleDateString() : "never"}</div>
                     </div>
-                    <span style={{ color: "#0a84ff", fontWeight: 800 }}>→</span>
+                    <span aria-hidden="true" style={{ color: "var(--accent)", fontWeight: 800 }}>→</span>
                   </button>
                 ))}
               </div>
@@ -3026,14 +3067,14 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
                     key={workspace.id}
                     type="button"
                     onClick={() => openDetail("workspace", workspace.id)}
-                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)", background: "none", border: 0, cursor: "pointer", textAlign: "left", width: "100%", color: "var(--text)" }}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)", background: "none", border: 0, cursor: "pointer", textAlign: "left", width: "100%", color: "var(--text)" }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{workspace.name}</div>
                       <div style={{ fontSize: 11, color: "var(--muted)" }}>{workspace.ownerEmail || "—"}</div>
                     </div>
-                    <span style={{ fontSize: 11.5, fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--muted)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</span>
-                    <span style={{ color: "#0a84ff", fontWeight: 800 }}>→</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 800, color: planTextColor(workspace.plan, "var(--muted)") }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</span>
+                    <span aria-hidden="true" style={{ color: "var(--accent)", fontWeight: 800 }}>→</span>
                   </button>
                 ))}
               </div>
@@ -3045,7 +3086,7 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
       {detailKind ? (
         <section className="card app-card">
           <p className="muted-copy" style={{ margin: "0 0 6px" }}>
-            <button type="button" onClick={() => { setDetailKind(null); setDetail(null); }} style={{ background: "none", border: 0, padding: 0, color: "#0a84ff", fontWeight: 700, cursor: "pointer" }}>← Results</button>
+            <button type="button" onClick={() => { setDetailKind(null); setDetail(null); }} style={{ background: "none", border: 0, padding: 0, color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}>← Results</button>
           </p>
           <CardTitle icon="dashboard" eyebrow={detailKind === "user" ? "User" : "Workspace"} title={detailKind === "user" ? "User Statistics" : "Workspace Statistics"} />
           {detailLoading ? <p className="muted-copy">Loading...</p> : detail ? (detailKind === "user" ? renderUserDetail() : renderWorkspaceDetail()) : null}
@@ -3055,10 +3096,14 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
   );
 }
 
-function AdminOverviewPanel({ view }: { view: AdminView }) {
+function AdminOverviewPanel({ view, onOpen }: { view: AdminView; onOpen: (page: AdminHubPage) => void }) {
   const [data, setData] = useState<AdminInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  // People in the apps now comes from the presence callable the Live page uses, so the two agree;
+  // getAdminInsights' own appNow is a raw session count with staff and test sessions in it.
+  const { live: appPresence, status: appStatus } = useLiveAppNow(view);
 
   useEffect(() => {
     let cancelled = false;
@@ -3078,14 +3123,17 @@ function AdminOverviewPanel({ view }: { view: AdminView }) {
     return () => {
       cancelled = true;
     };
-  }, [view]);
+  }, [view, reloadKey]);
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <div className="settings-card-stack">
         <section className="card app-card">
-          <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Admin Insights" />
-          <p className="muted-copy">Loading insights...</p>
+          <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Overview" />
+          <p className="muted-copy" role="status">Loading insights…</p>
+          <div className="site-stats-grid admin-skeleton-grid" aria-hidden="true">
+            {Array.from({ length: 6 }, (_, index) => <div key={index} className="admin-skeleton" />)}
+          </div>
         </section>
       </div>
     );
@@ -3095,8 +3143,9 @@ function AdminOverviewPanel({ view }: { view: AdminView }) {
     return (
       <div className="settings-card-stack">
         <section className="card app-card">
-          <CardTitle icon="lock" eyebrow="NivaDesk admin" title="Admin Insights" />
-          <p style={{ color: "var(--danger)", margin: 0 }}>{error || "No data."}</p>
+          <CardTitle icon="lock" eyebrow="NivaDesk admin" title="Overview" />
+          <p role="alert" style={{ color: "var(--danger)", margin: 0 }}>{error || "No data."}</p>
+          <button type="button" className="button secondary admin-small-button" style={{ marginTop: 10 }} onClick={() => setReloadKey(key => key + 1)}>Try again</button>
         </section>
       </div>
     );
@@ -3106,38 +3155,54 @@ function AdminOverviewPanel({ view }: { view: AdminView }) {
     .filter(([, value]) => value > 0)
     .map(([key, value]) => ({ label: ADMIN_PLAN_LABELS[key] || key, value, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }));
 
-  const usageEntries: [string, number][] = [
-    ["Orders (total)", data.usage.ordersTotal ?? 0],
-    ["Orders this month", data.usage.ordersThisMonth ?? 0],
-    ["Customers", data.usage.customersTotal ?? 0],
-    ["Notes (originals)", data.usage.notesTotal ?? 0],
-    ["Notes with reminders", data.usage.remindersTotal ?? 0],
-    ["Messages", data.usage.messagesTotal ?? 0],
-    ["Workspace tickets", data.usage.workspaceTicketsTotal ?? 0]
+  const usageEntries: [string, number | null][] = [
+    ["Orders (total)", data.usage.ordersTotal],
+    ["Orders this month", data.usage.ordersThisMonth],
+    ["Customers", data.usage.customersTotal],
+    ["Notes (originals)", data.usage.notesTotal],
+    ["Notes with reminders", data.usage.remindersTotal],
+    ["Messages", data.usage.messagesTotal],
+    ["Workspace tickets", data.usage.workspaceTicketsTotal]
   ];
 
   const heartbeatText = (ms: number | null) => (ms ? new Date(ms).toLocaleString() : "—");
+  const presenceLive = appPresence?.live;
+  const appsNow = appBuckets(presenceLive);
+  const appNowValue = presenceLive ? presenceLive.people : appPresence ? Number(appPresence.active || 0) : data.site.appNow ?? 0;
+  const appNowHint = presenceLive
+    ? PRESENCE_APPS.filter(app => appsNow[app.key].people > 0).map(app => `${app.short} ${appsNow[app.key].people}`).join(" · ") || "no one right now"
+    : Object.entries(appPresence?.platforms ?? data.site.appPlatforms ?? {}).map(([key, value]) => `${key} ${value}`).join(" · ") || "web / mac / ios / android";
 
   return (
     <div className="settings-card-stack">
       <section className="card app-card">
-        <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Admin Insights" />
-        <p className="muted-copy">
-          Live overview across all NivaDesk users and workspaces. Generated {new Date(data.generatedAtMs).toLocaleString()}.
-        </p>
+        <div className="admin-page-head">
+          <CardTitle icon="dashboard" eyebrow="NivaDesk admin" title="Overview" />
+          <div className="admin-page-actions">
+            <span className="admin-generated">Updated {new Date(data.generatedAtMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+            <button type="button" className="button secondary admin-small-button" onClick={() => setReloadKey(key => key + 1)} disabled={loading}>
+              {loading ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
+        </div>
         <ExclusionNote exclusion={data.exclusion} />
       </section>
 
+      <h3 className="admin-group-heading">Right now</h3>
       <div className="site-stats-grid">
-        {adminKpiTile("Total Users", data.users.total.toLocaleString(), `+${data.users.new30d} in last 30 days`)}
-        {adminKpiTile("Workspaces", data.workspaces.total.toLocaleString(), `+${data.workspaces.new30d} in last 30 days`)}
-        {adminKpiTile("Active Workspaces", data.workspaces.active30d.toLocaleString(), "created an order in last 30 days")}
+        {adminKpiTile("In the apps now", appStatus === "loading" && !appPresence ? "…" : appNowValue.toLocaleString(), presenceLive ? `${appNowHint} — open Live` : `${appNowHint} (sessions)`, () => onOpen("live"))}
+        {adminKpiTile("On the website now", data.site.liveVisitors.toLocaleString(), `${data.site.today.sessions} visitor sessions today`, () => onOpen("sitestats"))}
+        {adminKpiTile("Open support tickets", countText(data.support.open), `${countText(data.support.inProgress)} in progress`)}
+      </div>
+
+      <h3 className="admin-group-heading">Business</h3>
+      <div className="site-stats-grid">
         {data.billing ? (
           <>
-            {adminKpiTile("Paid by provider", (data.billing.byState.paid_provider || 0).toLocaleString(), providerHint(data.billing))}
+            {adminKpiTile("Paid by provider", (data.billing.byState.paid_provider || 0).toLocaleString(), providerHint(data.billing), () => onOpen("subscriptions"))}
             {adminKpiTile("Active trials", (data.billing.byState.trial_active || 0).toLocaleString(), `${data.billing.byState.trial_expired || 0} ended — now Free, not counted`)}
             {adminKpiTile("Manual / complimentary", (data.billing.byState.manual_comp || 0).toLocaleString(), "plan assigned, no till behind it")}
-            {adminKpiTile("List-price potential", `£${data.billing.listPricePotential.toLocaleString()}/mo`, "plans in force at list price — not revenue")}
+            {adminKpiTile("List-price potential", `£${data.billing.listPricePotential.toLocaleString()}/mo`, "plans in force at list price — not revenue", () => onOpen("revenue"))}
             {adminKpiTile("Collected revenue", "Not measured", "live billing is not connected to Insights")}
           </>
         ) : (
@@ -3147,8 +3212,13 @@ function AdminOverviewPanel({ view }: { view: AdminView }) {
             {adminKpiTile("Est. ARR", `£${data.revenue.arr.toLocaleString()}`, "estimate — billing not live")}
           </>
         )}
-        {adminKpiTile("On Site Now", data.site.liveVisitors.toLocaleString(), `${data.site.today.sessions} visitors today`)}
-        {adminKpiTile("In App Now", (data.site.appNow ?? 0).toLocaleString(), Object.entries(data.site.appPlatforms ?? {}).map(([key, value]) => `${key} ${value}`).join(" · ") || "web / mac / ios / android")}
+      </div>
+
+      <h3 className="admin-group-heading">Growth</h3>
+      <div className="site-stats-grid">
+        {adminKpiTile("Sign-in accounts", data.users.total.toLocaleString(), `+${data.users.new30d} in last 30 days · every account, staff and test included`, () => onOpen("users"))}
+        {adminKpiTile("Workspaces", data.workspaces.total.toLocaleString(), `+${data.workspaces.new30d} in last 30 days`, () => onOpen("users"))}
+        {adminKpiTile("Workspaces with a new order", data.workspaces.active30d.toLocaleString(), "an order created in the last 30 days (shop imports included)", () => onOpen("activation"))}
       </div>
 
       <div className="site-stats-panels">
@@ -3158,7 +3228,9 @@ function AdminOverviewPanel({ view }: { view: AdminView }) {
         </section>
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Usage" title="Feature Usage" />
-          <StatsRankedList entries={usageEntries} />
+          <ul className="admin-plain-list">
+            {usageEntries.map(([label, value]) => <li key={label}><span>{label}</span><strong>{countText(value)}</strong></li>)}
+          </ul>
           <p className="muted-copy" style={{ marginTop: 8 }}>Record counts of different kinds, some subsets of others — not shares of adoption. Notes count each note once (a note shared with a colleague is not counted again{typeof data.usage.notesSharedCopies === "number" ? `; ${data.usage.notesSharedCopies} shared copies` : ""}).</p>
         </section>
         <section className="card app-card">
@@ -3172,9 +3244,9 @@ function AdminOverviewPanel({ view }: { view: AdminView }) {
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Support" title="Support Tickets" />
           <div className="settings-mini-grid">
-            <InfoTile label="Open" value={(data.support.open ?? 0).toLocaleString()} />
-            <InfoTile label="In progress" value={(data.support.inProgress ?? 0).toLocaleString()} />
-            <InfoTile label="All time" value={(data.support.total ?? 0).toLocaleString()} />
+            <InfoTile label="Open" value={countText(data.support.open)} />
+            <InfoTile label="In progress" value={countText(data.support.inProgress)} />
+            <InfoTile label="All time" value={countText(data.support.total)} />
           </div>
           <p className="muted-copy" style={{ marginTop: 10 }}>Reply to tickets from the Support / Tickets section.</p>
         </section>
@@ -3182,10 +3254,10 @@ function AdminOverviewPanel({ view }: { view: AdminView }) {
           <CardTitle icon="dashboard" eyebrow="Workspaces" title="Newest Workspaces" />
           <div style={{ display: "grid" }}>
             {data.workspaces.newest.map((workspace, index) => (
-              <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+              <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)" }}>
                 <span style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", width: 16 }}>{index + 1}</span>
                 <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{workspace.name}</span>
-                <span style={{ fontSize: 11.5, fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--muted)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 800, color: planTextColor(workspace.plan, "var(--muted)") }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</span>
                 <span style={{ fontSize: 11, color: "var(--muted)", minWidth: 74, textAlign: "right" }}>
                   {workspace.createdAtMs ? new Date(workspace.createdAtMs).toLocaleDateString() : "—"}
                 </span>
@@ -3197,14 +3269,14 @@ function AdminOverviewPanel({ view }: { view: AdminView }) {
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Attention" title="Workspaces Requiring Attention" />
           {data.attention.inactivePaidWorkspaces.length === 0 ? (
-            <p className="muted-copy">All paid workspaces created an order in the last 30 days. ✓</p>
+            <p className="muted-copy">Every workspace on a plan (paid, trial or manual) created an order in the last 30 days. ✓</p>
           ) : (
             <div style={{ display: "grid" }}>
               {data.attention.inactivePaidWorkspaces.map((workspace, index) => (
-                <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid rgba(17,24,39,0.07)" }}>
+                <div key={workspace.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)" }}>
                   <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: "#ff9f0a" }} />
                   <span style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{workspace.name}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 800, color: ADMIN_PLAN_COLORS[workspace.plan] || "var(--muted)" }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</span>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: planTextColor(workspace.plan, "var(--muted)") }}>{ADMIN_PLAN_LABELS[workspace.plan] || workspace.plan}</span>
                   <span style={{ fontSize: 11, color: "var(--muted)" }}>no orders in 30 days</span>
                 </div>
               ))}
@@ -3340,7 +3412,7 @@ function AdminActivationFunnelSection({ view }: { view: AdminView }) {
         </p>
         <ExclusionNote exclusion={data?.exclusion} />
         {loading ? <p style={{ fontSize: 13, color: "var(--muted)" }}>{t("Working it out…")}</p> : null}
-        {error ? <p style={{ fontSize: 13, color: "var(--danger, #b91c1c)", fontWeight: 700 }}>{error}</p> : null}
+        {error ? <p role="alert" style={{ fontSize: 13, color: "var(--danger)", fontWeight: 700 }}>{error}</p> : null}
 
         {totals ? (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginTop: 12 }}>
@@ -3374,7 +3446,22 @@ function AdminActivationFunnelSection({ view }: { view: AdminView }) {
 
       {workspaces.length ? (
         <section className="card app-card">
-          <CardTitle icon="dashboard" eyebrow="Most at risk first" title="Workspaces" />
+          <div className="admin-card-head">
+            <CardTitle icon="dashboard" eyebrow="Most at risk first" title="Workspaces" />
+            <button
+              type="button"
+              className="button secondary admin-small-button"
+              onClick={() => downloadCsv(
+                `nivadesk-activation-${view}-${new Date().toISOString().slice(0, 10)}.csv`,
+                toCsv(
+                  ["workspace", "workspace_id", "came_for", "stage", "orders", "customers", "signed_up", "last_activity", "risk_score", "risk_level", "why"],
+                  workspaces.map(row => [row.name, row.companyId, row.path, FUNNEL_STATE_LABELS[row.state] || row.state, row.orderCount, row.customerCount, funnelDate(row.signedUpAtMs), funnelDate(row.lastMeaningfulAtMs), row.riskScore, row.riskLevel, activationEvidenceLine(row.evidence) || ""])
+                )
+              )}
+            >
+              Export CSV
+            </button>
+          </div>
           <div style={{ overflowX: "auto", marginTop: 10 }}>
             <table className="admin-search-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
@@ -3439,6 +3526,7 @@ function AdminActivationFunnelSection({ view }: { view: AdminView }) {
 
 type AdminHubPage =
   | "overview"
+  | "live"
   | "users"
   | "subscriptions"
   | "revenue"
@@ -3453,47 +3541,115 @@ type AdminHubPage =
   | "feedback"
   | "activation";
 
-const ADMIN_HUB_PAGES: { id: AdminHubPage; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "users", label: "Users & Workspaces" },
-  { id: "subscriptions", label: "Subscriptions" },
-  { id: "revenue", label: "Revenue" },
-  { id: "plans", label: "Plans" },
-  { id: "features", label: "Feature Usage" },
-  { id: "storage", label: "Storage" },
-  { id: "lookup", label: "User Lookup" },
-  { id: "sitestats", label: "Global Statistics" },
-  { id: "searchconsole", label: "Google Search" },
-  { id: "customorderlanding", label: "Custom Order Landing Page" },
-  { id: "onboarding", label: "Setup Answers" },
-  { id: "activation", label: "Activation" },
-  { id: "feedback", label: "Customer Feedback" }
+/* Fourteen flat links became five groups (29 Oct 2026): what is happening now, money, the
+   customers themselves, how the product is used, and the public website. Order inside a group is
+   the order an admin usually reads them in. */
+const ADMIN_HUB_GROUPS: { label: string; pages: { id: AdminHubPage; label: string }[] }[] = [
+  { label: "Pulse", pages: [{ id: "overview", label: "Overview" }, { id: "live", label: "Live" }] },
+  { label: "Money", pages: [{ id: "subscriptions", label: "Subscriptions" }, { id: "revenue", label: "Revenue" }, { id: "plans", label: "Plans" }] },
+  {
+    label: "Customers",
+    pages: [
+      { id: "users", label: "Users & Workspaces" },
+      { id: "activation", label: "Activation" },
+      { id: "onboarding", label: "Setup Answers" },
+      { id: "feedback", label: "Customer Feedback" },
+      { id: "lookup", label: "User Lookup" }
+    ]
+  },
+  { label: "Product", pages: [{ id: "features", label: "Feature Usage" }, { id: "storage", label: "Storage" }] },
+  {
+    label: "Website",
+    pages: [
+      { id: "sitestats", label: "Global Statistics" },
+      { id: "searchconsole", label: "Google Search" },
+      { id: "customorderlanding", label: "Custom Order Landing Page" }
+    ]
+  }
 ];
 
+const ADMIN_HUB_PAGE_IDS = ADMIN_HUB_GROUPS.flatMap(group => group.pages.map(page => page.id));
+
+function pageFromHash(): AdminHubPage {
+  if (typeof window === "undefined") return "overview";
+  const id = window.location.hash.replace(/^#/, "") as AdminHubPage;
+  return ADMIN_HUB_PAGE_IDS.includes(id) ? id : "overview";
+}
+
 export function AdminInsightsHub() {
-  const [page, setPage] = useState<AdminHubPage>("overview");
+  // The section lives in the address (#live, #revenue …): a link opens the right page and Back
+  // returns to the previous section instead of leaving the admin area.
+  const [page, setPageState] = useState<AdminHubPage>("overview");
   const [view, setView] = useState<AdminView>("business");
+  const hubRef = useRef<HTMLDivElement | null>(null);
+  const setPage = (next: AdminHubPage) => {
+    setPageState(next);
+    if (typeof window !== "undefined" && window.location.hash !== `#${next}`) {
+      window.history.pushState(null, "", next === "overview" ? window.location.pathname + window.location.search : `#${next}`);
+    }
+    // The app scrolls inside its own pane, not the window: bring the hub's top into view.
+    hubRef.current?.scrollIntoView({ block: "start" });
+  };
   const goOverview = () => setPage("overview");
-  // The toggle only means something on the pages that count workspaces.
-  const viewPages: AdminHubPage[] = ["overview", "users", "subscriptions", "revenue", "plans", "features", "storage", "onboarding", "activation"];
+
+  useEffect(() => {
+    setPageState(pageFromHash());
+    const onPop = () => setPageState(pageFromHash());
+    window.addEventListener("popstate", onPop);
+    window.addEventListener("hashchange", onPop);
+    // An admin's own browser is not a visitor: the landing-page and public-site beacons skip a
+    // browser carrying the analytics opt-out, so opening Insights sets it (Custom Order Landing
+    // has the switch to undo it).
+    if (!isAnalyticsExcluded()) setAnalyticsExclusion(true);
+    return () => {
+      window.removeEventListener("popstate", onPop);
+      window.removeEventListener("hashchange", onPop);
+    };
+  }, []);
+
+  // The toggle only means something on the pages that count workspaces or members.
+  const viewPages: AdminHubPage[] = ["overview", "live", "users", "subscriptions", "revenue", "plans", "features", "storage", "onboarding", "activation"];
+  const currentLabel = ADMIN_HUB_GROUPS.flatMap(group => group.pages).find(item => item.id === page)?.label || "Overview";
 
   return (
-    <div className="admin-hub-grid">
-      <aside className="admin-hub-sidebar">
-        {ADMIN_HUB_PAGES.map(item => (
-          <button
-            key={item.id}
-            type="button"
-            className={page === item.id ? "admin-hub-link active" : "admin-hub-link"}
-            onClick={() => setPage(item.id)}
-          >
-            {item.label}
-          </button>
+    <div className="admin-hub-grid" ref={hubRef}>
+      <nav className="admin-hub-sidebar" aria-label="Admin Insights sections">
+        {ADMIN_HUB_GROUPS.map(group => (
+          <div key={group.label} className="admin-hub-group">
+            <span className="admin-hub-group-label">{group.label}</span>
+            {group.pages.map(item => (
+              <a
+                key={item.id}
+                href={`#${item.id}`}
+                className={page === item.id ? "admin-hub-link active" : "admin-hub-link"}
+                aria-current={page === item.id ? "page" : undefined}
+                onClick={event => {
+                  if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+                  event.preventDefault();
+                  setPage(item.id);
+                }}
+              >
+                {item.id === "live" ? <span className="admin-live-dot" aria-hidden="true" /> : null}
+                {item.label}
+              </a>
+            ))}
+          </div>
         ))}
-      </aside>
-      <div className="admin-hub-content">
+      </nav>
+      <div className="admin-hub-mobile-nav">
+        <label htmlFor="admin-hub-section" className="admin-hub-group-label">Section</label>
+        <select id="admin-hub-section" value={page} onChange={event => setPage(event.target.value as AdminHubPage)}>
+          {ADMIN_HUB_GROUPS.map(group => (
+            <optgroup key={group.label} label={group.label}>
+              {group.pages.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+      <section className="admin-hub-content" aria-label={currentLabel}>
         {viewPages.includes(page) ? <AdminViewToggle view={view} onChange={setView} /> : null}
-        {page === "overview" ? <AdminOverviewPanel view={view} /> : null}
+        {page === "overview" ? <AdminOverviewPanel view={view} onOpen={setPage} /> : null}
+        {page === "live" ? <AdminLivePanel view={view} /> : null}
         {page === "users" ? <AdminUsersWorkspacesDetail onBack={goOverview} view={view} /> : null}
         {page === "subscriptions" ? <AdminSubscriptionsDetail onBack={goOverview} view={view} /> : null}
         {page === "revenue" ? <AdminRevenueDetail onBack={goOverview} view={view} /> : null}
@@ -3507,7 +3663,7 @@ export function AdminInsightsHub() {
         {page === "onboarding" ? <AdminOnboardingDetail onBack={goOverview} view={view} /> : null}
         {page === "activation" ? <AdminActivationFunnelSection view={view} /> : null}
         {page === "feedback" ? <AdminFeedbackInbox /> : null}
-      </div>
+      </section>
     </div>
   );
 }

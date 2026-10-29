@@ -16,6 +16,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { inAppLink, OPEN_IN_APP_EVENT } from "@/lib/studioflow/openInApp";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { WEB_BUILD_ID } from "@/lib/studioflow/webBuild";
 import { localizeActivityNotification } from "@/lib/studioflow/notificationText";
 import { bootMark } from "@/lib/studioflow/bootTrace";
 import { useQuickActionEvent, type QuickActionPayload } from "@/lib/studioflow/quickActions";
@@ -1353,14 +1354,16 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [syncInfoOpen, setSyncInfoOpen] = useState(false);
   const [notifDrawerOpen, setNotifDrawerOpen] = useState(false);
 
-  // Anonymous in-app presence heartbeat: powers the admin "In App Now"
-  // counter. Random per-session id, no user identifiers, production only.
+  // In-app presence heartbeat: powers admin Insights ▸ Live. Random per-tab session id plus the
+  // sign-in token, which the server only verifies to count one member once across devices and to
+  // leave staff/test accounts out — it stores the account id (server-only, 8 days), never shows it.
+  // Device class and this build ride along. Production only.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!user) return;
     if (!window.location.hostname.endsWith("nivadesk.app")) return;
 
-    const ping = () => {
+    const ping = async () => {
       if (document.visibilityState !== "visible") return;
       try {
         let id = window.sessionStorage.getItem("nv_app_presence");
@@ -1368,7 +1371,10 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`).toLowerCase();
           window.sessionStorage.setItem("nv_app_presence", id);
         }
-        const body = JSON.stringify({ kind: "heartbeat", scope: "app", platform: "web", sessionId: id, path: window.location.pathname });
+        const width = window.innerWidth;
+        const device = width <= 640 ? "mobile" : width <= 1024 ? "tablet" : "desktop";
+        const idToken = await user.getIdToken().catch(() => "");
+        const body = JSON.stringify({ kind: "heartbeat", scope: "app", platform: "web", device, appBuild: WEB_BUILD_ID, sessionId: id, path: window.location.pathname, ...(idToken ? { idToken } : {}) });
         let sent = false;
         if (navigator.sendBeacon) {
           sent = navigator.sendBeacon("https://europe-west2-eggcraft-studio.cloudfunctions.net/recordSiteVisit", new Blob([body], { type: "text/plain" }));
@@ -1381,8 +1387,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       }
     };
 
-    ping();
-    const interval = window.setInterval(ping, 30000);
+    void ping();
+    const interval = window.setInterval(() => void ping(), 30000);
     return () => window.clearInterval(interval);
   }, [user]);
   const [notifications, setNotifications] = useState<

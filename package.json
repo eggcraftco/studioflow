@@ -79,6 +79,7 @@
     "test:review-n09-n25": "npx tsx scripts/check-review-n09-n25.mts",
     "test:n23-receipt-currency": "npx tsx scripts/check-n23-receipt-currency.mts",
     "test:admin-insights": "node scripts/check-admin-insights-metrics.mts",
+    "test:admin-live-presence": "node scripts/check-admin-live-presence.mts",
     "test:order-delete-buttons": "node scripts/check-order-delete-buttons.mjs",
     "test:getting-started": "npx tsx scripts/check-getting-started.mts",
     "test:etsy-first-import": "npx tsx scripts/check-etsy-first-import.mts",
