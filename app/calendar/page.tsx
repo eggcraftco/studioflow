@@ -791,14 +791,18 @@ export default function CalendarPage() {
                 <label className="cal-inline-field"><span>{t("Search until")}</span><input type="date" className="input" aria-label={t("Search until")} value={searchTo} onChange={(e) => { if (core.isDateKey(e.target.value)) setSearchTo(e.target.value); }} /></label>
               </>
             ) : null}
-            <button type="button" className="button secondary" aria-expanded={connectionsOpen} onClick={() => setConnectionsOpen((v) => !v)}>
-              🌐 {t("Your other calendars")}{Object.values(connections).some((c) => c && c.status !== "active") ? " ⚠" : ""}
-            </button>
+            {/* Only for people the server has opened Google / Outlook for, or who already have a connection to see or remove:
+                during the pilot everyone else sees no sign of it. */}
+            {connectorsOn?.google || connectorsOn?.microsoft || Object.keys(connections).length ? (
+              <button type="button" className="button secondary" aria-expanded={connectionsOpen} onClick={() => setConnectionsOpen((v) => !v)}>
+                🌐 {t("Your other calendars")}{Object.values(connections).some((c) => c && c.status !== "active") ? " ⚠" : ""}
+              </button>
+            ) : null}
             <button type="button" className={`button secondary${filtersActive(filters) ? " is-active" : ""}`} aria-expanded={filtersOpen} onClick={() => setFiltersOpen((v) => !v)}>
               {t("Filters")}{filtersActive(filters) ? " •" : ""}
             </button>
           </div>
-          {connectionsOpen && workspace ? (
+          {connectionsOpen && workspace && (connectorsOn?.google || connectorsOn?.microsoft || Object.keys(connections).length) ? (
             <CalendarConnectionsPanel companyId={workspace.id} connections={connections} available={connectorsOn} locale={locale} timeZone={viewerTz} t={t} onNotice={(message) => dispatchStudioToast({ message })} />
           ) : null}
           {filtersOpen ? (
