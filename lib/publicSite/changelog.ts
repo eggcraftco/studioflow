@@ -104,14 +104,14 @@ export const CHANGELOG: ChangelogEntry[] = [
   },
   // 2.2 — from the store notes entered for native-candidate-34-2026-10-22 (docs/store/release-2.2/notes-final.json,
   // §5 of notes-final.md). Server-gated or pilot features (customer inbox, DHL, payment links) are left out on purpose.
-  // Apple: the day the App Store release started was not readable on 29 Oct (no App Store Connect session; the public
-  // page lists only the newest version) — "October 2026" until it is read back; it was live before 2.3 (28 Oct).
+  // Apple: released to the App Store on 23 October 2026 (owner, 29 Oct; not readable from the public page, which lists
+  // only the newest version).
   {
     version: "2.2",
     platformKey: "apple",
     platform: "iPhone, iPad & Mac",
-    date: "October 2026",
-    highlight: "Choose how your order list loads, a Getting started list that takes you to the real work, and all your notifications in one place.",
+    date: "23 October 2026",
+    highlight: "Choose how your order list loads, a Getting started list that takes you to the real work, and all your notifications in one place. Released to the App Store on 23 October 2026.",
     changes: [
       { tag: "improved", text: "Orders: choose how the list loads — Load more, Page by page or Show all (10 to 100 per page). On iPad and Mac a folded list keeps a rail of order squares beside the open order." },
       { tag: "improved", text: "Getting started: each step opens the real first task and ticks itself off once you have done it." },
