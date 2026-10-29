@@ -13,6 +13,7 @@ import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import type { StripeConnectionSummary } from "@/lib/studioflow/integrations";
 import { CardTitle } from "@/components/CardTitle";
+import { PaymentLinkDomainBlock } from "./PaymentLinkDomainBlock";
 import {
   getStripeConnection, beginStripeOnboarding, refreshStripeConnection,
   disconnectStripeConnection, stripeStatusLabel,
@@ -225,6 +226,10 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
               {t("Create payment links on an order, and see them all together in Banking.")}
             </p>
           ) : null}
+
+          {/* Short links on the business's own domain (pay.<their domain>/p/<code>): owner only, like the
+              connection itself, and only once links can be made at all. */}
+          {capable && isOwner ? <PaymentLinkDomainBlock workspace={workspace} t={t} /> : null}
         </>
       )}
     </div>

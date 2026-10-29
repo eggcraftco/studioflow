@@ -81,3 +81,32 @@ export async function removeClientDomain(workspace: WorkspaceContext, host: stri
     "The domain could not be removed."
   );
 }
+
+// STRIPE-LINKS short links (29 Oct 2026): the payment domain — pay.<their domain> — that payment links are
+// written on. Mirrors managePaymentLinkDomain in functions/clientDomains.js: its own registry row, so it never
+// becomes the address of the tracking and estimate links above.
+export type PaymentLinkDomainView = {
+  ok?: boolean;
+  host: string;
+  /** "payments" for an address added here; "custom" when a verified client domain was chosen as it is. */
+  kind?: string;
+  status: string;
+  cnameTarget?: string;
+  record?: { type: string; name: string; target: string };
+  certificate?: { status?: string; error?: string } | null;
+  verified?: boolean;
+  found?: string[];
+  error?: string;
+};
+
+export async function managePaymentLinkDomain(
+  workspace: WorkspaceContext,
+  action: "get" | "request" | "verify" | "remove",
+  host = ""
+) {
+  return call<PaymentLinkDomainView>(
+    "managePaymentLinkDomain",
+    { companyId: workspace.id, action, ...(host ? { host } : {}) },
+    "The payment address could not be updated."
+  );
+}

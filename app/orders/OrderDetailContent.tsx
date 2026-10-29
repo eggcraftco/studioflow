@@ -7881,6 +7881,7 @@ export function OrderDetailContent({
                   locale={studioLocaleTag(detailLanguage)}
                   onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)}
                   etsyOrder={etsyBuyerMessagingBlocked}
+                  onPaymentChanged={() => { void onReloadOrder(); }}
                 />
               </>
             ) : (

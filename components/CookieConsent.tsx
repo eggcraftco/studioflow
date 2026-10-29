@@ -156,6 +156,16 @@ const STRINGS: Record<string, Strings> = {
 
 const RTL_LANGS = new Set(["ar"]);
 
+// A business's customer paying it — the short payment link (/p/<code>) and the page Stripe returns them to
+// (/pay/done), often on the business's own pay.<domain> — is not a NivaDesk visitor, and a "Cookies on NivaDesk"
+// banner over the business's payment card reads as somebody else's software standing between them and the
+// payment. Neither page sets anything but what the page needs to work, so the banner stays away there.
+const PAYMENT_PATHS = [/^\/p\//, /^\/pay\//];
+
+function onPaymentPage(): boolean {
+  return typeof window !== "undefined" && PAYMENT_PATHS.some(pattern => pattern.test(window.location.pathname));
+}
+
 function detectLang(): string {
   if (typeof navigator === "undefined") return "en";
   const code = (navigator.languages?.[0] || navigator.language || "en").toLowerCase().split("-")[0];
@@ -169,6 +179,7 @@ export function CookieConsent() {
   const [functional, setFunctional] = useState(true);
 
   useEffect(() => {
+    if (onPaymentPage()) return;
     setLang(detectLang());
     const existing = readCookieConsent();
     if (!existing) {

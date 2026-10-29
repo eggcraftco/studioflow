@@ -40,6 +40,7 @@
     "test:request-amount": "node scripts/check-request-amount.mjs",
     "test:payment-links-pilot": "node scripts/check-payment-links-pilot.mjs",
     "test:payment-return": "node scripts/check-payment-return.mts",
+    "test:payment-link": "node scripts/check-payment-link.mts",
     "test:stripe-card": "node scripts/check-stripe-card.mts",
     "test:stripe-resume": "node scripts/check-stripe-resume.mjs",
     "test:inventory-notes": "node scripts/check-inventory-notes.mjs",

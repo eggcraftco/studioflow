@@ -66,6 +66,7 @@ export default function OrderPaymentLinks({
   locale,
   onSizeChange,
   etsyOrder = false,
+  onPaymentChanged,
 }: {
   companyId: string;
   orderId: string;
@@ -80,6 +81,9 @@ export default function OrderPaymentLinks({
   onSizeChange?: () => void;
   /** Etsy API Terms: NivaDesk never sends this link to an Etsy buyer; copying stays, with the M2 warning. */
   etsyOrder?: boolean;
+  /** A link's payment or refund changed since the last read — the server has already repaired the order's own
+   *  totals (paid, remaining) from the ledger, and the screen that drew them should read the order again. */
+  onPaymentChanged?: () => void;
 }) {
   // The pilot gate, as the server answers it (S2). Outside the pilot this card
   // does not exist: nothing is listed, nothing is asked, nothing is shown.
@@ -131,6 +135,40 @@ export default function OrderPaymentLinks({
   }, [companyId, orderId, available]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // SC-9 (29 Oct 2026). A payment or a refund reaches NivaDesk through Stripe's webhook, not through this
+  // screen, so the card read the links once and went on showing "open" after the customer had paid — and the
+  // order's totals around it stayed where they were. Now: while a link is open or in flight the card asks
+  // again every 15 seconds the tab is visible, and every time the tab comes back (a refund is made in the
+  // Stripe tab); when a link's money moved, the order itself is read again.
+  const paymentChangedRef = useRef(onPaymentChanged);
+  paymentChangedRef.current = onPaymentChanged;
+  const fingerprint = useRef("");
+  useEffect(() => {
+    if (!state) return;
+    const next = state.requests
+      .map((row) => `${row.paymentRequestId}:${row.publicStatus}:${row.paidAmountMinor}:${row.refundedAmountMinor}`)
+      .sort().join("|");
+    const before = fingerprint.current;
+    fingerprint.current = next;
+    if (before && before !== next) paymentChangedRef.current?.();
+  }, [state]);
+  const waiting = useMemo(
+    () => (state?.requests ?? []).some((row) => row.publicStatus === "open" || row.publicStatus === "processing"),
+    [state]
+  );
+  useEffect(() => {
+    if (available !== true || typeof document === "undefined") return;
+    const again = () => { if (document.visibilityState === "visible") void load(); };
+    document.addEventListener("visibilitychange", again);
+    window.addEventListener("focus", again);
+    const timer = waiting ? window.setInterval(again, 15000) : 0;
+    return () => {
+      document.removeEventListener("visibilitychange", again);
+      window.removeEventListener("focus", again);
+      if (timer) window.clearInterval(timer);
+    };
+  }, [available, load, waiting]);
 
   const openRequests = useMemo(
     () => (state?.requests ?? []).filter((row) => tabForStatus(row.publicStatus) === "open"),
