@@ -62,9 +62,86 @@ export function isLatestForPlatform(entry: ChangelogEntry, list: ChangelogEntry[
   return list.find((item) => item.platformKey === entry.platformKey) === entry;
 }
 
-export const CHANGELOG_LAST_UPDATED = "17 October 2026";
+export const CHANGELOG_LAST_UPDATED = "29 October 2026";
 
 export const CHANGELOG: ChangelogEntry[] = [
+  // 2.3 — from the store notes that were entered (App Store "What's New" read back from the live App Store page on
+  // 29 Oct 2026; Play notes ~/Developer/nivadesk-deploy-2026-10-28/store/play-notes-2.3.txt) for native-unified-2026-10-28
+  // @66ccd292, Apple 2.3 (33) / Android vc21. Server-gated or pilot features are left out on purpose.
+  {
+    version: "2.3",
+    platformKey: "apple",
+    platform: "iPhone, iPad & Mac",
+    date: "29 October 2026",
+    highlight: "Filter your orders by shop in one tap, Etsy orders with their own card, and Scan receipt from the app icon. Released to the App Store on 29 October 2026.",
+    changes: [
+      { tag: "new", text: "Orders: a platform bar above the list filters by shop in one tap (Etsy, WooCommerce, Shopify, By hand …), and each order carries a small badge for the shop it came from." },
+      { tag: "new", text: "Etsy orders: the order page shows a \"From Etsy\" card with the items, personalisation (with Copy), buyer note and Etsy's own totals. Profit is marked as estimated until the postage cost is known." },
+      { tag: "improved", text: "Etsy: when your plan is full, new Etsy orders wait safely and a banner tells you how many; once you make room, import them in one tap. The customer portal stays folded for Etsy orders, with automatic updates off." },
+      { tag: "new", text: "Scan receipt: press and hold the app icon, or open Banking ▸ Receipts, to photograph a receipt or pick a photo or PDF. NivaDesk attaches it to the matching bank payment, or keeps it waiting until the payment arrives (Pro and Team plans with a connected bank)." },
+      { tag: "improved", text: "WooCommerce: switch between your connected stores in Settings, and the Integrations card now shows them as connected." },
+      { tag: "new", text: "Work time: owners and admins can correct or delete a timer session." },
+      { tag: "fixed", text: "Open tracking goes straight to the carrier's own page — DHL, Royal Mail, Parcelforce, UPS, FedEx, Evri and DPD — never to a broken link." },
+      { tag: "fixed", text: "iPad: the window controls no longer cover the banner, the menu title or the Settings logo. Files: tapping a file opens its preview again." },
+      { tag: "fixed", text: "Smaller fixes and translations." },
+    ],
+  },
+  {
+    version: "2.3",
+    platformKey: "android",
+    platform: "Android",
+    date: "28 October 2026",
+    highlight: "Filter your orders by shop in one tap, Etsy orders with their own card, and Scan receipt. Released on Google Play on 28 October 2026 to everyone at once.",
+    changes: [
+      { tag: "new", text: "Orders: filter by shop in one tap; each order shows its shop badge." },
+      { tag: "new", text: "Etsy orders show items, personalisation, buyer note and Etsy totals; profit is marked estimated until postage is known." },
+      { tag: "new", text: "Scan receipt from the app icon or Banking ▸ Receipts (Pro and Team plans with a connected bank)." },
+      { tag: "improved", text: "WooCommerce: switch between connected stores." },
+      { tag: "new", text: "Work time: owners and admins can correct or delete sessions." },
+      { tag: "fixed", text: "Open tracking goes to the carrier's own page." },
+      { tag: "fixed", text: "Fixes and translations." },
+    ],
+  },
+  // 2.2 — from the store notes entered for native-candidate-34-2026-10-22 (docs/store/release-2.2/notes-final.json,
+  // §5 of notes-final.md). Server-gated or pilot features (customer inbox, DHL, payment links) are left out on purpose.
+  // Apple: the day the App Store release started was not readable on 29 Oct (no App Store Connect session; the public
+  // page lists only the newest version) — "October 2026" until it is read back; it was live before 2.3 (28 Oct).
+  {
+    version: "2.2",
+    platformKey: "apple",
+    platform: "iPhone, iPad & Mac",
+    date: "October 2026",
+    highlight: "Choose how your order list loads, a Getting started list that takes you to the real work, and all your notifications in one place.",
+    changes: [
+      { tag: "improved", text: "Orders: choose how the list loads — Load more, Page by page or Show all (10 to 100 per page). On iPad and Mac a folded list keeps a rail of order squares beside the open order." },
+      { tag: "improved", text: "Getting started: each step opens the real first task and ticks itself off once you have done it." },
+      { tag: "new", text: "Settings ▸ Notifications: all your notifications in one place. Owners can choose to be told when a member uploads a file or saves work time on an order assigned to them (off until you switch it on)." },
+      { tag: "fixed", text: "Order profit counts every payment recorded on the order, with the same figures as on the web. The order PDF no longer takes VAT off twice, and a platform fee the shop did not report is marked as an estimate." },
+      { tag: "improved", text: "Inventory: members without financial access see stock cost as hidden instead of 0." },
+      { tag: "fixed", text: "On iPad and Mac, an order opened from a notification or from Getting started opens on the right card." },
+      { tag: "new", text: "Files: select every file in a list at once, and drop files onto an order (iPad and Mac)." },
+      { tag: "new", text: "Notes: see who a note is shared with." },
+      { tag: "new", text: "Settings ▸ About: your version, a check for updates, and what's new after an update." },
+      { tag: "improved", text: "Settings ▸ Integrations: separate ChatGPT and Claude cards." },
+      { tag: "fixed", text: "Smaller fixes and translations." },
+    ],
+  },
+  {
+    version: "2.2",
+    platformKey: "android",
+    platform: "Android",
+    date: "22 October 2026",
+    highlight: "Choose how your order list loads, a Getting started list that takes you to the real work, and owner notices for members' uploads and work time. Released on Google Play on 22 October 2026 as a staged rollout to 20% of users, then to everyone on 28 October 2026.",
+    changes: [
+      { tag: "improved", text: "Orders: Load more, Page by page or Show all." },
+      { tag: "improved", text: "Getting started opens the real first task and ticks itself off." },
+      { tag: "new", text: "Settings ▸ Notifications: owners can be told when a member uploads a file or saves work time." },
+      { tag: "fixed", text: "Order profit counts every payment, as on the web; unreported shop fees are estimated." },
+      { tag: "improved", text: "Members without financial access see stock cost as hidden, not 0." },
+      { tag: "fixed", text: "Team Access: Delete client files and Bank Spending now apply." },
+      { tag: "new", text: "Files: select all, drop on an order, trash or restore several." },
+    ],
+  },
   // 2.1 — from the store notes that were entered (docs/store/release-2.1/:
   // app-store-whats-new.en-GB.txt, play-release-notes.en-GB.txt) for the code
   // tagged store-2.1-30-apple / store-2.1-vc18-android (3d690eeb). Server-gated
