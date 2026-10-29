@@ -7,7 +7,7 @@ import {
   reauthenticateWithPopup,
   type AuthProvider as FirebaseAuthProvider
 } from "firebase/auth";
-import { googleProvider, appleProvider } from "@/lib/firebase/client";
+import { auth, googleProvider, appleProvider } from "@/lib/firebase/client";
 import { signOutAndWipe, UNSYNCED_SIGN_OUT_TEXT } from "@/lib/auth/signOutSession";
 import { useAppConfirm } from "@/components/AppConfirmDialog";
 import { useAuth } from "@/lib/auth/AuthProvider";
