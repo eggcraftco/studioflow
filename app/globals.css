@@ -36026,6 +36026,18 @@ body[data-studio-theme="dark"] .inv-categories .btn-danger { color: #f87171; bor
 .cal-chip.cal-state-done .cal-chip-text, .cal-chip.cal-state-cancelled .cal-chip-text { text-decoration: line-through; color: var(--muted); }
 .cal-chip.cal-state-late { border-color: var(--danger); }
 .cal-chip.cal-state-late .cal-chip-state { color: var(--danger); }
+/* V1.1 (29 Oct): who can see an entry, the Today view's quick add and overdue tasks, the zone times are shown in. */
+.cal-chip-vis { font-size: 11px; flex: none; opacity: 0.8; }
+.cal-zone { font-size: 12px; white-space: nowrap; }
+.cal-views { display: flex; flex-wrap: wrap; max-inline-size: 100%; }
+.cal-views > button { flex: 1 1 auto; }
+.cal-quick-add { display: flex; flex-wrap: wrap; gap: 6px; margin-block-end: 10px; }
+.cal-quick-add .button { padding-block: 4px; padding-inline: 10px; font-size: 13px; }
+.cal-overdue { border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent); border-radius: 10px; padding: 8px 10px; margin-block-end: 10px; }
+.cal-overdue h3 { font-size: 14px; margin: 0 0 6px; color: var(--danger); }
+.cal-overdue h3 .muted-copy { font-weight: 500; font-size: 12px; }
+.cal-overdue-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.cal-overdue-row .cal-chip { flex: 1 1 220px; min-inline-size: 0; }
 .cal-tone-event { border-inline-start-color: #2563eb; }
 .cal-tone-task { border-inline-start-color: #7c3aed; }
 .cal-tone-note { border-inline-start-color: #b7791f; }

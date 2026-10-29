@@ -112,6 +112,27 @@ check("month grid covers whole weeks", JSON.stringify(v.rangeFor("month", "2026-
 check("agenda 30 days", v.rangeFor("agenda", "2026-10-29").toKey === "2026-11-27");
 check("month shift clamps day", v.monthShift("2026-01-31", 1) === "2026-02-28" && v.shiftAnchor("month", "2026-12-15", 1) === "2027-01-15");
 
+// V1.1: overdue tasks for the Today view — one row per entry, earliest missed day, how many times; done/cancelled/today excluded.
+{
+  const today = "2026-10-29";
+  const from = core.addDays(today, -v.OVERDUE_WINDOW_DAYS);
+  const late1 = E("od1", { type: "task", title: "Call supplier", dateKey: "2026-10-27" });
+  const done1 = E("od2", { type: "task", title: "Done one", dateKey: "2026-10-26", status: "done", completedAt: 1793185200000, completedByUid: "me" });
+  const todayTask = E("od3", { type: "task", title: "Today's", dateKey: today });
+  const daily = E("od4", { rowType: "series", type: "task", title: "Water plants", dateKey: "2026-10-26", recurrence: { freq: "daily", interval: 1, byWeekday: [], untilKey: null, count: null },
+    occurrenceStatus: { "2026-10-27": { status: "done", completedAt: 1793091600000, completedByUid: "me" } } });
+  const meeting = E("od5", { title: "Old meeting", dateKey: "2026-10-27" });
+  const its = v.buildCalendarItems({ entries: [late1, done1, todayTask, daily, meeting], orders: [], notes: [], uid: "me", fromKey: from, toKey: core.addDays(today, -1), viewerTimeZone: "Europe/London", todayKey: today });
+  const od = v.overdueTasks(its, today);
+  check("overdue: one row per entry, done/today/meetings left out", od.map((r) => r.item.entry?.id).join() === "od4,od1", od.map((r) => `${r.item.entry?.id}:${r.sinceKey}:${r.count}`).join());
+  check("overdue: a daily task missed on 26 and 28 Oct shows once since 26 Oct, 2 times", od[0]?.sinceKey === "2026-10-26" && od[0]?.count === 2, JSON.stringify(od[0] && { s: od[0].sinceKey, c: od[0].count }));
+  check("overdue: a one-off task shows since its day", od[1]?.sinceKey === "2026-10-27" && od[1]?.count === 1);
+}
+// V1.1: remembered filters are read back defensively.
+check("filters: a saved choice is read back", JSON.stringify(v.parseCalendarFilters({ mine: false, shared: true, team: true, person: "uid:x", types: ["task"], status: "late", orderLink: "linked" })) === JSON.stringify({ mine: false, shared: true, team: true, person: "uid:x", types: ["task"], status: "late", orderLink: "linked" }));
+check("filters: junk falls back to the defaults", JSON.stringify(v.parseCalendarFilters({ mine: "no", types: ["bogus"], status: "weird", orderLink: 3 })) === JSON.stringify(v.DEFAULT_CALENDAR_FILTERS));
+check("filters: nothing saved = defaults", JSON.stringify(v.parseCalendarFilters(null)) === JSON.stringify(v.DEFAULT_CALENDAR_FILTERS));
+
 for (const f of fails) console.log(`FAIL ${f}`);
 console.log(`calendar view (web): ${pass}/${pass + fails.length} pass${fails.length ? "" : "; reds: none"}`);
 process.exit(fails.length ? 1 : 0);

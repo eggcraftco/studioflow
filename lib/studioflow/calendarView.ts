@@ -240,6 +240,43 @@ export function searchCalendarItems(items: CalendarItem[], text: string): Calend
   });
 }
 
+/** A remembered filter choice read back from this device: anything malformed falls back to the default, piece by piece. */
+export function parseCalendarFilters(raw: unknown): CalendarFilters {
+  const d = DEFAULT_CALENDAR_FILTERS;
+  if (!raw || typeof raw !== "object") return d;
+  const r = raw as Record<string, unknown>;
+  const kinds: CalendarItemKind[] = ["event", "task", "note", "workday", "unavailable", "orderDue", "noteReminder"];
+  return {
+    mine: typeof r.mine === "boolean" ? r.mine : d.mine,
+    shared: typeof r.shared === "boolean" ? r.shared : d.shared,
+    team: typeof r.team === "boolean" ? r.team : d.team,
+    person: typeof r.person === "string" && /^(uid:|label:)?[^\n]{0,200}$/.test(r.person) ? r.person : d.person,
+    types: Array.isArray(r.types) ? (r.types.filter((k) => kinds.includes(k as CalendarItemKind)) as CalendarItemKind[]).slice(0, 1) : d.types,
+    status: r.status === "all" || r.status === "open" || r.status === "late" || r.status === "done" || r.status === "cancelled" ? r.status : d.status,
+    orderLink: r.orderLink === "all" || r.orderLink === "linked" || r.orderLink === "unlinked" ? r.orderLink : d.orderLink,
+  };
+}
+
+// ---------------------------------------------------------------- overdue (the "Today" view)
+
+export const OVERDUE_WINDOW_DAYS = 14;
+export type CalendarOverdueRow = { item: CalendarItem; sinceKey: string; count: number };
+
+/** Open tasks planned before today (items built for the last OVERDUE_WINDOW_DAYS days): one row per entry — a repeating
+ *  task missed several times shows once, from the earliest missed day, with how many times. */
+export function overdueTasks(items: CalendarItem[], todayKey: string): CalendarOverdueRow[] {
+  const byEntry = new Map<string, CalendarOverdueRow>();
+  for (const item of items) {
+    if (item.kind !== "task" || item.taskState !== "late" || !item.occurrence || !item.entry) continue;
+    const day = item.occurrence.dateKey;
+    if (day >= todayKey) continue;
+    const prev = byEntry.get(item.entry.id);
+    if (!prev) byEntry.set(item.entry.id, { item, sinceKey: day, count: 1 });
+    else byEntry.set(item.entry.id, day < prev.sinceKey ? { item, sinceKey: day, count: prev.count + 1 } : { ...prev, count: prev.count + 1 });
+  }
+  return [...byEntry.values()].sort((a, b) => (a.sinceKey === b.sinceKey ? a.item.title.localeCompare(b.item.title) : a.sinceKey < b.sinceKey ? -1 : 1));
+}
+
 // ---------------------------------------------------------------- per day
 
 export type CalendarDayRow = { item: CalendarItem; asCompletion: boolean };

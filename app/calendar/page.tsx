@@ -51,10 +51,13 @@ import {
 } from "@/lib/studioflow/calendarOutbox";
 import {
   DEFAULT_CALENDAR_FILTERS,
+  OVERDUE_WINDOW_DAYS,
   applyCalendarFilters,
   buildCalendarItems,
   filtersActive,
   itemsByDay,
+  overdueTasks,
+  parseCalendarFilters,
   localDayKey,
   personOptions,
   rangeFor,
@@ -86,6 +89,26 @@ function qaTimeZone(): string | null {
     return zone && core.isTimeZone(zone) ? zone : null;
   } catch {
     return null;
+  }
+}
+
+const FILTERS_KEY = (uid: string) => `nivadesk.calendar.filters.v1.${uid}`;
+
+/** The last filter choice on this device (V1.1): read back defensively, never shared. */
+function readFilters(uid: string): CalendarFilters {
+  try {
+    const raw = window.localStorage.getItem(FILTERS_KEY(uid));
+    return parseCalendarFilters(raw ? JSON.parse(raw) : null);
+  } catch {
+    return DEFAULT_CALENDAR_FILTERS;
+  }
+}
+
+function writeFilters(uid: string, filters: CalendarFilters) {
+  try {
+    window.localStorage.setItem(FILTERS_KEY(uid), JSON.stringify(filters));
+  } catch {
+    /* private window: the choice is simply not remembered */
   }
 }
 
@@ -186,8 +209,15 @@ export default function CalendarPage() {
   const [searchText, setSearchText] = useState("");
   const [searchFrom, setSearchFrom] = useState(() => core.addDays(localDayKey(new Date()), -SEARCH_SPAN_DAYS));
   const [searchTo, setSearchTo] = useState(() => core.addDays(localDayKey(new Date()), SEARCH_SPAN_DAYS));
-  const [filters, setFilters] = useState<CalendarFilters>(DEFAULT_CALENDAR_FILTERS);
+  const [filters, setFiltersState] = useState<CalendarFilters>(DEFAULT_CALENDAR_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const setFilters = (next: CalendarFilters) => {
+    setFiltersState(next);
+    if (user) writeFilters(user.uid, next);
+  };
+  useEffect(() => {
+    if (user) setFiltersState(readFilters(user.uid));
+  }, [user]);
 
   const [rangeState, setRangeState] = useState<CalendarRangeState>({ entries: [], loading: true, error: null, meta: new Map() });
   const [reloadTick, setReloadTick] = useState(0);
@@ -340,6 +370,14 @@ export default function CalendarPage() {
     return buildCalendarItems({ entries, orders, notes, uid: user.uid, fromKey: range.fromKey, toKey: range.toKey, viewerTimeZone: viewerTz, todayKey });
   }, [rangeState.entries, rangeState.meta, showArchived, orders, notes, user, range.fromKey, range.toKey, viewerTz, todayKey]);
   const shown = useMemo(() => searchCalendarItems(applyCalendarFilters(items, filters), searchText), [items, filters, searchText]);
+  // The Today view (V1.1): open tasks planned in the last OVERDUE_WINDOW_DAYS days, from the entries already loaded for the
+  // day (the range read covers the 64 days before it) — no extra read.
+  const overdue = useMemo(() => {
+    if (!user || view !== "day" || anchor !== todayKey || searching) return [];
+    const entries = rangeState.entries.filter((e) => showArchived || !rangeState.meta.get(e.id)?.archived);
+    const past = buildCalendarItems({ entries, orders: [], notes: [], uid: user.uid, fromKey: core.addDays(todayKey, -OVERDUE_WINDOW_DAYS), toKey: core.addDays(todayKey, -1), viewerTimeZone: viewerTz, todayKey });
+    return overdueTasks(applyCalendarFilters(past, filters), todayKey);
+  }, [user, view, anchor, todayKey, searching, rangeState.entries, rangeState.meta, showArchived, viewerTz, filters]);
   const byDay = useMemo(() => itemsByDay(shown, range.fromKey, range.toKey), [shown, range.fromKey, range.toKey]);
   const selected = useMemo(() => items.find((i) => i.id === selectedId) || null, [items, selectedId]);
   const orderTitles = useMemo(() => new Map(orders.map((o) => [o.id, o.title])), [orders]);
@@ -527,6 +565,10 @@ export default function CalendarPage() {
     const completionNote = asCompletion && item.occurrence ? ` · ${t("Done on this day · planned for {date}").replace("{date}", plannedLabel(item))}` : "";
     const rowMeta = item.entry ? rangeState.meta.get(item.entry.id) : undefined;
     const marks = `${rowMeta?.pending ? " ⏳" : ""}${rowMeta?.archived ? " 🗄" : ""}`;
+    // Who can see it, on every entry card (V1.1): a lock for "only me", a link for selected people, a building for the workspace.
+    const vis = item.entry?.visibility;
+    const visMark = vis === "private" ? "🔒" : vis === "selected" ? "🔗" : vis === "workspace" ? "🏢" : "";
+    const visNote = vis === "private" ? t("Only you can see this.") : vis === "workspace" ? t(item.entry?.workspaceRole === "edit" ? "Everyone in the workspace can edit this." : "Everyone in the workspace can see this.") : vis === "selected" ? t("Selected people") : "";
     const metaNote = `${rowMeta?.pending ? ` · ${t("Not synced yet — only on this device until the connection is back.")}` : ""}${rowMeta?.archived ? ` · ${t("Archived: made by someone who has left the workspace.")}` : ""}`;
     return (
       <button
@@ -534,12 +576,13 @@ export default function CalendarPage() {
         type="button"
         className={`cal-chip cal-tone-${meta.tone}${state ? ` cal-state-${state}` : ""}${asCompletion ? " is-completion" : ""}${selectedId === item.id ? " is-selected" : ""}`}
         onClick={(e) => { e.stopPropagation(); detailOpener.current = e.currentTarget; setSelectedId(item.id); }}
-        title={`${t(meta.label)}${stateText ? ` · ${stateText}` : ""} · ${label}${completionNote}${metaNote}`}
+        title={`${t(meta.label)}${stateText ? ` · ${stateText}` : ""} · ${label}${completionNote}${metaNote}${visNote ? ` · ${visNote}` : ""}`}
       >
         <span className="cal-chip-icon" aria-hidden="true">{iconFor(item.kind, state)}</span>
         <span className="cal-chip-text">{label}{marks ? <span aria-hidden="true">{marks}</span> : null}</span>
         {!compact && stateText ? <span className="cal-chip-state">{stateText}</span> : null}
-        <span className="visually-hidden-file">{t(meta.label)}{spokenCompletion ? completionNote : ""}{metaNote}</span>
+        {visMark && !compact ? <span className="cal-chip-vis" aria-hidden="true">{visMark}</span> : null}
+        <span className="visually-hidden-file">{t(meta.label)}{spokenCompletion ? completionNote : ""}{metaNote}{visNote ? ` · ${visNote}` : ""}</span>
       </button>
     );
   }
@@ -619,6 +662,26 @@ export default function CalendarPage() {
     const hourOf = (ms: number | null) => (ms === null ? 0 : Number(core.localParts(ms, viewerTz).time.slice(0, 2)));
     return (
       <div className="cal-day">
+        <div className="cal-quick-add" role="group" aria-label={`${t("New entry")} · ${dayLabel(anchor, locale)}`}>
+          {(["event", "task", "note", "workday"] as const).map((type) => (
+            <button key={type} type="button" className="button secondary" onClick={() => openCreate(type === "note" && anchor > todayKey ? todayKey : anchor, type)}>
+              ＋ {t(TYPE_META[type].label)}
+            </button>
+          ))}
+        </div>
+        {overdue.length ? (
+          <section className="cal-overdue" aria-label={t("Overdue")}>
+            <h3>{t("Overdue")} <span className="muted-copy">· {t("Open tasks planned in the last 14 days")}</span></h3>
+            <div className="cal-chips">
+              {overdue.map((row) => (
+                <div key={row.item.id} className="cal-overdue-row">
+                  {chip({ item: row.item, asCompletion: false })}
+                  <span className="muted-copy">{t("Late since {date}").replace("{date}", dayLabel(row.sinceKey, locale))}{row.count > 1 ? ` · ${t("{count} times").replace("{count}", String(row.count))}` : ""}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
         <div className="cal-day-allday">
           <span className="cal-hour-label">{t("All day")}</span>
           <div className="cal-chips">{allDayRows.length ? allDayRows.map((r) => chip(r)) : <span className="muted-copy">—</span>}</div>
@@ -681,6 +744,7 @@ export default function CalendarPage() {
             <button type="button" className="cal-icon-button" aria-label={t("Previous period")} onClick={() => setAnchor(shiftAnchor(view, anchor, -1))} disabled={searching}>‹</button>
             <button type="button" className="cal-icon-button" aria-label={t("Next period")} onClick={() => setAnchor(shiftAnchor(view, anchor, 1))} disabled={searching}>›</button>
             <strong className="cal-period" aria-live="polite">{periodLabel}</strong>
+            <span className="muted-copy cal-zone">{t("Times in {zone}").replace("{zone}", viewerTz)}</span>
             <input type="date" className="input cal-goto" aria-label={t("Go to date")} value={anchor} onChange={(e) => { if (core.isDateKey(e.target.value)) setAnchor(e.target.value); }} />
             <div className="segmented-control cal-views" role="tablist" aria-label={t("Calendar")}>
               {(["day", "week", "month", "agenda"] as const).map((v) => (
