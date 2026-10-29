@@ -33,8 +33,9 @@ type Category = typeof categories[number];
  *
  * Today: 9 live (Shopify since 14 October 2026, Etsy from the 28 October 2026
  * pass, DHL Express from 28 October 2026 (late), eBay once the switch below is
- * open, WooCommerce, Square, PayPal, TrueLayer, ChatGPT), 6 limited (Xero,
- * QuickBooks, Twilio, WhatsApp, Instagram Direct, Amazon) — 15 cards. The 28 October 2026 pass re-read every card
+ * open, WooCommerce, Square, PayPal, TrueLayer, ChatGPT), 7 limited (Xero,
+ * QuickBooks, Twilio, WhatsApp, Instagram Direct, Amazon, Stripe payment links since
+ * the STRIPE-LINKS live switch) — 16 cards. The 28 October 2026 pass re-read every card
  * against the integration status records (docs/integrations/<slug>.md in the
  * main repository, §1 and §5): Etsy became live (commercial access approved
  * 24 October 2026, any seller connects on their own, read only), and sentences
@@ -65,6 +66,11 @@ type Category = typeof categories[number];
  * is in docs/deploys/site-integrations-2026-09-28/README.md and, for the
  * second pass that added Instagram Direct and DHL Express and corrected the
  * Shopify sentence, docs/deploys/site-integrations-update-2026-09-28/README.md.
+ * Stripe (card payment links) is limited, not live: the rail runs in Stripe live mode only
+ * for the workspaces named in STRIPE_CONNECT_PILOT_WORKSPACES (EGGcraft first), so a
+ * business cannot switch it on itself. This card is published only after that switch has
+ * been read back in production (docs/integrations/stripe-connect.md;
+ * scripts/check-stripe-card.mts keeps the card's claims to what the code does).
  * When a state changes, change it here and in that record on the same day.
  */
 type AvailabilityState = "live" | "limited" | "comingSoon";
@@ -121,6 +127,11 @@ const integrations: Integration[] = [
   { name: "eBay", logo: "/integration-logos/ebay.svg", website: "https://www.ebay.com/", category: "Commerce", summary: { key: "integrations.summary.ebay" }, detail: { key: "integrations.detail.ebay" }, state: "live", note: "integrations.note.ebay" },
   { name: "Amazon", logo: "/integration-logos/amazon.png", website: "https://www.amazon.com/", category: "Commerce", summary: "Marketplace order visibility, with a careful approach to customer data.", detail: "The Amazon connection is complete on our side, with customer data kept in a separate, hardened environment. Amazon approved our developer profile on 17 September 2026; the app itself is still in Amazon's review, so a seller cannot authorise it yet. General connection and listing management are not offered.", state: "limited", note: "integrations.note.amazon" },
   { name: "DHL Express", mark: "D", website: "https://www.dhl.com/", category: "Shipping", summary: { key: "integrations.summary.dhl" }, detail: { key: "integrations.detail.dhl" }, state: "live", note: "integrations.note.dhl" },
+  // Stripe (card payment links), STRIPE-LINKS 29 October 2026: payment links paid into each
+  // business's own Stripe account (Connect, direct charges), live Stripe mode, open only to the
+  // workspaces in STRIPE_CONNECT_PILOT_WORKSPACES. No logo file: the mark is Stripe's and is not
+  // redrawn, so the tile keeps an initial, as the app's own Stripe tile does.
+  { name: "Stripe", mark: "S", website: "https://stripe.com/", category: "Payments", summary: { key: "integrations.summary.stripe" }, detail: { key: "integrations.detail.stripe" }, state: "limited", note: "integrations.note.stripe" },
 ];
 
 const logoVariants: Record<string, string> = {
