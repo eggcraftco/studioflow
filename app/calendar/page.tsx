@@ -153,6 +153,9 @@ export default function CalendarPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [form, setForm] = useState<{ open: boolean; mode: CalendarFormMode; initial: CalendarDraft }>({ open: false, mode: { kind: "create" }, initial: emptyDraft(todayKey, viewerTz) });
   const pendingOpen = useRef<{ entryId: string; dateKey: string } | null>(null);
+  // Keyboard: whatever opened the form or the detail panel gets the focus back when it closes.
+  const formOpener = useRef<HTMLElement | null>(null);
+  const detailOpener = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -278,7 +281,24 @@ export default function CalendarPage() {
     writeView(uid, next);
   }
 
+  function focusedElement(): HTMLElement | null {
+    const active = typeof document === "undefined" ? null : document.activeElement;
+    return active instanceof HTMLElement && active !== document.body ? active : null;
+  }
+
+  function restoreFocus(opener: React.MutableRefObject<HTMLElement | null>) {
+    const el = opener.current;
+    opener.current = null;
+    window.setTimeout(() => { if (el && el.isConnected) el.focus(); }, 0);
+  }
+
+  function closeForm() {
+    setForm((f) => ({ ...f, open: false }));
+    restoreFocus(formOpener);
+  }
+
   function openCreate(dateKey: string, type: core.CalendarEntryType = "event", startTime: string | null = null) {
+    formOpener.current = focusedElement();
     setForm({ open: true, mode: { kind: "create" }, initial: emptyDraft(dateKey, viewerTz, type, startTime) });
   }
 
@@ -286,6 +306,7 @@ export default function CalendarPage() {
     if (!item.entry || !item.occurrence) return;
     const access = accessOf(item);
     const occurrenceKey = item.entry.rowType === "series" ? item.occurrence.occurrenceKey : null;
+    formOpener.current = focusedElement();
     setForm({ open: true, mode: { kind: "edit", entry: item.entry, occurrenceKey, canShare: access.share }, initial: draftFromOccurrence(item.entry, item.occurrence) });
   }
 
@@ -301,7 +322,7 @@ export default function CalendarPage() {
     } else {
       await saveCalendarEntryEdits(workspace.id, uid, mode.entry, draft, mode.canShare);
     }
-    setForm((f) => ({ ...f, open: false }));
+    closeForm();
     dispatchStudioToast({ message: t("Entry saved") });
   }
 
@@ -341,7 +362,7 @@ export default function CalendarPage() {
         key={`${item.id}${asCompletion ? ":done" : ""}`}
         type="button"
         className={`cal-chip cal-tone-${meta.tone}${state ? ` cal-state-${state}` : ""}${asCompletion ? " is-completion" : ""}${selectedId === item.id ? " is-selected" : ""}`}
-        onClick={(e) => { e.stopPropagation(); setSelectedId(item.id); }}
+        onClick={(e) => { e.stopPropagation(); detailOpener.current = e.currentTarget; setSelectedId(item.id); }}
         title={`${t(meta.label)}${stateText ? ` · ${stateText}` : ""} · ${label}${completionNote}`}
       >
         <span className="cal-chip-icon" aria-hidden="true">{iconFor(item.kind, state)}</span>
@@ -565,7 +586,7 @@ export default function CalendarPage() {
               locale={locale}
               timeZone={viewerTz}
               t={t}
-              onClose={() => setSelectedId(null)}
+              onClose={() => { setSelectedId(null); restoreFocus(detailOpener); }}
               onEdit={() => openEdit(selected)}
               onDelete={removeSelected}
               onStatus={async (status) => {
@@ -590,7 +611,7 @@ export default function CalendarPage() {
         orders={orders.map((o) => ({ id: o.id, title: o.title }))}
         canPublishWorkspace={canPublishWorkspace}
         t={t}
-        onCancel={() => setForm((f) => ({ ...f, open: false }))}
+        onCancel={closeForm}
         onSave={save}
       />
     </AppShell>

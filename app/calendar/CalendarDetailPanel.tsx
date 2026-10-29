@@ -3,7 +3,7 @@
 // Calendar V1 — the side panel (full screen on a phone) for one item: what it is, when, who it is shared
 // with, the linked order (only if this person may open it), who made and changed it, and — when allowed —
 // edit, delete and the task's status. Each person's reminder is their own.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import * as core from "@/lib/studioflow/calendarCore";
 import type { CalendarItem } from "@/lib/studioflow/calendarView";
@@ -36,6 +36,9 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [reminderTime, setReminderTime] = useState(reminder?.allDayTime || core.DEFAULT_ALL_DAY_REMINDER_TIME);
+  const closeButton = useRef<HTMLButtonElement | null>(null);
+  // Keyboard: the panel takes the focus when an item opens, so Escape closes it from where the person is.
+  useEffect(() => { closeButton.current?.focus(); }, [item.id]);
   useEffect(() => {
     setError("");
     setConfirmDelete(false);
@@ -95,7 +98,7 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
     <aside className="cal-detail" role="dialog" aria-modal="false" aria-labelledby="cal-detail-title" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
       <header className="cal-detail-head">
         <span className={`cal-badge cal-tone-${meta.tone}`}><span aria-hidden="true">{meta.icon}</span> {t(meta.label)}</span>
-        <button type="button" className="cal-icon-button" onClick={onClose} aria-label={t("Close")}>×</button>
+        <button ref={closeButton} type="button" className="cal-icon-button" onClick={onClose} aria-label={t("Close")}>×</button>
       </header>
       <h2 id="cal-detail-title" className="cal-detail-title">{item.title || t(meta.label)}</h2>
       <p className="cal-detail-when">{when}</p>
