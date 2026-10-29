@@ -20,6 +20,8 @@ function CalendarConnectReturn() {
   const [message, setMessage] = useState("");
   const [failed, setFailed] = useState(false);
   const [toApp, setToApp] = useState(false);
+  // A phone browser may not follow the automatic hand-off to the app; then the person taps this link (same address).
+  const [appLink, setAppLink] = useState("");
   const params = useRef<{ code: string; state: string; error: string } | null>(null);
 
   // Read once, then clear the address bar (the code is single-use, but it should not sit in history either).
@@ -33,8 +35,10 @@ function CalendarConnectReturn() {
     if (p.state.startsWith("n.")) {
       setToApp(true);
       const q = new URLSearchParams({ state: p.state, ...(p.code ? { code: p.code } : {}), ...(p.error ? { error: p.error } : {}) });
+      const link = `nivadesk://oauth/calendar?${q}`;
+      setAppLink(link);
       window.history.replaceState(null, "", "/oauth/calendar");
-      window.location.replace(`nivadesk://oauth/calendar?${q}`);
+      window.location.replace(link);
       return;
     }
     window.history.replaceState(null, "", "/oauth/calendar");
@@ -76,6 +80,7 @@ function CalendarConnectReturn() {
         <p role={failed ? "alert" : "status"} style={{ margin: 0, fontSize: 14, color: failed ? "#dc2626" : "inherit", fontWeight: failed ? 600 : 400 }}>
           {toApp ? t("Returning to the NivaDesk app… If nothing happens, open NivaDesk yourself.") : message || "…"}
         </p>
+        {toApp && appLink ? <p style={{ marginTop: 14 }}><a className="button" href={appLink}>{t("Open NivaDesk")}</a></p> : null}
         {failed ? <p style={{ marginTop: 14 }}><a href="/calendar">{t("Back to the calendar")}</a></p> : null}
       </div>
     </main>
