@@ -66,7 +66,7 @@ export function CalendarConnectionsPanel({ companyId, connections, available, lo
 
   async function run(label: string, action: () => Promise<void>) {
     setBusy(label);
-    try { await action(); } catch (error) { onNotice(error instanceof Error && error.message ? error.message : t("That did not work. Try again.")); } finally { setBusy(""); }
+    try { await action(); } catch (error) { onNotice(error instanceof Error && error.message ? t(error.message) : t("That did not work. Try again.")); } finally { setBusy(""); }
   }
 
   const shown = CALENDAR_PROVIDERS.filter((p) => connections[p] || available?.[p]);

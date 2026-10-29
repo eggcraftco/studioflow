@@ -60,7 +60,7 @@ function CalendarConnectReturn() {
       (error) => {
         if (cancelled) return;
         setFailed(true);
-        setMessage(error instanceof Error && error.message ? error.message : t("Could not finish the calendar connection."));
+        setMessage(error instanceof Error && error.message ? t(error.message) : t("Could not finish the calendar connection."));
       },
     );
     return () => { cancelled = true; };
