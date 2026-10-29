@@ -185,25 +185,38 @@ export default function CalendarPage() {
         loadNoteWorkspaceMembers(ws.id).then((m) => { if (!cancelled) setMembers(m); }).catch(() => {});
         // Order dates only for people who can already open orders, from the same scoped query the
         // Schedule uses (Workflow Only → their view, assigned-only → their own orders).
-        if (workspaceAccessAllows(ws.memberAccess, "orders")) {
-          loadScheduleOrders(ws.id, ws, uid).then((rows) => {
-            if (cancelled) return;
-            setOrders(rows.map((o) => ({
-              id: o.id,
-              title: o.designName && o.designName !== "Untitled design" ? o.designName : o.customerName,
-              customerName: o.customerName,
-              paymentDate: o.paymentDate,
-              deliveryTime: o.deliveryTime,
-              isDelivered: o.isDelivered,
-            })));
-          }).catch(() => { if (!cancelled) setOrders([]); });
-        }
+        if (workspaceAccessAllows(ws.memberAccess, "orders")) loadOrders(ws);
       } catch {
         if (!cancelled) setWorkspaceError(true);
       }
     })();
+    // The due date is the order's own: it is read again when the tab comes back and when an order
+    // is created or removed, so a date changed on the order shows here as the same single card.
+    function loadOrders(ws: WorkspaceContext) {
+      loadScheduleOrders(ws.id, ws, uid).then((rows) => {
+        if (cancelled) return;
+        setOrders(rows.map((o) => ({
+          id: o.id,
+          title: o.designName && o.designName !== "Untitled design" ? o.designName : o.customerName,
+          customerName: o.customerName,
+          paymentDate: o.paymentDate,
+          deliveryTime: o.deliveryTime,
+          isDelivered: o.isDelivered,
+        })));
+      }).catch(() => { if (!cancelled) setOrders([]); });
+    }
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      loadWorkspaceContext(uid).then((ws) => { if (!cancelled && workspaceAccessAllows(ws.memberAccess, "orders")) loadOrders(ws); }).catch(() => {});
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("studioflow-order-created", refresh);
+    window.addEventListener("studioflow-order-removed", refresh);
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("studioflow-order-created", refresh);
+      window.removeEventListener("studioflow-order-removed", refresh);
     };
   }, [user]);
 
