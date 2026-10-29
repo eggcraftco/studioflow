@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { assistantNameForResource, clientMetadataHost, connectCapabilities } from "@/lib/chatgpt/claudeMcp";
-import { cancelRedirectUrl, describeRequestedScopes, serverClientName } from "@/lib/chatgpt/oauthConnect";
+import { cancelRedirectUrl, describeRequestedScopes, serverClientInfo, type ServerClientInfo } from "@/lib/chatgpt/oauthConnect";
 
 type WorkspaceOption = {
   id: string;
@@ -98,14 +98,15 @@ function workspaceRole(data: Record<string, unknown>, uid: string) {
 async function loadWorkspaces(
   user: NonNullable<ReturnType<typeof useAuth>["user"]>,
   oauthParams: OAuthParams
-): Promise<{ workspaces: WorkspaceOption[]; clientName: string }> {
+): Promise<{ workspaces: WorkspaceOption[]; client: ServerClientInfo }> {
   const token = await user.getIdToken();
   const baseUrl = functionBaseUrl();
   if (!baseUrl) throw new Error("ChatGPT connection is not available right now. Please try again later.");
 
-  // The request being approved goes along, so the server can name the client it
-  // registered (`client.name` in the answer). A server that does not read these
-  // ignores them; the page then shows the client's published host, if any.
+  // The request being approved goes along, so the server can say which client it
+  // registered and whether this destination is allowed (`client {name,
+  // redirectAllowed}`, `requestedScopes`; server arm of #10). A server that does
+  // not read these ignores them; the page then falls back to the request itself.
   const query = new URLSearchParams();
   if (oauthParams.client_id) query.set("client_id", oauthParams.client_id);
   if (oauthParams.redirect_uri) query.set("redirect_uri", oauthParams.redirect_uri);
@@ -132,7 +133,7 @@ async function loadWorkspaces(
     }))
     .filter((item: WorkspaceOption) => Boolean(item.id))
     .sort((a: WorkspaceOption, b: WorkspaceOption) => a.name.localeCompare(b.name));
-  return { workspaces, clientName: serverClientName(data) };
+  return { workspaces, client: serverClientInfo(data) };
 }
 
 export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOAuthParams: OAuthParams }) {
@@ -150,7 +151,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [clientName, setClientName] = useState("");
+  const [serverClient, setServerClient] = useState<ServerClientInfo>({ name: "", redirectAllowed: null, requestedScopes: null });
   const [cancelled, setCancelled] = useState(false);
 
   // Parsed rather than printed raw: a URL is long, and the host is the part
@@ -185,7 +186,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
         if (cancelled) return;
         const items = loaded.workspaces;
         setWorkspaces(items);
-        setClientName(loaded.clientName);
+        setServerClient(loaded.client);
         setSelectedCompanyId(current => current || items[0]?.id || "");
       } catch (loadError) {
         if (!cancelled) {
@@ -268,7 +269,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
     // server accepts (lib/chatgpt/oauthConnect.ts). Anything else came from the
     // link, not from a registration, so the page stays here instead of becoming
     // an open redirect on nivadesk.app (audit #10).
-    const target = cancelRedirectUrl(oauthParams);
+    const target = cancelRedirectUrl(oauthParams, serverClient.redirectAllowed);
     if (target) {
       window.location.assign(target);
       return;
@@ -285,7 +286,10 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
   // A client that names itself with a published metadata document (CIMD): its host is who is asking.
   const requesterHost = clientMetadataHost(oauthParams.client_id);
   // What is being asked for, in words: the scopes in the request (or the server's default when none is named).
-  const requested = describeRequestedScopes(oauthParams.scope);
+  const requested = describeRequestedScopes(oauthParams.scope, serverClient.requestedScopes);
+  const clientName = serverClient.name;
+  // The server checked this client + destination and refused it: no Allow button.
+  const destinationRefused = serverClient.redirectAllowed === false;
 
   return (
     <main style={{
@@ -436,11 +440,19 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
               {capabilities.map((line) => <span key={line}>• {line}</span>)}
             </div>
 
+            {destinationRefused ? (
+              <div style={{ background: "#fff2f2", color: "#a11", borderRadius: 16, padding: 14, fontWeight: 700 }} data-testid="connect-destination-refused">
+                NivaDesk does not send connections to this address. Start the connection again from {assistant}.
+              </div>
+            ) : null}
+
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button type="button" onClick={handleCancel} disabled={submitting} style={secondaryButtonStyle}>{t("Cancel")}</button>
-              <button type="button" onClick={handleAllow} disabled={submitting || !selectedCompanyId} style={primaryButtonStyle}>
-                {submitting ? "Connecting..." : `Allow ${assistant}`}
-              </button>
+              {destinationRefused ? null : (
+                <button type="button" onClick={handleAllow} disabled={submitting || !selectedCompanyId} style={primaryButtonStyle}>
+                  {submitting ? "Connecting..." : `Allow ${assistant}`}
+                </button>
+              )}
             </div>
           </div>
         )}

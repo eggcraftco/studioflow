@@ -1,9 +1,11 @@
 // Security audit #10, web part (28 Oct 2026): the ChatGPT / Claude connect page is not an open redirect, and shows
 // what is being asked for.
 //
-// 1. lib/chatgpt/oauthConnect.ts: Cancel returns only to the assistant hosts the server accepts (owner decision
-//    28 Oct: chatgpt.com, openai.com, claude.ai, anthropic.com and their subdomains, https only); any other
-//    redirect_uri from the link → "" (stay on the page). Requested scopes in words; unknown ones listed apart.
+// 1. lib/chatgpt/oauthConnect.ts: Cancel returns where the server says this client may go
+//    (chatgptOAuthWorkspaces client.redirectAllowed, server arm of #10), or, when the server does not say, only to
+//    the allowlisted assistant hosts (owner decision 28 Oct: chatgpt.com, openai.com, claude.ai, anthropic.com +
+//    claude.com, subdomains, https only); a server "false" or any other redirect_uri → "" (stay on the page).
+//    Requested scopes in words (the server's filtered list when sent); unknown ones listed apart.
 // 2. ChatGPTConnectClient.tsx: Cancel goes through cancelRedirectUrl (no other read of redirect_uri builds a
 //    navigation), the client and the requested access are shown, the request goes along to chatgptOAuthWorkspaces.
 //
@@ -36,6 +38,7 @@ if (m) {
     "https://platform.openai.com/oauth/callback",
     "https://claude.ai/api/mcp/auth_callback",
     "https://console.anthropic.com/oauth/callback",
+    "https://claude.com/api/mcp/auth_callback",
   ];
   const REFUSED = [
     "https://evil.example/cb",
@@ -68,16 +71,27 @@ if (m) {
   ok("an unknown scope is listed apart", odd.lines.length === 1 && odd.unknown.join() === "admin.all");
   ok("server client name read from client.name", m.serverClientName({ client: { name: " ChatGPT " } }) === "ChatGPT");
   ok("no client info → empty name", m.serverClientName({ workspaces: [] }) === "" && m.serverClientName(null) === "");
+  const info = m.serverClientInfo({ client: { id: "c1", name: "Claude", redirectHost: "claude.ai", redirectAllowed: true }, requestedScopes: ["orders.read", "notes.read"] });
+  ok("server info: name, redirectAllowed, requestedScopes", info.name === "Claude" && info.redirectAllowed === true && info.requestedScopes.join() === "orders.read,notes.read");
+  const old = m.serverClientInfo({ workspaces: [] });
+  ok("older server: redirectAllowed null, no scopes", old.redirectAllowed === null && old.requestedScopes === null);
+  ok("server says allowed: Cancel to a loopback client (Claude Code)", new URL(m.cancelRedirectUrl({ redirect_uri: "http://127.0.0.1:33418/callback", state: "s" }, true)).searchParams.get("error") === "access_denied");
+  ok("server silent: Cancel to loopback stays on the page", m.cancelRedirectUrl({ redirect_uri: "http://127.0.0.1:33418/callback", state: "s" }, null) === "");
+  ok("server says refused: Cancel stays on the page even for chatgpt.com", m.cancelRedirectUrl({ redirect_uri: ALLOWED[0], state: "s" }, false) === "");
+  ok("server says allowed but the URI is javascript: → stays", m.cancelRedirectUrl({ redirect_uri: "javascript:alert(1)", state: "s" }, true) === "");
+  const filtered = m.describeRequestedScopes("orders.read admin.all offline_access", ["orders.read"]);
+  ok("the server's filtered scope list wins over the URL's", filtered.lines.length === 1 && filtered.unknown.length === 0);
   ok("advertised scopes match the server registry list", JSON.stringify(m.SUPPORTED_OAUTH_SCOPES) === JSON.stringify(["orders.read", "orders.write", "notes.read", "notes.write", "finance.read", "tasks.write"]));
 }
 
 // ---------------------------------------------------------------- 2. the page
 const page = read("app/chatgpt/connect/ChatGPTConnectClient.tsx");
 const cancelBody = page.slice(page.indexOf("function handleCancel"), page.indexOf("function handleCancel") + 900);
-ok("Cancel goes through cancelRedirectUrl", /cancelRedirectUrl\(oauthParams\)/.test(cancelBody));
+ok("Cancel goes through cancelRedirectUrl with the server's word", /cancelRedirectUrl\(oauthParams, serverClient\.redirectAllowed\)/.test(cancelBody));
 ok("no navigation is built from redirect_uri on the page (only its host is displayed)", !/new URL\(oauthParams\.redirect_uri\)(?!\.host)/.test(page));
 ok("a refused Cancel shows a message instead of navigating", /setCancelled\(true\)/.test(cancelBody) && /data-testid="connect-cancelled"/.test(page));
-ok("the requested access is shown", /describeRequestedScopes\(oauthParams\.scope\)/.test(page) && /data-testid="connect-requested-scopes"/.test(page));
+ok("the requested access is shown (server's filtered list when sent)", /describeRequestedScopes\(oauthParams\.scope, serverClient\.requestedScopes\)/.test(page) && /data-testid="connect-requested-scopes"/.test(page));
+ok("a destination the server refuses gets no Allow button", /destinationRefused \? null : \(/.test(page) && /data-testid="connect-destination-refused"/.test(page));
 ok("the client is shown (server name, published host, client id)", /data-testid="connect-client-name"/.test(page) && /Client ID:/.test(page));
 ok("the request goes along to chatgptOAuthWorkspaces", /chatgptOAuthWorkspaces\$\{search \? `\?\$\{search\}` : ""\}/.test(page));
 ok("no 'unverified app' label (owner chose the allowlist)", !/unverified|not verified|verified ===|verified:/i.test(page));

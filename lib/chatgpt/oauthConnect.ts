@@ -4,15 +4,23 @@
 // Everything in /chatgpt/connect?... can be written by whoever sent the link.
 // The server checks the destination when the code is minted (chatgptOAuthApprove),
 // but "Cancel" used to send the browser to redirect_uri straight from the URL —
-// an open redirect on nivadesk.app. Cancel now goes back only to the assistants
-// the server accepts (owner decision 28 Oct: an allowlist of chatgpt.com,
-// openai.com, claude.ai, anthropic.com); anything else stays on this page.
+// an open redirect on nivadesk.app. Cancel now goes back only where the server
+// says this client may go (chatgptOAuthWorkspaces `client.redirectAllowed`,
+// server arm of #10), or — with a server that does not say yet — to the
+// assistant hosts of the owner's allowlist (decision 28 Oct); anything else
+// stays on this page.
 //
-// The page also shows what is being asked for: each requested scope in words,
-// and the client's name when the server supplies it.
+// The page also shows what is being asked for: each requested scope in words
+// (the server's filtered list when it sends one), and the client's name.
 
-/** The assistant hosts a connection may return to (and their subdomains). Same list as the server's allowlist. */
-export const ASSISTANT_REDIRECT_HOSTS = ["chatgpt.com", "openai.com", "claude.ai", "anthropic.com"] as const;
+/**
+ * The assistant hosts a connection may return to without the server's word (and
+ * their subdomains): the owner's allowlist (28 Oct) plus claude.com, which the
+ * server arm added as Anthropic's successor callback host (oauth/publicClients.js).
+ * The server's list also admits loopback (Claude Code); Cancel goes there only
+ * when the server confirms it.
+ */
+export const ASSISTANT_REDIRECT_HOSTS = ["chatgpt.com", "openai.com", "claude.ai", "claude.com", "anthropic.com"] as const;
 
 /** The scopes the OAuth metadata advertises (functions/orchestrator/registry.js SCOPES_SUPPORTED). */
 export const SUPPORTED_OAUTH_SCOPES = ["orders.read", "orders.write", "notes.read", "notes.write", "finance.read", "tasks.write"] as const;
@@ -44,10 +52,19 @@ export function isAssistantRedirect(uri: string | null | undefined): boolean {
 /**
  * Where Cancel sends the browser: the assistant's own redirect with
  * error=access_denied (and the state it sent), or "" to stay on this page.
+ * `serverAllowed` is the server's `client.redirectAllowed` for this exact
+ * client + redirect_uri (null when the server did not say).
  */
-export function cancelRedirectUrl(params: { redirect_uri: string; state: string }): string {
-  if (!isAssistantRedirect(params.redirect_uri)) return "";
-  const redirect = new URL(params.redirect_uri.trim());
+export function cancelRedirectUrl(params: { redirect_uri: string; state: string }, serverAllowed: boolean | null = null): string {
+  if (serverAllowed === false) return "";
+  if (serverAllowed !== true && !isAssistantRedirect(params.redirect_uri)) return "";
+  let redirect: URL;
+  try {
+    redirect = new URL(params.redirect_uri.trim());
+  } catch {
+    return "";
+  }
+  if (redirect.protocol !== "https:" && redirect.protocol !== "http:") return "";
   redirect.searchParams.set("error", "access_denied");
   redirect.searchParams.set("error_description", "User cancelled the NivaDesk connection.");
   if (params.state) redirect.searchParams.set("state", params.state);
@@ -63,9 +80,14 @@ export type RequestedScopes = {
   usesDefault: boolean;
 };
 
-/** The requested scope string, in words. */
-export function describeRequestedScopes(scope: string | null | undefined): RequestedScopes {
-  const tokens = Array.from(new Set(String(scope ?? "").split(/\s+/).map(token => token.trim()).filter(Boolean))).slice(0, 40);
+/**
+ * The requested scopes, in words. `serverScopes` is the server's filtered list
+ * (chatgptOAuthWorkspaces `requestedScopes`) when it sends one; otherwise the
+ * scope string from the request.
+ */
+export function describeRequestedScopes(scope: string | null | undefined, serverScopes: string[] | null = null): RequestedScopes {
+  const source = serverScopes && serverScopes.length ? serverScopes.join(" ") : String(scope ?? "");
+  const tokens = Array.from(new Set(source.split(/\s+/).map(token => token.trim()).filter(Boolean))).slice(0, 40);
   const usesDefault = tokens.length === 0;
   const named = usesDefault ? [...SUPPORTED_OAUTH_SCOPES] : tokens;
   const known = SUPPORTED_OAUTH_SCOPES.filter(supported => named.includes(supported));
@@ -73,11 +95,33 @@ export function describeRequestedScopes(scope: string | null | undefined): Reque
   return { lines: known.map(supported => SCOPE_TEXT[supported]), unknown, usesDefault };
 }
 
+export type ServerClientInfo = {
+  /** client.name, or "". */
+  name: string;
+  /** client.redirectAllowed for this client + redirect_uri; null when the server did not say. */
+  redirectAllowed: boolean | null;
+  /** requestedScopes (the server's filtered list); null when absent. */
+  requestedScopes: string[] | null;
+};
+
+/** What chatgptOAuthWorkspaces says about the client (server arm of #10); all empty for an older server. */
+export function serverClientInfo(data: unknown): ServerClientInfo {
+  const empty: ServerClientInfo = { name: "", redirectAllowed: null, requestedScopes: null };
+  if (!data || typeof data !== "object") return empty;
+  const record = data as { client?: unknown; requestedScopes?: unknown };
+  const client = record.client && typeof record.client === "object" ? (record.client as { name?: unknown; client_name?: unknown; redirectAllowed?: unknown }) : null;
+  const name = client ? (client.name ?? client.client_name) : "";
+  const scopes = Array.isArray(record.requestedScopes)
+    ? record.requestedScopes.filter((item): item is string => typeof item === "string").map(item => item.trim()).filter(Boolean).slice(0, 40)
+    : null;
+  return {
+    name: typeof name === "string" ? name.trim().slice(0, 120) : "",
+    redirectAllowed: client && typeof client.redirectAllowed === "boolean" ? client.redirectAllowed : null,
+    requestedScopes: scopes
+  };
+}
+
 /** The client's name as the server reports it (chatgptOAuthWorkspaces `client.name`), or "". */
 export function serverClientName(data: unknown): string {
-  if (!data || typeof data !== "object") return "";
-  const client = (data as { client?: unknown }).client;
-  if (!client || typeof client !== "object") return "";
-  const name = (client as { name?: unknown; client_name?: unknown }).name ?? (client as { client_name?: unknown }).client_name;
-  return typeof name === "string" ? name.trim().slice(0, 120) : "";
+  return serverClientInfo(data).name;
 }
