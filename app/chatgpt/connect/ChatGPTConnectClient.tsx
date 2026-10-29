@@ -151,7 +151,7 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [serverClient, setServerClient] = useState<ServerClientInfo>({ name: "", redirectAllowed: null, requestedScopes: null });
+  const [serverClient, setServerClient] = useState<ServerClientInfo>({ name: "", redirectAllowed: null, requestedScopes: null, redirectHost: "" });
   const [cancelled, setCancelled] = useState(false);
 
   // Parsed rather than printed raw: a URL is long, and the host is the part
@@ -265,10 +265,10 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
   }
 
   function handleCancel() {
-    // Back to the assistant only when redirect_uri is one of the assistants the
-    // server accepts (lib/chatgpt/oauthConnect.ts). Anything else came from the
-    // link, not from a registration, so the page stays here instead of becoming
-    // an open redirect on nivadesk.app (audit #10).
+    // Back to the assistant only when the server confirmed this client + redirect_uri
+    // (client.redirectAllowed === true, lib/chatgpt/oauthConnect.ts). Anything else
+    // came from the link, not from a registration, so the page stays here instead
+    // of becoming an open redirect on nivadesk.app (audit #10).
     const target = cancelRedirectUrl(oauthParams, serverClient.redirectAllowed);
     if (target) {
       window.location.assign(target);
@@ -290,6 +290,8 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
   const clientName = serverClient.name;
   // The server checked this client + destination and refused it: no Allow button.
   const destinationRefused = serverClient.redirectAllowed === false;
+  // Where the code goes: the server's reading of the registered destination when it sends one.
+  const shownRedirectHost = serverClient.redirectHost || redirectHost;
 
   return (
     <main style={{
@@ -335,10 +337,10 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
           </p>
         ) : null}
 
-        {redirectHost ? (
+        {shownRedirectHost ? (
           <p style={{ color: "#6e6e73", lineHeight: 1.55, marginTop: -6, fontSize: 14 }}>
             After you allow it, NivaDesk will send the authorization to{" "}
-            <strong style={{ color: "#1d1d1f" }}>{redirectHost}</strong>. If you were not expecting
+            <strong style={{ color: "#1d1d1f" }} data-testid="connect-redirect-host">{shownRedirectHost}</strong>. If you were not expecting
             that address, close this page.
           </p>
         ) : null}

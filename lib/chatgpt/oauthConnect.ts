@@ -5,20 +5,19 @@
 // The server checks the destination when the code is minted (chatgptOAuthApprove),
 // but "Cancel" used to send the browser to redirect_uri straight from the URL —
 // an open redirect on nivadesk.app. Cancel now goes back only where the server
-// says this client may go (chatgptOAuthWorkspaces `client.redirectAllowed`,
-// server arm of #10), or — with a server that does not say yet — to the
-// assistant hosts of the owner's allowlist (decision 28 Oct); anything else
-// stays on this page.
+// says this exact client + destination may go (chatgptOAuthWorkspaces
+// `client.redirectAllowed === true`, server arm of #10, owner's allowlist
+// decision 28 Oct). Without that answer (an older server, a failed call, a
+// refusal) the page stays where it is.
 //
 // The page also shows what is being asked for: each requested scope in words
 // (the server's filtered list when it sends one), and the client's name.
 
 /**
- * The assistant hosts a connection may return to without the server's word (and
- * their subdomains): the owner's allowlist (28 Oct) plus claude.com, which the
- * server arm added as Anthropic's successor callback host (oauth/publicClients.js).
- * The server's list also admits loopback (Claude Code); Cancel goes there only
- * when the server confirms it.
+ * The assistant hosts of the server's allowlist (owner decision 28 Oct, plus
+ * claude.com which the server arm added; loopback for Claude Code is the
+ * server's too). Display only: the page marks a destination outside them, but
+ * Cancel follows the server's redirectAllowed alone.
  */
 export const ASSISTANT_REDIRECT_HOSTS = ["chatgpt.com", "openai.com", "claude.ai", "claude.com", "anthropic.com"] as const;
 
@@ -56,8 +55,7 @@ export function isAssistantRedirect(uri: string | null | undefined): boolean {
  * client + redirect_uri (null when the server did not say).
  */
 export function cancelRedirectUrl(params: { redirect_uri: string; state: string }, serverAllowed: boolean | null = null): string {
-  if (serverAllowed === false) return "";
-  if (serverAllowed !== true && !isAssistantRedirect(params.redirect_uri)) return "";
+  if (serverAllowed !== true) return "";
   let redirect: URL;
   try {
     redirect = new URL(params.redirect_uri.trim());
@@ -100,24 +98,28 @@ export type ServerClientInfo = {
   name: string;
   /** client.redirectAllowed for this client + redirect_uri; null when the server did not say. */
   redirectAllowed: boolean | null;
-  /** requestedScopes (the server's filtered list); null when absent. */
+  /** requestedScopes / scopes (the server's filtered list); null when absent. */
   requestedScopes: string[] | null;
+  /** client.redirectHost: where the server will send the code; "" when absent. */
+  redirectHost: string;
 };
 
 /** What chatgptOAuthWorkspaces says about the client (server arm of #10); all empty for an older server. */
 export function serverClientInfo(data: unknown): ServerClientInfo {
-  const empty: ServerClientInfo = { name: "", redirectAllowed: null, requestedScopes: null };
+  const empty: ServerClientInfo = { name: "", redirectAllowed: null, requestedScopes: null, redirectHost: "" };
   if (!data || typeof data !== "object") return empty;
-  const record = data as { client?: unknown; requestedScopes?: unknown };
-  const client = record.client && typeof record.client === "object" ? (record.client as { name?: unknown; client_name?: unknown; redirectAllowed?: unknown }) : null;
+  const record = data as { client?: unknown; requestedScopes?: unknown; scopes?: unknown };
+  const client = record.client && typeof record.client === "object" ? (record.client as { name?: unknown; client_name?: unknown; redirectAllowed?: unknown; redirectHost?: unknown }) : null;
   const name = client ? (client.name ?? client.client_name) : "";
-  const scopes = Array.isArray(record.requestedScopes)
-    ? record.requestedScopes.filter((item): item is string => typeof item === "string").map(item => item.trim()).filter(Boolean).slice(0, 40)
+  const list = Array.isArray(record.requestedScopes) ? record.requestedScopes : Array.isArray(record.scopes) ? record.scopes : null;
+  const scopes = list
+    ? list.filter((item): item is string => typeof item === "string").map(item => item.trim()).filter(Boolean).slice(0, 40)
     : null;
   return {
     name: typeof name === "string" ? name.trim().slice(0, 120) : "",
     redirectAllowed: client && typeof client.redirectAllowed === "boolean" ? client.redirectAllowed : null,
-    requestedScopes: scopes
+    requestedScopes: scopes,
+    redirectHost: client && typeof client.redirectHost === "string" ? client.redirectHost.trim().slice(0, 200) : ""
   };
 }
 

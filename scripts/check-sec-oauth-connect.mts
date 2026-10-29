@@ -1,11 +1,10 @@
 // Security audit #10, web part (28 Oct 2026): the ChatGPT / Claude connect page is not an open redirect, and shows
 // what is being asked for.
 //
-// 1. lib/chatgpt/oauthConnect.ts: Cancel returns where the server says this client may go
-//    (chatgptOAuthWorkspaces client.redirectAllowed, server arm of #10), or, when the server does not say, only to
-//    the allowlisted assistant hosts (owner decision 28 Oct: chatgpt.com, openai.com, claude.ai, anthropic.com +
-//    claude.com, subdomains, https only); a server "false" or any other redirect_uri → "" (stay on the page).
-//    Requested scopes in words (the server's filtered list when sent); unknown ones listed apart.
+// 1. lib/chatgpt/oauthConnect.ts: Cancel returns ONLY where the server confirmed this client + destination
+//    (chatgptOAuthWorkspaces client.redirectAllowed === true, server arm of #10); server false, no answer (older
+//    server) or a non-http(s) URI → "" (stay on the page). isAssistantRedirect() (display) knows the allowlisted
+//    hosts. Requested scopes in words (the server's filtered list when sent); unknown ones listed apart.
 // 2. ChatGPTConnectClient.tsx: Cancel goes through cancelRedirectUrl (no other read of redirect_uri builds a
 //    navigation), the client and the requested access are shown, the request goes along to chatgptOAuthWorkspaces.
 //
@@ -57,10 +56,11 @@ if (m) {
   for (const uri of ALLOWED) ok(`assistant redirect allowed: ${uri}`, m.isAssistantRedirect(uri) === true);
   for (const uri of REFUSED) ok(`redirect refused: ${JSON.stringify(uri)}`, m.isAssistantRedirect(uri) === false);
 
-  const back = m.cancelRedirectUrl({ redirect_uri: ALLOWED[0], state: "st-1" });
+  const back = m.cancelRedirectUrl({ redirect_uri: ALLOWED[0], state: "st-1" }, true);
   const backUrl = back ? new URL(back) : null;
   ok("Cancel to ChatGPT carries error=access_denied and the state", backUrl?.host === "chatgpt.com" && backUrl?.searchParams.get("error") === "access_denied" && backUrl?.searchParams.get("state") === "st-1");
-  ok("Cancel with a crafted redirect_uri stays on the page", m.cancelRedirectUrl({ redirect_uri: "https://evil.example/cb", state: "x" }) === "");
+  ok("Cancel with a crafted redirect_uri stays on the page", m.cancelRedirectUrl({ redirect_uri: "https://evil.example/cb", state: "x" }) === "" && m.cancelRedirectUrl({ redirect_uri: "https://evil.example/cb", state: "x" }, false) === "");
+  ok("older server (no redirectAllowed): Cancel stays on the page, even for chatgpt.com", m.cancelRedirectUrl({ redirect_uri: ALLOWED[0], state: "x" }, null) === "");
   ok("Cancel without redirect_uri stays on the page", m.cancelRedirectUrl({ redirect_uri: "", state: "" }) === "");
 
   const all = m.describeRequestedScopes("");
@@ -72,7 +72,8 @@ if (m) {
   ok("server client name read from client.name", m.serverClientName({ client: { name: " ChatGPT " } }) === "ChatGPT");
   ok("no client info → empty name", m.serverClientName({ workspaces: [] }) === "" && m.serverClientName(null) === "");
   const info = m.serverClientInfo({ client: { id: "c1", name: "Claude", redirectHost: "claude.ai", redirectAllowed: true }, requestedScopes: ["orders.read", "notes.read"] });
-  ok("server info: name, redirectAllowed, requestedScopes", info.name === "Claude" && info.redirectAllowed === true && info.requestedScopes.join() === "orders.read,notes.read");
+  ok("server info: name, redirectHost, redirectAllowed, requestedScopes", info.name === "Claude" && info.redirectHost === "claude.ai" && info.redirectAllowed === true && info.requestedScopes.join() === "orders.read,notes.read");
+  ok("server info: `scopes` is read when `requestedScopes` is absent", m.serverClientInfo({ client: { redirectAllowed: true }, scopes: ["orders.read"] }).requestedScopes.join() === "orders.read");
   const old = m.serverClientInfo({ workspaces: [] });
   ok("older server: redirectAllowed null, no scopes", old.redirectAllowed === null && old.requestedScopes === null);
   ok("server says allowed: Cancel to a loopback client (Claude Code)", new URL(m.cancelRedirectUrl({ redirect_uri: "http://127.0.0.1:33418/callback", state: "s" }, true)).searchParams.get("error") === "access_denied");
@@ -93,6 +94,7 @@ ok("a refused Cancel shows a message instead of navigating", /setCancelled\(true
 ok("the requested access is shown (server's filtered list when sent)", /describeRequestedScopes\(oauthParams\.scope, serverClient\.requestedScopes\)/.test(page) && /data-testid="connect-requested-scopes"/.test(page));
 ok("a destination the server refuses gets no Allow button", /destinationRefused \? null : \(/.test(page) && /data-testid="connect-destination-refused"/.test(page));
 ok("the client is shown (server name, published host, client id)", /data-testid="connect-client-name"/.test(page) && /Client ID:/.test(page));
+ok("the destination shown is the server's redirectHost when sent", /const shownRedirectHost = serverClient\.redirectHost \|\| redirectHost;/.test(page) && /data-testid="connect-redirect-host"/.test(page));
 ok("the request goes along to chatgptOAuthWorkspaces", /chatgptOAuthWorkspaces\$\{search \? `\?\$\{search\}` : ""\}/.test(page));
 ok("no 'unverified app' label (owner chose the allowlist)", !/unverified|not verified|verified ===|verified:/i.test(page));
 
