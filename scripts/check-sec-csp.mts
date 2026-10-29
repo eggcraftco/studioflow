@@ -112,7 +112,7 @@ if (frameMod) {
 }
 for (const rel of ["app/files/page.tsx", "app/orders/OrderDetailContent.tsx"]) {
   const text = read(rel);
-  ok(`${rel}: the preview frame loads safePreviewFrameUrl(...) only`, /safePreviewFrameUrl\(activeFile\.downloadURL/.test(text) && /<iframe src=\{previewFrameUrl\}/.test(text) && !/<iframe src=\{activeFile\.downloadURL\}/.test(text));
+  ok(`${rel}: the preview frame loads safePreviewFrameUrl(...) only`, /safePreviewFrameUrl\((activeFile\.downloadURL|activeUrl),/.test(text) && /<iframe src=\{previewFrameUrl\}/.test(text) && !/<iframe src=\{activeFile\.downloadURL\}/.test(text));
 }
 
 // ---------------------------------------------------------------- 4. escaping
