@@ -359,7 +359,7 @@ export function AdminLivePanel({ view }: { view: AdminView }) {
           <ul className="admin-limits">
             <li>Apps released before 2.4 do not say who is signed in or whether it is an iPhone or an iPad: each of their sessions counts as one person and cannot be left out as staff or test.</li>
             <li>The web app counts a tab only while it is visible; each open tab is its own session (one signed-in member still counts once).</li>
-            <li>Presence is kept for {live?.retentionDays ?? 8} days and then deleted; the 7-day history cannot go further back.</li>
+            <li>A session is kept for {live?.retentionDays ?? 8} days after it was last seen, so the 7-day history cannot go further back.</li>
             <li>Nothing here names a person. Use User Lookup for one account.</li>
           </ul>
         </section>

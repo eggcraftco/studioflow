@@ -104,7 +104,7 @@ Tanımlar (etiketler sektörle uyumlu olsun diye): DAU/WAU/MAU kayan 24 saat / 7
 
 ### 4.1 Live sayfası (yeni) ve canlı üye sinyali
 - **Ne gösteriyor:** şu an uygulamadaki kişi sayısı (= farklı üye + kimliğini söylemeyen eski uygulama oturumu; ikisi ayrı yazılı), uygulama başına Web / iOS (iPhone) / iPadOS (iPad) / iPhone-iPad (eski uygulama) / macOS / Android, canlı sürüm tablosu, cihaz ve sistem, son 24 saat (saatlik, uygulamaya göre yığılmış), son 7 İngiltere günü, DAU/WAU/MAU + DAU/MAU, "bunu göremez" kartı. 30 sn'de bir yenilenir (yalnız sekme görünürken), geçmiş 5 dk'da bir; "Live / Not updating" durumu, Refresh, CSV.
-- **Sinyal:** mevcut heartbeat kullanıldı, yeni yazma yolu eklenmedi. Aynı belge yazımına `device`, `appVersion`, `appBuild`, kaba `os`/`browser`, `hours.<UTC saat>` ve `expireAt` eklendi; uygulama oturum token'ını gönderirse sunucu doğrulayıp `uid` ve `staff` yazıyor (ekranda kimse adıyla görünmüyor; koleksiyon istemcilere kapalı; 8 gün sonra siliniyor).
+- **Sinyal:** mevcut heartbeat kullanıldı, yeni yazma yolu eklenmedi. Aynı belge yazımına `device`, `appVersion`, `appBuild`, kaba `os`/`browser`, `hours.<UTC saat>` ve `expireAt` eklendi; uygulama oturum token'ını gönderirse sunucu doğrulayıp `uid` ve `staff` yazıyor (ekranda kimse adıyla görünmüyor; koleksiyon istemcilere kapalı). Saklama: her heartbeat `expireAt = şimdi + 8 gün` yazar ve silmeyi Firestore **TTL politikası** yapar; bu politika bir proje ayarıdır ve canlıda `appPresence` için **henüz yok** (29 Eki okuması: 18 koleksiyonda var, burada yok). Yayın adımı 0 olarak sahibe bırakıldı (paket README §6); açılana kadar silme yalnız `getSitePresence`'ın süpürmesiyle (admin Live/Global Statistics açıkken, çağrı başına ≤200, `lastSeenAt` 8 günden eski — `expireAt`'siz eski belgeler dahil) olur. Değişiklikten önceki birikim için tek seferlik `tools/cleanup-stale-presence.cjs` (kuru koşu varsayılan, `--apply` sahipte).
 - **Eski sürümler dürüstçe:** Apple uygulamaları build numarasını zaten user-agent'ta gönderiyor ("NivaDesk/33" → 2.3), bu yüzden eski Mac/iPhone sürümleri tabloda doğru görünüyor. iPhone/iPad ayrımı, Android sürümü ve kim olduğu 2.4 gerektiriyor; o oturumlar "older app" diye ayrı sayılıyor ve personel/test olarak elenemediği yazıyor.
 - **DAU/WAU/MAU:** Firebase Auth'un her hesap için zaten tuttuğu `lastRefreshTime` (açık uygulama saatte bir yeniler) — her sürüm, her platform, sıfır yeni yazma.
 - **Maliyet:** heartbeat başına okuma/yazma sayısı değişmedi (SEC-FIX #48'in IP sayacı işlemi dahil 1 okuma + 2 yazma, öncesi ve sonrası aynı). Okuma yalnız Live/Overview açıkken; ayrıntı paket README §4.
@@ -119,7 +119,7 @@ Tanımlar (etiketler sektörle uyumlu olsun diye): DAU/WAU/MAU kayan 24 saat / 7
 
 ### 4.3 Kanıt
 - Web: `tsc` 0 hata; temiz `next build` (`.next` silinerek) rc=0; tüm `test:*` betikleri — yeni `test:admin-live-presence` 16/16, mevcut `test:admin-insights` geçiyor; 3 kırmızı (`test:finance`, `test:customer-card`, `test:team-schedule-key`) **canlı tabanda (10f2b8db) da aynı şekilde kırmızı** (ortam: `functions/` ağacı ve sunucu indeksi yok) — bu paketten değil.
-- Sunucu: `src/test/presence.test.js` 17/17; emülatör kabulü ACCEPTANCE OK (aday 15/15, kontrol 11/15 kırmızı, canlı eşleşme 15/15); verify-tree OK; manifest ve sır adları aynı; PREFLIGHT OK; kilitli kuru koşu tüm kapılardan geçti.
+- Sunucu: temizlik betiği emülatörde CLEANUP TEST OK (kuru koşu siler değil; `--apply` yalnız 8 günü aşanları siler); `src/test/presence.test.js` 17/17; emülatör kabulü ACCEPTANCE OK (aday 15/15, kontrol 11/15 kırmızı, canlı eşleşme 15/15); verify-tree OK; manifest ve sır adları aynı; PREFLIGHT OK; kilitli kuru koşu tüm kapılardan geçti.
 - Ekran (yalnız demo-insights emülatörü, admin callable'larını dışa açan test sarmalayıcısı): Live ve Overview masaüstü koyu/açık, Live 375 px açık (yatay taşma yok), Global Statistics özel tarih boşaltma. Görüntüler: paket `screens/`.
 - Native: derleme sonuçları paket README ve dal commit mesajında.
 
@@ -141,9 +141,10 @@ Tanımlar (etiketler sektörle uyumlu olsun diye): DAU/WAU/MAU kayan 24 saat / 7
 ---
 
 ## 6. Ölçülemeyenler ve dürüst sınırlar
-- Hiçbir şey canlıda ölçülmedi (yayın yok). Canlı veriden yalnız user-agent sayımı okundu.
+- Hiçbir şey canlıda ölçülmedi (yayın yok). Canlı veriden yalnız user-agent sayımı ve TTL politikaları listesi okundu.
+- `appPresence` için TTL politikası açılmadan "8 gün sonra silinir" kendiliğinden gerçekleşmez (yukarıda §4.1); canlıdaki mevcut birikimin büyüklüğü okunmadı — temizlik betiğinin kuru koşusu sayar.
 - Native değişiklik simülatörde/cihazda açılıp görülmedi; heartbeat'in gerçekten yeni alanlarla geldiği canlıda ancak 2.4 yayınından sonra görülür.
 - 2.3 ve öncesi uygulamalar (bugün çoğunluk) kim olduklarını ve iPhone/iPad ayrımını göndermez; o oturumlar personel/test olarak elenemez. Sahibin arka planda açık 2.2 Mac'i bu yüzden 2.4'e kadar "older app" oturumu olarak görünmeye devam eder (Mac'te arka plan ping'ini SEC-FIX #48 zaten 2.4'te kapatıyor).
 - `lastRefreshTime` "uygulaması açık ve oturumu yenilenmiş" demek; sayfa görüntüleme ya da işlem değil.
-- Gizlilik: politika §4.4 cihaz türü, işletim sistemi, uygulama sürümü, giriş zamanları ve kullanılan özellikleri zaten sayıyor; meşru menfaat paragrafı "understanding product usage" diyor. Yeni bir veri türü eklenmediği için taslak hazırlanmadı. İstenirse tek cümlelik açıklama eklenebilir: "Uygulamanın açık olduğunu gösteren oturum kayıtlarını 8 gün saklarız ve yalnız toplu sayım için kullanırız."
+- Gizlilik: politika §4.4 cihaz türü, işletim sistemi, uygulama sürümü, giriş zamanları ve kullanılan özellikleri zaten sayıyor; meşru menfaat paragrafı "understanding product usage" diyor. Yeni bir veri türü eklenmediği için taslak hazırlanmadı. İstenirse tek cümlelik açıklama eklenebilir (TTL açıldıktan sonra doğru olur): "Uygulamanın açık olduğunu gösteren oturum kayıtlarını son görüldükleri andan itibaren 8 gün saklarız ve yalnız toplu sayım için kullanırız."
 - Users & Workspaces, Subscriptions, Revenue, Plans, Feature Usage, Storage, Lookup, Setup Answers, Google Search, Landing ve Feedback ekranda gezilmedi; bulgular kod okumasıdır.
