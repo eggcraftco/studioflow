@@ -127,9 +127,10 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
     setError("");
     try {
       await finishTotpEnrollment(user, step.secret, otp, deviceName || t("Authenticator app"));
-      await refresh();
       // Straight into recovery codes: the fresh token has the second factor and a new auth_time.
       const codes = await createRecoveryCodes().catch(() => [] as string[]);
+      // Refresh after the codes exist, or the count reads the pre-enrolment "0 left".
+      await refresh();
       setStep(codes.length ? { kind: "codes", codes } : { kind: "idle" });
       setNotice(t("Two-step verification is on. Next time you sign in, NivaDesk asks for a code from your authenticator app."));
     } catch (err) {

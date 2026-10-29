@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
-import { SECOND_FACTOR_CANCELLED, withSecondFactor } from "@/lib/auth/secondFactor";
+import { SECOND_FACTOR_CANCELLED, SECOND_FACTOR_REMOVED_BY_RECOVERY, withSecondFactor } from "@/lib/auth/secondFactor";
 import { AuthProviderButtons } from "@/components/AuthProviders";
 import { AuthFeatureRotator } from "@/components/AuthFeatureRotator";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -59,6 +59,7 @@ function LoginPageContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
@@ -75,12 +76,20 @@ function LoginPageContent() {
   async function handleEmailLogin(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setNotice(null);
     setSubmitting(true);
     try {
       await withSecondFactor(auth, () => signInWithEmailAndPassword(auth, email, password), { email });
       router.replace(nextDestination(HOME_AFTER_SIGN_IN));
     } catch (loginError) {
-      if ((loginError as { code?: string })?.code === SECOND_FACTOR_CANCELLED) return;
+      const loginCode = (loginError as { code?: string })?.code;
+      if (loginCode === SECOND_FACTOR_CANCELLED) return;
+      // A redeemed recovery code is a success, not a failure: the factor is gone
+      // and the person signs in once more with the password.
+      if (loginCode === SECOND_FACTOR_REMOVED_BY_RECOVERY) {
+        setNotice(tx((loginError as Error).message));
+        return;
+      }
       setError(friendlyErrorMessage(loginError, tx));
     } finally {
       setSubmitting(false);
@@ -261,6 +270,7 @@ function LoginPageContent() {
                   {tx("Forgot password?")}
                 </button>
               </div>
+              {notice ? <p style={{ color: "var(--success)", margin: 0 }}>{notice}</p> : null}
               {error ? <p style={{ color: "var(--danger)", margin: 0 }}>{error}</p> : null}
               <button className="button" type="submit" disabled={submitting}>
                 {t("login.signIn")}
