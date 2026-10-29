@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { assistantNameForResource, clientMetadataHost, connectCapabilities } from "@/lib/chatgpt/claudeMcp";
+import { cancelRedirectUrl, describeRequestedScopes, serverClientName } from "@/lib/chatgpt/oauthConnect";
 
 type WorkspaceOption = {
   id: string;
@@ -94,12 +95,23 @@ function workspaceRole(data: Record<string, unknown>, uid: string) {
   return cleanText(memberRoles[uid]) || "member";
 }
 
-async function loadWorkspaces(user: NonNullable<ReturnType<typeof useAuth>["user"]>): Promise<WorkspaceOption[]> {
+async function loadWorkspaces(
+  user: NonNullable<ReturnType<typeof useAuth>["user"]>,
+  oauthParams: OAuthParams
+): Promise<{ workspaces: WorkspaceOption[]; clientName: string }> {
   const token = await user.getIdToken();
   const baseUrl = functionBaseUrl();
   if (!baseUrl) throw new Error("ChatGPT connection is not available right now. Please try again later.");
 
-  const response = await fetch(`${baseUrl}/chatgptOAuthWorkspaces`, {
+  // The request being approved goes along, so the server can name the client it
+  // registered (`client.name` in the answer). A server that does not read these
+  // ignores them; the page then shows the client's published host, if any.
+  const query = new URLSearchParams();
+  if (oauthParams.client_id) query.set("client_id", oauthParams.client_id);
+  if (oauthParams.redirect_uri) query.set("redirect_uri", oauthParams.redirect_uri);
+  if (oauthParams.scope) query.set("scope", oauthParams.scope);
+  const search = query.toString();
+  const response = await fetch(`${baseUrl}/chatgptOAuthWorkspaces${search ? `?${search}` : ""}`, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`
@@ -112,7 +124,7 @@ async function loadWorkspaces(user: NonNullable<ReturnType<typeof useAuth>["user
   }
 
   const items = Array.isArray(data.workspaces) ? data.workspaces : [];
-  return items
+  const workspaces = items
     .map((item: Record<string, unknown>) => ({
       id: cleanText(item.id),
       name: cleanText(item.name) || "My Studio",
@@ -120,6 +132,7 @@ async function loadWorkspaces(user: NonNullable<ReturnType<typeof useAuth>["user
     }))
     .filter((item: WorkspaceOption) => Boolean(item.id))
     .sort((a: WorkspaceOption, b: WorkspaceOption) => a.name.localeCompare(b.name));
+  return { workspaces, clientName: serverClientName(data) };
 }
 
 export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOAuthParams: OAuthParams }) {
@@ -137,6 +150,8 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [clientName, setClientName] = useState("");
+  const [cancelled, setCancelled] = useState(false);
 
   // Parsed rather than printed raw: a URL is long, and the host is the part
   // that decides where the code lands.
@@ -149,6 +164,9 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
   })();
 
   const validRequest = isValidOAuthRequest(oauthParams);
+  // The workspace list is loaded again only when the request itself changes, not
+  // when the same values are re-read from the address bar after mount.
+  const clientRequestKey = JSON.stringify([oauthParams.client_id, oauthParams.redirect_uri, oauthParams.scope]);
 
   useEffect(() => {
     let cancelled = false;
@@ -162,9 +180,12 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
       setLoadingWorkspaces(true);
       setError("");
       try {
-        const items = await loadWorkspaces(user);
+        const [clientId, redirectUri, scope] = JSON.parse(clientRequestKey) as [string, string, string];
+        const loaded = await loadWorkspaces(user, { ...oauthParams, client_id: clientId, redirect_uri: redirectUri, scope });
         if (cancelled) return;
+        const items = loaded.workspaces;
         setWorkspaces(items);
+        setClientName(loaded.clientName);
         setSelectedCompanyId(current => current || items[0]?.id || "");
       } catch (loadError) {
         if (!cancelled) {
@@ -179,7 +200,8 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
     return () => {
       cancelled = true;
     };
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the request's values (clientRequestKey)
+  }, [user, clientRequestKey]);
 
   async function handleEmailLogin(event: FormEvent) {
     event.preventDefault();
@@ -242,16 +264,16 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
   }
 
   function handleCancel() {
-    if (!oauthParams.redirect_uri) {
-      window.location.assign("/");
+    // Back to the assistant only when redirect_uri is one of the assistants the
+    // server accepts (lib/chatgpt/oauthConnect.ts). Anything else came from the
+    // link, not from a registration, so the page stays here instead of becoming
+    // an open redirect on nivadesk.app (audit #10).
+    const target = cancelRedirectUrl(oauthParams);
+    if (target) {
+      window.location.assign(target);
       return;
     }
-
-    const redirect = new URL(oauthParams.redirect_uri);
-    redirect.searchParams.set("error", "access_denied");
-    redirect.searchParams.set("error_description", "User cancelled the NivaDesk connection.");
-    if (oauthParams.state) redirect.searchParams.set("state", oauthParams.state);
-    window.location.assign(redirect.toString());
+    setCancelled(true);
   }
 
   // Which assistant asked: Claude when the request names the Claude endpoint
@@ -262,6 +284,8 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
   const capabilities = connectCapabilities(oauthParams.resource);
   // A client that names itself with a published metadata document (CIMD): its host is who is asking.
   const requesterHost = clientMetadataHost(oauthParams.client_id);
+  // What is being asked for, in words: the scopes in the request (or the server's default when none is named).
+  const requested = describeRequestedScopes(oauthParams.scope);
 
   return (
     <main style={{
@@ -315,7 +339,11 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
           </p>
         ) : null}
 
-        {!validRequest ? (
+        {cancelled ? (
+          <div style={{ background: "#f5f5f7", borderRadius: 16, padding: 16, fontWeight: 700 }} data-testid="connect-cancelled">
+            Connection cancelled. Nothing was shared with {assistant}. You can close this page.
+          </div>
+        ) : !validRequest ? (
           <div style={{ background: "#fff2f2", color: "#a11", borderRadius: 16, padding: 16, fontWeight: 700 }}>
             This {assistant} connection request is missing required OAuth parameters. Please start the connection again from {assistant}.
           </div>
@@ -369,6 +397,26 @@ export default function ChatGPTConnectClient({ initialOAuthParams }: { initialOA
                 ))}
               </select>
             </label>
+
+            <div style={{ background: "#f5f5f7", borderRadius: 18, padding: 16, display: "grid", gap: 4 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "#6e6e73" }}>Application</div>
+              <div style={{ fontWeight: 800 }} data-testid="connect-client-name">{clientName || requesterHost || `${assistant} connector`}</div>
+              {oauthParams.client_id ? (
+                <div style={{ color: "#6e6e73", fontSize: 12, wordBreak: "break-all" }}>
+                  Client ID: <code>{oauthParams.client_id.slice(0, 120)}</code>
+                </div>
+              ) : null}
+            </div>
+
+            <div style={{ display: "grid", gap: 6, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 18, padding: 16 }} data-testid="connect-requested-scopes">
+              <strong>Requested access{requested.usesDefault ? " (NivaDesk default)" : ""}:</strong>
+              {requested.lines.map(line => <span key={line}>• {line}</span>)}
+              {requested.unknown.length ? (
+                <span style={{ color: "#6e6e73", fontSize: 14 }}>
+                  Not recognised by NivaDesk (grants nothing): {requested.unknown.join(", ")}
+                </span>
+              ) : null}
+            </div>
 
             {loadingWorkspaces ? <p style={{ color: "#6e6e73", margin: 0 }}>Loading workspaces...</p> : null}
             {!loadingWorkspaces && workspaces.length === 0 ? (
