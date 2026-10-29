@@ -13,6 +13,7 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { sendEmailVerification } from "firebase/auth";
+import { TwoStepVerificationCard } from "./TwoStepVerificationCard";
 import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle, type CardIcon } from "@/components/CardTitle";
 import { CustomRoleManager } from "@/components/CustomRoleManager";
@@ -313,7 +314,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
 // Settings search (settings report): each section carries the terms a user
 // actually types — "VAT", "logo", "password" — beyond its title words.
 const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
-  "profile-security": "password email photo sign in account delete biometric security",
+  "profile-security": "password email photo sign in account delete biometric security two-step 2fa mfa authenticator recovery code",
   preferences: "theme language dark light auto lock",
   notifications: "notification notifications push bell alert alerts mute file upload work time timer day entry assigned member device permission browser",
   about: "version release diagnostics whats new",
@@ -4810,6 +4811,9 @@ function AccountSection({
           </button>
         </div>
       </section>
+
+      {/* GN-10: authenticator-app two-step verification (flagged; always shown once a factor exists). */}
+      <TwoStepVerificationCard language={accountLanguage} workspaceRole={normalizeWorkspaceRole(workspace.role)} />
 
       {!hideWorkspaceIdentity ? <section className="card app-card">
         <CardTitle icon="storage" eyebrow={t("Workspace Logo")} title={t("Upload or replace only")} />

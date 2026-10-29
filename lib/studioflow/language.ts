@@ -20,6 +20,8 @@ import { CHANNEL_SHIPPING_COST_TRANSLATIONS } from "./channelShippingCost";
 import { ETSY_ORDER_VIEW_TRANSLATIONS } from "./etsyOrderViewTranslations";
 import { SECURITY_FIX_TRANSLATIONS } from "./securityFixTranslations";
 
+import { SECOND_FACTOR_TRANSLATIONS } from "./secondFactorTranslations";
+
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
   "Türkçe",
@@ -9367,6 +9369,9 @@ mergeIntoTranslations(ETSY_ORDER_VIEW_TRANSLATIONS);
 
 // Security fixes (28 Oct 2026): the sign-out question about undelivered writes, the re-authentication prompt.
 mergeIntoTranslations(SECURITY_FIX_TRANSLATIONS);
+
+// GN-10 two-step verification (22 Oct 2026). Merged last on purpose.
+mergeIntoTranslations(SECOND_FACTOR_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

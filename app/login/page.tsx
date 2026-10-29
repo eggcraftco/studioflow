@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "@/lib/firebase/client";
+import { SECOND_FACTOR_CANCELLED, withSecondFactor } from "@/lib/auth/secondFactor";
 import { AuthProviderButtons } from "@/components/AuthProviders";
 import { AuthFeatureRotator } from "@/components/AuthFeatureRotator";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -76,9 +77,10 @@ function LoginPageContent() {
     setError(null);
     setSubmitting(true);
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await withSecondFactor(auth, () => signInWithEmailAndPassword(auth, email, password), { email });
       router.replace(nextDestination(HOME_AFTER_SIGN_IN));
     } catch (loginError) {
+      if ((loginError as { code?: string })?.code === SECOND_FACTOR_CANCELLED) return;
       setError(friendlyErrorMessage(loginError, tx));
     } finally {
       setSubmitting(false);
