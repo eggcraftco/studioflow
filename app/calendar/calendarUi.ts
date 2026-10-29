@@ -35,7 +35,7 @@ export function dayLabel(key: string, locale: string, opts: Intl.DateTimeFormatO
   return new Intl.DateTimeFormat(locale, { ...opts, timeZone: "UTC" }).format(new Date(Date.UTC(y, m - 1, d)));
 }
 
-export function dateTimeLabel(ms: number | null, locale: string): string {
+export function dateTimeLabel(ms: number | null, locale: string, timeZone?: string): string {
   if (!ms) return "";
-  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(ms));
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", ...(timeZone ? { timeZone } : {}) }).format(new Date(ms));
 }

@@ -3,7 +3,8 @@
 // calendarReminders / calendarInbox); this file only asks for what the rules allow:
 //   - lists always say which half they want: `accessUids array-contains <me>` or `visibility == workspace`
 //     (a list without one of those is refused as a whole);
-//   - only the visible date range is read, never a workspace's whole history;
+//   - only the visible date range is read, never a workspace's whole history (tasks done inside the range are
+//     found by the day they were done — `completedAt` — however long ago they were planned);
 //   - every change moves `version` on by one inside a transaction that first checks the copy on screen is
 //     still the latest, so two people editing at once get a "someone else changed it" message instead of a
 //     silent overwrite.
@@ -25,7 +26,8 @@ import {
   type DocumentData,
   type Unsubscribe,
 } from "firebase/firestore";
-import { db } from "@/lib/firebase/client";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase/client";
 import * as core from "./calendarCore";
 import type { CalendarEntry, CalendarEntryType, CalendarRecurrence, CalendarTaskStatus, CalendarVisibility } from "./calendarCore";
 
@@ -48,10 +50,32 @@ const entryDoc = (companyId: string, entryId: string) => doc(db, "companies", co
 
 // ---------------------------------------------------------------- reading a range
 
-export type CalendarRangeState = { entries: CalendarEntry[]; loading: boolean; error: string | null };
+/** What a row says beyond the shared entry shape: written by the server (archive / hand-over of a former member's
+ *  entry), or only on this device so far (`pending`: not confirmed by the server yet). */
+export type CalendarEntryMeta = {
+  pending: boolean;
+  archived: boolean;
+  archivedAtMs: number | null;
+  transferredFromUid: string | null;
+  transferredAtMs: number | null;
+  transferredByUid: string | null;
+};
+export type CalendarRangeState = { entries: CalendarEntry[]; loading: boolean; error: string | null; meta: Map<string, CalendarEntryMeta> };
 
-/** Live entries that can show in [fromKey, toKey] for this person. Four listeners (mine/shared ×
- *  single/series, workspace × single/series); a series is read when it started before the range ends. */
+function metaOf(data: DocumentData, pending: boolean): CalendarEntryMeta {
+  return {
+    pending,
+    archived: Boolean(data.archivedAt),
+    archivedAtMs: core.millis(data.archivedAt),
+    transferredFromUid: typeof data.transferredFromUid === "string" ? data.transferredFromUid : null,
+    transferredAtMs: core.millis(data.transferredAt),
+    transferredByUid: typeof data.transferredByUid === "string" ? data.transferredByUid : null,
+  };
+}
+
+/** Live entries that can show in [fromKey, toKey] for this person. Six listeners: mine/shared × single/series/
+ *  done-in-range, workspace × the same; a series is read when it started before the range ends, a task by the day
+ *  it was done (padded a day and a half each side for time zones) so one planned 400 days ago shows on that day. */
 export function listenToCalendarRange(
   companyId: string,
   uid: string,
@@ -61,7 +85,10 @@ export function listenToCalendarRange(
 ): Unsubscribe {
   const queryFrom = core.addDays(fromKey, -(core.MAX_SPAN_DAYS + 2));
   const queryTo = core.addDays(toKey, 2);
+  const doneFrom = Timestamp.fromMillis(Date.parse(`${fromKey}T00:00:00Z`) - 36 * 3600_000);
+  const doneTo = Timestamp.fromMillis(Date.parse(`${toKey}T00:00:00Z`) + 60 * 3600_000);
   const parts = new Map<string, Map<string, CalendarEntry>>();
+  const metas = new Map<string, Map<string, CalendarEntryMeta>>();
   const reported = new Set<string>();
   let error: string | null = null;
   const queries: [string, ReturnType<typeof query>][] = [
@@ -69,28 +96,40 @@ export function listenToCalendarRange(
     ["named-series", query(entriesCol(companyId), where("accessUids", "array-contains", uid), where("rowType", "==", "series"), where("dateKey", "<=", queryTo))],
     ["workspace-entry", query(entriesCol(companyId), where("visibility", "==", "workspace"), where("rowType", "==", "entry"), where("dateKey", ">=", queryFrom), where("dateKey", "<=", queryTo))],
     ["workspace-series", query(entriesCol(companyId), where("visibility", "==", "workspace"), where("rowType", "==", "series"), where("dateKey", "<=", queryTo))],
+    ["named-done", query(entriesCol(companyId), where("accessUids", "array-contains", uid), where("completedAt", ">=", doneFrom), where("completedAt", "<", doneTo))],
+    ["workspace-done", query(entriesCol(companyId), where("visibility", "==", "workspace"), where("completedAt", ">=", doneFrom), where("completedAt", "<", doneTo))],
   ];
   const emit = () => {
     const merged = new Map<string, CalendarEntry>();
-    for (const part of parts.values()) for (const [id, entry] of part) merged.set(id, entry);
-    onChange({ entries: [...merged.values()], loading: reported.size < queries.length && !error, error });
+    const meta = new Map<string, CalendarEntryMeta>();
+    for (const [name, part] of parts) {
+      for (const [id, entry] of part) merged.set(id, entry);
+      for (const [id, m] of metas.get(name) || []) meta.set(id, { ...m, pending: m.pending || Boolean(meta.get(id)?.pending) });
+    }
+    onChange({ entries: [...merged.values()], loading: reported.size < queries.length && !error, error, meta });
   };
   const unsubs = queries.map(([name, q]) =>
     onSnapshot(
       q,
+      { includeMetadataChanges: true },
       (snap) => {
         const part = new Map<string, CalendarEntry>();
+        const partMeta = new Map<string, CalendarEntryMeta>();
         for (const d of snap.docs) {
           const entry = core.normalizeEntry(d.id, d.data());
-          if (entry) part.set(d.id, entry);
+          if (!entry) continue;
+          part.set(d.id, entry);
+          partMeta.set(d.id, metaOf(d.data() as DocumentData, d.metadata.hasPendingWrites));
         }
         parts.set(name, part);
+        metas.set(name, partMeta);
         reported.add(name);
         emit();
       },
       (err) => {
         error = String(err?.code || err?.message || "error");
         parts.delete(name);
+        metas.delete(name);
         reported.add(name);
         emit();
       },
@@ -178,8 +217,14 @@ export function sharingFields(ownerUid: string, draft: CalendarDraft) {
   return { visibility: s.visibility, accessUids: s.accessUids, editorUids: s.editorUids, workspaceRole: s.workspaceRole };
 }
 
-export async function createCalendarEntry(companyId: string, uid: string, draft: CalendarDraft): Promise<string> {
-  const ref = doc(entriesCol(companyId));
+/** The id a new entry will have, chosen when its form opens: saving it twice, reopening the form or reloading the
+ *  page writes the same row again (refused as an update at version 1), never a second entry. */
+export function newCalendarEntryId(companyId: string): string {
+  return doc(entriesCol(companyId)).id;
+}
+
+export async function createCalendarEntry(companyId: string, uid: string, draft: CalendarDraft, entryId: string): Promise<string> {
+  const ref = doc(entriesCol(companyId), entryId);
   const recurrence = draft.recurrence ? core.normalizeRecurrence(draft.recurrence) : null;
   await setDoc(ref, {
     companyId,
@@ -462,4 +507,12 @@ export async function markCalendarInboxRead(companyId: string, rowId: string): P
 
 export async function removeCalendarInboxRow(companyId: string, rowId: string): Promise<void> {
   await deleteDoc(doc(db, "companies", companyId, "calendarInbox", rowId));
+}
+
+// ---------------------------------------------------------------- a former member's workspace entries (owner only)
+
+/** Archive, or hand to an active member, an entry shared with the whole workspace whose owner has left. The server
+ *  (calendarFormerMemberEntry) checks everything: business owner, workspace visibility, the owner gone, the target. */
+export async function manageFormerMemberEntry(companyId: string, entryId: string, action: "archive" | "transfer", toUid: string | null = null): Promise<void> {
+  await httpsCallable(functions, "calendarFormerMemberEntry")({ companyId, entryId, action, toUid });
 }

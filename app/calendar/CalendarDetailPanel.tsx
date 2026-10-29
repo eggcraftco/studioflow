@@ -7,7 +7,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import * as core from "@/lib/studioflow/calendarCore";
 import type { CalendarItem } from "@/lib/studioflow/calendarView";
-import type { CalendarReminderRow } from "@/lib/studioflow/calendarData";
+import type { CalendarEntryMeta, CalendarReminderRow } from "@/lib/studioflow/calendarData";
 import type { NoteWorkspaceMember } from "@/lib/studioflow/noteSharing";
 import { TYPE_META, TASK_STATE_META, dayLabel, dateTimeLabel, timeLabel } from "./calendarUi";
 import { weekdayShort } from "./CalendarEntryForm";
@@ -27,16 +27,27 @@ type Props = {
   onDelete: (scope: "single" | "only" | "following") => Promise<void>;
   onStatus: (status: core.CalendarTaskStatus) => Promise<void>;
   onReminder: (offsetMinutes: number | null, allDayTime: string) => Promise<void>;
+  /** Server-written state of the row (archive / hand-over) and whether it is still only on this device. */
+  meta?: CalendarEntryMeta | null;
+  /** The entry is shared with the whole workspace and its maker has left. */
+  formerOwner?: boolean;
+  /** The business owner: may archive or hand over such an entry (the server checks it again). */
+  canManageFormer?: boolean;
+  transferTargets?: { uid: string; label: string }[];
+  onManageFormer?: (action: "archive" | "transfer", toUid: string | null) => Promise<void>;
 };
 
 const OFFSETS: [string, string][] = [["", "Off"], ["0", "At the time"], ["15", "15 minutes before"], ["60", "1 hour before"], ["1440", "1 day before"]];
 
-export function CalendarDetailPanel({ item, uid, access, members, orderTitles, reminder, locale, timeZone, t, onClose, onEdit, onDelete, onStatus, onReminder }: Props) {
+export function CalendarDetailPanel({ item, uid, access, members, orderTitles, reminder, locale, timeZone, t, onClose, onEdit, onDelete, onStatus, onReminder, meta: rowMeta = null, formerOwner = false, canManageFormer = false, transferTargets = [], onManageFormer }: Props) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [reminderTime, setReminderTime] = useState(reminder?.allDayTime || core.DEFAULT_ALL_DAY_REMINDER_TIME);
   const closeButton = useRef<HTMLButtonElement | null>(null);
+  const [handTo, setHandTo] = useState("");
+  // An archived entry is read-only for everybody (rules); only the business owner may hand it over.
+  const archived = Boolean(rowMeta?.archived);
   // Keyboard: the panel takes the focus when an item opens, so Escape closes it from where the person is.
   useEffect(() => { closeButton.current?.focus(); }, [item.id]);
   useEffect(() => {
@@ -50,7 +61,7 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
   const nameOf = (memberUid: string | null) => {
     if (!memberUid) return "";
     const m = members.find((x) => x.uid === memberUid);
-    return m ? m.name || m.email || memberUid : memberUid === uid ? "—" : t("Nobody");
+    return m ? m.name || m.email || memberUid : memberUid === uid ? "—" : members.length ? t("a former member") : "";
   };
 
   async function run(label: string, action: () => Promise<void>) {
@@ -107,9 +118,9 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
       ) : null}
       {occ?.moved ? <p className="muted-copy">{t("Moved from {date}").replace("{date}", dayLabel(occ.occurrenceKey, locale))}</p> : null}
       {occ?.type === "task" && occ.status === "done" && occ.completedAtMs ? (
-        <p className="muted-copy">{t("Completed {date}").replace("{date}", dateTimeLabel(occ.completedAtMs, locale))} · {t("Planned for {date}").replace("{date}", dayLabel(occ.dateKey, locale))}</p>
+        <p className="muted-copy">{t("Completed {date}").replace("{date}", dateTimeLabel(occ.completedAtMs, locale, timeZone))} · {t("Planned for {date}").replace("{date}", dayLabel(occ.dateKey, locale))}</p>
       ) : null}
-      {writtenLater ? <p className="cal-notice">{t("Written later, on {date}").replace("{date}", dateTimeLabel(entry!.createdAtMs, locale))}</p> : null}
+      {writtenLater ? <p className="cal-notice">{t("Written later, on {date}").replace("{date}", dateTimeLabel(entry!.createdAtMs, locale, timeZone))}</p> : null}
       {occ?.description ? <p className="cal-detail-text">{occ.description}</p> : null}
       {occ?.location ? <p><strong>{t("Location")}:</strong> {occ.location}</p> : null}
       {occ?.meetingUrl && /^https?:\/\//i.test(occ.meetingUrl) ? <p><strong>{t("Meeting link")}:</strong> <a href={occ.meetingUrl} target="_blank" rel="noreferrer noopener">{occ.meetingUrl}</a></p> : null}
@@ -142,7 +153,7 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
 
       {entry && occ ? (
         <>
-          {access.setStatus && item.kind === "task" ? (
+          {access.setStatus && item.kind === "task" && !archived ? (
             <div className="cal-actions">
               {occ.status !== "done" ? <button type="button" className="button" disabled={Boolean(busy)} onClick={() => run("done", () => onStatus("done"))}>☑ {t("Mark done")}</button> : null}
               {occ.status !== "open" ? <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={() => run("open", () => onStatus("open"))}>{t("Reopen")}</button> : null}
@@ -150,7 +161,7 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
             </div>
           ) : null}
 
-          <div className="cal-detail-block">
+          {!archived ? <div className="cal-detail-block">
             <label className="cal-field">
               <span>{t("Reminder")}</span>
               <select className="input" value={reminder ? String(reminder.offsetMinutes) : ""} disabled={Boolean(busy)} onChange={(e) => {
@@ -169,16 +180,35 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
               </label>
             ) : null}
             <small className="muted-copy">{t("Your reminder is only for you. It shows in your notifications inside NivaDesk.")}</small>
-          </div>
+          </div> : null}
 
           <p className="muted-copy cal-audit">
-            {t("Created by {name} · {date}").replace("{name}", nameOf(entry.createdByUid)).replace("{date}", dateTimeLabel(entry.createdAtMs, locale))}
-            {entry.updatedAtMs && entry.version > 1 && entry.updatedByUid ? <><br />{t("Last changed by {name} · {date}").replace("{name}", nameOf(entry.updatedByUid)).replace("{date}", dateTimeLabel(entry.updatedAtMs, locale))}</> : null}
+            {t("Created by {name} · {date}").replace("{name}", nameOf(entry.createdByUid)).replace("{date}", dateTimeLabel(entry.createdAtMs, locale, timeZone))}
+            {entry.updatedAtMs && entry.version > 1 && entry.updatedByUid ? <><br />{t("Last changed by {name} · {date}").replace("{name}", nameOf(entry.updatedByUid)).replace("{date}", dateTimeLabel(entry.updatedAtMs, locale, timeZone))}</> : null}
+            {rowMeta?.transferredFromUid ? <><br />{t("Handed over from {from} by {by} on {date}").replace("{from}", nameOf(rowMeta.transferredFromUid)).replace("{by}", nameOf(rowMeta.transferredByUid)).replace("{date}", dateTimeLabel(rowMeta.transferredAtMs, locale, timeZone))}</> : null}
+            {archived ? <><br />{t("Archived by {name} on {date}").replace("{name}", nameOf(entry.updatedByUid)).replace("{date}", dateTimeLabel(rowMeta?.archivedAtMs ?? null, locale, timeZone))}</> : null}
           </p>
+          {rowMeta?.pending ? <p className="muted-copy" role="status">⏳ {t("Not synced yet — only on this device until the connection is back.")}</p> : null}
+
+          {formerOwner || archived ? (
+            <div className="cal-confirm">
+              <p>{archived ? t("Archived: made by someone who has left the workspace.") : t("Made by someone who has left the workspace.")}</p>
+              {canManageFormer && onManageFormer ? (
+                <div className="cal-actions">
+                  {!archived ? <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={() => run("archive", () => onManageFormer("archive", null))}>🗄 {t("Archive")}</button> : null}
+                  <select className="input" aria-label={t("Hand over to")} value={handTo} onChange={(e) => setHandTo(e.target.value)}>
+                    <option value="">{t("Hand over to")}</option>
+                    {transferTargets.map((m) => <option key={m.uid} value={m.uid}>{m.label}</option>)}
+                  </select>
+                  <button type="button" className="button secondary" disabled={Boolean(busy) || !handTo} onClick={() => run("transfer", () => onManageFormer("transfer", handTo))}>{t("Hand over")}</button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="cal-actions">
-            {access.edit ? <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={onEdit}>{t("Edit")}</button> : null}
-            {access.remove && !confirmDelete ? <button type="button" className="button danger secondary" disabled={Boolean(busy)} onClick={() => setConfirmDelete(true)}>{t("Delete")}</button> : null}
+            {access.edit && !archived ? <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={onEdit}>{t("Edit")}</button> : null}
+            {access.remove && !archived && !confirmDelete ? <button type="button" className="button danger secondary" disabled={Boolean(busy)} onClick={() => setConfirmDelete(true)}>{t("Delete")}</button> : null}
           </div>
           {confirmDelete ? (
             <div className="cal-confirm" role="alertdialog" aria-label={t("Delete")}>

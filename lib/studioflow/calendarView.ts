@@ -76,9 +76,26 @@ export type BuildInput = {
 export function buildCalendarItems(input: BuildInput): CalendarItem[] {
   const { uid, fromKey, toKey, viewerTimeZone, todayKey } = input;
   const items: CalendarItem[] = [];
-  // Expand wider than the range: a timed entry in another zone may land a day either side, and a task
-  // planned up to MAX_SPAN_DAYS earlier (the window calendarData reads) may have been ticked done inside it.
-  for (const occ of core.expandEntries(input.entries, core.addDays(fromKey, -(core.MAX_SPAN_DAYS + 2)), core.addDays(toKey, 2))) {
+  const expandFrom = core.addDays(fromKey, -(core.MAX_SPAN_DAYS + 2));
+  const occurrences = core.expandEntries(input.entries, expandFrom, core.addDays(toKey, 2));
+  // A task done inside the range whose planned day is older than the expanded window (calendarData finds it by
+  // `completedAt`, however long ago it was planned): that one occurrence, shown on the day it was done.
+  const expanded = new Set(occurrences.map((o) => o.occurrenceId));
+  for (const entry of input.entries) {
+    if (entry.type !== "task") continue;
+    const keys = entry.rowType === "series"
+      ? Object.entries(entry.occurrenceStatus).filter(([key, st]) => key < expandFrom && st.status === "done" && st.completedAtMs).map(([key]) => key)
+      : entry.endDateKey < expandFrom && entry.status === "done" && entry.completedAtMs ? [entry.dateKey] : [];
+    for (const key of keys) {
+      const occ = core.occurrenceAt(entry, key);
+      if (occ && !expanded.has(occ.occurrenceId)) {
+        occurrences.push(occ);
+        expanded.add(occ.occurrenceId);
+      }
+    }
+  }
+  // Expand wider than the range: a timed entry in another zone may land a day either side.
+  for (const occ of occurrences) {
     const entry = input.entries.find((e) => e.id === occ.entryId) || null;
     if (!entry) continue;
     const days = core.occurrenceDays(occ, viewerTimeZone).filter((d) => d >= fromKey && d <= toKey);

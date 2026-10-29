@@ -51,6 +51,30 @@ check("cancelled task is never late", cancelled[0]?.taskState === "cancelled");
 const doneOutside = v.buildCalendarItems({ entries: [task], orders: [], notes: [], uid: "me", fromKey: "2026-10-26", toKey: "2026-11-01", viewerTimeZone: "Europe/London", todayKey: "2026-10-28" });
 check("a range holding only the completion day still finds the task", doneOutside.length === 1 && doneOutside[0].days.length === 0 && doneOutside[0].completedDay === "2026-10-28");
 
+// Run 3: no 64-day limit. Tasks planned 65, 180 and 400 days before today, done today, show today; planned day kept.
+const today = "2026-10-29";
+const doneToday = Date.parse("2026-10-29T10:00:00Z");
+// Day view (today only): the old 64-day window was counted from the range start, so this is where 65 days fell out.
+const week = (entries: core.CalendarEntry[]) => v.buildCalendarItems({ entries, orders: [], notes: [], uid: "me", fromKey: today, toKey: today, viewerTimeZone: "Europe/London", todayKey: today });
+for (const back of [65, 180, 400]) {
+  const planned = core.addDays(today, -back);
+  const old = E(`old${back}`, { type: "task", title: `Planned ${back} days ago`, dateKey: planned, status: "done", completedAt: doneToday, completedByUid: "me" });
+  const got = week([old]);
+  const rows = v.itemsByDay(got, today, today).get(today) || [];
+  check(`task planned ${back} days ago, done today: listed today as a completion`, got.length === 1 && rows.length === 1 && rows[0].asCompletion && rows[0].item.occurrence?.dateKey === planned, JSON.stringify(got.map((i) => [i.days, i.completedDay])));
+  const reopened = E(`old${back}r`, { type: "task", title: "Reopened", dateKey: planned, status: "open" });
+  check(`task planned ${back} days ago, reopened: not listed today`, week([reopened]).length === 0);
+}
+const oldDaily = E("od", { rowType: "series", type: "task", title: "Daily check", dateKey: "2025-09-01", recurrence: { freq: "daily" },
+  occurrenceStatus: { "2025-09-24": { status: "done", completedAt: doneToday, completedByUid: "me" }, "2026-04-29": { status: "open", completedAt: null, completedByUid: null } } });
+const odItems = week([oldDaily]);
+const odDone = odItems.filter((i) => i.completedDay === today);
+check("series occurrence planned 400 days ago, done today: that one listed today", odDone.length === 1 && odDone[0].occurrence?.occurrenceKey === "2025-09-24", JSON.stringify(odDone.map((i) => i.occurrence?.occurrenceKey)));
+check("series: the reopened old occurrence is not listed, today's is", !odItems.some((i) => i.occurrence?.occurrenceKey === "2026-04-29") && odItems.filter((i) => i.days.length).length === 1, String(odItems.length));
+const cancelledOld = E("co", { rowType: "series", type: "task", title: "Weekly", dateKey: "2025-09-02", recurrence: { freq: "weekly", byWeekday: [2] },
+  exceptions: { "2025-09-23": { cancelled: true } }, occurrenceStatus: { "2025-09-23": { status: "done", completedAt: doneToday, completedByUid: "me" } } });
+check("series: a cancelled old occurrence is never shown as done", !week([cancelledOld]).some((i) => i.completedDay === today));
+
 // Repeating task: completing one occurrence leaves the others open.
 const daily = E("d1", { rowType: "series", type: "task", title: "Water", dateKey: "2026-10-26", recurrence: { freq: "daily", count: 5 }, occurrenceStatus: { "2026-10-27": { status: "done", completedAt: Date.parse("2026-10-27T09:00:00Z"), completedByUid: "me" } } });
 items = build({ entries: [daily] });

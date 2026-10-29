@@ -6,6 +6,9 @@
 // days), the due dates of orders they can already open, and their own note reminders.
 // Day / Week / Month / Agenda, the last choice remembered per person on this browser. Only the range on
 // screen is read. Filters hide; they never grant (the rules decide who reads what).
+// Run 3 (29 Oct): a write without a connection never leaves the form on "Saving…" (calendarOutbox), tasks done in
+// the range show however long ago they were planned, and the business owner can archive or hand over a workspace
+// entry whose maker has left (checked by the server).
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
@@ -20,6 +23,8 @@ import * as core from "@/lib/studioflow/calendarCore";
 import {
   createCalendarEntry,
   deleteCalendarEntry,
+  manageFormerMemberEntry,
+  newCalendarEntryId,
   deleteOnlyThisOccurrence,
   deleteThisAndFollowing,
   listenToCalendarRange,
@@ -30,8 +35,20 @@ import {
   saveThisAndFollowing,
   setCalendarTaskStatus,
   type CalendarDraft,
+  type CalendarEntryMeta,
+  type CalendarRangeState,
   type CalendarReminderRow,
 } from "@/lib/studioflow/calendarData";
+import {
+  calendarOutboxItems,
+  dropCalendarOutboxItem,
+  onCalendarOutbox,
+  outboxKey,
+  settleEarlierCalendarWrites,
+  trackCalendarWrite,
+  type CalendarOutboxItem,
+  type CalendarOutboxKind,
+} from "@/lib/studioflow/calendarOutbox";
 import {
   DEFAULT_CALENDAR_FILTERS,
   applyCalendarFilters,
@@ -57,6 +74,20 @@ import { TASK_STATE_META, TYPE_META, dayLabel, iconFor, timeLabel } from "./cale
 const VIEW_KEY = (uid: string) => `nivadesk.calendar.view.v1.${uid}`;
 const SEARCH_SPAN_DAYS = 180;
 const KINDS: CalendarItemKind[] = ["event", "task", "note", "workday", "unavailable", "orderDue", "noteReminder"];
+
+/** QA only: an emulator build on this computer (localhost + NEXT_PUBLIC_FIREBASE_EMULATOR=1) may show the calendar in
+ *  another zone (`localStorage["nivadesk.qa.timeZone"]`) so a screen check needs no change to the computer's settings.
+ *  A production build has no emulator flag: the branch is compiled out and the device zone is always used. */
+function qaTimeZone(): string | null {
+  if (process.env.NEXT_PUBLIC_FIREBASE_EMULATOR !== "1" || typeof window === "undefined") return null;
+  if (!["localhost", "127.0.0.1"].includes(window.location.hostname)) return null;
+  try {
+    const zone = window.localStorage.getItem("nivadesk.qa.timeZone");
+    return zone && core.isTimeZone(zone) ? zone : null;
+  } catch {
+    return null;
+  }
+}
 
 function readView(uid: string): CalendarViewMode | null {
   try {
@@ -100,6 +131,16 @@ function emptyDraft(dateKey: string, timeZone: string, type: core.CalendarEntryT
   };
 }
 
+/** What a write that did not go through says (the form, the toasts and the list of drafts use the same words). */
+function failedText(code: string | null, t: (text: string) => string): string {
+  if (code === "conflict") return t("Someone else changed this entry while you were editing. Your changes were not saved; reopen it and try again.");
+  if (code === "gone" || code === "permission-denied") return t("Not saved: you no longer have access to this. Your text is kept.");
+  if (code === "unavailable" || code === "failed-precondition" || code === "deadline-exceeded") return t("Not saved: there was no connection. Your text is kept — try again.");
+  return t("Not saved. Nothing was changed — try again.");
+}
+
+type CalendarFormState = { open: boolean; mode: CalendarFormMode; initial: CalendarDraft; entryId: string | null; notice: string };
+
 function draftFromOccurrence(entry: core.CalendarEntry, occ: core.CalendarOccurrence | null): CalendarDraft {
   const source = occ || core.occurrenceAt(entry, entry.dateKey);
   return {
@@ -130,7 +171,7 @@ export default function CalendarPage() {
   const { user, loading: authLoading, language } = useAuth();
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const locale = studioLocaleTag(language);
-  const viewerTz = useMemo(() => core.deviceTimeZone(), []);
+  const viewerTz = useMemo(() => qaTimeZone() || core.deviceTimeZone(), []);
   const [todayKey, setTodayKey] = useState(() => localDayKey(new Date()));
 
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
@@ -148,10 +189,17 @@ export default function CalendarPage() {
   const [filters, setFilters] = useState<CalendarFilters>(DEFAULT_CALENDAR_FILTERS);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const [rangeState, setRangeState] = useState<{ entries: core.CalendarEntry[]; loading: boolean; error: string | null }>({ entries: [], loading: true, error: null });
+  const [rangeState, setRangeState] = useState<CalendarRangeState>({ entries: [], loading: true, error: null, meta: new Map() });
   const [reloadTick, setReloadTick] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [form, setForm] = useState<{ open: boolean; mode: CalendarFormMode; initial: CalendarDraft }>({ open: false, mode: { kind: "create" }, initial: emptyDraft(todayKey, viewerTz) });
+  const [form, setForm] = useState<CalendarFormState>({ open: false, mode: { kind: "create" }, initial: emptyDraft(todayKey, viewerTz), entryId: null, notice: "" });
+  // The open form's write while it waits for the server (its outbox key), and what came back after the wait.
+  const formKey = useRef<string | null>(null);
+  const [formPending, setFormPending] = useState(false);
+  const [formRemoteError, setFormRemoteError] = useState("");
+  const [outbox, setOutbox] = useState<CalendarOutboxItem[]>([]);
+  const [online, setOnline] = useState(true);
+  const [showArchived, setShowArchived] = useState(false);
   const pendingOpen = useRef<{ entryId: string; dateKey: string } | null>(null);
   // Keyboard: whatever opened the form or the detail panel gets the focus back when it closes.
   const formOpener = useRef<HTMLElement | null>(null);
@@ -236,6 +284,46 @@ export default function CalendarPage() {
     return listenToMyCalendarReminders(workspace.id, user.uid, setReminders);
   }, [workspace, user]);
 
+  useEffect(() => {
+    const update = () => setOnline(typeof navigator === "undefined" ? true : navigator.onLine);
+    update();
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+  }, []);
+
+  // Writes not confirmed yet (this page or an earlier one): their answer is announced when it comes; a refused one
+  // keeps its text in the list above the calendar.
+  useEffect(() => {
+    if (!workspace || !user) return;
+    const companyId = workspace.id;
+    const me = user.uid;
+    const refresh = () => setOutbox(calendarOutboxItems(companyId, me));
+    refresh();
+    const stopSettle = settleEarlierCalendarWrites(companyId, me);
+    const stop = onCalendarOutbox((event) => {
+      refresh();
+      const item = event.item;
+      if (!item || item.companyId !== companyId || item.uid !== me || event.type === "changed") return;
+      const title = item.title || t("Untitled entry");
+      if (item.key === formKey.current) {
+        setFormPending(false);
+        if (event.type === "saved") setForm((f) => ({ ...f, open: false }));
+        else setFormRemoteError(failedText(item.errorCode, t));
+      }
+      dispatchStudioToast({ message: event.type === "saved"
+        ? t("Saved after the connection came back: {title}").replace("{title}", title)
+        : `${failedText(item.errorCode, t)} ${item.draft ? t("Not saved: {title}. Your text is kept — open it from the list above the calendar.").replace("{title}", title) : ""}`.trim() });
+    });
+    return () => {
+      stop();
+      stopSettle();
+    };
+  }, [workspace, user, t]);
+
   const searching = searchText.trim().length > 0;
   const range = useMemo(() => (searching ? { fromKey: searchFrom <= searchTo ? searchFrom : searchTo, toKey: searchFrom <= searchTo ? searchTo : searchFrom } : rangeFor(view, anchor)), [searching, searchFrom, searchTo, view, anchor]);
 
@@ -247,8 +335,10 @@ export default function CalendarPage() {
 
   const items = useMemo(() => {
     if (!user) return [];
-    return buildCalendarItems({ entries: rangeState.entries, orders, notes, uid: user.uid, fromKey: range.fromKey, toKey: range.toKey, viewerTimeZone: viewerTz, todayKey });
-  }, [rangeState.entries, orders, notes, user, range.fromKey, range.toKey, viewerTz, todayKey]);
+    // An archived entry (a former member's, archived by the business owner) shows only when asked for.
+    const entries = rangeState.entries.filter((e) => showArchived || !rangeState.meta.get(e.id)?.archived);
+    return buildCalendarItems({ entries, orders, notes, uid: user.uid, fromKey: range.fromKey, toKey: range.toKey, viewerTimeZone: viewerTz, todayKey });
+  }, [rangeState.entries, rangeState.meta, showArchived, orders, notes, user, range.fromKey, range.toKey, viewerTz, todayKey]);
   const shown = useMemo(() => searchCalendarItems(applyCalendarFilters(items, filters), searchText), [items, filters, searchText]);
   const byDay = useMemo(() => itemsByDay(shown, range.fromKey, range.toKey), [shown, range.fromKey, range.toKey]);
   const selected = useMemo(() => items.find((i) => i.id === selectedId) || null, [items, selectedId]);
@@ -274,6 +364,15 @@ export default function CalendarPage() {
   const uid = user.uid;
   const memberCtx: core.CalendarMember | null = workspace ? { role: normalizeWorkspaceRole(workspace.role), isWorkspaceOwner: workspace.ownerUid === uid || workspace.id === uid } : null;
   const canPublishWorkspace = Boolean(memberCtx && (memberCtx.isWorkspaceOwner || ["owner", "admin", "member"].includes(memberCtx.role)));
+  const isBusinessOwner = Boolean(memberCtx?.isWorkspaceOwner);
+  // A maker who is neither the business owner nor in the member list has left (shown only once the list is loaded;
+  // the server checks it again before anything changes).
+  const formerMember = (ownerUid: string) => members.length > 0 && ownerUid !== workspace?.ownerUid && ownerUid !== workspace?.id && !members.some((m) => m.uid === ownerUid);
+  const transferTargets = members.filter((m) => !m.suspended && (m.isOwner || ["owner", "admin", "member"].includes(normalizeWorkspaceRole(m.role))))
+    .map((m) => ({ uid: m.uid, label: m.name || m.email || m.uid }));
+  const hasArchived = [...rangeState.meta.values()].some((m) => m.archived);
+  const pendingCount = outbox.filter((i) => i.state === "pending").length;
+  const failedDrafts = outbox.filter((i) => i.state === "failed" && i.draft);
   const accessOf = (item: CalendarItem) => (item.entry ? core.entryAccess(item.entry, uid, memberCtx) : { read: true, edit: false, remove: false, share: false, setStatus: false });
 
   function changeView(next: CalendarViewMode) {
@@ -294,12 +393,46 @@ export default function CalendarPage() {
 
   function closeForm() {
     setForm((f) => ({ ...f, open: false }));
+    formKey.current = null;
+    setFormPending(false);
     restoreFocus(formOpener);
   }
 
+  function showForm(next: CalendarFormState) {
+    setFormPending(false);
+    setFormRemoteError("");
+    formKey.current = next.mode.kind === "create" ? outboxKey("create", next.entryId as string) : outboxKey("edit", next.mode.entry.id, next.mode.occurrenceKey);
+    setForm(next);
+  }
+
   function openCreate(dateKey: string, type: core.CalendarEntryType = "event", startTime: string | null = null) {
+    if (!workspace) return;
     formOpener.current = focusedElement();
-    setForm({ open: true, mode: { kind: "create" }, initial: emptyDraft(dateKey, viewerTz, type, startTime) });
+    // The id is chosen now: saving twice or reopening this draft can only ever write this one entry.
+    showForm({ open: true, mode: { kind: "create" }, initial: emptyDraft(dateKey, viewerTz, type, startTime), entryId: newCalendarEntryId(workspace.id), notice: "" });
+  }
+
+  /** A draft whose write was refused (kept in the outbox): back into a form, the same entry id when it was new. */
+  function openDraft(item: CalendarOutboxItem) {
+    if (!workspace || !item.draft) return;
+    formOpener.current = focusedElement();
+    if (item.kind === "create") {
+      showForm({ open: true, mode: { kind: "create" }, initial: item.draft, entryId: item.entryId, notice: "" });
+      return;
+    }
+    const entry = rangeState.entries.find((e) => e.id === item.entryId);
+    if (entry) {
+      const access = core.entryAccess(entry, uid, memberCtx);
+      if (access.edit) {
+        dropCalendarOutboxItem(item.key);
+        showForm({ open: true, mode: { kind: "edit", entry, occurrenceKey: item.occurrenceKey, canShare: access.share }, initial: item.draft, entryId: null, notice: "" });
+        return;
+      }
+    }
+    // The entry is gone or no longer editable: the text becomes a new entry of the person's own.
+    dropCalendarOutboxItem(item.key);
+    showForm({ open: true, mode: { kind: "create" }, initial: { ...item.draft, visibility: "private", viewerUids: [], editorUids: [], workspaceRole: "view", recurrence: null },
+      entryId: newCalendarEntryId(workspace.id), notice: t("The original entry is no longer available to you. Saving makes a new entry of your own.") });
   }
 
   function openEdit(item: CalendarItem) {
@@ -307,34 +440,62 @@ export default function CalendarPage() {
     const access = accessOf(item);
     const occurrenceKey = item.entry.rowType === "series" ? item.occurrence.occurrenceKey : null;
     formOpener.current = focusedElement();
-    setForm({ open: true, mode: { kind: "edit", entry: item.entry, occurrenceKey, canShare: access.share }, initial: draftFromOccurrence(item.entry, item.occurrence) });
+    showForm({ open: true, mode: { kind: "edit", entry: item.entry, occurrenceKey, canShare: access.share }, initial: draftFromOccurrence(item.entry, item.occurrence), entryId: null, notice: "" });
   }
 
-  async function save(draft: CalendarDraft, scope: CalendarSeriesScope | null) {
-    if (!workspace) return;
+  async function save(draft: CalendarDraft, scope: CalendarSeriesScope | null): Promise<"done" | "pending"> {
+    if (!workspace) return "done";
+    const companyId = workspace.id;
     const mode = form.mode;
+    let write: Promise<unknown>;
+    let kind: CalendarOutboxKind = "edit";
+    let entryId: string;
+    let occurrenceKey: string | null = null;
     if (mode.kind === "create") {
-      await createCalendarEntry(workspace.id, uid, draft);
-    } else if (mode.entry.rowType === "series" && mode.occurrenceKey && scope === "only") {
-      await saveOnlyThisOccurrence(workspace.id, uid, mode.entry, mode.occurrenceKey, draft);
-    } else if (mode.entry.rowType === "series" && mode.occurrenceKey && scope === "following") {
-      await saveThisAndFollowing(workspace.id, uid, mode.entry, mode.occurrenceKey, draft);
+      kind = "create";
+      entryId = form.entryId || newCalendarEntryId(companyId);
+      write = createCalendarEntry(companyId, uid, draft, entryId);
     } else {
-      await saveCalendarEntryEdits(workspace.id, uid, mode.entry, draft, mode.canShare);
+      entryId = mode.entry.id;
+      occurrenceKey = mode.occurrenceKey;
+      if (mode.entry.rowType === "series" && mode.occurrenceKey && scope === "only") write = saveOnlyThisOccurrence(companyId, uid, mode.entry, mode.occurrenceKey, draft);
+      else if (mode.entry.rowType === "series" && mode.occurrenceKey && scope === "following") write = saveThisAndFollowing(companyId, uid, mode.entry, mode.occurrenceKey, draft);
+      else write = saveCalendarEntryEdits(companyId, uid, mode.entry, draft, mode.canShare);
     }
-    closeForm();
-    dispatchStudioToast({ message: t("Entry saved") });
+    const title = draft.title.trim() || core.autoNoteTitle(draft.description);
+    const result = await trackCalendarWrite({ companyId, uid, kind, entryId, title, draft, occurrenceKey }, write);
+    if (result === "done") {
+      closeForm();
+      dispatchStudioToast({ message: t("Entry saved") });
+    } else {
+      setFormPending(true);
+    }
+    return result;
+  }
+
+  // Any other write from the detail panel: it never hangs there either; the answer is announced if it is late.
+  async function tracked(kind: CalendarOutboxKind, entry: core.CalendarEntry, occurrenceKey: string | null, write: Promise<unknown>, doneMessage: string) {
+    if (!workspace) return;
+    const result = await trackCalendarWrite({ companyId: workspace.id, uid, kind, entryId: entry.id, title: entry.title, draft: null, occurrenceKey }, write);
+    dispatchStudioToast({ message: result === "done" ? doneMessage : t("Not confirmed yet — no connection. You'll be told when it is.") });
   }
 
   async function removeSelected(scope: "single" | "only" | "following") {
     if (!workspace || !selected?.entry || !selected.occurrence) return;
     const entry = selected.entry;
     const key = selected.occurrence.occurrenceKey;
-    if (scope === "only") await deleteOnlyThisOccurrence(workspace.id, uid, entry, key);
-    else if (scope === "following") await deleteThisAndFollowing(workspace.id, uid, entry, key);
-    else await deleteCalendarEntry(workspace.id, entry.id);
+    const write = scope === "only" ? deleteOnlyThisOccurrence(workspace.id, uid, entry, key)
+      : scope === "following" ? deleteThisAndFollowing(workspace.id, uid, entry, key)
+        : deleteCalendarEntry(workspace.id, entry.id);
+    await tracked(scope === "single" ? "delete" : "edit", entry, scope === "single" ? null : key, write, t("Entry deleted"));
     setSelectedId(null);
-    dispatchStudioToast({ message: t("Entry deleted") });
+  }
+
+  async function manageFormer(entry: core.CalendarEntry, action: "archive" | "transfer", toUid: string | null) {
+    if (!workspace) return;
+    await manageFormerMemberEntry(workspace.id, entry.id, action, toUid);
+    dispatchStudioToast({ message: action === "archive" ? t("Entry archived") : t("Entry handed over") });
+    if (action === "archive" && !showArchived) setSelectedId(null);
   }
 
   const periodLabel = (() => {
@@ -349,26 +510,36 @@ export default function CalendarPage() {
   // three starters show. Nothing is ever written for the person.
   const noEntries = !rangeState.loading && !loadFailed && !items.some((i) => i.entry);
 
+  // The planned day of a task shown on the day it was done: with the year when that was another year.
+  function plannedLabel(item: CalendarItem): string {
+    const planned = item.occurrence?.dateKey || "";
+    const withYear = planned.slice(0, 4) !== (item.completedDay || todayKey).slice(0, 4);
+    return dayLabel(planned, locale, withYear ? { weekday: "short", day: "numeric", month: "short", year: "numeric" } : undefined);
+  }
+
   function chip(row: { item: CalendarItem; asCompletion: boolean }, compact = false, spokenCompletion = true) {
     const { item, asCompletion } = row;
     const meta = TYPE_META[item.kind];
-    const time = !item.allDay && item.startMs !== null ? timeLabel(item.startMs, locale) : "";
+    const time = !item.allDay && item.startMs !== null ? timeLabel(item.startMs, locale, viewerTz) : "";
     const state = item.taskState;
     const stateText = state && state !== "open" ? t(TASK_STATE_META[state].label) : "";
     const label = [time, item.title || t(meta.label)].filter(Boolean).join(" ");
-    const completionNote = asCompletion && item.occurrence ? ` · ${t("Done on this day · planned for {date}").replace("{date}", dayLabel(item.occurrence.dateKey, locale))}` : "";
+    const completionNote = asCompletion && item.occurrence ? ` · ${t("Done on this day · planned for {date}").replace("{date}", plannedLabel(item))}` : "";
+    const rowMeta = item.entry ? rangeState.meta.get(item.entry.id) : undefined;
+    const marks = `${rowMeta?.pending ? " ⏳" : ""}${rowMeta?.archived ? " 🗄" : ""}`;
+    const metaNote = `${rowMeta?.pending ? ` · ${t("Not synced yet — only on this device until the connection is back.")}` : ""}${rowMeta?.archived ? ` · ${t("Archived: made by someone who has left the workspace.")}` : ""}`;
     return (
       <button
         key={`${item.id}${asCompletion ? ":done" : ""}`}
         type="button"
         className={`cal-chip cal-tone-${meta.tone}${state ? ` cal-state-${state}` : ""}${asCompletion ? " is-completion" : ""}${selectedId === item.id ? " is-selected" : ""}`}
         onClick={(e) => { e.stopPropagation(); detailOpener.current = e.currentTarget; setSelectedId(item.id); }}
-        title={`${t(meta.label)}${stateText ? ` · ${stateText}` : ""} · ${label}${completionNote}`}
+        title={`${t(meta.label)}${stateText ? ` · ${stateText}` : ""} · ${label}${completionNote}${metaNote}`}
       >
         <span className="cal-chip-icon" aria-hidden="true">{iconFor(item.kind, state)}</span>
-        <span className="cal-chip-text">{label}</span>
+        <span className="cal-chip-text">{label}{marks ? <span aria-hidden="true">{marks}</span> : null}</span>
         {!compact && stateText ? <span className="cal-chip-state">{stateText}</span> : null}
-        <span className="visually-hidden-file">{t(meta.label)}{spokenCompletion ? completionNote : ""}</span>
+        <span className="visually-hidden-file">{t(meta.label)}{spokenCompletion ? completionNote : ""}{metaNote}</span>
       </button>
     );
   }
@@ -473,7 +644,14 @@ export default function CalendarPage() {
     return (
       <div className="cal-agenda">
         {!searching ? <button type="button" className="cal-link-button" onClick={() => setAnchor(shiftAnchor("agenda", anchor, -1))}>{t("Show earlier")}</button> : null}
-        {daysWithItems.length === 0 ? <p className="muted-copy">{searching ? t("No entries match your search in these dates.") : t("Nothing on this day.")}</p> : null}
+        {daysWithItems.length === 0 && searching && rangeState.loading ? <p className="muted-copy" role="status">{t("Searching…")}</p> : null}
+        {daysWithItems.length === 0 && !(searching && rangeState.loading) ? (
+          <p className="muted-copy">{searching
+            ? t("Nothing found between {from} and {to}. Change the dates to search further back or ahead.")
+              .replace("{from}", dayLabel(range.fromKey, locale, { day: "numeric", month: "short", year: "numeric" }))
+              .replace("{to}", dayLabel(range.toKey, locale, { day: "numeric", month: "short", year: "numeric" }))
+            : t("Nothing on this day.")}</p>
+        ) : null}
         {daysWithItems.map(([d, rows]) => (
           <section key={d} className={`cal-agenda-day${d === todayKey ? " is-today" : ""}`}>
             <h3>{dayLabel(d, locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</h3>
@@ -482,7 +660,7 @@ export default function CalendarPage() {
                 <li key={`${r.item.id}${r.asCompletion ? ":done" : ""}`} className="cal-agenda-row">
                   {chip(r, false, false)}
                   {r.item.subtitle ? <span className="muted-copy">{r.item.subtitle}</span> : null}
-                  {r.asCompletion && r.item.occurrence ? <span className="muted-copy">{t("Done on this day · planned for {date}").replace("{date}", dayLabel(r.item.occurrence.dateKey, locale))}</span> : null}
+                  {r.asCompletion && r.item.occurrence ? <span className="muted-copy">{t("Done on this day · planned for {date}").replace("{date}", plannedLabel(r.item))}</span> : null}
                 </li>
               ))}
             </ul>
@@ -517,8 +695,8 @@ export default function CalendarPage() {
             <input type="search" className="input cal-search" placeholder={t("Search entries")} aria-label={t("Search entries")} value={searchText} onChange={(e) => setSearchText(e.target.value)} />
             {searching ? (
               <>
-                <label className="cal-inline-field"><span>{t("Search from")}</span><input type="date" className="input" value={searchFrom} onChange={(e) => { if (core.isDateKey(e.target.value)) setSearchFrom(e.target.value); }} /></label>
-                <label className="cal-inline-field"><span>{t("Search until")}</span><input type="date" className="input" value={searchTo} onChange={(e) => { if (core.isDateKey(e.target.value)) setSearchTo(e.target.value); }} /></label>
+                <label className="cal-inline-field"><span>{t("Search from")}</span><input type="date" className="input" aria-label={t("Search from")} value={searchFrom} onChange={(e) => { if (core.isDateKey(e.target.value)) setSearchFrom(e.target.value); }} /></label>
+                <label className="cal-inline-field"><span>{t("Search until")}</span><input type="date" className="input" aria-label={t("Search until")} value={searchTo} onChange={(e) => { if (core.isDateKey(e.target.value)) setSearchTo(e.target.value); }} /></label>
               </>
             ) : null}
             <button type="button" className={`button secondary${filtersActive(filters) ? " is-active" : ""}`} aria-expanded={filtersOpen} onClick={() => setFiltersOpen((v) => !v)}>
@@ -548,6 +726,9 @@ export default function CalendarPage() {
                 <option value="linked">{t("Linked to an order")}</option>
                 <option value="unlinked">{t("Not linked to an order")}</option>
               </select>
+              {isBusinessOwner && (hasArchived || showArchived) ? (
+                <label className="cal-check"><input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> <span>{t("Show archived entries of people who left")}</span></label>
+              ) : null}
               <button type="button" className="cal-link-button" onClick={() => setFilters(DEFAULT_CALENDAR_FILTERS)}>{t("Reset filters")}</button>
               <p className="muted-copy cal-filter-note">{t("Filters only change what you see here. They never change who can see an entry.")}</p>
               {orders.length ? <p className="muted-copy cal-filter-note">{t("Order dates come from your orders and follow your order access.")}</p> : null}
@@ -566,6 +747,15 @@ export default function CalendarPage() {
               </div>
             ) : (
               <>
+                {!online ? <p className="muted-copy cal-loading" role="status">{t("You're offline. Changes stay on this device until the connection is back.")}</p> : null}
+                {pendingCount ? <p className="muted-copy cal-loading" role="status">⏳ {t("Waiting to be confirmed: {count}").replace("{count}", String(pendingCount))}</p> : null}
+                {failedDrafts.map((item) => (
+                  <div key={item.key} className="layout-error" role="alert">
+                    {t("Not saved: {title}").replace("{title}", item.title || t("Untitled entry"))} — {failedText(item.errorCode, t)}{" "}
+                    <button type="button" className="button secondary" onClick={() => openDraft(item)}>{t("Open")}</button>{" "}
+                    <button type="button" className="cal-link-button" onClick={() => dropCalendarOutboxItem(item.key)}>{t("Discard")}</button>
+                  </div>
+                ))}
                 {rangeState.loading ? <p className="muted-copy cal-loading" role="status">{t("Loading calendar…")}</p> : null}
                 {rangeState.error ? (
                   <div className="layout-error" role="alert">{t("The calendar could not be loaded.")} <button type="button" className="button secondary" onClick={() => setReloadTick((n) => n + 1)}>{t("Try again")}</button></div>
@@ -591,13 +781,18 @@ export default function CalendarPage() {
               onDelete={removeSelected}
               onStatus={async (status) => {
                 if (!selected.entry || !selected.occurrence) return;
-                await setCalendarTaskStatus(workspace.id, uid, selected.entry, selected.occurrence.occurrenceKey, status);
+                const key = selected.occurrence.occurrenceKey;
+                await tracked("status", selected.entry, key, setCalendarTaskStatus(workspace.id, uid, selected.entry, key, status), t("Entry saved"));
               }}
               onReminder={async (offset, allDayTime) => {
                 if (!selected.entry) return;
-                await saveMyCalendarReminder(workspace.id, uid, selected.entry.id, offset, allDayTime, viewerTz, reminders.has(selected.entry.id));
-                dispatchStudioToast({ message: t("Reminder saved") });
+                await tracked("reminder", selected.entry, null, saveMyCalendarReminder(workspace.id, uid, selected.entry.id, offset, allDayTime, viewerTz, reminders.has(selected.entry.id)), t("Reminder saved"));
               }}
+              meta={selected.entry ? rangeState.meta.get(selected.entry.id) || null : null}
+              formerOwner={Boolean(selected.entry && selected.entry.visibility === "workspace" && formerMember(selected.entry.ownerUid))}
+              canManageFormer={isBusinessOwner}
+              transferTargets={transferTargets}
+              onManageFormer={(action, toUid) => (selected.entry ? manageFormer(selected.entry, action, toUid) : Promise.resolve())}
             />
           ) : null}
         </div>
@@ -611,6 +806,9 @@ export default function CalendarPage() {
         orders={orders.map((o) => ({ id: o.id, title: o.title }))}
         canPublishWorkspace={canPublishWorkspace}
         t={t}
+        notice={form.notice}
+        pending={formPending}
+        remoteError={formRemoteError}
         onCancel={closeForm}
         onSave={save}
       />

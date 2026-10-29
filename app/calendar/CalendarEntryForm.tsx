@@ -25,8 +25,14 @@ type Props = {
   orders: { id: string; title: string }[];
   canPublishWorkspace: boolean;
   t: (text: string) => string;
+  /** A line shown above the form (e.g. a refused edit reopened as a new entry). */
+  notice?: string;
+  /** The save went out but the server has not answered within a few seconds (no connection). */
+  pending?: boolean;
+  /** The answer that came after the wait, when it was a refusal. */
+  remoteError?: string;
   onCancel: () => void;
-  onSave: (draft: CalendarDraft, scope: CalendarSeriesScope | null) => Promise<void>;
+  onSave: (draft: CalendarDraft, scope: CalendarSeriesScope | null) => Promise<"done" | "pending">;
 };
 
 const ERROR_TEXT: Record<string, string> = {
@@ -53,7 +59,7 @@ export function weekdayShort(n: number, locale: string): string {
   return new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" }).format(date);
 }
 
-export function CalendarEntryForm({ open, mode, initial, uid, members, orders, canPublishWorkspace, t, onCancel, onSave }: Props) {
+export function CalendarEntryForm({ open, mode, initial, uid, members, orders, canPublishWorkspace, t, notice = "", pending = false, remoteError = "", onCancel, onSave }: Props) {
   const [draft, setDraft] = useState<CalendarDraft>(initial);
   const [moreOpen, setMoreOpen] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
@@ -129,7 +135,8 @@ export function CalendarEntryForm({ open, mode, initial, uid, members, orders, c
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (saving) return;
+    // While a save waits for the connection it is not sent again (one write, one answer).
+    if (saving || pending) return;
     const recurrence = draft.recurrence
       ? { ...draft.recurrence, untilKey: repeatEnd === "until" ? draft.recurrence.untilKey : null, count: repeatEnd === "count" ? draft.recurrence.count : null }
       : null;
@@ -146,7 +153,8 @@ export function CalendarEntryForm({ open, mode, initial, uid, members, orders, c
     setSaving(true);
     setSaveError("");
     try {
-      await onSave(toSave, seriesOccurrence ? scope : null);
+      // "pending": the page shows the waiting state; the form may be closed and its text is not lost.
+      if ((await onSave(toSave, seriesOccurrence ? scope : null)) === "pending") setSaving(false);
     } catch (error) {
       const name = (error as Error)?.name;
       setSaveError(name === "CalendarConflictError"
@@ -193,6 +201,7 @@ export function CalendarEntryForm({ open, mode, initial, uid, members, orders, c
             <h2 id="cal-form-title">{isEdit ? t("Edit entry") : t("New entry")}</h2>
             <button type="button" className="cal-icon-button" onClick={onCancel} aria-label={t("Close")} disabled={saving}>×</button>
           </header>
+          {notice ? <p className="muted-copy" role="status">{notice}</p> : null}
 
           <div className="cal-type-row" role="radiogroup" aria-label={t("Type")}>
             {(["event", "task", "note", "workday", "unavailable"] as const).map((type) => (
@@ -426,11 +435,12 @@ export function CalendarEntryForm({ open, mode, initial, uid, members, orders, c
           {errorLines.length ? (
             <ul className="cal-errors" role="alert">{errorLines.map((line) => <li key={line}>{t(line)}</li>)}</ul>
           ) : null}
-          {saveError ? <p className="cal-errors" role="alert">{saveError}</p> : null}
+          {pending ? <p className="muted-copy" role="status">⏳ {t("Not confirmed yet — no connection to NivaDesk. You can close this form: you'll be told whether it was saved, and if it wasn't, your text is kept.")}</p> : null}
+          {remoteError || saveError ? <p className="cal-errors" role="alert">{remoteError || saveError}</p> : null}
 
           <footer className="cal-form-foot">
-            <button type="button" className="button secondary" onClick={onCancel} disabled={saving}>{t("Cancel")}</button>
-            <button type="submit" className="button" disabled={saving}>{saving ? t("Saving…") : t("Save")}</button>
+            <button type="button" className="button secondary" onClick={onCancel} disabled={saving}>{pending ? t("Close") : t("Cancel")}</button>
+            <button type="submit" className="button" disabled={saving || pending}>{pending ? t("Waiting for the connection…") : saving ? t("Saving…") : t("Save")}</button>
           </footer>
         </form>
       </section>
