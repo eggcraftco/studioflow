@@ -36108,6 +36108,7 @@ body[data-studio-theme="dark"] .inv-categories .btn-danger { color: #f87171; bor
   .cal-detail { position: fixed; inset: 0; z-index: var(--z-drawer); border-radius: 0; max-height: none; }
 }
 @media (max-width: 760px) {
+  .cal-page { padding: 0 4px; }
   .cal-week { grid-template-columns: minmax(0, 1fr); }
   .cal-week-col { min-height: 0; }
   .cal-month-cell { min-height: 64px; padding: 3px; }
@@ -36117,9 +36118,12 @@ body[data-studio-theme="dark"] .inv-categories .btn-danger { color: #f87171; bor
   .cal-goto { flex: 1 1 140px; }
   .cal-form { padding: 12px; border-radius: 14px; }
 }
-.cal-inbox-title { margin: 0 0 8px; font-size: 14px; }
+/* The drawer's cards are always light (NotificationsDrawer.tsx), so the section uses the drawer's own ink. */
+.cal-inbox { padding: 12px 14px; color: #111827; }
+.cal-inbox .muted-copy { color: #6b7280; }
+.cal-inbox-title { margin: 0 0 8px; font-size: 14px; font-weight: 800; color: #111827; }
 .cal-inbox-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .cal-inbox-row { display: flex; align-items: center; gap: 6px; }
 .cal-inbox-row.is-read { opacity: 0.7; }
-.cal-inbox-open { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border: 0; background: none; color: var(--text); text-align: left; cursor: pointer; padding: 4px 0; }
+.cal-inbox-open { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border: 0; background: none; color: #111827; text-align: left; cursor: pointer; padding: 4px 0; }
 .cal-inbox-open strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }

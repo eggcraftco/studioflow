@@ -72,7 +72,7 @@ export function CalendarEntryForm({ open, mode, initial, uid, members, orders, c
     setScope("only");
     const r = initial.recurrence;
     setRepeatEnd(r?.untilKey ? "until" : r?.count ? "count" : "never");
-    setMoreOpen(Boolean(initial.description || initial.personUid || initial.personLabel || initial.orderId || initial.recurrence || initial.location || initial.meetingUrl || initial.type === "workday" || initial.type === "unavailable"));
+    setMoreOpen(Boolean(initial.description || (initial.personUid && initial.type === "task") || initial.orderId || initial.recurrence || initial.location || initial.meetingUrl));
     window.setTimeout(() => firstField.current?.focus(), 30);
   }, [open, initial]);
 
@@ -159,10 +159,30 @@ export function CalendarEntryForm({ open, mode, initial, uid, members, orders, c
   }
 
   if (!open) return null;
-  const errorLines = [...new Set(errors.map((code) => ERROR_TEXT[code] || "Not saved. Nothing was changed — try again."))];
-  const isNote = draft.type === "note";
   const personValue = draft.personUid ? `uid:${draft.personUid}` : draft.personLabel !== null ? "label" : "";
   const personIsMember = (m: NoteWorkspaceMember) => m.uid === draft.personUid;
+  // Work day and unavailable need a person: the field sits on the first screen for them.
+  const personFirst = draft.type === "workday" || draft.type === "unavailable";
+  const personField = draft.type === "note" ? null : (
+                <div className="cal-field">
+                  <span>{draft.type === "task" ? t("Assigned to") : t("Who it is about")}</span>
+                  <select className="input" value={personValue} onChange={(e) => choosePerson(e.target.value)}>
+                    <option value="">{t("Nobody")}</option>
+                    {members.filter((m) => !m.suspended).map((m) => (
+                      <option key={m.uid} value={`uid:${m.uid}`} disabled={draft.type === "task" && !canShare && !draft.viewerUids.includes(m.uid) && !personIsMember(m) && draft.visibility !== "workspace"}>{memberName(m)}</option>
+                    ))}
+                    {draft.type !== "task" ? <option value="label">{t("Name label")}</option> : null}
+                  </select>
+                  {draft.personLabel !== null && !draft.personUid ? (
+                    <>
+                      <input className="input" value={draft.personLabel} onChange={(e) => patch({ personLabel: e.target.value })} maxLength={core.LABEL_MAX} aria-label={t("Name label")} />
+                      <small className="muted-copy">{t("A name label is only text — not an account. It gets no access and no notifications.")}</small>
+                    </>
+                  ) : null}
+                </div>
+  );
+  const errorLines = [...new Set(errors.map((code) => ERROR_TEXT[code] || "Not saved. Nothing was changed — try again."))];
+  const isNote = draft.type === "note";
   const viewerOnlyMember = (m: NoteWorkspaceMember) => m.role === "viewer";
 
   return (
@@ -182,7 +202,7 @@ export function CalendarEntryForm({ open, mode, initial, uid, members, orders, c
                 role="radio"
                 aria-checked={draft.type === type}
                 className={`cal-type-choice${draft.type === type ? " is-active" : ""}`}
-                onClick={() => patch({ type, personUid: type === "task" || type === "workday" || type === "unavailable" ? draft.personUid : null })}
+                onClick={() => patch({ type, personUid: type === "task" || type === "workday" || type === "unavailable" ? draft.personUid : null, personLabel: (type === "workday" || type === "unavailable") && !draft.personUid ? draft.personLabel ?? "" : type === "task" ? null : draft.personLabel })}
                 disabled={isEdit && mode.kind === "edit" && mode.entry.rowType === "series" && Boolean(mode.occurrenceKey)}
               >
                 <span aria-hidden="true">{TYPE_META[type].icon}</span> {t(TYPE_META[type].label)}
@@ -240,6 +260,8 @@ export function CalendarEntryForm({ open, mode, initial, uid, members, orders, c
               ) : null}
             </div>
           ) : null}
+
+          {personFirst ? personField : null}
 
           <fieldset className="cal-fieldset" disabled={!canShare}>
             <legend>{t("Who can see it")}</legend>
@@ -314,24 +336,7 @@ export function CalendarEntryForm({ open, mode, initial, uid, members, orders, c
                 </label>
               )}
 
-              {draft.type !== "note" ? (
-                <div className="cal-field">
-                  <span>{draft.type === "task" ? t("Assigned to") : t("Who it is about")}</span>
-                  <select className="input" value={personValue} onChange={(e) => choosePerson(e.target.value)}>
-                    <option value="">{t("Nobody")}</option>
-                    {members.filter((m) => !m.suspended).map((m) => (
-                      <option key={m.uid} value={`uid:${m.uid}`} disabled={draft.type === "task" && !canShare && !draft.viewerUids.includes(m.uid) && !personIsMember(m) && draft.visibility !== "workspace"}>{memberName(m)}</option>
-                    ))}
-                    {draft.type !== "task" ? <option value="label">{t("Name label")}</option> : null}
-                  </select>
-                  {draft.personLabel !== null && !draft.personUid ? (
-                    <>
-                      <input className="input" value={draft.personLabel} onChange={(e) => patch({ personLabel: e.target.value })} maxLength={core.LABEL_MAX} aria-label={t("Name label")} />
-                      <small className="muted-copy">{t("A name label is only text — not an account. It gets no access and no notifications.")}</small>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
+              {!personFirst ? personField : null}
 
               {draft.type !== "note" ? (
                 <label className="cal-field">

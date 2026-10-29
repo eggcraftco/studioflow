@@ -311,9 +311,11 @@ export default function CalendarPage() {
   })();
 
   const loadFailed = Boolean(rangeState.error) && !rangeState.entries.length;
-  const nothingAtAll = !rangeState.loading && !loadFailed && shown.length === 0;
+  // No calendar entry of any kind in this range (order dates and note reminders do not count): the
+  // three starters show. Nothing is ever written for the person.
+  const noEntries = !rangeState.loading && !loadFailed && !items.some((i) => i.entry);
 
-  function chip(row: { item: CalendarItem; asCompletion: boolean }, compact = false) {
+  function chip(row: { item: CalendarItem; asCompletion: boolean }, compact = false, spokenCompletion = true) {
     const { item, asCompletion } = row;
     const meta = TYPE_META[item.kind];
     const time = !item.allDay && item.startMs !== null ? timeLabel(item.startMs, locale) : "";
@@ -332,7 +334,7 @@ export default function CalendarPage() {
         <span className="cal-chip-icon" aria-hidden="true">{iconFor(item.kind, state)}</span>
         <span className="cal-chip-text">{label}</span>
         {!compact && stateText ? <span className="cal-chip-state">{stateText}</span> : null}
-        <span className="visually-hidden-file">{t(meta.label)}{completionNote}</span>
+        <span className="visually-hidden-file">{t(meta.label)}{spokenCompletion ? completionNote : ""}</span>
       </button>
     );
   }
@@ -444,7 +446,7 @@ export default function CalendarPage() {
             <ul>
               {rows.map((r) => (
                 <li key={`${r.item.id}${r.asCompletion ? ":done" : ""}`} className="cal-agenda-row">
-                  {chip(r)}
+                  {chip(r, false, false)}
                   {r.item.subtitle ? <span className="muted-copy">{r.item.subtitle}</span> : null}
                   {r.asCompletion && r.item.occurrence ? <span className="muted-copy">{t("Done on this day · planned for {date}").replace("{date}", dayLabel(r.item.occurrence.dateKey, locale))}</span> : null}
                 </li>
@@ -534,7 +536,7 @@ export default function CalendarPage() {
                 {rangeState.error ? (
                   <div className="layout-error" role="alert">{t("The calendar could not be loaded.")} <button type="button" className="button secondary" onClick={() => setReloadTick((n) => n + 1)}>{t("Try again")}</button></div>
                 ) : null}
-                {nothingAtAll && !searching && !filtersActive(filters) ? emptyStarters(view === "day" ? anchor : todayKey) : null}
+                {noEntries && !searching && !filtersActive(filters) ? emptyStarters(view === "day" ? anchor : todayKey) : null}
                 {searching ? renderAgenda() : view === "month" ? renderMonth() : view === "week" ? renderWeek() : view === "day" ? renderDay() : renderAgenda()}
               </>
             )}
