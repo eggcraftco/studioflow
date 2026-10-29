@@ -15,6 +15,7 @@ import { MessagesTabs } from "@/components/MessagesTabs";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { loadWorkspaceContext, normalizeWorkspaceRole, workspaceAccessAllows, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { canDeleteTeamMessage, messagingRedirectFor } from "@/lib/studioflow/messagingAccess";
+import { appStorageBucket, messageAttachmentStoragePath, resolvedFileProblem, useResolvedFileUrl } from "@/lib/studioflow/storageFileUrl";
 import {
   addMembersToMessageThread,
   canDeleteMessageThread,
@@ -1448,6 +1449,12 @@ function MessageBubble({
   const [menuOpen, setMenuOpen] = useState(false);
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false);
   const canEdit = isMine && !item.deletedForEveryone && !!item.text && !item.fileURL;
+  // The attachment is asked of Storage (path from its own message_files URL, audit #19 A1): a plan or
+  // thread the rules refuse shows no file, and the stored token link is not offered instead.
+  const attachmentPath = item.fileURL ? messageAttachmentStoragePath(item.fileURL, appStorageBucket()) : "";
+  const attachment = useResolvedFileUrl(attachmentPath, item.fileURL);
+  const attachmentUrl = attachment.status === "ready" ? attachment.url : "";
+  const attachmentProblem = resolvedFileProblem(attachment);
 
   return (
     <div className={`bubble-row bubble-row--${alignment}`}>
@@ -1492,16 +1499,20 @@ function MessageBubble({
           <>
             {item.fileURL && (
               <div className="bubble__attachment">
-                {isImageAttachment(item) ? (
+                {attachmentProblem ? (
+                  <span role="note">📎 {item.fileName || t("Attachment")} · {t(attachmentProblem)}</span>
+                ) : !attachmentUrl ? (
+                  <span aria-busy="true">📎 {item.fileName || t("Attachment")}</span>
+                ) : isImageAttachment(item) ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={item.fileURL}
+                    src={attachmentUrl}
                     alt={item.fileName || t("Attachment")}
                     style={{ cursor: "zoom-in" }}
                     onClick={(e) => { e.stopPropagation(); onOpenImage(); }}
                   />
                 ) : (
-                  <a href={item.fileURL} target="_blank" rel="noreferrer">
+                  <a href={attachmentUrl} target="_blank" rel="noreferrer">
                     📎 {item.fileName || t("Attachment")}
                   </a>
                 )}
@@ -1593,11 +1604,11 @@ function MessageBubble({
                 {t("Copy text")}
               </button>
             )}
-            {item.fileURL && (
+            {attachmentUrl && (
               <button
                 type="button"
                 onClick={() => {
-                  navigator.clipboard?.writeText(item.fileURL).catch(() => {});
+                  navigator.clipboard?.writeText(attachmentUrl).catch(() => {});
                   setMenuOpen(false);
                 }}
               >
@@ -1653,6 +1664,10 @@ function ImageViewerModal({
 }) {
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
+  // Same rule as the bubble (audit #19 A1): asked of Storage, refused = no image.
+  const viewed = useResolvedFileUrl(item.fileURL ? messageAttachmentStoragePath(item.fileURL, appStorageBucket()) : "", item.fileURL);
+  const viewedUrl = viewed.status === "ready" ? viewed.url : "";
+  const viewedProblem = resolvedFileProblem(viewed);
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
@@ -1724,9 +1739,10 @@ function ImageViewerModal({
           }}
         >{t("Reset zoom")}</button>
       )}
+      {viewedProblem ? <p role="alert" style={{ color: "white", fontWeight: 700 }}>{t(viewedProblem)}</p> : null}
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={item.fileURL}
+      {viewedUrl ? <img
+        src={viewedUrl}
         alt={item.fileName || t("Image")}
         onClick={(e) => e.stopPropagation()}
         onDoubleClick={(e) => {
@@ -1759,7 +1775,7 @@ function ImageViewerModal({
           transition: dragRef.current ? "none" : "transform 0.15s ease-out",
         }}
         draggable={false}
-      />
+      /> : null}
       {item.fileName && (
         <div
           style={{

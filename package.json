@@ -102,7 +102,8 @@
     "test:sec-csp": "npx tsx scripts/check-sec-csp.mts",
     "test:security-headers": "node scripts/check-security-headers.js 3091",
     "test:sec-connect-claim": "npx tsx scripts/check-sec-connect-claim.mts",
-    "test:sec-web": "npm run -s test:sec-next-guard && npm run -s test:sec-logout-cache && npm run -s test:sec-session-lock && npm run -s test:sec-oauth-connect && npm run -s test:sec-bundle-emails && npm run -s test:sec-csp && npm run -s test:sec-connect-claim"
+    "test:sec-storage-read": "npx tsx scripts/check-sec-storage-read.mts",
+    "test:sec-web": "npm run -s test:sec-next-guard && npm run -s test:sec-logout-cache && npm run -s test:sec-session-lock && npm run -s test:sec-oauth-connect && npm run -s test:sec-bundle-emails && npm run -s test:sec-csp && npm run -s test:sec-connect-claim && npm run -s test:sec-storage-read"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

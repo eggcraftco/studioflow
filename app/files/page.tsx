@@ -49,7 +49,9 @@ import {
 } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { FilesLibraryView, type LibraryView } from "./FilesLibraryView";
-import { maskFileUrl, openSharedFile } from "@/lib/studioflow/fileMask";
+import { maskFileUrl } from "@/lib/studioflow/fileMask";
+import { openOutcomeProblem, openStoredFile, resolvedFileProblem, useResolvedFileUrl } from "@/lib/studioflow/storageFileUrl";
+import { StoredFileImage } from "@/components/StoredFileImage";
 import { UploadQueuePanel } from "@/components/UploadQueuePanel";
 import { useUploadQueue } from "@/lib/studioflow/useUploadQueue";
 import { safePreviewFrameUrl } from "@/lib/security/framePreview";
@@ -136,7 +138,13 @@ function FilesPreviewModal({
   const currentIndex = Math.max(0, files.findIndex(file => file.id === activeFile.id));
   const isImage = isClientFileImage(activeFile);
   const isPdf = isFilePdf(activeFile);
-  const previewFrameUrl = safePreviewFrameUrl(activeFile.downloadURL, typeof window !== "undefined" ? window.location.origin : "https://nivadesk.app");
+  // Asked of Storage now, with this person's sign-in (audit #19 A1); a refusal shows no file.
+  const resolved = useResolvedFileUrl(activeFile.storagePath, activeFile.downloadURL);
+  const activeUrl = resolved.status === "ready" ? resolved.url : "";
+  const problem = resolvedFileProblem(resolved);
+  const [openProblem, setOpenProblem] = useState("");
+  useEffect(() => { setOpenProblem(""); }, [activeFile.id]);
+  const previewFrameUrl = safePreviewFrameUrl(activeUrl, typeof window !== "undefined" ? window.location.origin : "https://nivadesk.app");
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -171,8 +179,17 @@ function FilesPreviewModal({
         </header>
 
         <div className="client-file-preview-stage">
-          {isImage ? (
-            <img src={activeFile.downloadURL} alt={activeFile.fileName} />
+          {problem ? (
+            <div className="client-file-preview-unavailable" role="alert">
+              <span>{fileBadgeLabel(activeFile)}</span>
+              <strong>{t(problem)}</strong>
+            </div>
+          ) : resolved.status === "loading" ? (
+            <div className="client-file-preview-unavailable" aria-busy="true">
+              <span>{fileBadgeLabel(activeFile)}</span>
+            </div>
+          ) : isImage && activeUrl ? (
+            <img src={activeUrl} alt={activeFile.fileName} />
           ) : isPdf && previewFrameUrl ? (
             // Storage or this site's /f/ links only (lib/security/framePreview.ts, audit #18).
             <iframe src={previewFrameUrl} title={activeFile.fileName} referrerPolicy="no-referrer" />
@@ -183,6 +200,7 @@ function FilesPreviewModal({
               <p>{t("Use Open / Download to view this file in another app.")}</p>
             </div>
           )}
+          {openProblem && !problem ? <p className="layout-error" role="alert">{t(openProblem)}</p> : null}
         </div>
 
         <footer className="client-file-preview-actions">
@@ -194,13 +212,16 @@ function FilesPreviewModal({
           >
             {t("Previous")}
           </button>
-          {activeFile.downloadURL ? (
+          {activeUrl ? (
             <a
               className="button secondary"
-              href={maskFileUrl(activeFile.downloadURL, brandedHost)}
+              href={maskFileUrl(activeUrl, brandedHost)}
               target="_blank"
               rel="noreferrer"
-              onClick={event => { event.preventDefault(); void openSharedFile(activeFile.downloadURL, brandedHost); }}
+              onClick={event => {
+                event.preventDefault();
+                void openStoredFile(activeFile, brandedHost).then(status => setOpenProblem(openOutcomeProblem(status)));
+              }}
             >
               {t("Open / Download")}
             </a>
@@ -531,7 +552,7 @@ export default function FilesPage() {
   const shownSelectionScope = selectionScope(selection, shownFileIds);
   const canUseClientFiles = Boolean(workspace?.entitlements.features.client_files);
   const previewFiles = useMemo(
-    () => files.filter(file => canUseClientFiles && Boolean(file.downloadURL)),
+    () => files.filter(file => canUseClientFiles && Boolean(file.downloadURL || file.storagePath)),
     [files, canUseClientFiles]
   );
   const activePreview = previewingFileId
@@ -1093,8 +1114,8 @@ export default function FilesPage() {
                 </div>
                 <div className="app-client-files-list compact-list-grid is-static">
                   {group.files.map(file => {
-                    const canOpenPreview = canUseClientFiles && Boolean(file.downloadURL);
-                    const showThumb = canUseClientFiles && Boolean(file.downloadURL) && isClientFileImage(file);
+                    const canOpenPreview = canUseClientFiles && Boolean(file.downloadURL || file.storagePath);
+                    const showThumb = canOpenPreview && isClientFileImage(file);
                     return (
                       <article key={file.id} className={selectedFileIds.has(file.id) ? "client-file-list-row is-selected" : "client-file-list-row"}>
                         {canDeleteClientFiles ? (
@@ -1116,7 +1137,14 @@ export default function FilesPage() {
                           title={canOpenPreview ? t("Preview file") : t("Preview is locked for this plan.")}
                         >
                           {showThumb ? (
-                            <img src={file.downloadURL} alt={file.fileName} className="file-preview compact-file-preview" />
+                            // Asked of Storage (audit #19 A1); the badge stands in until then, or when refused.
+                            <StoredFileImage
+                              storagePath={file.storagePath}
+                              fallbackUrl={file.downloadURL}
+                              alt={file.fileName}
+                              className="file-preview compact-file-preview"
+                              placeholder={<div className="file-token compact-file-preview">{fileBadgeLabel(file)}</div>}
+                            />
                           ) : (
                             <div className="file-token compact-file-preview">{fileBadgeLabel(file)}</div>
                           )}
@@ -1133,8 +1161,22 @@ export default function FilesPage() {
 
                         <div className="client-file-icon-actions">
                           {canUseClientFiles ? (
-                            file.downloadURL ? (
-                              <a className="button secondary" href={maskFileUrl(file.downloadURL, workspace?.clientPortalHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openSharedFile(file.downloadURL, workspace?.clientPortalHost); }}>{t("Open")}</a>
+                            file.downloadURL || file.storagePath ? (
+                              // Opened through Storage when the file has a path (audit #19 A1); the href is only
+                              // the older records' stored link.
+                              <a
+                                className="button secondary"
+                                href={file.storagePath ? "#" : maskFileUrl(file.downloadURL, workspace?.clientPortalHost)}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={event => {
+                                  event.preventDefault();
+                                  void openStoredFile(file, workspace?.clientPortalHost).then(status => {
+                                    const problem = openOutcomeProblem(status);
+                                    if (problem) setError(t(problem));
+                                  });
+                                }}
+                              >{t("Open")}</a>
                             ) : (
                               <span className="pill">{t("No URL")}</span>
                             )
