@@ -19,6 +19,7 @@ import { ETSY_SHIPPING_COST_TRANSLATIONS } from "./etsyShippingCost";
 import { CHANNEL_SHIPPING_COST_TRANSLATIONS } from "./channelShippingCost";
 import { ETSY_ORDER_VIEW_TRANSLATIONS } from "./etsyOrderViewTranslations";
 import { SECURITY_FIX_TRANSLATIONS } from "./securityFixTranslations";
+import { CALENDAR_TRANSLATIONS } from "./calendarTranslations";
 
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
@@ -2316,6 +2317,14 @@ function mergeTranslationTables(...tables: TranslationTable[]): TranslationTable
 function mergeIntoTranslations(extra: Record<string, Partial<Record<StudioLanguage, string>>>) {
   for (const [source, langs] of Object.entries(extra)) {
     TRANSLATIONS[source] = { ...(TRANSLATIONS[source] ?? {}), ...langs };
+  }
+}
+
+// Fills only what is not translated yet: a key another screen already translates keeps its wording
+// (the Calendar table carries a few common words such as "Day" so it never shows English).
+function mergeMissingIntoTranslations(extra: Record<string, Partial<Record<StudioLanguage, string>>>) {
+  for (const [source, langs] of Object.entries(extra)) {
+    TRANSLATIONS[source] = { ...langs, ...(TRANSLATIONS[source] ?? {}) };
   }
 }
 
@@ -9383,6 +9392,10 @@ mergeIntoTranslations(ETSY_ORDER_VIEW_TRANSLATIONS);
 
 // Security fixes (28 Oct 2026): the sign-out question about undelivered writes, the re-authentication prompt.
 mergeIntoTranslations(SECURITY_FIX_TRANSLATIONS);
+
+// Calendar V1 (28 Oct 2026): the /calendar screen and the bell's calendar reminders. Last, and filling only
+// gaps, so no wording elsewhere changes.
+mergeMissingIntoTranslations(CALENDAR_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

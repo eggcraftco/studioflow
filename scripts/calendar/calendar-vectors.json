@@ -1,0 +1,2373 @@
+{
+ "version": 1,
+ "generatedFrom": "functions/calendar/calendarCore.js",
+ "zoned": [
+  {
+   "dateKey": "2026-03-29",
+   "time": "00:30",
+   "timeZone": "Europe/London",
+   "utcMs": 1774744200000
+  },
+  {
+   "dateKey": "2026-03-29",
+   "time": "01:00",
+   "timeZone": "Europe/London",
+   "utcMs": 1774746000000
+  },
+  {
+   "dateKey": "2026-03-29",
+   "time": "01:30",
+   "timeZone": "Europe/London",
+   "utcMs": 1774747800000
+  },
+  {
+   "dateKey": "2026-03-29",
+   "time": "02:00",
+   "timeZone": "Europe/London",
+   "utcMs": 1774746000000
+  },
+  {
+   "dateKey": "2026-10-25",
+   "time": "00:59",
+   "timeZone": "Europe/London",
+   "utcMs": 1792886340000
+  },
+  {
+   "dateKey": "2026-10-25",
+   "time": "01:00",
+   "timeZone": "Europe/London",
+   "utcMs": 1792886400000
+  },
+  {
+   "dateKey": "2026-10-25",
+   "time": "01:30",
+   "timeZone": "Europe/London",
+   "utcMs": 1792888200000
+  },
+  {
+   "dateKey": "2026-10-25",
+   "time": "02:00",
+   "timeZone": "Europe/London",
+   "utcMs": 1792893600000
+  },
+  {
+   "dateKey": "2026-07-01",
+   "time": "09:00",
+   "timeZone": "Europe/London",
+   "utcMs": 1782892800000
+  },
+  {
+   "dateKey": "2026-12-01",
+   "time": "09:00",
+   "timeZone": "Europe/London",
+   "utcMs": 1796115600000
+  },
+  {
+   "dateKey": "2026-07-01",
+   "time": "09:00",
+   "timeZone": "Europe/Istanbul",
+   "utcMs": 1782885600000
+  },
+  {
+   "dateKey": "2026-12-01",
+   "time": "23:30",
+   "timeZone": "Europe/Istanbul",
+   "utcMs": 1796157000000
+  },
+  {
+   "dateKey": "2026-03-08",
+   "time": "02:30",
+   "timeZone": "America/New_York",
+   "utcMs": 1772955000000
+  },
+  {
+   "dateKey": "2026-11-01",
+   "time": "01:30",
+   "timeZone": "America/New_York",
+   "utcMs": 1793511000000
+  },
+  {
+   "dateKey": "2026-10-04",
+   "time": "02:30",
+   "timeZone": "Australia/Sydney",
+   "utcMs": 1791045000000
+  },
+  {
+   "dateKey": "2026-04-05",
+   "time": "02:30",
+   "timeZone": "Australia/Sydney",
+   "utcMs": 1775316600000
+  },
+  {
+   "dateKey": "2026-06-15",
+   "time": "00:00",
+   "timeZone": "Asia/Kolkata",
+   "utcMs": 1781461800000
+  },
+  {
+   "dateKey": "2026-01-01",
+   "time": "00:00",
+   "timeZone": "UTC",
+   "utcMs": 1767225600000
+  },
+  {
+   "dateKey": "2028-02-29",
+   "time": "12:00",
+   "timeZone": "Europe/Berlin",
+   "utcMs": 1835434800000
+  },
+  {
+   "dateKey": "2026-12-31",
+   "time": "23:59",
+   "timeZone": "Pacific/Auckland",
+   "utcMs": 1798714740000
+  }
+ ],
+ "local": [
+  {
+   "ms": 1792888200000,
+   "timeZone": "Europe/London",
+   "dateKey": "2026-10-25",
+   "time": "01:30",
+   "offsetMinutes": 60
+  },
+  {
+   "ms": 1792891800000,
+   "timeZone": "Europe/London",
+   "dateKey": "2026-10-25",
+   "time": "01:30",
+   "offsetMinutes": 0
+  },
+  {
+   "ms": 1793831400000,
+   "timeZone": "Europe/Istanbul",
+   "dateKey": "2026-11-05",
+   "time": "01:30",
+   "offsetMinutes": 180
+  },
+  {
+   "ms": 1793831400000,
+   "timeZone": "America/New_York",
+   "dateKey": "2026-11-04",
+   "time": "17:30",
+   "offsetMinutes": -300
+  },
+  {
+   "ms": 1774746000000,
+   "timeZone": "Europe/London",
+   "dateKey": "2026-03-29",
+   "time": "02:00",
+   "offsetMinutes": 60
+  }
+ ],
+ "weekday": [
+  {
+   "dateKey": "1970-01-01",
+   "isoWeekday": 4,
+   "plus40": "1970-02-10",
+   "minus400": "1968-11-27",
+   "weekStartMonday": "1969-12-29"
+  },
+  {
+   "dateKey": "2026-10-26",
+   "isoWeekday": 1,
+   "plus40": "2026-12-05",
+   "minus400": "2025-09-21",
+   "weekStartMonday": "2026-10-26"
+  },
+  {
+   "dateKey": "2026-11-01",
+   "isoWeekday": 7,
+   "plus40": "2026-12-11",
+   "minus400": "2025-09-27",
+   "weekStartMonday": "2026-10-26"
+  },
+  {
+   "dateKey": "2028-02-29",
+   "isoWeekday": 2,
+   "plus40": "2028-04-09",
+   "minus400": "2027-01-25",
+   "weekStartMonday": "2028-02-28"
+  },
+  {
+   "dateKey": "2000-03-05",
+   "isoWeekday": 7,
+   "plus40": "2000-04-14",
+   "minus400": "1999-01-30",
+   "weekStartMonday": "2000-02-28"
+  }
+ ],
+ "expand": [
+  {
+   "name": "single all-day",
+   "id": "a1",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "type": "event",
+    "title": "Fair",
+    "allDay": true,
+    "dateKey": "2026-11-04"
+   },
+   "from": "2026-11-01",
+   "to": "2026-11-30",
+   "occurrences": [
+    {
+     "occurrenceId": "a1",
+     "occurrenceKey": "2026-11-04",
+     "dateKey": "2026-11-04",
+     "endDateKey": "2026-11-04",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Fair",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    }
+   ]
+  },
+  {
+   "name": "single outside range",
+   "id": "a2",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "type": "event",
+    "title": "Fair",
+    "allDay": true,
+    "dateKey": "2026-12-04"
+   },
+   "from": "2026-11-01",
+   "to": "2026-11-30",
+   "occurrences": []
+  },
+  {
+   "name": "multi-day leave crossing range start",
+   "id": "a3",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "type": "unavailable",
+    "title": "Leave",
+    "allDay": true,
+    "dateKey": "2026-10-29",
+    "endDateKey": "2026-11-03",
+    "personLabel": "Ana"
+   },
+   "from": "2026-11-01",
+   "to": "2026-11-07",
+   "occurrences": [
+    {
+     "occurrenceId": "a3",
+     "occurrenceKey": "2026-10-29",
+     "dateKey": "2026-10-29",
+     "endDateKey": "2026-11-03",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Leave",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    }
+   ]
+  },
+  {
+   "name": "timed London",
+   "id": "a4",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "type": "event",
+    "title": "Call",
+    "allDay": false,
+    "dateKey": "2026-10-26",
+    "startTime": "09:00",
+    "endTime": "10:30"
+   },
+   "from": "2026-10-26",
+   "to": "2026-10-26",
+   "occurrences": [
+    {
+     "occurrenceId": "a4",
+     "occurrenceKey": "2026-10-26",
+     "dateKey": "2026-10-26",
+     "endDateKey": "2026-10-26",
+     "allDay": false,
+     "startTime": "09:00",
+     "endTime": "10:30",
+     "startMs": 1793005200000,
+     "endMs": 1793010600000,
+     "title": "Call",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    }
+   ]
+  },
+  {
+   "name": "Yunseo every Tuesday, one moved to Thursday",
+   "id": "y1",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "workday",
+    "title": "Yunseo",
+    "personLabel": "Yunseo",
+    "allDay": true,
+    "dateKey": "2026-11-03",
+    "recurrence": {
+     "freq": "weekly",
+     "byWeekday": [
+      2
+     ]
+    },
+    "exceptions": {
+     "2026-11-10": {
+      "dateKey": "2026-11-12",
+      "endDateKey": "2026-11-12"
+     }
+    }
+   },
+   "from": "2026-11-01",
+   "to": "2026-11-30",
+   "occurrences": [
+    {
+     "occurrenceId": "y1@2026-11-03",
+     "occurrenceKey": "2026-11-03",
+     "dateKey": "2026-11-03",
+     "endDateKey": "2026-11-03",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Yunseo",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "y1@2026-11-10",
+     "occurrenceKey": "2026-11-10",
+     "dateKey": "2026-11-12",
+     "endDateKey": "2026-11-12",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Yunseo",
+     "status": null,
+     "completedAtMs": null,
+     "moved": true
+    },
+    {
+     "occurrenceId": "y1@2026-11-17",
+     "occurrenceKey": "2026-11-17",
+     "dateKey": "2026-11-17",
+     "endDateKey": "2026-11-17",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Yunseo",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "y1@2026-11-24",
+     "occurrenceKey": "2026-11-24",
+     "dateKey": "2026-11-24",
+     "endDateKey": "2026-11-24",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Yunseo",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    }
+   ]
+  },
+  {
+   "name": "moved occurrence seen from its new week only",
+   "id": "y1b",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "workday",
+    "title": "Yunseo",
+    "personLabel": "Yunseo",
+    "allDay": true,
+    "dateKey": "2026-11-03",
+    "recurrence": {
+     "freq": "weekly",
+     "byWeekday": [
+      2
+     ]
+    },
+    "exceptions": {
+     "2026-11-10": {
+      "dateKey": "2026-11-16",
+      "endDateKey": "2026-11-16"
+     }
+    }
+   },
+   "from": "2026-11-09",
+   "to": "2026-11-15",
+   "occurrences": []
+  },
+  {
+   "name": "weekly Tue+Thu starting on a Monday, until",
+   "id": "w2",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "workday",
+    "title": "Shop",
+    "allDay": false,
+    "startTime": "10:00",
+    "endTime": "16:00",
+    "dateKey": "2026-11-02",
+    "recurrence": {
+     "freq": "weekly",
+     "byWeekday": [
+      2,
+      4
+     ],
+     "untilKey": "2026-11-19"
+    }
+   },
+   "from": "2026-11-01",
+   "to": "2026-11-30",
+   "occurrences": [
+    {
+     "occurrenceId": "w2@2026-11-03",
+     "occurrenceKey": "2026-11-03",
+     "dateKey": "2026-11-03",
+     "endDateKey": "2026-11-03",
+     "allDay": false,
+     "startTime": "10:00",
+     "endTime": "16:00",
+     "startMs": 1793700000000,
+     "endMs": 1793721600000,
+     "title": "Shop",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "w2@2026-11-05",
+     "occurrenceKey": "2026-11-05",
+     "dateKey": "2026-11-05",
+     "endDateKey": "2026-11-05",
+     "allDay": false,
+     "startTime": "10:00",
+     "endTime": "16:00",
+     "startMs": 1793872800000,
+     "endMs": 1793894400000,
+     "title": "Shop",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "w2@2026-11-10",
+     "occurrenceKey": "2026-11-10",
+     "dateKey": "2026-11-10",
+     "endDateKey": "2026-11-10",
+     "allDay": false,
+     "startTime": "10:00",
+     "endTime": "16:00",
+     "startMs": 1794304800000,
+     "endMs": 1794326400000,
+     "title": "Shop",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "w2@2026-11-12",
+     "occurrenceKey": "2026-11-12",
+     "dateKey": "2026-11-12",
+     "endDateKey": "2026-11-12",
+     "allDay": false,
+     "startTime": "10:00",
+     "endTime": "16:00",
+     "startMs": 1794477600000,
+     "endMs": 1794499200000,
+     "title": "Shop",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "w2@2026-11-17",
+     "occurrenceKey": "2026-11-17",
+     "dateKey": "2026-11-17",
+     "endDateKey": "2026-11-17",
+     "allDay": false,
+     "startTime": "10:00",
+     "endTime": "16:00",
+     "startMs": 1794909600000,
+     "endMs": 1794931200000,
+     "title": "Shop",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "w2@2026-11-19",
+     "occurrenceKey": "2026-11-19",
+     "dateKey": "2026-11-19",
+     "endDateKey": "2026-11-19",
+     "allDay": false,
+     "startTime": "10:00",
+     "endTime": "16:00",
+     "startMs": 1795082400000,
+     "endMs": 1795104000000,
+     "title": "Shop",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    }
+   ]
+  },
+  {
+   "name": "daily count 5 with one done and one cancelled",
+   "id": "d5",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "task",
+    "title": "Water",
+    "allDay": true,
+    "dateKey": "2026-10-01",
+    "recurrence": {
+     "freq": "daily",
+     "count": 5
+    },
+    "occurrenceStatus": {
+     "2026-10-02": {
+      "status": "done",
+      "completedAt": 1790000000000,
+      "completedByUid": "o"
+     }
+    },
+    "exceptions": {
+     "2026-10-04": {
+      "cancelled": true
+     }
+    }
+   },
+   "from": "2026-09-01",
+   "to": "2026-12-01",
+   "occurrences": [
+    {
+     "occurrenceId": "d5@2026-10-01",
+     "occurrenceKey": "2026-10-01",
+     "dateKey": "2026-10-01",
+     "endDateKey": "2026-10-01",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Water",
+     "status": "open",
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "d5@2026-10-02",
+     "occurrenceKey": "2026-10-02",
+     "dateKey": "2026-10-02",
+     "endDateKey": "2026-10-02",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Water",
+     "status": "done",
+     "completedAtMs": 1790000000000,
+     "moved": false
+    },
+    {
+     "occurrenceId": "d5@2026-10-03",
+     "occurrenceKey": "2026-10-03",
+     "dateKey": "2026-10-03",
+     "endDateKey": "2026-10-03",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Water",
+     "status": "open",
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "d5@2026-10-05",
+     "occurrenceKey": "2026-10-05",
+     "dateKey": "2026-10-05",
+     "endDateKey": "2026-10-05",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Water",
+     "status": "open",
+     "completedAtMs": null,
+     "moved": false
+    }
+   ]
+  },
+  {
+   "name": "daily interval 3",
+   "id": "d3",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "event",
+    "title": "Kiln",
+    "allDay": true,
+    "dateKey": "2026-11-01",
+    "recurrence": {
+     "freq": "daily",
+     "interval": 3,
+     "count": 4
+    }
+   },
+   "from": "2026-11-01",
+   "to": "2026-11-30",
+   "occurrences": [
+    {
+     "occurrenceId": "d3@2026-11-01",
+     "occurrenceKey": "2026-11-01",
+     "dateKey": "2026-11-01",
+     "endDateKey": "2026-11-01",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Kiln",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "d3@2026-11-04",
+     "occurrenceKey": "2026-11-04",
+     "dateKey": "2026-11-04",
+     "endDateKey": "2026-11-04",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Kiln",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "d3@2026-11-07",
+     "occurrenceKey": "2026-11-07",
+     "dateKey": "2026-11-07",
+     "endDateKey": "2026-11-07",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Kiln",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "d3@2026-11-10",
+     "occurrenceKey": "2026-11-10",
+     "dateKey": "2026-11-10",
+     "endDateKey": "2026-11-10",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Kiln",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    }
+   ]
+  },
+  {
+   "name": "weekly 09:00 across the London clock change",
+   "id": "dst",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "event",
+    "title": "Standup",
+    "allDay": false,
+    "startTime": "09:00",
+    "endTime": "09:15",
+    "dateKey": "2026-10-20",
+    "recurrence": {
+     "freq": "weekly",
+     "byWeekday": [
+      2
+     ]
+    }
+   },
+   "from": "2026-10-19",
+   "to": "2026-11-04",
+   "occurrences": [
+    {
+     "occurrenceId": "dst@2026-10-20",
+     "occurrenceKey": "2026-10-20",
+     "dateKey": "2026-10-20",
+     "endDateKey": "2026-10-20",
+     "allDay": false,
+     "startTime": "09:00",
+     "endTime": "09:15",
+     "startMs": 1792483200000,
+     "endMs": 1792484100000,
+     "title": "Standup",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "dst@2026-10-27",
+     "occurrenceKey": "2026-10-27",
+     "dateKey": "2026-10-27",
+     "endDateKey": "2026-10-27",
+     "allDay": false,
+     "startTime": "09:00",
+     "endTime": "09:15",
+     "startMs": 1793091600000,
+     "endMs": 1793092500000,
+     "title": "Standup",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "dst@2026-11-03",
+     "occurrenceKey": "2026-11-03",
+     "dateKey": "2026-11-03",
+     "endDateKey": "2026-11-03",
+     "allDay": false,
+     "startTime": "09:00",
+     "endTime": "09:15",
+     "startMs": 1793696400000,
+     "endMs": 1793697300000,
+     "title": "Standup",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    }
+   ]
+  },
+  {
+   "name": "only-this title change",
+   "id": "ot",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "event",
+    "title": "Class",
+    "allDay": true,
+    "dateKey": "2026-11-02",
+    "recurrence": {
+     "freq": "weekly",
+     "byWeekday": [
+      1
+     ]
+    },
+    "exceptions": {
+     "2026-11-09": {
+      "title": "Class (hall B)"
+     }
+    }
+   },
+   "from": "2026-11-01",
+   "to": "2026-11-20",
+   "occurrences": [
+    {
+     "occurrenceId": "ot@2026-11-02",
+     "occurrenceKey": "2026-11-02",
+     "dateKey": "2026-11-02",
+     "endDateKey": "2026-11-02",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Class",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "ot@2026-11-09",
+     "occurrenceKey": "2026-11-09",
+     "dateKey": "2026-11-09",
+     "endDateKey": "2026-11-09",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Class (hall B)",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    },
+    {
+     "occurrenceId": "ot@2026-11-16",
+     "occurrenceKey": "2026-11-16",
+     "dateKey": "2026-11-16",
+     "endDateKey": "2026-11-16",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Class",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    }
+   ]
+  },
+  {
+   "name": "series exception on a non-generated key is ignored",
+   "id": "bad",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "event",
+    "title": "Class",
+    "allDay": true,
+    "dateKey": "2026-11-02",
+    "recurrence": {
+     "freq": "weekly",
+     "byWeekday": [
+      1
+     ]
+    },
+    "exceptions": {
+     "2026-11-04": {
+      "dateKey": "2026-11-05",
+      "endDateKey": "2026-11-05"
+     }
+    }
+   },
+   "from": "2026-11-01",
+   "to": "2026-11-08",
+   "occurrences": [
+    {
+     "occurrenceId": "bad@2026-11-02",
+     "occurrenceKey": "2026-11-02",
+     "dateKey": "2026-11-02",
+     "endDateKey": "2026-11-02",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Class",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    }
+   ]
+  },
+  {
+   "name": "timed Istanbul",
+   "id": "ist",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/Istanbul",
+    "type": "event",
+    "title": "Supplier",
+    "allDay": false,
+    "dateKey": "2026-11-04",
+    "startTime": "23:30",
+    "endTime": "23:45"
+   },
+   "from": "2026-11-04",
+   "to": "2026-11-04",
+   "occurrences": [
+    {
+     "occurrenceId": "ist",
+     "occurrenceKey": "2026-11-04",
+     "dateKey": "2026-11-04",
+     "endDateKey": "2026-11-04",
+     "allDay": false,
+     "startTime": "23:30",
+     "endTime": "23:45",
+     "startMs": 1793824200000,
+     "endMs": 1793825100000,
+     "title": "Supplier",
+     "status": null,
+     "completedAtMs": null,
+     "moved": false
+    }
+   ]
+  },
+  {
+   "name": "single task done",
+   "id": "td",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "type": "task",
+    "title": "Invoice",
+    "allDay": true,
+    "dateKey": "2026-10-20",
+    "status": "done",
+    "completedAt": 1793000000000,
+    "completedByUid": "o"
+   },
+   "from": "2026-10-19",
+   "to": "2026-10-25",
+   "occurrences": [
+    {
+     "occurrenceId": "td",
+     "occurrenceKey": "2026-10-20",
+     "dateKey": "2026-10-20",
+     "endDateKey": "2026-10-20",
+     "allDay": true,
+     "startTime": null,
+     "endTime": null,
+     "startMs": null,
+     "endMs": null,
+     "title": "Invoice",
+     "status": "done",
+     "completedAtMs": 1793000000000,
+     "moved": false
+    }
+   ]
+  }
+ ],
+ "days": [
+  {
+   "id": "ist",
+   "viewerTimeZone": "Europe/London",
+   "occurrenceId": "ist",
+   "days": [
+    "2026-11-04"
+   ]
+  },
+  {
+   "id": "ist",
+   "viewerTimeZone": "Europe/Istanbul",
+   "occurrenceId": "ist",
+   "days": [
+    "2026-11-04"
+   ]
+  },
+  {
+   "id": "a4",
+   "viewerTimeZone": "America/New_York",
+   "occurrenceId": "a4",
+   "days": [
+    "2026-10-26"
+   ]
+  },
+  {
+   "id": "a3",
+   "viewerTimeZone": "Asia/Tokyo",
+   "occurrenceId": "a3",
+   "days": [
+    "2026-10-29",
+    "2026-10-30",
+    "2026-10-31",
+    "2026-11-01",
+    "2026-11-02",
+    "2026-11-03"
+   ]
+  },
+  {
+   "id": "a4",
+   "viewerTimeZone": "Pacific/Auckland",
+   "occurrenceId": "a4",
+   "days": [
+    "2026-10-26"
+   ]
+  }
+ ],
+ "access": [
+  {
+   "name": "private: owner",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "event",
+    "visibility": "private",
+    "accessUids": [
+     "o"
+    ]
+   },
+   "uid": "o",
+   "member": {
+    "role": "member",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": true,
+    "edit": true,
+    "remove": true,
+    "share": true,
+    "setStatus": false
+   }
+  },
+  {
+   "name": "private: workspace owner",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "event",
+    "visibility": "private",
+    "accessUids": [
+     "o"
+    ]
+   },
+   "uid": "boss",
+   "member": {
+    "role": "owner",
+    "isWorkspaceOwner": true
+   },
+   "access": {
+    "read": false,
+    "edit": false,
+    "remove": false,
+    "share": false,
+    "setStatus": false
+   }
+  },
+  {
+   "name": "private: admin",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "event",
+    "visibility": "private",
+    "accessUids": [
+     "o"
+    ]
+   },
+   "uid": "adm",
+   "member": {
+    "role": "admin",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": false,
+    "edit": false,
+    "remove": false,
+    "share": false,
+    "setStatus": false
+   }
+  },
+  {
+   "name": "selected viewer",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "event",
+    "visibility": "selected",
+    "accessUids": [
+     "o",
+     "v"
+    ]
+   },
+   "uid": "v",
+   "member": {
+    "role": "member",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": true,
+    "edit": false,
+    "remove": false,
+    "share": false,
+    "setStatus": false
+   }
+  },
+  {
+   "name": "selected editor",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "event",
+    "visibility": "selected",
+    "accessUids": [
+     "o",
+     "e"
+    ],
+    "editorUids": [
+     "e"
+    ]
+   },
+   "uid": "e",
+   "member": {
+    "role": "member",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": true,
+    "edit": true,
+    "remove": false,
+    "share": false,
+    "setStatus": false
+   }
+  },
+  {
+   "name": "selected editor who is View Only",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "event",
+    "visibility": "selected",
+    "accessUids": [
+     "o",
+     "e"
+    ],
+    "editorUids": [
+     "e"
+    ]
+   },
+   "uid": "e",
+   "member": {
+    "role": "viewer",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": true,
+    "edit": false,
+    "remove": false,
+    "share": false,
+    "setStatus": false
+   }
+  },
+  {
+   "name": "workspace view",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "event",
+    "visibility": "workspace",
+    "accessUids": [
+     "o"
+    ],
+    "workspaceRole": "view"
+   },
+   "uid": "m",
+   "member": {
+    "role": "member",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": true,
+    "edit": false,
+    "remove": false,
+    "share": false,
+    "setStatus": false
+   }
+  },
+  {
+   "name": "workspace edit, member",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "event",
+    "visibility": "workspace",
+    "accessUids": [
+     "o"
+    ],
+    "workspaceRole": "edit"
+   },
+   "uid": "m",
+   "member": {
+    "role": "member",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": true,
+    "edit": true,
+    "remove": false,
+    "share": false,
+    "setStatus": false
+   }
+  },
+  {
+   "name": "workspace edit, workflow",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "event",
+    "visibility": "workspace",
+    "accessUids": [
+     "o"
+    ],
+    "workspaceRole": "edit"
+   },
+   "uid": "w",
+   "member": {
+    "role": "workflow",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": true,
+    "edit": false,
+    "remove": false,
+    "share": false,
+    "setStatus": false
+   }
+  },
+  {
+   "name": "workspace edit, viewer",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "event",
+    "visibility": "workspace",
+    "accessUids": [
+     "o"
+    ],
+    "workspaceRole": "edit"
+   },
+   "uid": "v",
+   "member": {
+    "role": "viewer",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": true,
+    "edit": false,
+    "remove": false,
+    "share": false,
+    "setStatus": false
+   }
+  },
+  {
+   "name": "task assignee",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "task",
+    "visibility": "selected",
+    "accessUids": [
+     "o",
+     "p"
+    ],
+    "personUid": "p"
+   },
+   "uid": "p",
+   "member": {
+    "role": "member",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": true,
+    "edit": false,
+    "remove": false,
+    "share": false,
+    "setStatus": true
+   }
+  },
+  {
+   "name": "task assignee View Only",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "task",
+    "visibility": "selected",
+    "accessUids": [
+     "o",
+     "p"
+    ],
+    "personUid": "p"
+   },
+   "uid": "p",
+   "member": {
+    "role": "viewer",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": true,
+    "edit": false,
+    "remove": false,
+    "share": false,
+    "setStatus": false
+   }
+  },
+  {
+   "name": "event person is not an assignee",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "workday",
+    "visibility": "selected",
+    "accessUids": [
+     "o",
+     "p"
+    ],
+    "personUid": "p"
+   },
+   "uid": "p",
+   "member": {
+    "role": "member",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": true,
+    "edit": false,
+    "remove": false,
+    "share": false,
+    "setStatus": false
+   }
+  },
+  {
+   "name": "not named",
+   "raw": {
+    "ownerUid": "o",
+    "dateKey": "2026-11-04",
+    "type": "event",
+    "visibility": "selected",
+    "accessUids": [
+     "o",
+     "v"
+    ]
+   },
+   "uid": "x",
+   "member": {
+    "role": "admin",
+    "isWorkspaceOwner": false
+   },
+   "access": {
+    "read": false,
+    "edit": false,
+    "remove": false,
+    "share": false,
+    "setStatus": false
+   }
+  }
+ ],
+ "sharing": [
+  {
+   "input": {
+    "ownerUid": "o",
+    "visibility": "private",
+    "viewerUids": [
+     "a"
+    ],
+    "editorUids": [
+     "b"
+    ]
+   },
+   "result": {
+    "visibility": "private",
+    "accessUids": [
+     "o"
+    ],
+    "editorUids": [],
+    "workspaceRole": "view",
+    "addedForPerson": false
+   }
+  },
+  {
+   "input": {
+    "ownerUid": "o",
+    "visibility": "selected",
+    "viewerUids": [
+     "a",
+     "o",
+     "a"
+    ],
+    "editorUids": [
+     "b"
+    ]
+   },
+   "result": {
+    "visibility": "selected",
+    "accessUids": [
+     "o",
+     "b",
+     "a"
+    ],
+    "editorUids": [
+     "b"
+    ],
+    "workspaceRole": "view",
+    "addedForPerson": false
+   }
+  },
+  {
+   "input": {
+    "ownerUid": "o",
+    "visibility": "selected",
+    "viewerUids": [
+     "a"
+    ],
+    "editorUids": [],
+    "type": "task",
+    "personUid": "p"
+   },
+   "result": {
+    "visibility": "selected",
+    "accessUids": [
+     "o",
+     "a",
+     "p"
+    ],
+    "editorUids": [],
+    "workspaceRole": "view",
+    "addedForPerson": true
+   }
+  },
+  {
+   "input": {
+    "ownerUid": "o",
+    "visibility": "workspace",
+    "viewerUids": [],
+    "editorUids": [],
+    "workspaceRole": "edit"
+   },
+   "result": {
+    "visibility": "workspace",
+    "accessUids": [
+     "o"
+    ],
+    "editorUids": [],
+    "workspaceRole": "edit",
+    "addedForPerson": false
+   }
+  },
+  {
+   "input": {
+    "ownerUid": "o",
+    "visibility": "workspace",
+    "viewerUids": [],
+    "editorUids": [
+     "b"
+    ],
+    "workspaceRole": "nonsense"
+   },
+   "result": {
+    "visibility": "workspace",
+    "accessUids": [
+     "o",
+     "b"
+    ],
+    "editorUids": [
+     "b"
+    ],
+    "workspaceRole": "view",
+    "addedForPerson": false
+   }
+  }
+ ],
+ "validate": [
+  {
+   "draft": {
+    "type": "event",
+    "title": "Call",
+    "dateKey": "2026-11-04",
+    "allDay": true
+   },
+   "errors": []
+  },
+  {
+   "draft": {
+    "type": "event",
+    "title": "",
+    "dateKey": "2026-11-04",
+    "allDay": true
+   },
+   "errors": [
+    "title"
+   ]
+  },
+  {
+   "draft": {
+    "type": "note",
+    "title": "",
+    "description": "Bought paint",
+    "dateKey": "2026-10-21",
+    "allDay": true
+   },
+   "errors": []
+  },
+  {
+   "draft": {
+    "type": "note",
+    "title": "",
+    "description": "  ",
+    "dateKey": "2026-10-21",
+    "allDay": true
+   },
+   "errors": [
+    "noteText"
+   ]
+  },
+  {
+   "draft": {
+    "type": "event",
+    "title": "Call",
+    "dateKey": "2026-11-04",
+    "allDay": false,
+    "startTime": "10:00",
+    "endTime": "09:00",
+    "timeZone": "Europe/London"
+   },
+   "errors": [
+    "endTime"
+   ]
+  },
+  {
+   "draft": {
+    "type": "event",
+    "title": "Call",
+    "dateKey": "2026-11-04",
+    "endDateKey": "2026-11-05",
+    "allDay": false,
+    "startTime": "23:00",
+    "endTime": "01:00",
+    "timeZone": "Europe/London"
+   },
+   "errors": []
+  },
+  {
+   "draft": {
+    "type": "event",
+    "title": "Call",
+    "dateKey": "2026-11-04",
+    "allDay": false,
+    "startTime": "10:00",
+    "endTime": "11:00",
+    "timeZone": "Mars/Base"
+   },
+   "errors": [
+    "timeZone"
+   ]
+  },
+  {
+   "draft": {
+    "type": "workday",
+    "title": "Work",
+    "dateKey": "2026-11-04",
+    "allDay": true
+   },
+   "errors": [
+    "person"
+   ]
+  },
+  {
+   "draft": {
+    "type": "workday",
+    "title": "Work",
+    "dateKey": "2026-11-04",
+    "allDay": true,
+    "personLabel": "Yunseo"
+   },
+   "errors": []
+  },
+  {
+   "draft": {
+    "type": "event",
+    "title": "Trip",
+    "dateKey": "2026-11-04",
+    "endDateKey": "2027-02-01",
+    "allDay": true
+   },
+   "errors": [
+    "span"
+   ]
+  },
+  {
+   "draft": {
+    "type": "event",
+    "title": "X",
+    "dateKey": "2026-11-04",
+    "endDateKey": "2026-11-03",
+    "allDay": true
+   },
+   "errors": [
+    "endDate"
+   ]
+  },
+  {
+   "draft": {
+    "type": "event",
+    "title": "X",
+    "dateKey": "2026-11-04",
+    "allDay": true,
+    "recurrence": {
+     "freq": "weekly",
+     "byWeekday": []
+    }
+   },
+   "errors": [
+    "weekdays"
+   ]
+  },
+  {
+   "draft": {
+    "type": "event",
+    "title": "X",
+    "dateKey": "2026-11-04",
+    "allDay": true,
+    "recurrence": {
+     "freq": "daily",
+     "untilKey": "2026-11-01"
+    }
+   },
+   "errors": [
+    "until"
+   ]
+  },
+  {
+   "draft": {
+    "type": "task",
+    "title": "X",
+    "dateKey": "2026-11-04",
+    "allDay": true,
+    "visibility": "selected",
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "personUid": "p"
+   },
+   "errors": [
+    "assigneeAccess"
+   ]
+  },
+  {
+   "draft": {
+    "type": "task",
+    "title": "X",
+    "dateKey": "2026-11-04",
+    "allDay": true,
+    "visibility": "private",
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "personUid": "o"
+   },
+   "errors": []
+  },
+  {
+   "draft": {
+    "type": "meeting",
+    "title": "X",
+    "dateKey": "2026-13-01",
+    "allDay": true
+   },
+   "errors": [
+    "type",
+    "date",
+    "endDate"
+   ]
+  }
+ ],
+ "noteTitle": [
+  {
+   "text": "Bought paint\nand brushes",
+   "title": "Bought paint"
+  },
+  {
+   "text": "",
+   "title": ""
+  },
+  {
+   "text": "   \n  second line",
+   "title": "second line"
+  },
+  {
+   "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…"
+  },
+  {
+   "text": "Ünlü çay ☕ notu",
+   "title": "Ünlü çay ☕ notu"
+  }
+ ],
+ "next": [
+  {
+   "name": "timed 15 min",
+   "id": "a4",
+   "reminder": {
+    "offsetMinutes": 15
+   },
+   "afterMs": 1792998000000,
+   "next": {
+    "occurrenceKey": "2026-10-26",
+    "fireMs": 1793004300000
+   }
+  },
+  {
+   "name": "timed, already passed",
+   "id": "a4",
+   "reminder": {
+    "offsetMinutes": 15
+   },
+   "afterMs": 1793001600000,
+   "next": {
+    "occurrenceKey": "2026-10-26",
+    "fireMs": 1793004300000
+   }
+  },
+  {
+   "name": "all-day own 09:00 London",
+   "id": "a1",
+   "reminder": {
+    "offsetMinutes": 0,
+    "allDayTime": "09:00",
+    "timeZone": "Europe/London"
+   },
+   "afterMs": 1793491200000,
+   "next": {
+    "occurrenceKey": "2026-11-04",
+    "fireMs": 1793782800000
+   }
+  },
+  {
+   "name": "all-day 1 day before at 18:00 Istanbul",
+   "id": "a1",
+   "reminder": {
+    "offsetMinutes": 1440,
+    "allDayTime": "18:00",
+    "timeZone": "Europe/Istanbul"
+   },
+   "afterMs": 1793491200000,
+   "next": {
+    "occurrenceKey": "2026-11-04",
+    "fireMs": 1793718000000
+   }
+  },
+  {
+   "name": "series skips done occurrence",
+   "id": "d5",
+   "reminder": {
+    "offsetMinutes": 0,
+    "allDayTime": "08:00"
+   },
+   "afterMs": 1790899200000,
+   "next": {
+    "occurrenceKey": "2026-10-03",
+    "fireMs": 1791010800000
+   }
+  },
+  {
+   "name": "series after the last",
+   "id": "d5",
+   "reminder": {
+    "offsetMinutes": 0
+   },
+   "afterMs": 1791244800000,
+   "next": null
+  },
+  {
+   "name": "DST weekly, from GMT side",
+   "id": "dst",
+   "reminder": {
+    "offsetMinutes": 60
+   },
+   "afterMs": 1792540800000,
+   "next": {
+    "occurrenceKey": "2026-10-27",
+    "fireMs": 1793088000000
+   }
+  },
+  {
+   "name": "moved Tuesday",
+   "id": "y1",
+   "reminder": {
+    "offsetMinutes": 0
+   },
+   "afterMs": 1793750400000,
+   "next": {
+    "occurrenceKey": "2026-11-10",
+    "fireMs": 1794474000000
+   }
+  }
+ ],
+ "decision": [
+  {
+   "name": "on time",
+   "id": "a4",
+   "reminder": {
+    "offsetMinutes": 15
+   },
+   "key": "2026-10-26",
+   "fireMs": 1793004300000,
+   "nowMs": 1793004330000,
+   "decision": {
+    "action": "send",
+    "next": null
+   }
+  },
+  {
+   "name": "too early (sweep clock skew)",
+   "id": "a4",
+   "reminder": {
+    "offsetMinutes": 15
+   },
+   "key": "2026-10-26",
+   "fireMs": 1793004300000,
+   "nowMs": 1793004000000,
+   "decision": {
+    "action": "reschedule",
+    "next": {
+     "occurrenceKey": "2026-10-26",
+     "fireMs": 1793004300000
+    }
+   }
+  },
+  {
+   "name": "slot no longer matches",
+   "id": "a4",
+   "reminder": {
+    "offsetMinutes": 15
+   },
+   "key": "2026-10-26",
+   "fireMs": 1793000700000,
+   "nowMs": 1793000700000,
+   "decision": {
+    "action": "reschedule",
+    "next": {
+     "occurrenceKey": "2026-10-26",
+     "fireMs": 1793004300000
+    }
+   }
+  },
+  {
+   "name": "late but before end",
+   "id": "a4",
+   "reminder": {
+    "offsetMinutes": 15
+   },
+   "key": "2026-10-26",
+   "fireMs": 1793004300000,
+   "nowMs": 1793006400000,
+   "decision": {
+    "action": "send",
+    "next": null
+   }
+  },
+  {
+   "name": "too late",
+   "id": "a4",
+   "reminder": {
+    "offsetMinutes": 15
+   },
+   "key": "2026-10-26",
+   "fireMs": 1793004300000,
+   "nowMs": 1793016000000,
+   "decision": {
+    "action": "drop",
+    "next": null
+   }
+  },
+  {
+   "name": "cancelled occurrence",
+   "id": "d5",
+   "reminder": {
+    "offsetMinutes": 0
+   },
+   "key": "2026-10-04",
+   "fireMs": 1791100800000,
+   "nowMs": 1791100800000,
+   "decision": {
+    "action": "drop",
+    "next": {
+     "occurrenceKey": "2026-10-05",
+     "fireMs": 1791187200000
+    }
+   }
+  },
+  {
+   "name": "done occurrence",
+   "id": "d5",
+   "reminder": {
+    "offsetMinutes": 0
+   },
+   "key": "2026-10-02",
+   "fireMs": 1790928000000,
+   "nowMs": 1790928000000,
+   "decision": {
+    "action": "drop",
+    "next": {
+     "occurrenceKey": "2026-10-03",
+     "fireMs": 1791014400000
+    }
+   }
+  },
+  {
+   "name": "all-day same day late",
+   "id": "a1",
+   "reminder": {
+    "offsetMinutes": 0
+   },
+   "key": "2026-11-04",
+   "fireMs": 1793782800000,
+   "nowMs": 1793822400000,
+   "decision": {
+    "action": "send",
+    "next": null
+   }
+  }
+ ],
+ "split": [
+  {
+   "name": "Yunseo from 17 Nov, new title",
+   "id": "ys",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "workday",
+    "title": "Yunseo",
+    "allDay": true,
+    "dateKey": "2026-11-03",
+    "personLabel": "Yunseo",
+    "recurrence": {
+     "freq": "weekly",
+     "byWeekday": [
+      2
+     ],
+     "count": 10
+    },
+    "exceptions": {
+     "2026-11-10": {
+      "dateKey": "2026-11-12",
+      "endDateKey": "2026-11-12"
+     },
+     "2026-11-24": {
+      "cancelled": true,
+      "title": "x"
+     },
+     "2026-12-01": {
+      "title": "Yunseo (late)",
+      "startTime": "12:00"
+     }
+    },
+    "occurrenceStatus": {}
+   },
+   "key": "2026-11-17",
+   "changes": {
+    "title": "Yunseo (new shop)"
+   },
+   "result": {
+    "mode": "split",
+    "newId": "ys_s20261117",
+    "old": {
+     "recurrence": {
+      "freq": "weekly",
+      "interval": 1,
+      "byWeekday": [
+       2
+      ],
+      "untilKey": "2026-11-16",
+      "count": null
+     },
+     "exceptions": {
+      "2026-11-10": {
+       "dateKey": "2026-11-12",
+       "endDateKey": "2026-11-12"
+      }
+     },
+     "occurrenceStatus": {}
+    },
+    "next": {
+     "dateKey": "2026-11-17",
+     "endDateKey": "2026-11-17",
+     "recurrence": {
+      "freq": "weekly",
+      "interval": 1,
+      "byWeekday": [
+       2
+      ],
+      "untilKey": null,
+      "count": 8
+     },
+     "exceptions": {
+      "2026-11-24": {
+       "cancelled": true
+      },
+      "2026-12-01": {
+       "startTime": "12:00"
+      }
+     },
+     "occurrenceStatus": {},
+     "splitFromId": "ys"
+    }
+   }
+  },
+  {
+   "name": "Yunseo from first occurrence = whole",
+   "id": "ys",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "workday",
+    "title": "Yunseo",
+    "allDay": true,
+    "dateKey": "2026-11-03",
+    "personLabel": "Yunseo",
+    "recurrence": {
+     "freq": "weekly",
+     "byWeekday": [
+      2
+     ],
+     "count": 10
+    },
+    "exceptions": {
+     "2026-11-10": {
+      "dateKey": "2026-11-12",
+      "endDateKey": "2026-11-12"
+     },
+     "2026-11-24": {
+      "cancelled": true,
+      "title": "x"
+     },
+     "2026-12-01": {
+      "title": "Yunseo (late)",
+      "startTime": "12:00"
+     }
+    },
+    "occurrenceStatus": {}
+   },
+   "key": "2026-11-03",
+   "changes": {
+    "title": "X"
+   },
+   "result": {
+    "mode": "whole"
+   }
+  },
+  {
+   "name": "daily task from 5 Oct keeps past completion, carries later one",
+   "id": "ts",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "task",
+    "title": "Water",
+    "allDay": true,
+    "dateKey": "2026-10-01",
+    "recurrence": {
+     "freq": "daily"
+    },
+    "occurrenceStatus": {
+     "2026-10-02": {
+      "status": "done",
+      "completedAt": 1790000000000,
+      "completedByUid": "o"
+     },
+     "2026-10-09": {
+      "status": "done",
+      "completedAt": 1790500000000,
+      "completedByUid": "o"
+     }
+    }
+   },
+   "key": "2026-10-05",
+   "changes": {
+    "title": "Water (balcony)"
+   },
+   "result": {
+    "mode": "split",
+    "newId": "ts_s20261005",
+    "old": {
+     "recurrence": {
+      "freq": "daily",
+      "interval": 1,
+      "byWeekday": [],
+      "untilKey": "2026-10-04",
+      "count": null
+     },
+     "exceptions": {},
+     "occurrenceStatus": {
+      "2026-10-02": {
+       "status": "done",
+       "completedAtMs": 1790000000000,
+       "completedByUid": "o"
+      }
+     }
+    },
+    "next": {
+     "dateKey": "2026-10-05",
+     "endDateKey": "2026-10-05",
+     "recurrence": {
+      "freq": "daily",
+      "interval": 1,
+      "byWeekday": [],
+      "untilKey": null,
+      "count": null
+     },
+     "exceptions": {},
+     "occurrenceStatus": {
+      "2026-10-09": {
+       "status": "done",
+       "completedAtMs": 1790500000000,
+       "completedByUid": "o"
+      }
+     },
+     "splitFromId": "ts"
+    }
+   }
+  }
+ ],
+ "endBefore": [
+  {
+   "id": "ys",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "workday",
+    "title": "Yunseo",
+    "allDay": true,
+    "dateKey": "2026-11-03",
+    "personLabel": "Yunseo",
+    "recurrence": {
+     "freq": "weekly",
+     "byWeekday": [
+      2
+     ],
+     "count": 10
+    },
+    "exceptions": {
+     "2026-11-10": {
+      "dateKey": "2026-11-12",
+      "endDateKey": "2026-11-12"
+     },
+     "2026-11-24": {
+      "cancelled": true,
+      "title": "x"
+     },
+     "2026-12-01": {
+      "title": "Yunseo (late)",
+      "startTime": "12:00"
+     }
+    },
+    "occurrenceStatus": {}
+   },
+   "key": "2026-11-17",
+   "result": {
+    "mode": "end",
+    "recurrence": {
+     "freq": "weekly",
+     "interval": 1,
+     "byWeekday": [
+      2
+     ],
+     "untilKey": "2026-11-16",
+     "count": null
+    },
+    "exceptions": {
+     "2026-11-10": {
+      "dateKey": "2026-11-12",
+      "endDateKey": "2026-11-12"
+     }
+    },
+    "occurrenceStatus": {}
+   }
+  },
+  {
+   "id": "ys",
+   "raw": {
+    "ownerUid": "o",
+    "accessUids": [
+     "o"
+    ],
+    "visibility": "private",
+    "timeZone": "Europe/London",
+    "rowType": "series",
+    "type": "workday",
+    "title": "Yunseo",
+    "allDay": true,
+    "dateKey": "2026-11-03",
+    "personLabel": "Yunseo",
+    "recurrence": {
+     "freq": "weekly",
+     "byWeekday": [
+      2
+     ],
+     "count": 10
+    },
+    "exceptions": {
+     "2026-11-10": {
+      "dateKey": "2026-11-12",
+      "endDateKey": "2026-11-12"
+     },
+     "2026-11-24": {
+      "cancelled": true,
+      "title": "x"
+     },
+     "2026-12-01": {
+      "title": "Yunseo (late)",
+      "startTime": "12:00"
+     }
+    },
+    "occurrenceStatus": {}
+   },
+   "key": "2026-11-03",
+   "result": {
+    "mode": "deleteAll"
+   }
+  }
+ ],
+ "taskState": [
+  {
+   "occurrence": {
+    "type": "task",
+    "status": "open",
+    "endDateKey": "2026-10-20"
+   },
+   "todayKey": "2026-10-28",
+   "state": "late"
+  },
+  {
+   "occurrence": {
+    "type": "task",
+    "status": "open",
+    "endDateKey": "2026-10-28"
+   },
+   "todayKey": "2026-10-28",
+   "state": "open"
+  },
+  {
+   "occurrence": {
+    "type": "task",
+    "status": "done",
+    "endDateKey": "2026-10-20"
+   },
+   "todayKey": "2026-10-28",
+   "state": "done"
+  },
+  {
+   "occurrence": {
+    "type": "task",
+    "status": "cancelled",
+    "endDateKey": "2026-10-20"
+   },
+   "todayKey": "2026-10-28",
+   "state": "cancelled"
+  },
+  {
+   "occurrence": {
+    "type": "event",
+    "status": null,
+    "endDateKey": "2026-10-20"
+   },
+   "todayKey": "2026-10-28",
+   "state": null
+  }
+ ]
+}

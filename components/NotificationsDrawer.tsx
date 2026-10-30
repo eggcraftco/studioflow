@@ -20,6 +20,8 @@ import {
   typeLabel,
 } from "@/lib/studioflow/notifications";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import type { CalendarInboxRow } from "@/lib/studioflow/calendarData";
+import { CalendarInboxSection } from "@/components/CalendarInboxSection";
 import type { WebPushStatus } from "@/lib/studioflow/pushNotifications";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
@@ -92,6 +94,8 @@ type Props = {
   dismissedLocally: Set<string>;
   onClose: () => void;
   onLocalDismiss: (ids: string[]) => void;
+  /** Calendar V1: this person's own reminders that went off (calendarInbox). */
+  calendarRows?: CalendarInboxRow[];
 };
 
 export function NotificationsDrawer({
@@ -103,6 +107,7 @@ export function NotificationsDrawer({
   dismissedLocally,
   onClose,
   onLocalDismiss,
+  calendarRows = [],
 }: Props) {
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
@@ -342,6 +347,7 @@ export function NotificationsDrawer({
         onClick={onClose}
       />
       <aside className="notif-drawer">
+        <CalendarInboxSection rows={calendarRows} workspaceId={workspace?.id ?? ""} language={language} onClose={onClose} />
         <div className="notif-card notif-header-card">
           <div className="notif-header-row">
             <div style={{ flex: 1 }}>
