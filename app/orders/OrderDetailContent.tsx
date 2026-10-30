@@ -30,10 +30,12 @@ import {
 } from "@/lib/studioflow/repairIntakePresets";
 import {
   createOrderPortalLink,
+  getOrderPortalLink,
   portalUrlForToken,
   revokeOrderPortalLink,
   saveOrderPortalSettings,
   type PortalAutoUpdates,
+  type PortalLinkLookup,
   type PortalVisibility
 } from "@/lib/studioflow/customerPortal";
 import { getWorkspaceSmsSettings, type WorkspaceSmsSettings } from "@/lib/studioflow/sms";
@@ -6153,7 +6155,43 @@ export function OrderDetailContent({
   const orderProfitIsEstimate = orderCostsMissing || (isEtsyOrder && etsyOrderProfitIsEstimate(orderFinance, etsyShippingUnknown)) || channelShippingEstimate;
   const [portalBusy, setPortalBusy] = useState(false);
   const [portalNotice, setPortalNotice] = useState("");
-  const portalUrl = portalUrlForToken(portal.token, workspace.clientPortalHost);
+  // SEC-NAME C-portal (28 Oct 2026): the link to copy comes from getOrderPortalLink, which checks Customers,
+  // Financial Info and the member's assigned scope — the order document is open to members who have neither. The
+  // order's own copy is used only when that call got no answer (apps and links from before the change), never
+  // when it said no. Asked once per live link, and only by someone who can see this card.
+  const [portalLink, setPortalLink] = useState<{ key: string; lookup: PortalLinkLookup | null }>({ key: "", lookup: null });
+  const portalLinkKey = portal.active && canShowOrderCard("customerPortal") ? `${order.id}:${portal.tokenId}` : "";
+  useEffect(() => {
+    if (!portalLinkKey) return;
+    let cancelled = false;
+    setPortalLink({ key: portalLinkKey, lookup: null });
+    void getOrderPortalLink(workspace, order.id).then(lookup => {
+      if (!cancelled) setPortalLink({ key: portalLinkKey, lookup });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace, order.id, portalLinkKey]);
+  const portalLookup = portalLinkKey && portalLink.key === portalLinkKey ? portalLink.lookup : null;
+  const portalUrl = !portal.active
+    ? ""
+    : portalLookup?.kind === "link"
+      ? portalLookup.url
+      : portalLookup?.kind === "unavailable"
+        ? portalUrlForToken(portal.token, workspace.clientPortalHost)
+        : "";
+  // What the card says while the link is on but not shown (still asking, not allowed, or not to be found).
+  const portalLinkStateText = !portalLookup
+    ? "Getting the link…"
+    : portalLookup.kind === "denied"
+      ? portalLookup.reason === "customers_off"
+        ? "The link is on. Copying it needs Customers access."
+        : portalLookup.reason === "financial_off"
+          ? "The link is on. Copying it needs Financial Info access."
+          : "The link is on. Your workspace access does not include copying it."
+      : portalLookup.kind === "none"
+        ? "The link could not be found. Create a fresh link to send one."
+        : "The link could not be loaded. Try again shortly.";
 
   // The SMS switch on this card was dead: hard-wired to OFF under the sentence
   // "SMS is not connected yet". The server has read that per-order flag all
@@ -6703,6 +6741,10 @@ export function OrderDetailContent({
                       {t("Open Portal")}
                     </a>
                   </div>
+                ) : portal.active ? (
+                  <p className="portal-empty" data-portal-link-state={portalLookup?.kind ?? "loading"}>
+                    {t(portalLinkStateText)}
+                  </p>
                 ) : (
                   <p className="portal-empty">
                     {t("No portal link yet. Create one and send it to your customer — they can open it without signing in.")}
@@ -12814,6 +12856,7 @@ export function pdfPreviewSampleOrder(): OrderDetail {
     estimates: [],
     customerPortal: {
       token: "",
+      tokenId: "",
       active: false,
       createdAtMs: 0,
       visibility: { status: false, estimate: false, payments: false, photos: false, expectedDate: false },
