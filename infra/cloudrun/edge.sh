@@ -25,6 +25,7 @@ ACTION="${ACTION:-plan}"
 DOMAINS=(nivadesk.app www.nivadesk.app)
 
 IP=nivadesk-web-ip
+IP6=nivadesk-web-ipv6
 NEG=nivadesk-web-neg
 BACKEND=nivadesk-web-backend
 URLMAP=nivadesk-web-map
@@ -36,6 +37,8 @@ HTTPS_PROXY=nivadesk-web-https
 HTTP_PROXY=nivadesk-web-http
 FR_HTTPS=nivadesk-web-https-fr
 FR_HTTP=nivadesk-web-http-fr
+FR_HTTPS6=nivadesk-web-https-fr-v6
+FR_HTTP6=nivadesk-web-http-fr-v6
 auth_name() { echo "nivadesk-web-auth-${1//./-}"; }
 
 g() { gcloud "$@" --project="$PROJECT"; }
@@ -61,7 +64,10 @@ report() {
            "certificate-manager maps describe $CERT_MAP" \
            "compute target-https-proxies describe $HTTPS_PROXY" \
            "compute forwarding-rules describe $FR_HTTPS --global" \
-           "compute forwarding-rules describe $FR_HTTP --global"; do
+           "compute forwarding-rules describe $FR_HTTP --global" \
+           "compute addresses describe $IP6 --global" \
+           "compute forwarding-rules describe $FR_HTTPS6 --global" \
+           "compute forwarding-rules describe $FR_HTTP6 --global"; do
     # shellcheck disable=SC2086
     if has g $r; then echo "  present  $r"; else echo "  missing  $r"; fi
   done
@@ -73,7 +79,9 @@ plan)
   echo "plan only — nothing changed" ;;
 
 apply)
+  # nivadesk.app has an AAAA record as well as an A record: both must move, or IPv6 visitors stay on Hostinger.
   has g compute addresses describe $IP --global || g compute addresses create $IP --global --ip-version=IPV4
+  has g compute addresses describe $IP6 --global || g compute addresses create $IP6 --global --ip-version=IPV6
   has g compute network-endpoint-groups describe $NEG --region=$REGION \
     || g compute network-endpoint-groups create $NEG --region=$REGION --network-endpoint-type=serverless --cloud-run-service=$SERVICE
   if ! has g compute backend-services describe $BACKEND --global; then
@@ -115,6 +123,12 @@ apply)
   has g compute forwarding-rules describe $FR_HTTP --global \
     || g compute forwarding-rules create $FR_HTTP --global --load-balancing-scheme=EXTERNAL_MANAGED \
          --address=$IP --target-http-proxy=$HTTP_PROXY --ports=80
+  has g compute forwarding-rules describe $FR_HTTPS6 --global \
+    || g compute forwarding-rules create $FR_HTTPS6 --global --load-balancing-scheme=EXTERNAL_MANAGED \
+         --address=$IP6 --target-https-proxy=$HTTPS_PROXY --ports=443
+  has g compute forwarding-rules describe $FR_HTTP6 --global \
+    || g compute forwarding-rules create $FR_HTTP6 --global --load-balancing-scheme=EXTERNAL_MANAGED \
+         --address=$IP6 --target-http-proxy=$HTTP_PROXY --ports=80
 
   echo "══ readback"; report
   addr=$(g compute addresses describe $IP --global --format='value(address)')
@@ -122,16 +136,19 @@ apply)
   for a in "${auths[@]}"; do
     g certificate-manager dns-authorizations describe "$a" --format='value(dnsResourceRecord.name,dnsResourceRecord.type,dnsResourceRecord.data)'
   done
-  echo "  (NOT yet) nivadesk.app A $addr   ← the cutover step, after smoke.sh passes against $addr"
+  addr6=$(g compute addresses describe $IP6 --global --format='value(address)')
+  echo "  (NOT yet) nivadesk.app A $addr and AAAA $addr6   ← the cutover step, after smoke.sh passes"
   echo "certificate state: $(g certificate-manager certificates describe $CERT --format='value(managed.state)')" ;;
 
 rollback)
-  echo "Only after nivadesk.app's A record is back on Hostinger (76.13.132.222)."
-  for r in "compute forwarding-rules delete $FR_HTTP --global" "compute forwarding-rules delete $FR_HTTPS --global" \
+  echo "Only after nivadesk.app's A and AAAA records are back on Hostinger (76.13.132.222, 2a02:4780:3f:2216:0:2907:1f72:6)."
+  for r in "compute forwarding-rules delete $FR_HTTP6 --global" "compute forwarding-rules delete $FR_HTTPS6 --global" \
+           "compute forwarding-rules delete $FR_HTTP --global" "compute forwarding-rules delete $FR_HTTPS --global" \
            "compute target-http-proxies delete $HTTP_PROXY" "compute target-https-proxies delete $HTTPS_PROXY" \
            "compute url-maps delete $REDIRECT_MAP" "compute url-maps delete $URLMAP" \
            "compute backend-services delete $BACKEND --global" "compute network-endpoint-groups delete $NEG --region=$REGION" \
-           "compute ssl-policies delete $SSL_POLICY --global" "compute addresses delete $IP --global"; do
+           "compute ssl-policies delete $SSL_POLICY --global" "compute addresses delete $IP --global" \
+           "compute addresses delete $IP6 --global"; do
     # shellcheck disable=SC2086
     has g $r --quiet && echo "  deleted  $r" || echo "  absent   $r"
   done

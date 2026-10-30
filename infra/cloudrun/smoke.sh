@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Compares nivadesk.app on the new load balancer with nivadesk.app on Hostinger, path by path.
 #
-#   ./smoke.sh <LB_IP>     before the cutover: talks to the load balancer with --resolve, so the real
+#   ./smoke.sh <LB_IP> [LB_IPv6]   before the cutover: talks to the load balancer with --resolve, so the real
 #                          certificate and Host are used while the public DNS still points at Hostinger
 #   ./smoke.sh             after the cutover: plain DNS
 #
@@ -9,6 +9,7 @@
 # input and must refuse it exactly as Hostinger does.
 set -uo pipefail
 LB_IP="${1:-}"
+LB_IP6="${2:-}"
 HOSTINGER=76.13.132.222
 NEW=(); [ -n "$LB_IP" ] && NEW=(--resolve "nivadesk.app:443:$LB_IP" --resolve "www.nivadesk.app:443:$LB_IP")
 OLD=(--resolve "nivadesk.app:443:$HOSTINGER")
@@ -56,5 +57,13 @@ echo "══ certificate and TLS"
 host_ip="${LB_IP:-$(dig +short nivadesk.app | tail -1)}"
 echo | openssl s_client -connect "$host_ip:443" -servername nivadesk.app 2>/dev/null | openssl x509 -noout -subject -issuer -enddate 2>/dev/null | sed 's/^/  /'
 echo | openssl s_client -connect "$host_ip:443" -servername nivadesk.app -tls1_2 2>/dev/null | grep -q "Protocol *: TLSv1.2\|TLSv1.2" && echo "  TLS 1.2 accepted" || echo "  TLS 1.2 not negotiated (check)"
+
+if [ -n "$LB_IP6" ]; then
+  echo "══ IPv6 front door"
+  for p in / /login /integrations/amazon /.well-known/oauth-authorization-server; do
+    n=$(curl -s -6 --resolve "nivadesk.app:443:[$LB_IP6]" -o /dev/null -w '%{http_code}' "https://nivadesk.app$p")
+    row "[v6] $p" "$n" "-" "$([ "$n" = 200 ] && echo ok || { fail=1; echo 'EXPECTED 200'; })"
+  done
+fi
 
 [ $fail = 0 ] && echo "SMOKE OK" || { echo "SMOKE FAILED"; exit 1; }
