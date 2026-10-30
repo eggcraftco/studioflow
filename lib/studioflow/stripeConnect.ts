@@ -133,3 +133,147 @@ export function stripeStatusLabel(status: StripeConnectionSummary["status"] | ""
     default: return "Not connected";
   }
 }
+
+// ---- Refunds from NivaDesk (SL-21 / SL-22, 30 Oct 2026) ------------------------------------------------------
+
+/**
+ * What a payment request's summary says about refunding it (SL-22), beside the
+ * fields every row already has.
+ *
+ * All three are OPTIONAL on purpose: a server from before refunds sends none of
+ * them, and a row without `canRefund === true` draws no Refund button — never a
+ * button the server would refuse. The server decides all three; nothing here
+ * recomputes them.
+ */
+export type PaymentRequestRefundFields = {
+  /** The most that can still be refunded, in minor units: paid − refunds − refunds still in flight. */
+  refundableMinor?: number;
+  /** Refunds Stripe is holding as pending (the business's balance cannot cover them yet), in minor units. */
+  refundPendingMinor?: number;
+  /** THIS person may refund this row now: the owner, something left, one payment, and the deployment's own mode. */
+  canRefund?: boolean;
+};
+
+/** The two reasons NivaDesk offers. "fraudulent" is Stripe's too, but it also blocks the card, so it stays in Stripe. */
+export type RefundReason = "requested_by_customer" | "duplicate";
+
+export type RefundOrderPaymentInput = {
+  companyId: string;
+  orderId: string;
+  paymentRequestId: string;
+  /** Integer minor units, > 0, at most `refundableMinor`. The server and then Stripe check again. */
+  amountMinor: number;
+  reason: RefundReason;
+  /** Made once per submit (`newClientRefundId`) and sent again when the same submit is retried. */
+  clientRefundId: string;
+};
+
+export type RefundOrderPaymentResult = {
+  ok: boolean;
+  /** `status` is Stripe's own: succeeded | pending | requires_action | failed | canceled. */
+  refund: { status: string; amountMinor: number; currency: string };
+  /** The request's summary after the refund, as the list would send it. */
+  request: (PaymentRequestRefundFields & Record<string, unknown>) | null;
+};
+
+/**
+ * The id that makes a refund happen once.
+ *
+ * The server keeps one attempt per id and passes it to Stripe as the
+ * idempotency key, so the SAME id sent twice is one refund — which is why a
+ * retry of the same submit must send it again rather than make a new one.
+ * Letters and digits only (the server accepts `^[A-Za-z0-9_-]{8,64}$`).
+ */
+export function newClientRefundId(): string {
+  const source = (globalThis as { crypto?: Crypto }).crypto;
+  if (source && typeof source.randomUUID === "function") return source.randomUUID().replace(/-/g, "");
+  const bytes = new Uint8Array(16);
+  if (source && typeof source.getRandomValues === "function") source.getRandomValues(bytes);
+  else for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Refund (part of) a paid payment link to the customer's card. Owner only.
+ *
+ * The money comes from the business's own Stripe balance and Stripe keeps its
+ * fee. A `pending` answer is a refund Stripe has accepted but will send only
+ * when that balance can cover it — not a refund that failed.
+ */
+export async function refundOrderPayment(input: RefundOrderPaymentInput): Promise<RefundOrderPaymentResult> {
+  const data = (await call<RefundOrderPaymentInput, Partial<RefundOrderPaymentResult>>("refundOrderPayment")({
+    companyId: input.companyId,
+    orderId: input.orderId,
+    paymentRequestId: input.paymentRequestId,
+    amountMinor: input.amountMinor,
+    reason: input.reason,
+    clientRefundId: input.clientRefundId,
+  })).data;
+  return {
+    ok: data?.ok === true,
+    refund: {
+      status: String(data?.refund?.status ?? ""),
+      amountMinor: Math.max(0, Math.trunc(Number(data?.refund?.amountMinor) || 0)),
+      currency: String(data?.refund?.currency ?? ""),
+    },
+    request: data?.request ?? null,
+  };
+}
+
+/** Why the server refused a refund: `details.reason` on the callable error, the way orders.ts reads `pilot_off`. */
+export type RefundRefusal = {
+  /** `details.reason`, or "" when the error carried none (a lost reply, a network failure). */
+  reason: string;
+  /** The sentence to show, a key in the translation table. "{amount}" stands for the most that can be refunded. */
+  text: string;
+  /** `details.refundableMinor` when the server sent it (refund_amount_too_large), else null. */
+  refundableMinor: number | null;
+};
+
+export function refundRefusal(error: unknown): RefundRefusal {
+  const details = (error as { details?: { reason?: unknown; refundableMinor?: unknown } } | null)?.details;
+  const reason = typeof details?.reason === "string" ? details.reason : "";
+  const most = Number(details?.refundableMinor);
+  const code = String((error as { code?: string } | null)?.code || "");
+  return {
+    reason,
+    text: refundRefusalText(reason, code),
+    refundableMinor: details?.refundableMinor != null && Number.isInteger(most) && most >= 0 ? most : null,
+  };
+}
+
+/**
+ * One sentence per refusal the server can give (the contract's `details.reason`
+ * list). Never Stripe's own message: the server does not pass it on, and the
+ * screen would not show it if it did.
+ */
+export function refundRefusalText(reason: string, code = ""): string {
+  switch (reason) {
+    case "refund_not_allowed": return "Only the workspace owner can refund a payment.";
+    case "refund_not_refundable": return "This payment has nothing left to refund.";
+    case "refund_disputed": return "The customer has disputed this payment, so it cannot be refunded here. Answer the dispute in your Stripe Dashboard.";
+    case "refund_multiple_payments": return "This link was paid more than once. Refund it in your Stripe Dashboard.";
+    case "refund_mode_mismatch": return "This payment was made in Stripe's other mode (test or live), so it cannot be refunded from here.";
+    case "refund_account_changed": return "This payment went to a Stripe account that is no longer connected here. Refund it from that account's Stripe Dashboard.";
+    case "refund_amount_invalid": return "That refund amount is not valid.";
+    case "refund_amount_too_large": return "That is more than can be refunded. The most you can refund is {amount}.";
+    case "refund_in_progress": return "Another refund for this payment is still being made. Wait a moment, then try again.";
+    case "refund_provider_error": return "Stripe could not make this refund just now. Try again in a moment; if it keeps failing, refund it in your Stripe Dashboard.";
+    default: break;
+  }
+  if (/permission-denied/.test(code)) return "Only the workspace owner can refund a payment.";
+  if (/unauthenticated/.test(code)) return "Sign in again to see payment links.";
+  // No reason means no answer reached the screen: the refund may or may not have been made. Trying again
+  // sends the same id, so it is never made twice.
+  return "The refund could not be confirmed. Try again; it will not be made twice.";
+}
+
+/** What a refund the server accepted turned into, by Stripe's status. */
+export function refundResult(status: string): { tone: "done" | "pending" | "problem"; text: string } {
+  switch (status) {
+    case "succeeded": return { tone: "done", text: "Refunded" };
+    case "pending": return { tone: "pending", text: "Refund pending. Stripe will finish this when your Stripe balance allows." };
+    case "requires_action": return { tone: "problem", text: "Stripe needs something more before this refund can finish. Check it in your Stripe Dashboard." };
+    default: return { tone: "problem", text: "Stripe did not complete this refund. Check it in your Stripe Dashboard." };
+  }
+}

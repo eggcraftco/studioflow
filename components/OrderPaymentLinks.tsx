@@ -32,6 +32,13 @@ import { formatMinor, tabForStatus, type PaymentLinkRow } from "@/components/Pay
 import { minorToInputText, parseRequestAmount, requestAmountMessage } from "@/lib/studioflow/money";
 import { usePaymentLinksAvailable } from "@/lib/studioflow/usePaymentLinksAvailable";
 import { ETSY_COPY_LINK_NOTE } from "@/lib/studioflow/etsyOrder";
+import {
+  newClientRefundId, refundOrderPayment, refundRefusal, refundRefusalText, refundResult,
+  type PaymentRequestRefundFields, type RefundReason,
+} from "@/lib/studioflow/stripeConnect";
+
+/** A row as this card reads it: the shared fields, plus what the server says about refunding it (SL-22). */
+type OrderLinkRow = PaymentLinkRow & PaymentRequestRefundFields;
 
 type ListResult = {
   ok: boolean;
@@ -40,8 +47,11 @@ type ListResult = {
   currency: string;
   outstandingMinor: number;
   headroomMinor: number;
-  requests: PaymentLinkRow[];
+  requests: OrderLinkRow[];
 };
+
+/** One refund submit: retried as it is, it keeps its id, so the server and Stripe make it once. */
+type RefundAttempt = { paymentRequestId: string; amountMinor: number; reason: RefundReason; clientRefundId: string };
 
 /** Same classification as the Banking panel, for the same reason. */
 function messageForError(error: unknown): string {
@@ -97,6 +107,15 @@ export default function OrderPaymentLinks({
   const [busy, setBusy] = useState("");
   const [copiedId, setCopiedId] = useState("");
   const [shownId, setShownId] = useState("");
+  // Refunds from NivaDesk (SL-21, 30 Oct 2026): one refund form at a time, under its own row.
+  const [refundFor, setRefundFor] = useState("");
+  const [refundAmount, setRefundAmount] = useState("");
+  const [refundReason, setRefundReason] = useState<RefundReason>("requested_by_customer");
+  const [refundError, setRefundError] = useState("");
+  const [refundNotice, setRefundNotice] = useState<{ id: string; tone: string; text: string } | null>(null);
+  const refundAttempt = useRef<RefundAttempt | null>(null);
+  const refundFieldRef = useRef<HTMLInputElement | null>(null);
+  const refundOpenerRef = useRef<HTMLButtonElement | null>(null);
   const latest = useRef(0);
   const sizeChangeRef = useRef(onSizeChange);
   sizeChangeRef.current = onSizeChange;
@@ -153,8 +172,11 @@ export default function OrderPaymentLinks({
     fingerprint.current = next;
     if (before && before !== next) paymentChangedRef.current?.();
   }, [state]);
+  // A refund Stripe holds as pending (the balance cannot cover it yet) finishes, or fails, through the
+  // webhook as well, so the card keeps asking while one is waiting.
   const waiting = useMemo(
-    () => (state?.requests ?? []).some((row) => row.publicStatus === "open" || row.publicStatus === "processing"),
+    () => (state?.requests ?? []).some((row) => row.publicStatus === "open" || row.publicStatus === "processing"
+      || (row.refundPendingMinor ?? 0) > 0),
     [state]
   );
   useEffect(() => {
@@ -217,6 +239,87 @@ export default function OrderPaymentLinks({
       await load();
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+
+  // ---- Refunds from NivaDesk (SL-21, 30 Oct 2026) ----------------------------------------------------------
+  // Owner only, and only where the server says so (`canRefund`). The money comes from the business's own Stripe
+  // balance and Stripe keeps its fee; the form says both before anything is sent. It does not say the customer
+  // will be emailed: whether Stripe emails a refund receipt is the business's own Stripe setting.
+  const refunding = busy.startsWith("refund:");
+  const openRefund = (row: OrderLinkRow, opener: HTMLButtonElement) => {
+    refundOpenerRef.current = opener;
+    setRefundFor(row.paymentRequestId);
+    // The whole refundable remainder, the way the New payment link form starts at the headroom; editable for a
+    // partial refund.
+    setRefundAmount(minorToInputText(row.refundableMinor ?? 0, row.currency || state?.currency || "", locale));
+    setRefundReason("requested_by_customer");
+    setRefundError("");
+    setRefundNotice(null);
+  };
+  const closeRefund = () => {
+    if (refunding) return; // the answer is on its way; the form stays until it arrives
+    setRefundFor("");
+    setRefundError("");
+    refundOpenerRef.current?.focus();
+  };
+  // Focus moves into the form when it opens, onto the amount, so it can be read and changed at once.
+  useEffect(() => {
+    if (!refundFor) return;
+    refundFieldRef.current?.focus();
+    refundFieldRef.current?.select();
+  }, [refundFor]);
+
+  const refund = async (row: OrderLinkRow) => {
+    const rowCurrency = row.currency || state?.currency || "";
+    // Read exactly as the New payment link form reads an amount: "12,50" is 12.50 in every locale, and an amount
+    // that could mean two things is refused rather than guessed.
+    const parsed = parseRequestAmount(refundAmount, rowCurrency, locale);
+    if (!parsed.ok) { setRefundError(t(requestAmountMessage(parsed.reason))); return; }
+    const most = row.refundableMinor ?? 0;
+    if (parsed.amountMinor > most) {
+      setRefundError(t(refundRefusalText("refund_amount_too_large")).replace("{amount}", formatMinor(most, rowCurrency)));
+      return;
+    }
+    // The same submit, retried (the answer was lost, Stripe was slow), keeps its id, so it is one refund however
+    // many times it is sent. A different amount, reason or row is a different refund and gets a new id.
+    const previous = refundAttempt.current;
+    const attempt: RefundAttempt = previous
+      && previous.paymentRequestId === row.paymentRequestId
+      && previous.amountMinor === parsed.amountMinor
+      && previous.reason === refundReason
+      ? previous
+      : { paymentRequestId: row.paymentRequestId, amountMinor: parsed.amountMinor, reason: refundReason, clientRefundId: newClientRefundId() };
+    refundAttempt.current = attempt;
+    setBusy(`refund:${row.paymentRequestId}`);
+    setRefundError("");
+    try {
+      const result = await refundOrderPayment({
+        companyId, orderId,
+        paymentRequestId: attempt.paymentRequestId,
+        amountMinor: attempt.amountMinor,
+        reason: attempt.reason,
+        clientRefundId: attempt.clientRefundId,
+      });
+      refundAttempt.current = null;
+      const outcome = refundResult(result.refund.status);
+      const amountText = formatMinor(result.refund.amountMinor || attempt.amountMinor, result.refund.currency || rowCurrency);
+      setRefundNotice({
+        id: row.paymentRequestId,
+        tone: outcome.tone,
+        text: outcome.tone === "done" ? `${t(outcome.text)} ${amountText}` : t(outcome.text),
+      });
+      setRefundFor("");
+      // The list again: the row's refunded and refundable amounts, and (through the fingerprint above) the order.
+      await load();
+    } catch (e) {
+      const refusal = refundRefusal(e);
+      setRefundError(t(refusal.text).replace("{amount}", formatMinor(refusal.refundableMinor ?? most, rowCurrency)));
+      // A refusal with a reason is the server's answer about this row as it is now (refunded elsewhere, disputed,
+      // less left): read the list again so the row says so too. The form and its sentence stay.
+      if (refusal.reason) void load();
     } finally {
       setBusy("");
     }
@@ -340,6 +443,11 @@ export default function OrderPaymentLinks({
               {row.refundedAmountMinor > 0 ? (
                 <span style={{ opacity: 0.7 }}>{t("Refunded")} {formatMinor(row.refundedAmountMinor, row.currency || currency)}</span>
               ) : null}
+              {(row.refundPendingMinor ?? 0) > 0 ? (
+                <span style={{ color: "#b45309" }} title={t("Refund pending. Stripe will finish this when your Stripe balance allows.")}>
+                  {t("Refund pending")} {formatMinor(row.refundPendingMinor ?? 0, row.currency || currency)}
+                </span>
+              ) : null}
               {row.stale ? (
                 <span style={{ color: "#b45309" }}>
                   {row.staleReason === "order_fully_settled" ? t("This order is already settled") : t("More than this order still owes")}
@@ -360,6 +468,78 @@ export default function OrderPaymentLinks({
                   ) : null}
                 </>
               ) : null}
+              {/* A settled row, and only when the server says THIS person may refund it now (an older server sends
+                  no canRefund, so no button). Banking's list stays read-only. */}
+              {tabForStatus(row.publicStatus) !== "open" && row.canRefund === true && (row.refundableMinor ?? 0) > 0 ? (
+                <button
+                  type="button"
+                  className="finance-payments-add"
+                  aria-expanded={refundFor === row.paymentRequestId}
+                  aria-controls={`refund-form-${row.paymentRequestId}`}
+                  disabled={busy !== ""}
+                  onClick={(e) => (refundFor === row.paymentRequestId ? closeRefund() : openRefund(row, e.currentTarget))}
+                >
+                  {t("Refund payment")}
+                </button>
+              ) : null}
+              {refundNotice && refundNotice.id === row.paymentRequestId ? (
+                <span role="status" style={{ flexBasis: "100%", fontSize: 12, color: refundNotice.tone === "done" ? "#047857" : "#b45309" }}>
+                  {refundNotice.text}
+                </span>
+              ) : null}
+              {refundFor === row.paymentRequestId ? (() => {
+                const rowCurrency = row.currency || currency;
+                const formId = `refund-form-${row.paymentRequestId}`;
+                const typed = parseRequestAmount(refundAmount, rowCurrency, locale);
+                return (
+                  <div
+                    id={formId}
+                    role="dialog"
+                    aria-labelledby={`${formId}-title`}
+                    aria-describedby={`${formId}-terms`}
+                    className="finance-payments-form"
+                    onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closeRefund(); } }}
+                    style={{ flexBasis: "100%", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}
+                  >
+                    <strong id={`${formId}-title`} style={{ flexBasis: "100%", fontSize: 12.5 }}>{t("Refund this payment")}</strong>
+                    <label style={{ display: "grid", gap: 3, fontSize: 11, opacity: 0.75 }}>
+                      {t("Amount to refund")}
+                      <input
+                        ref={refundFieldRef}
+                        value={refundAmount}
+                        onChange={(e) => setRefundAmount(e.target.value)}
+                        inputMode="decimal"
+                        disabled={refunding}
+                        aria-describedby={`${formId}-most`}
+                        placeholder={minorToInputText(0, rowCurrency, locale)}
+                        style={{ width: 110 }}
+                      />
+                    </label>
+                    <label style={{ display: "grid", gap: 3, fontSize: 11, opacity: 0.75 }}>
+                      {t("Reason")}
+                      <select value={refundReason} disabled={refunding} onChange={(e) => setRefundReason(e.target.value === "duplicate" ? "duplicate" : "requested_by_customer")}>
+                        <option value="requested_by_customer">{t("Customer asked for a refund")}</option>
+                        <option value="duplicate">{t("Duplicate payment")}</option>
+                      </select>
+                    </label>
+                    <span id={`${formId}-most`} style={{ fontSize: 11, opacity: 0.75, alignSelf: "center" }}>
+                      {t("Up to {amount}").replace("{amount}", formatMinor(row.refundableMinor ?? 0, rowCurrency))}
+                    </span>
+                    <p id={`${formId}-terms`} style={{ margin: 0, flexBasis: "100%", fontSize: 12 }}>
+                      {t("A refund cannot be undone. The money comes from your Stripe balance, and Stripe keeps its processing fee.")}
+                    </p>
+                    <button type="button" className="finance-payments-add" disabled={refunding} onClick={() => void refund(row)}>
+                      {refunding
+                        ? t("Refunding…")
+                        : typed.ok ? t("Refund {amount}").replace("{amount}", formatMinor(typed.amountMinor, rowCurrency)) : t("Refund payment")}
+                    </button>
+                    <button type="button" className="finance-payments-add" disabled={refunding} onClick={closeRefund}>{t("Close")}</button>
+                    {refundError ? (
+                      <p role="alert" style={{ margin: 0, flexBasis: "100%", fontSize: 12, color: "#b91c1c" }}>{refundError}</p>
+                    ) : null}
+                  </div>
+                );
+              })() : null}
               {etsyOrder && copiedId === row.paymentRequestId ? (
                 <span role="status" data-etsy-compliance="copied" style={{ flexBasis: "100%", fontSize: 11.5, color: "#b45309" }}>{t(ETSY_COPY_LINK_NOTE)}</span>
               ) : null}
