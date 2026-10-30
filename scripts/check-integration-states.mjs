@@ -74,6 +74,8 @@ try {
     "export const getAmazonStatus = refuse('getAmazonStatus');",
     "export const loadCustomerChannelStatus = refuse('loadCustomerChannelStatus');",
     "export const getStorageStatus = refuse('getStorageStatus');",
+    "// Pure and called by the Cloud storage rule: the brand table, as lib/studioflow/storage.ts has it.",
+    "export const storageProviderLabel = (id) => ({ gdrive: 'Google Drive', onedrive: 'OneDrive', dropbox: 'Dropbox', box: 'Box', managed: 'NivaDesk Cloud' })[id] || id;",
     "",
   ].join("\n"));
 
@@ -201,27 +203,28 @@ try {
     expect("etsy: no shop is 'available'", state("etsy", { etsyShops: [] }).state === "available");
   }
 
-  // --- Own cloud storage: four tiles, the server's word (30 Oct 2026) -------
+  // --- Own cloud storage: ONE tile (as on iPhone/Mac and Android), the server's word (30 Oct 2026)
   {
     const offers = (available) => ["gdrive", "onedrive", "dropbox", "box"].map((id) => ({ id, label: id, available: available.includes(id) }));
     const status = (available, connections = [], primary = "managed") =>
       ({ storage: { provider: "gdrive", available: false, providers: offers(available), primary: { provider: primary, connectionId: "", label: "" }, connections, canConnect: true, canDisconnect: true, reason: "" } });
-    for (const id of ["gdrive", "onedrive", "dropbox", "box"]) {
-      expect(`${id}: a server that could not be read (or has no callable) offers nothing`, state(id, { storage: null }).state === "planned");
-      expect(`${id}: not configured on the server is 'planned', with no button`,
-        state(id, status([])).state === "planned" && integrationStateOffersNoAction(state(id, status([])).state));
-      expect(`${id}: configured is 'available'`, state(id, status([id])).state === "available");
-    }
+    const cs = (signals) => state("cloudstorage", signals);
+    expect("cloudstorage: a server that could not be read (or has no callable) offers nothing", cs({ storage: null }).state === "planned");
+    expect("cloudstorage: no provider configured is 'planned', with no button",
+      cs(status([])).state === "planned" && integrationStateOffersNoAction(cs(status([])).state));
+    expect("cloudstorage: one configured provider is enough for 'available'", cs(status(["box"])).state === "available");
     const live = [{ connectionId: "c1", provider: "gdrive", status: "connected" }];
-    expect("gdrive: a live primary connection is connected and says new files go there",
-      state("gdrive", status(["gdrive"], live, "gdrive")).state === "connected"
-        && state("gdrive", status(["gdrive"], live, "gdrive")).detail === "New files are saved here");
-    expect("onedrive: a Drive connection is not OneDrive's", state("onedrive", status(["onedrive"], live, "gdrive")).state === "available");
-    expect("box: a revoked row is no connection", state("box", status(["box"], [{ connectionId: "c2", provider: "box", status: "revoked" }])).state === "available");
-    expect("dropbox: a lapsed consent needs attention",
-      state("dropbox", status(["dropbox"], [{ connectionId: "c3", provider: "dropbox", status: "reauth_required" }])).state === "attention");
-    expect("the four storage tiles are native and open the storage card",
-      ["gdrive", "onedrive", "dropbox", "box"].every((id) => provider(id).kind === "native" && provider(id).manage === id));
+    expect("cloudstorage: a live connection is connected and names where new files go",
+      cs(status(["gdrive"], live, "gdrive")).state === "connected" && cs(status(["gdrive"], live, "gdrive")).detail === "Google Drive");
+    expect("cloudstorage: a revoked row is no connection", cs(status(["box"], [{ connectionId: "c2", provider: "box", status: "revoked" }])).state === "available");
+    expect("cloudstorage: a lapsed consent needs attention, even beside a live one",
+      cs(status(["dropbox"], [...live, { connectionId: "c3", provider: "dropbox", status: "reauth_required" }], "gdrive")).state === "attention");
+    expect("cloudstorage: one native tile opening the storage card, with the four brands as its chips",
+      provider("cloudstorage").kind === "native" && provider("cloudstorage").manage === "cloudstorage"
+        && provider("cloudstorage").capabilities.join(",") === "Google Drive,OneDrive,Dropbox,Box"
+        && ["dropbox", "onedrive", "box", "google drive"].every((word) => provider("cloudstorage").keywords.includes(word)));
+    expect("no per-provider storage tiles beside it",
+      !INTEGRATION_PROVIDERS.some((row) => ["gdrive", "googledrive", "onedrive", "dropbox", "box"].includes(row.id)));
   }
 
   {

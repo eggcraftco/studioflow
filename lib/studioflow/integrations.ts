@@ -29,7 +29,7 @@ import { getEbayConnections } from "@/lib/studioflow/ebay";
 import { getAmazonStatus, type AmazonAuthorizationMode, type AmazonConnection } from "@/lib/studioflow/amazon";
 import { getIntegrationWebhookInfo, type IntegrationWebhookInfo } from "@/lib/studioflow/planActions";
 import { loadCustomerChannelStatus, type CustomerChannelCard } from "@/lib/studioflow/customerInbox";
-import { getStorageStatus, type StorageStatusResult } from "@/lib/studioflow/storage";
+import { getStorageStatus, storageProviderLabel, type StorageStatusResult } from "@/lib/studioflow/storage";
 
 export type IntegrationCategory = "commerce" | "banking" | "automation" | "messaging";
 
@@ -46,7 +46,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
 // "dhl" is not in INTEGRATION_PROVIDERS: DHL Express is shown only where the server
 // has opened it for the workspace, and never on the public integrations page.
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "claude" | "dhl" | "whatsapp" | "instagram" | "stripe" | "tracking" | "storage" | "gdrive" | "onedrive" | "dropbox" | "box";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "claude" | "dhl" | "whatsapp" | "instagram" | "stripe" | "tracking" | "cloudstorage" | "storage" | "gdrive" | "onedrive" | "dropbox" | "box";
 
 export type IntegrationProvider = {
   id: string;
@@ -60,6 +60,8 @@ export type IntegrationProvider = {
   blurb: string;
   /** What it brings in — the chips under the name. */
   capabilities: string[];
+  /** Extra words the hub search matches (lower case), for a tile whose name is not the brand. */
+  keywords?: string[];
   manage: IntegrationManageTarget;
 };
 
@@ -190,34 +192,20 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     blurb: "Sales, fees and refunds from your PayPal account, beside your bank.",
     capabilities: ["Payments received and sent", "Fees beside the gross", "Withdrawals matched to your bank"], manage: "paypal",
   },
-  // "Use your own cloud" (own-cloud CONTRACT, 30 Oct 2026). Four tiles, one
-  // manage screen: each opens the Cloud storage card with its own row
-  // highlighted. A provider the server cannot connect yet resolves to
-  // "planned" below, so no tile offers a consent page that cannot complete.
+  // "Use your own cloud" (own-cloud CONTRACT, 30 Oct 2026). ONE tile, the same
+  // `cloudstorage` the iPhone/Mac and Android hubs show, opening the Cloud
+  // storage card (NivaDesk Cloud + Google Drive, OneDrive, Dropbox, Box). The
+  // brand names are its chips and its search words, so "Dropbox" still finds it.
+  // When the server can connect none of them (or cannot be read) it is
+  // "planned": no button, no consent page that cannot complete.
   {
-    id: "gdrive", name: "Google Drive", category: "automation", kind: "native", mark: "G",
-    blurb: "Keep this workspace's order files in your own Google Drive. NivaDesk only sees the files it saves there.",
-    capabilities: ["Order files"], manage: "gdrive",
-  },
-  {
-    id: "onedrive", name: "OneDrive", category: "automation", kind: "native", mark: "O",
-    blurb: "Keep this workspace's order files in your own OneDrive or SharePoint. NivaDesk only sees the files it saves there.",
-    capabilities: ["Order files"], manage: "onedrive",
-  },
-  {
-    id: "dropbox", name: "Dropbox", category: "automation", kind: "native", mark: "D",
-    blurb: "Keep this workspace's order files in your own Dropbox. NivaDesk only sees the files it saves there.",
-    capabilities: ["Order files"], manage: "dropbox",
-  },
-  {
-    id: "box", name: "Box", category: "automation", kind: "native", mark: "B",
-    blurb: "Keep this workspace's order files in your own Box. NivaDesk only sees the files it saves there.",
-    capabilities: ["Order files"], manage: "box",
+    id: "cloudstorage", name: "Cloud storage", category: "automation", kind: "native", mark: "C",
+    blurb: "Keep this workspace's order files in your own Google Drive, OneDrive, Dropbox or Box. NivaDesk only sees the files it saves there.",
+    capabilities: ["Google Drive", "OneDrive", "Dropbox", "Box"],
+    keywords: ["google drive", "drive", "onedrive", "sharepoint", "dropbox", "box", "storage", "files"],
+    manage: "cloudstorage",
   },
 ];
-
-/** The four own-cloud tiles: their ids are the storage provider ids. */
-const STORAGE_TILE_IDS: readonly string[] = ["gdrive", "onedrive", "dropbox", "box"];
 
 /**
  * What a card says about itself right now.
@@ -494,22 +482,21 @@ function resolveProviderState(
 ): IntegrationLiveState {
   if (provider.kind === "planned") return { state: "planned" };
 
-  // Own cloud storage. A revoked row is no connection (it is what disconnecting
-  // leaves); a live one is "connected" (and says when new files go there); a
-  // stopped one needs the owner. A provider the server cannot connect yet — or
-  // a server that could not be read — is "planned": no button, no consent page
-  // for an app that does not exist.
-  if (STORAGE_TILE_IDS.includes(provider.id)) {
+  // Own cloud storage, one tile. A revoked row is no connection (it is what
+  // disconnecting leaves). A stopped or limited connection needs the owner and
+  // outranks green; a live one is "connected" with the provider new files go to
+  // as its detail (a brand name, never translated). No connection: "available"
+  // when the server can connect at least one provider, else "planned".
+  if (provider.id === "cloudstorage") {
     const status = signals.storage;
     if (!status) return { state: "planned" };
-    const rows = status.connections.filter((row) => row.provider === provider.id && row.status && row.status !== "revoked");
-    if (rows.some((row) => row.status === "connected")) {
-      return { state: "connected", detail: status.primary.provider === provider.id ? "New files are saved here" : undefined };
-    }
+    const rows = status.connections.filter((row) => row.status && row.status !== "revoked");
     if (rows.some((row) => row.status === "limited")) return { state: "attention", detail: "Some permissions missing" };
-    if (rows.length > 0) return { state: "attention", detail: "Reconnect required" };
-    const offer = status.providers.find((row) => row.id === provider.id);
-    return offer?.available ? { state: "available" } : { state: "planned" };
+    if (rows.some((row) => row.status === "reauth_required" || row.status === "error")) return { state: "attention", detail: "Reconnect required" };
+    if (rows.some((row) => row.status === "connected")) {
+      return { state: "connected", detail: storageProviderLabel(status.primary.provider) };
+    }
+    return status.providers.some((row) => row.available) ? { state: "available" } : { state: "planned" };
   }
 
   if (provider.id === "stripe") {

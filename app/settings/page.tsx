@@ -249,6 +249,7 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   instagram: "integrations",
   "customer-channels": "integrations",
   // Own cloud storage: the Cloud storage card, one row per provider.
+  cloudstorage: "integrations",
   storage: "integrations",
   gdrive: "integrations",
   onedrive: "integrations",
@@ -754,7 +755,7 @@ export default function SettingsPage() {
       rawRequested === "etsy" ||
       rawRequested === "square" || rawRequested === "ebay" || rawRequested === "amazon" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero" ||
       rawRequested === "dhl" || rawRequested === "whatsapp" || rawRequested === "instagram" || rawRequested === "stripe" || rawRequested === "tracking" ||
-      rawRequested === "storage" || rawRequested === "gdrive" || rawRequested === "onedrive" || rawRequested === "dropbox" || rawRequested === "box"
+      rawRequested === "cloudstorage" || rawRequested === "storage" || rawRequested === "gdrive" || rawRequested === "onedrive" || rawRequested === "dropbox" || rawRequested === "box"
     ) {
       setIntegrationProvider(rawRequested);
     }
@@ -764,7 +765,7 @@ export default function SettingsPage() {
     // that reports it has to be the one that opens, on a phone too.
     if (params.get("storage") || params.get("gdrive")) {
       const returned = params.get("provider") || (params.get("gdrive") ? "gdrive" : "");
-      setIntegrationProvider(returned === "gdrive" || returned === "onedrive" || returned === "dropbox" || returned === "box" ? returned : "storage");
+      setIntegrationProvider(returned === "gdrive" || returned === "onedrive" || returned === "dropbox" || returned === "box" ? returned : "cloudstorage");
       setActiveSection("integrations");
       setMobileDetail(true);
     }
@@ -5830,7 +5831,9 @@ function IntegrationsSection({
   useEffect(() => {
     if (openProvider) setManaging(openProvider);
   }, [openProvider]);
-  const managingStorage = managing === "storage" || managing === "gdrive" || managing === "onedrive" || managing === "dropbox" || managing === "box";
+  // The Cloud storage card: the tile (`cloudstorage`), and the deep links that
+  // name the card (`storage`) or one provider's row in it (gdrive, onedrive, …).
+  const managingStorage = managing === "cloudstorage" || managing === "storage" || managing === "gdrive" || managing === "onedrive" || managing === "dropbox" || managing === "box";
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "connected" | "available" | "planned">("all");
   const [signals, setSignals] = useState<IntegrationSignals>(EMPTY_INTEGRATION_SIGNALS);
@@ -5901,7 +5904,7 @@ function IntegrationsSection({
         {managing === "chatgpt" ? <ChatGPTIntegrationSection workspace={workspace} language={language} assistant="chatgpt" /> : null}
         {managing === "claude" ? <ChatGPTIntegrationSection workspace={workspace} language={language} assistant="claude" /> : null}
         {managing === "inbound" ? <InboundWebhookSection workspace={workspace} language={language} /> : null}
-        {managingStorage ? <StorageIntegrationSection workspace={workspace} language={language} focus={managing === "storage" ? "" : managing} /> : null}
+        {managingStorage ? <StorageIntegrationSection workspace={workspace} language={language} focus={managing === "cloudstorage" || managing === "storage" ? "" : managing} /> : null}
       </div>
     );
   }
@@ -5911,7 +5914,8 @@ function IntegrationsSection({
   const attention = resolved.filter((row) => row.live.state === "attention").length;
   const needle = query.trim().toLowerCase();
   const matches = (row: (typeof resolved)[number]) => {
-    if (needle && !row.provider.name.toLowerCase().includes(needle)) return false;
+    if (needle && !row.provider.name.toLowerCase().includes(needle)
+      && !(row.provider.keywords ?? []).some((word) => word.includes(needle))) return false;
     if (filter === "connected") return row.live.state === "connected" || row.live.state === "attention";
     if (filter === "available") return row.live.state === "available" || row.live.state === "webhook" || row.live.state === "checking" || row.live.state === "unverified";
     if (filter === "planned") return row.live.state === "planned";

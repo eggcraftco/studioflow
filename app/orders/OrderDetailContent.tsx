@@ -3062,7 +3062,8 @@ export function OrderDetailContent({
       uploadedByEmail: row.uploadedByEmail,
       uploadedBy: row.uploadedByEmail,
       uploadedAt: row.uploadedAtMs ? new Date(row.uploadedAtMs) : null,
-      source: "service",
+      // No source word: the provider badge on the row says where the file is.
+      source: "",
       note: "",
       serviceRef: row.ref,
       provider: row.provider

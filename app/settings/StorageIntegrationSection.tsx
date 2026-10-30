@@ -19,7 +19,7 @@
 //   disconnecting says what it does and what it does not: new files go back to
 //   NivaDesk Cloud, the files already in the provider stay there, and the grant
 //   in the person's own account is theirs to remove.
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
@@ -41,6 +41,16 @@ const RETURN_COPY: Readonly<Record<string, string>> = Object.freeze({
   signin: "Please sign in again, then connect {provider} once more.",
   error: "The connection did not complete. Please try again.",
 });
+
+// One row per storage: the name (and account / problem) on the left, the state
+// and the action on the right, wrapping under each other on a phone.
+const ROW_STYLE: React.CSSProperties = {
+  display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between",
+  gap: 10, padding: "12px 0", borderTop: "1px solid rgba(127, 127, 127, 0.18)"
+};
+const ACTIONS_STYLE: React.CSSProperties = {
+  display: "inline-flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "flex-end"
+};
 
 type Props = {
   workspace: WorkspaceContext;
@@ -172,8 +182,8 @@ export function StorageIntegrationSection({ workspace, language = "English", foc
           <p className="muted-copy" data-storage-primary={primary}>
             {t("New files are saved to: {provider}").replace("{provider}", storageProviderLabel(primary))}
           </p>
-          <ul className="settings-rule-list">
-            <li data-storage-row="managed">
+          <ul style={{ listStyle: "none", margin: "4px 0 12px", padding: 0 }}>
+            <li data-storage-row="managed" style={ROW_STYLE}>
               <span>
                 <strong>{storageProviderLabel(MANAGED_STORAGE)}</strong>
                 <br />
@@ -194,7 +204,7 @@ export function StorageIntegrationSection({ workspace, language = "English", foc
               const working = busy.endsWith(`:${provider}`);
               return (
                 <li key={provider} data-storage-row={provider} className={highlighted ? "is-highlighted" : undefined}
-                  style={{ flexWrap: "wrap", gap: 8, ...(highlighted ? { outline: "2px solid var(--accent, #2563eb)", outlineOffset: 4, borderRadius: 8 } : {}) }}>
+                  style={{ ...ROW_STYLE, ...(highlighted ? { outline: "2px solid var(--accent, #2563eb)", outlineOffset: 2, borderRadius: 8, paddingInline: 8 } : {}) }}>
                   <span>
                     <strong>{label}</strong>
                     {row?.displayAccountHint ? <><br /><span className="muted-copy">{row.displayAccountHint}</span></> : null}
@@ -205,7 +215,7 @@ export function StorageIntegrationSection({ workspace, language = "English", foc
                       <><br /><span className="layout-error">{t("{provider} ended NivaDesk's access. Reconnect to keep using it.").replace("{provider}", label)}</span></>
                     ) : null}
                   </span>
-                  <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "flex-end" }}>
+                  <span style={ACTIONS_STYLE}>
                     <span className={`studio-pill${live ? " success" : ""}`} data-storage-state={row ? row.status : available ? "available" : "unavailable"}>
                       {row ? (live && primary === provider ? t("In use") : statusLabel(row.status, t)) : available ? t("Not connected") : t("Not available yet")}
                     </span>
