@@ -13,6 +13,7 @@ import { isAnalyticsExcluded, setAnalyticsExclusion } from "@/lib/landingTrackin
 import { AdminFeedbackInbox } from "@/components/AdminFeedbackInbox";
 import { AdminLivePanel, useLiveAppNow } from "@/components/AdminLivePanel";
 import { AdminDropoffPanel } from "@/components/AdminDropoffPanel";
+import { AdminAssistantQuestionsPanel } from "@/components/AdminAssistantQuestionsPanel";
 import { PRESENCE_APPS, appBuckets, downloadCsv, toCsv } from "@/lib/studioflow/adminLivePresence";
 import {
   countryShares,
@@ -3541,7 +3542,8 @@ type AdminHubPage =
   | "onboarding"
   | "feedback"
   | "activation"
-  | "dropoff";
+  | "dropoff"
+  | "botquestions";
 
 /* Fourteen flat links became five groups (29 Oct 2026): what is happening now, money, the
    customers themselves, how the product is used, and the public website. Order inside a group is
@@ -3560,7 +3562,7 @@ const ADMIN_HUB_GROUPS: { label: string; pages: { id: AdminHubPage; label: strin
       { id: "lookup", label: "User Lookup" }
     ]
   },
-  { label: "Product", pages: [{ id: "features", label: "Feature Usage" }, { id: "storage", label: "Storage" }] },
+  { label: "Product", pages: [{ id: "features", label: "Feature Usage" }, { id: "storage", label: "Storage" }, { id: "botquestions", label: "Bot questions" }] },
   {
     label: "Website",
     pages: [
@@ -3611,7 +3613,7 @@ export function AdminInsightsHub() {
   }, []);
 
   // The toggle only means something on the pages that count workspaces or members.
-  const viewPages: AdminHubPage[] = ["overview", "live", "users", "subscriptions", "revenue", "plans", "features", "storage", "onboarding", "activation", "dropoff"];
+  const viewPages: AdminHubPage[] = ["overview", "live", "users", "subscriptions", "revenue", "plans", "features", "storage", "onboarding", "activation", "dropoff", "botquestions"];
   const currentLabel = ADMIN_HUB_GROUPS.flatMap(group => group.pages).find(item => item.id === page)?.label || "Overview";
 
   return (
@@ -3666,6 +3668,7 @@ export function AdminInsightsHub() {
         {page === "onboarding" ? <AdminOnboardingDetail onBack={goOverview} view={view} /> : null}
         {page === "activation" ? <AdminActivationFunnelSection view={view} /> : null}
         {page === "dropoff" ? <AdminDropoffPanel view={view} /> : null}
+        {page === "botquestions" ? <AdminAssistantQuestionsPanel view={view} /> : null}
         {page === "feedback" ? <AdminFeedbackInbox /> : null}
       </section>
     </div>
