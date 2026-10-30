@@ -16,20 +16,41 @@ const call = <TIn, TOut>(name: string) => httpsCallable<TIn, TOut>(functions, na
 export type StripeConnectionView = {
   configured: boolean;
   /** Why `configured` is false, when it is: "not_in_pilot" (this workspace is
-   *  outside the Payment Links pilot) or "rail_disabled" (the server has the
-   *  rail switched off). "" when configured. */
+   *  outside the Payment Links pilot), "rail_disabled" (the server has the
+   *  rail switched off) or "not_connected" (no Stripe account yet — asked
+   *  without purpose "settings"). "" when configured. */
   reason: string;
   connection: StripeConnectionSummary | null;
+  /** Settings only (SC-8): the workspace's own country if Stripe serves it, and
+   *  the ISO codes the owner may choose from before the first connect. */
+  onboarding: { country: string; supportedCountries: string[] } | null;
 };
 
-/** Anyone in the workspace may ask whether payments work. */
-export async function getStripeConnection(companyId: string): Promise<StripeConnectionView> {
-  const result = await call<{ companyId: string }, { ok: boolean; configured: boolean; reason?: string; connection: StripeConnectionSummary }>(
-    "getStripePaymentConnection")({ companyId });
+/**
+ * Anyone in the workspace may ask whether payments work.
+ *
+ * `purpose: "settings"` is the Settings card asking, where connecting starts:
+ * it hears `configured: true` before any account exists. Every other surface
+ * (the order card, Banking — and the store apps, which send no purpose) hears
+ * `configured: false, reason: "not_connected"` until the workspace has a
+ * Stripe account, so it draws nothing rather than a button that cannot work.
+ */
+export async function getStripeConnection(companyId: string, purpose: "" | "settings" = ""): Promise<StripeConnectionView> {
+  const result = await call<{ companyId: string; purpose?: string }, {
+    ok: boolean; configured: boolean; reason?: string; connection: StripeConnectionSummary;
+    onboarding?: { country?: string; supportedCountries?: string[] };
+  }>("getStripePaymentConnection")(purpose ? { companyId, purpose } : { companyId });
+  const onboarding = result.data?.onboarding;
   return {
     configured: result.data?.configured === true,
     reason: String(result.data?.reason ?? ""),
     connection: result.data?.connection ?? null,
+    onboarding: onboarding
+      ? {
+          country: String(onboarding.country ?? ""),
+          supportedCountries: Array.isArray(onboarding.supportedCountries) ? onboarding.supportedCountries.map(String) : [],
+        }
+      : null,
   };
 }
 
@@ -70,9 +91,12 @@ export function paymentLinksAvailable(companyId: string): Promise<boolean> {
  * design — it is the one provider value a client is meant to hold. Resuming an
  * existing account reuses it rather than opening a second one.
  */
-export async function beginStripeOnboarding(companyId: string) {
-  return (await call<{ companyId: string }, { ok: boolean; url: string; expiresAt: number; connection: StripeConnectionSummary }>(
-    "beginStripeConnectOnboarding")({ companyId })).data;
+export async function beginStripeOnboarding(companyId: string, country = "") {
+  // SC-8: the business's country, chosen on the Settings card before the first
+  // account is opened. Ignored by the server when the workspace already has one.
+  const code = country.trim().toUpperCase();
+  return (await call<{ companyId: string; country?: string }, { ok: boolean; url: string; expiresAt: number; connection: StripeConnectionSummary }>(
+    "beginStripeConnectOnboarding")(/^[A-Z]{2}$/.test(code) ? { companyId, country: code } : { companyId })).data;
 }
 
 /** Re-read the account from Stripe and re-derive the status. Owner only. */

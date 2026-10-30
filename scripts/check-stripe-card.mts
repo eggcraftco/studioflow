@@ -4,7 +4,7 @@
 // Facts the code supports (functions/paymentConnect.js + payments/connectTransport.js, live 8 Oct
 // 2026 + STRIPE-LINKS): a link is a Stripe Checkout session on the business's OWN connected account
 // (direct charges, no application fee), for a deposit, an instalment or the balance of an order;
-// Stripe's default expiry (24 hours, no expires_at is sent); the order is updated from the signed
+// the customer gets a short link (pay.<domain>/p/<code>) that outlives Stripe's 24-hour session; the order is updated from the signed
 // webhook. The rail serves only the workspaces in STRIPE_CONNECT_PILOT_WORKSPACES, so the card is
 // "limited" and its note says "on request" — never "live", "every business", "approved", "partner".
 // The rules run first against known-bad mutants, so a check that cannot fail is itself a failure.
@@ -31,7 +31,8 @@ function cardProblems(card: Card): string[] {
   if (/\b(live|every business|all businesses|approved|certified|partner|official|guarantee)/i.test(all)) out.push("over-claims");
   if (!/own Stripe account/.test(card.summary) || !/own Stripe account/.test(card.detail)) out.push("does not say the money goes to the business's own account");
   if (!/no commission/.test(card.detail) || !/Stripe's own fees apply/.test(card.detail)) out.push("fees not stated");
-  if (!/24 hours/.test(card.detail)) out.push("expiry not stated");
+  // Short links (30 Oct 2026): the link stays open until paid or cancelled — the old "24 hours" is now false.
+  if (!/until it is paid or you cancel it/.test(card.detail) || /24 hours/.test(card.detail)) out.push("lifetime not stated, or the old 24 hours");
   if (!/on request/.test(card.note)) out.push("limited note does not say on request");
   return out;
 }
@@ -48,7 +49,8 @@ const mutants: Array<[string, Card]> = [
   ["approved", { ...real, detail: `${real.detail} Approved by Stripe.` }],
   ["no own account", { ...real, summary: real.summary.replace("your own Stripe account", "NivaDesk's account") }],
   ["no fees", { ...real, detail: real.detail.replace("NivaDesk takes no commission; Stripe's own fees apply. ", "") }],
-  ["no expiry", { ...real, detail: real.detail.replace(" Each link stays open for 24 hours.", "") }],
+  ["no lifetime", { ...real, detail: real.detail.replace(" The link is short, can use your own domain, and stays open until it is paid or you cancel it.", "") }],
+  ["old 24 hours", { ...real, detail: real.detail + " Each link stays open for 24 hours." }],
   ["no on request", { ...real, note: real.note.replace("Available on request", "Available") }],
 ];
 for (const [name, mutant] of mutants) expect(`the rules catch the mutant: ${name}`, cardProblems(mutant).length > 0);
@@ -66,7 +68,7 @@ for (const lang of LANGS) {
     expect(`${lang} ${key} names Stripe`, text.includes("Stripe"));
   }
   if (lang !== "English") {
-    expect(`${lang} detail keeps the 24`, String(table["integrations.detail.stripe"]).includes("24"));
+    expect(`${lang} detail no longer says 24 hours`, !String(table["integrations.detail.stripe"]).includes("24"));
   }
 }
 

@@ -8,8 +8,8 @@
 // a payment" is exactly one answer too many.
 //
 // The Stripe account id is never returned by any callable and is not displayed.
-import { useCallback, useEffect, useRef, useState } from "react";
-import { studioT } from "@/lib/studioflow/language";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import type { StripeConnectionSummary } from "@/lib/studioflow/integrations";
 import { CardTitle } from "@/components/CardTitle";
@@ -53,15 +53,25 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  // SC-8 (30 Oct 2026): the business's country, asked before the FIRST account
+  // is opened — Stripe cannot open one without it, and a workspace may never
+  // have said which (EGGcraft met that as "internal" on 29 Oct).
+  const [onboarding, setOnboarding] = useState<{ country: string; supportedCountries: string[] } | null>(null);
+  const [pickingCountry, setPickingCountry] = useState(false);
+  const [country, setCountry] = useState("");
   const latest = useRef(0);
 
   const load = useCallback(async () => {
     if (!companyId) return;
     const ticket = ++latest.current;
     try {
-      const view = await getStripeConnection(companyId);
+      // "settings": this card is where connecting starts, so it is told the
+      // rail is here before any account exists (the order card is not).
+      const view = await getStripeConnection(companyId, "settings");
       if (ticket !== latest.current) return;
       setConnection(view.connection);
+      setOnboarding(view.onboarding);
+      if (view.onboarding?.country) setCountry(current => current || view.onboarding?.country || "");
       setConfigured(view.configured);
       setUnavailableReason(view.configured ? "" : view.reason);
       setKnown(true);
@@ -93,8 +103,19 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
   const status = connection?.status ?? "disconnected";
   const capable = connection?.canCreatePaymentRequest === true;
 
-  const connect = () => guard("connect", async () => {
-    const result = await beginStripeOnboarding(companyId);
+  // The names in the reader's own language; the codes are Stripe's and the server's.
+  const countryOptions = useMemo(() => {
+    const codes = onboarding?.supportedCountries ?? [];
+    let names: Intl.DisplayNames | null = null;
+    try { names = new Intl.DisplayNames([studioLocaleTag(language)], { type: "region" }); } catch { names = null; }
+    return codes
+      .map(code => ({ code, name: names?.of(code) || code }))
+      .sort((a, b) => a.name.localeCompare(b.name, studioLocaleTag(language)));
+  }, [onboarding, language]);
+
+  const connect = (chosenCountry = "") => guard("connect", async () => {
+    const result = await beginStripeOnboarding(companyId, chosenCountry);
+    setPickingCountry(false);
     if (result?.url) {
       // Stripe's hosted onboarding. A new tab, so the workspace keeps its place
       // here and the status can be re-read on return.
@@ -170,7 +191,8 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
               // owner must be able to go back and answer, and the server resumes
               // onboarding on the SAME account (beginStripeConnectOnboarding
               // reuses the stored account id), so no second account is made.
-              <button type="button" className="button" disabled={!isOwner || busy === "connect"} onClick={() => void connect()}>
+              <button type="button" className="button" disabled={!isOwner || busy === "connect"}
+                onClick={() => (status === "disconnected" && countryOptions.length > 0 ? setPickingCountry(true) : void connect())}>
                 {busy === "connect" ? t("Opening…") : status === "disconnected" ? t("Connect Stripe") : t("Continue with Stripe")}
               </button>
             ) : null}
@@ -183,6 +205,26 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
               </button>
             ) : null}
           </div>
+
+          {pickingCountry && status === "disconnected" ? (
+            <div className="settings-card" style={{ marginTop: 10, display: "grid", gap: 8 }} data-stripe-country-picker>
+              <label style={{ display: "grid", gap: 4 }}>
+                <strong style={{ fontSize: 13 }}>{t("Country your business is registered in")}</strong>
+                <select className="input" value={country} onChange={event => setCountry(event.target.value)}>
+                  <option value="">{t("Choose a country")}</option>
+                  {countryOptions.map(option => <option key={option.code} value={option.code}>{option.name}</option>)}
+                </select>
+              </label>
+              <p className="muted-copy" style={{ margin: 0 }}>{t("Stripe needs this to open your account, and it cannot be changed later.")}</p>
+              <p className="muted-copy" style={{ margin: 0 }}>{t("Not in the list? Stripe does not accept businesses registered there yet.")}</p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button type="button" className="button" disabled={!country || busy === "connect"} onClick={() => void connect(country)}>
+                  {busy === "connect" ? t("Opening…") : t("Continue to Stripe")}
+                </button>
+                <button type="button" className="button secondary" onClick={() => setPickingCountry(false)}>{t("Cancel")}</button>
+              </div>
+            </div>
+          ) : null}
 
           {!isOwner ? (
             <p className="muted-copy">{t("Only the workspace owner can connect or disconnect Stripe. Everyone can see whether payments work.")}</p>
@@ -222,9 +264,15 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
           ) : null}
 
           {capable ? (
-            <p className="muted-copy" style={{ marginTop: 10 }}>
-              {t("Create payment links on an order, and see them all together in Banking.")}
-            </p>
+            <>
+              <p className="muted-copy" style={{ marginTop: 10 }}>
+                {t("Create payment links on an order, and see them all together in Banking.")}
+              </p>
+              {/* NivaDesk sends the customer nothing; a receipt is Stripe's, and only when the owner turned it on. */}
+              <p className="muted-copy" style={{ margin: 0 }}>
+                {t("Customers get a receipt from Stripe by email only when Successful payments is turned on in your Stripe Dashboard (Settings → Customer emails).")}
+              </p>
+            </>
           ) : null}
 
           {/* Short links on the business's own domain (pay.<their domain>/p/<code>): owner only, like the

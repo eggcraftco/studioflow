@@ -77,5 +77,28 @@ for (const key of ["Payment link address", "Use this address", "Remove {host}? P
   expect(`settings words in eleven languages: ${key.slice(0, 40)}`, count === 11, String(count));
 }
 
+// 4. Stripe for every workspace (30 Oct 2026): who is told the rail is here, and the country picker (SC-8)
+const client = read("lib/studioflow/stripeConnect.ts");
+expect("Settings asks with purpose \"settings\"", /getStripeConnection\(companyId, "settings"\)/.test(section));
+expect("the order card / Banking gate asks with no purpose", /getStripeConnection\(id\)\s*\n?\s*\.then/.test(client) || /= getStripeConnection\(id\)/.test(client));
+expect("purpose is only sent when given", /purpose \? \{ companyId, purpose \} : \{ companyId \}/.test(client));
+expect("the chosen country reaches the server, upper-cased ISO only", /\/\^\[A-Z\]\{2\}\$\/\.test\(code\) \? \{ companyId, country: code \}/.test(client));
+expect("the picker is shown for a first connect, and only with a country list", /status === "disconnected" && countryOptions\.length > 0 \? setPickingCountry\(true\)/.test(section));
+expect("Continue is disabled until a country is chosen", /disabled=\{!country \|\| busy === "connect"\} onClick=\{\(\) => void connect\(country\)\}/.test(section));
+expect("country names come from Intl in the reader's language", /new Intl\.DisplayNames\(\[studioLocaleTag\(language\)\], \{ type: "region" \}\)/.test(section));
+for (const key of [
+  "Country your business is registered in", "Choose a country", "Continue to Stripe",
+  "Stripe needs this to open your account, and it cannot be changed later.",
+  "Not in the list? Stripe does not accept businesses registered there yet.",
+  "Customers get a receipt from Stripe by email only when Successful payments is turned on in your Stripe Dashboard (Settings → Customer emails).",
+  "Choose the country your business is registered in, then connect Stripe.",
+  "Stripe does not accept businesses registered in that country yet, so card payment links cannot be set up for it.",
+  "Stripe could not start the setup just now. Try again in a moment; if it keeps failing, contact support."
+]) {
+  const line = language.split("\n").find(l => l.startsWith(`  ${JSON.stringify(key)}:`)) || "";
+  const count = (line.match(/": "/g) || []).length;
+  expect(`Stripe words in eleven languages: ${key.slice(0, 44)}`, count === 11, String(count));
+}
+
 console.log(failures ? `${failures} of ${checks} payment-link checks FAILED` : `All ${checks} payment-link checks passed.`);
 process.exit(failures ? 1 : 0);
