@@ -17,7 +17,7 @@ export type PrivacyPolicySection = {
 // and 10 (AI assistants: ChatGPT and Claude) were approved by the owner and
 // published on 17 October 2026. 18 October 2026: section 10 names the separate
 // ChatGPT and Claude cards in Settings › Integrations (owner-approved).
-export const PRIVACY_POLICY_LAST_UPDATED = "18 October 2026";
+export const PRIVACY_POLICY_LAST_UPDATED = "30 October 2026";
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -309,7 +309,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
         bullets: [
           "a connection record (the account e-mail address the provider shows, the calendars you chose, and the time of the last sync), for as long as the connection exists;",
           "an access token and a refresh token, stored encrypted and readable only by NivaDesk's servers, for as long as the connection exists;",
-          "a copy of each meeting in the calendars you chose that falls between 30 days ago and 180 days ahead: its title, time, place, video-call link and a link back to the meeting at Google or Microsoft. Copies are refreshed about every 15 minutes; a meeting that is changed, cancelled or deleted at the provider, or that leaves that period, is updated or removed at the next sync;",
+          "a copy of each meeting in the calendars you chose that falls between 30 days ago and 180 days ahead: its title, time, place, video-call link and a link back to the meeting at Google or Microsoft. Copies are refreshed when you open your calendar and otherwise about every 30 minutes; a meeting that is changed, cancelled or deleted at the provider, or that leaves that period, is updated or removed at the next sync;",
           "deleted copies can remain in NivaDesk's database backups for up to 14 days, until these expire."
         ]
       },
