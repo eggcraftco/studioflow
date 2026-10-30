@@ -485,5 +485,15 @@ const placementReal = placementProblems(languageSource);
 expect("the new sentences are one block right after the refund block, not at the end of language.ts", placementReal.length === 0, placementReal.join("; "));
 
 rmSync(outDir, { recursive: true, force: true });
+// 31 Oct 2026, the £1 live test: Banking's "Order #96" pushed /orders?order=… while the Orders page reads ?orderId=
+// (or ?selectedOrderId=), so it selected the first order of the list instead. Every "open this order" link uses ?orderId=.
+{
+  const ordersPage = read("app/orders/page.tsx");
+  const wrong = ["app/bank/page.tsx", "app/inventory/ItemDetailPanel.tsx"].filter((file) => /\/orders\?order=/.test(read(file)));
+  expect("open-order links use the Orders page's ?orderId=",
+    /searchParams\.get\("orderId"\)/.test(ordersPage) && wrong.length === 0
+      && /\/orders\?orderId=\$\{encodeURIComponent\(orderId\)\}/.test(read("app/bank/page.tsx")),
+    wrong.join(", "));
+}
 console.log(failures ? `${failures} of ${checks} standalone-ui checks FAILED` : `All ${checks} standalone-ui checks passed.`);
 process.exit(failures ? 1 : 0);

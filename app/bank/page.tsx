@@ -3216,7 +3216,7 @@ function BankPageContent() {
                 t={t}
                 locale={studioLocaleTag(language)}
                 orders={orderOptions}
-                onOpenOrder={(orderId) => router.push(`/orders?order=${encodeURIComponent(orderId)}`)}
+                onOpenOrder={(orderId) => router.push(`/orders?orderId=${encodeURIComponent(orderId)}`)}
               />
             ) : null}
 

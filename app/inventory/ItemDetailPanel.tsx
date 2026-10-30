@@ -389,7 +389,7 @@ export function ItemDetailPanel({
               <ul className="inventory-panel-list">
                 {reservations.map(row => (
                   <li key={row.orderId}>
-                    <a href={`/orders?order=${row.orderId}`}>{t("Order")} {row.orderId.slice(0, 8)}…</a>
+                    <a href={`/orders?orderId=${encodeURIComponent(row.orderId)}`}>{t("Order")} {row.orderId.slice(0, 8)}…</a>
                     {item.trackingType === "quantity" ? ` · ${row.quantity}${item.quantity?.unit ? ` ${item.quantity.unit}` : ""}` : ""}
                     {canEdit ? (
                       <button
