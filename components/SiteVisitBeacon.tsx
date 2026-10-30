@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { isAnalyticsExcluded } from "@/lib/landingTracking";
 
 const BEACON_URL = "https://europe-west2-eggcraft-studio.cloudfunctions.net/recordSiteVisit";
 const SESSION_FLAG = "nv_visit_session";
@@ -59,6 +60,8 @@ export function SiteVisitBeacon() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!window.location.hostname.endsWith("nivadesk.app")) return;
+    // An admin's browser (opt-out set when Insights is opened, lib/landingTracking) is not a visitor.
+    if (isAnalyticsExcluded()) return;
 
     let newSession = false;
     let secondView = false;
@@ -95,6 +98,7 @@ export function SiteVisitBeacon() {
 
     const ping = () => {
       if (document.visibilityState !== "visible") return;
+      if (isAnalyticsExcluded()) return;
       const id = sessionId();
       if (id) sendBeaconPayload({ kind: "heartbeat", sessionId: id, path: window.location.pathname });
     };
@@ -112,7 +116,7 @@ export function SiteVisitBeacon() {
     const onVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
         const seconds = Math.round((Date.now() - shownAt) / 1000);
-        if (seconds >= 2) {
+        if (seconds >= 2 && !isAnalyticsExcluded()) {
           sendBeaconPayload({ kind: "duration", seconds });
         }
       } else {
