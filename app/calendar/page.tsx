@@ -242,6 +242,9 @@ export default function CalendarPage() {
   // Keyboard: whatever opened the form or the detail panel gets the focus back when it closes.
   const formOpener = useRef<HTMLElement | null>(null);
   const detailOpener = useRef<HTMLElement | null>(null);
+  // The day view's hour list was last scrolled for this list element, day and first hour (once, then left to the person;
+  // a list mounted again, e.g. back from the week view, is scrolled again).
+  const hoursScrolledFor = useRef<{ el: HTMLOListElement | null; key: string }>({ el: null, key: "" });
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -609,7 +612,9 @@ export default function CalendarPage() {
         <span className="cal-chip-text">{label}{marks ? <span aria-hidden="true">{marks}</span> : null}</span>
         {!compact && stateText ? <span className="cal-chip-state">{stateText}</span> : null}
         {visMark && !compact ? <span className="cal-chip-vis" aria-hidden="true">{visMark}</span> : null}
-        {item.external && !compact ? <span className="cal-chip-vis" aria-hidden="true">{item.external.joinUrl ? "🎥 " : ""}{source}</span> : null}
+        {item.external && !compact && item.external.joinUrl ? <span className="cal-chip-vis" aria-hidden="true">🎥</span> : null}
+        {/* The brand only, and it gives way first: the title keeps the room (hidden in the 7-column week, see globals.css). */}
+        {item.external && !compact ? <span className="cal-chip-src" aria-hidden="true">{PROVIDER_META[item.external.provider].short}</span> : null}
         <span className="visually-hidden-file">{t(meta.label)}{spokenCompletion ? completionNote : ""}{metaNote}{visNote ? ` · ${visNote}` : ""}{sourceNote}</span>
       </button>
     );
@@ -688,6 +693,16 @@ export default function CalendarPage() {
     const allDayRows = rows.filter((r) => r.item.allDay || r.asCompletion);
     const timed = rows.filter((r) => !r.item.allDay && !r.asCompletion);
     const hourOf = (ms: number | null) => (ms === null ? 0 : Number(core.localParts(ms, viewerTz).time.slice(0, 2)));
+    // Opens an hour before the first timed entry (08:00 on an empty day), not at midnight: on 30 Oct nine empty hours
+    // sat above the 09:00 meetings.
+    const firstHour = timed.length ? Math.min(...timed.map((r) => hourOf(r.item.startMs))) : 9;
+    const scrollKey = `${anchor}|${firstHour}`;
+    const scrollHours = (el: HTMLOListElement | null) => {
+      if (!el || (hoursScrolledFor.current.el === el && hoursScrolledFor.current.key === scrollKey)) return;
+      hoursScrolledFor.current = { el, key: scrollKey };
+      const row = el.children[Math.max(0, firstHour - 1)] as HTMLElement | undefined;
+      el.scrollTop = row ? row.offsetTop : 0;
+    };
     return (
       <div className="cal-day">
         <div className="cal-quick-add" role="group" aria-label={`${t("New entry")} · ${dayLabel(anchor, locale)}`}>
@@ -714,7 +729,7 @@ export default function CalendarPage() {
           <span className="cal-hour-label">{t("All day")}</span>
           <div className="cal-chips">{allDayRows.length ? allDayRows.map((r) => chip(r)) : <span className="muted-copy">—</span>}</div>
         </div>
-        <ol className="cal-hours">
+        <ol className="cal-hours" ref={scrollHours}>
           {Array.from({ length: 24 }, (_, h) => h).map((h) => {
             const inHour = timed.filter((r) => hourOf(r.item.startMs) === h);
             const hh = `${String(h).padStart(2, "0")}:00`;

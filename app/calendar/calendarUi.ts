@@ -14,10 +14,11 @@ export const TYPE_META: Record<CalendarItemKind, { label: string; icon: string; 
   external: { label: "From your calendar", icon: "🌐", tone: "external" },
 };
 
-/** The source an external meeting came from (V1.1). */
-export const PROVIDER_META: Record<"google" | "microsoft", { label: string; open: string }> = {
-  google: { label: "Google Calendar", open: "Open in Google Calendar" },
-  microsoft: { label: "Outlook", open: "Open in Outlook" },
+/** The source an external meeting came from (V1.1). `short` is the brand on a card, where the title needs the room
+ * (30 Oct: "Google Calendar" left a week-view card "09…"); the full name stays in the detail and for screen readers. */
+export const PROVIDER_META: Record<"google" | "microsoft", { label: string; short: string; open: string }> = {
+  google: { label: "Google Calendar", short: "Google", open: "Open in Google Calendar" },
+  microsoft: { label: "Outlook", short: "Outlook", open: "Open in Outlook" },
 };
 
 export const TASK_STATE_META: Record<CalendarTaskState, { label: string; icon: string }> = {
