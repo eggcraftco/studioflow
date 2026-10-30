@@ -101,6 +101,10 @@ const PAGES_WITHOUT_CHAPTER: Record<string, string> = {
   "/pandle/callback": "provider callback, no screen to explain",
   "/quickbooks/callback": "provider callback, no screen to explain",
   "/xero/callback": "provider callback, no screen to explain",
+  "/oauth/gdrive/callback": "OAuth return page for Cloud storage (Google Drive), not a screen to explain; set-cloud-storage covers connecting",
+  "/oauth/onedrive/callback": "OAuth return page for Cloud storage (OneDrive), not a screen to explain; set-cloud-storage covers connecting",
+  "/oauth/dropbox/callback": "OAuth return page for Cloud storage (Dropbox), not a screen to explain; set-cloud-storage covers connecting",
+  "/oauth/box/callback": "OAuth return page for Cloud storage (Box), not a screen to explain; set-cloud-storage covers connecting",
   "/admin": "NivaDesk staff only, not a customer feature",
   "/privacy": "legal page",
   "/terms": "legal page",
@@ -178,11 +182,13 @@ const INTEGRATION_CHAPTERS: Record<string, string> = {
   "dhl-express": "set-dhl",
   tracking: "card-shipping",
   twilio: "set-sms",
+  cloudstorage: "set-cloud-storage",
 };
 // The name the chapter must use for it (the tile's own name where it differs from the id).
 const INTEGRATION_NAMES: Record<string, string> = {
   openbanking: "Open Banking", quickbooks: "QuickBooks", "dhl-express": "DHL Express", dhl: "DHL Express",
   tracking: "17TRACK", inbound: "webhook", truelayer: "Open Banking", chatgpt: "ChatGPT", twilio: "SMS",
+  cloudstorage: "Cloud storage",
 };
 
 const EN = getGuideTree("English");
@@ -263,6 +269,7 @@ check("4 each mapped chapter exists in English AND Turkish, with a paragraph for
 // rewrite it: from then on every line of it must be in all ten GUIDE_T languages.
 const FULLY_TRANSLATED = [
   "calendar", "help-assistant", "set-security", "set-stripe", "set-dhl", "set-team", "messages", "banking",
+  "set-cloud-storage",
 ];
 // Lines of the older chapters still in English in the other ten languages on 30 Oct 2026. This
 // number can only go down: lower it when you translate some, never raise it.

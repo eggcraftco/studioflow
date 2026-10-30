@@ -1324,6 +1324,34 @@ const TREE_EN: GuideNode[] = [
         ]
       },
       {
+        id: "set-cloud-storage",
+        title: "Cloud storage (Google Drive, OneDrive, Dropbox, Box)",
+        blocks: [
+          { kind: "para", text: "Keep your order files in your own cloud. The workspace owner can connect Google Drive, OneDrive, Dropbox or Box; from then on the files you attach to orders are saved there instead of in NivaDesk Cloud, and you open them from the order as before. Files already in NivaDesk Cloud stay where they are." },
+          { kind: "sub", text: "Connecting Google Drive, OneDrive, Dropbox or Box (owner)" },
+          { kind: "steps", items: [
+            "Settings ▸ Integrations ▸ Cloud storage.",
+            "Press Connect next to the cloud you use, sign in to that account and allow NivaDesk.",
+            "Back in NivaDesk the card reads New files are saved to: followed by your cloud's name."
+          ] },
+          { kind: "bullets", items: [
+            "Only the workspace owner can connect, reconnect or disconnect; team members see which cloud is in use. A cloud marked Not available yet cannot be connected yet."
+          ] },
+          { kind: "sub", text: "Where do my files go?" },
+          { kind: "bullets", items: [
+            "NivaDesk writes only to its own folder in your cloud: NivaDesk ▸ your workspace ▸ Orders ▸ the order (in OneDrive and Dropbox inside Apps ▸ NivaDesk). It keeps the file's name, size and link to the order, not a copy.",
+            "Large files go up in parts and continue after a dropped connection; attaching the same file to the same order again does not make a second copy.",
+            "Move to bin puts the file in that cloud's own bin, where you can restore it."
+          ] },
+          { kind: "sub", text: "Disconnecting, reconnecting and iCloud" },
+          { kind: "bullets", items: [
+            "Disconnect sends new files back to NivaDesk Cloud. Files already in your cloud stay there; connect that cloud again to open them from NivaDesk.",
+            "If the cloud asks to be reconnected (for example you removed NivaDesk's access in your account), uploads stop with Reconnect instead of going anywhere else: press Reconnect on the Cloud storage card.",
+            "iCloud Drive: on iPhone, iPad and Mac you can attach files from iCloud Drive and save files to it, but it cannot be your workspace storage."
+          ] }
+        ]
+      },
+      {
         id: "set-safety",
         title: "Safety & Uploads",
         blocks: [
@@ -2882,6 +2910,34 @@ const TREE_TR: GuideNode[] = [
             "Etiket, kargoya vermek demek değildir: koliyi yine DHL'e kendiniz teslim eder ya da alımı DHL'den kendiniz ayarlarsınız.",
             "Kontrol gerekiyor, NivaDesk'in DHL'in gönderiyi oluşturup oluşturmadığını doğrulayamadığı anlamına gelir; MyDHL'de açılmış gönderileri bul ya da DHL'de yeniden ara, bir şey iki kez oluşturulmadan önce durumu netleştirir.",
             "Eşya beyanı ve ticari fatura finans erişimi ister. eBay siparişi için DHL etiketi oluşturulamaz."
+          ] }
+        ]
+      },
+      {
+        id: "set-cloud-storage",
+        title: "Bulut depolama (Google Drive, OneDrive, Dropbox, Box)",
+        blocks: [
+          { kind: "para", text: "Sipariş dosyalarınızı kendi bulutunuzda tutun. Çalışma alanı sahibi Google Drive, OneDrive, Dropbox ya da Box bağlayabilir; bundan sonra siparişlere eklediğiniz dosyalar NivaDesk Cloud yerine oraya kaydedilir ve onları yine siparişten açarsınız. NivaDesk Cloud'daki mevcut dosyalar olduğu yerde kalır." },
+          { kind: "sub", text: "Google Drive, OneDrive, Dropbox ya da Box bağlamak (sahip)" },
+          { kind: "steps", items: [
+            "Ayarlar ▸ Entegrasyonlar ▸ Cloud storage.",
+            "Kullandığınız bulutun yanında Connect'e basın, o hesaba giriş yapın ve NivaDesk'e izin verin.",
+            "NivaDesk'e döndüğünüzde kartta New files are saved to: ve bulutunuzun adı yazar."
+          ] },
+          { kind: "bullets", items: [
+            "Yalnız çalışma alanı sahibi bağlayabilir, yeniden bağlayabilir ya da bağlantıyı kesebilir; ekip üyeleri hangi bulutun kullanıldığını görür. Not available yet yazan bir bulut henüz bağlanamaz."
+          ] },
+          { kind: "sub", text: "Dosyalarım nereye gider?" },
+          { kind: "bullets", items: [
+            "NivaDesk bulutunuzda yalnız kendi klasörüne yazar: NivaDesk ▸ çalışma alanınız ▸ Orders ▸ sipariş (OneDrive ve Dropbox'ta Apps ▸ NivaDesk içinde). Dosyanın kopyasını değil; adını, boyutunu ve siparişle bağını tutar.",
+            "Büyük dosyalar parça parça yüklenir ve bağlantı koparsa kaldığı yerden devam eder; aynı dosyayı aynı siparişe tekrar eklemek ikinci bir kopya oluşturmaz.",
+            "Çöpe taşı, dosyayı o bulutun kendi çöp kutusuna koyar; oradan geri alabilirsiniz."
+          ] },
+          { kind: "sub", text: "Bağlantıyı kesmek, yeniden bağlamak ve iCloud" },
+          { kind: "bullets", items: [
+            "Bağlantıyı kesince yeni dosyalar yine NivaDesk Cloud'a gider. Bulutunuzdaki dosyalar orada kalır; NivaDesk'ten açmak için o bulutu yeniden bağlayın.",
+            "Bulut yeniden bağlanmak isterse (örneğin hesabınızda NivaDesk'in erişimini kaldırdıysanız) yüklemeler başka bir yere gitmek yerine Reconnect uyarısıyla durur: Cloud storage kartında Reconnect'e basın.",
+            "iCloud Drive: iPhone, iPad ve Mac'te iCloud Drive'dan dosya ekleyebilir ve dosyaları oraya kaydedebilirsiniz, ama çalışma alanının deposu olamaz."
           ] }
         ]
       },
