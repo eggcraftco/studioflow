@@ -32960,6 +32960,8 @@ body[data-studio-theme="dark"] .inbox-chip-status.is-open { color: #5fe39b; }
 .inbox-bubble p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.4; }
 .inbox-msg-untrusted { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.4; }
 .inbox-msg-tag { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.3px; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+/* IG-3: NivaDesk's line for an attachment it cannot show, not the customer's words. */
+.inbox-msg-placeholder { display: block; font-style: italic; color: var(--muted); }
 .inbox-msg-time { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--muted); align-self: flex-end; }
 .inbox-msg-status { display: inline-flex; align-items: center; gap: 3px; }
 .inbox-msg-ticks { letter-spacing: -2px; font-weight: 700; }

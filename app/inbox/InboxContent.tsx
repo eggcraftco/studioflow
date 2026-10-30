@@ -42,6 +42,7 @@ import { MessagesTabs } from "@/components/MessagesTabs";
 import { inboxEmptySentence, isDefaultInboxView } from "@/lib/studioflow/inboxEmptyState";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { ETSY_INBOX_NOTE, inboxReplyRefusalText, isEtsyOrder, isEtsyOrderId } from "@/lib/studioflow/etsyOrder";
+import { isProviderPlaceholderLine } from "@/lib/studioflow/inboxPlaceholders";
 import { InboxAttachment } from "./InboxAttachment";
 import { EmojiPicker } from "./EmojiPicker";
 import {
@@ -236,6 +237,8 @@ function mediaKindWord(messageType: string): string {
 }
 function rowPreview(row: CustomerInboxRow, t: (text: string) => string): string {
   const stored = row.lastMessagePreview || "";
+  // A line the server wrote for an attachment NivaDesk cannot show (IG-3), translated.
+  if (isProviderPlaceholderLine(stored)) return t(stored);
   if (stored && !MIME_LIKE.test(stored)) return stored;
   if (["image", "document", "audio"].includes(row.lastMessageType)) return t(mediaKindWord(row.lastMessageType));
   return stored;
@@ -1350,7 +1353,10 @@ export function InboxContent({
                           {/* Each message keeps its own direction: a Turkish sentence in an
                               Arabic interface (or the reverse) must not have its punctuation
                               moved to the wrong end. */}
-                          {entry.message.text || !entry.message.media ? <span dir="auto">{entry.message.text ?? t("(no text)")}</span> : null}
+                          {/* A placeholder line is NivaDesk's, not the customer's words (IG-3): translated and set apart. */}
+                          {isProviderPlaceholderLine(entry.message.text)
+                            ? <em className="inbox-msg-placeholder" dir="auto">{t(entry.message.text as string)}</em>
+                            : entry.message.text || !entry.message.media ? <span dir="auto">{entry.message.text ?? t("(no text)")}</span> : null}
                           {entry.message.media ? (
                             <InboxAttachment
                               key={`${thread.conversationId}:${entry.message.messageId}`}
