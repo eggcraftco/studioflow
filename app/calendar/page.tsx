@@ -892,7 +892,8 @@ export default function CalendarPage() {
                 {rangeState.error ? (
                   <div className="layout-error" role="alert">{t("The calendar could not be loaded.")} <button type="button" className="button secondary" onClick={() => setReloadTick((n) => n + 1)}>{t("Try again")}</button></div>
                 ) : null}
-                {noEntries && !searching && !filtersActive(filters) ? emptyStarters(view === "day" ? anchor : todayKey) : null}
+                {/* Not in the day view: its quick-add row already offers the same (30 Oct: the two showed together). */}
+                {noEntries && !searching && !filtersActive(filters) && view !== "day" ? emptyStarters(todayKey) : null}
                 {searching ? renderAgenda() : view === "month" ? renderMonth() : view === "week" ? renderWeek() : view === "day" ? renderDay() : renderAgenda()}
               </>
             )}
