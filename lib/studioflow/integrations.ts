@@ -265,8 +265,13 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     // this returns the summary every member may see, and `configured` says
     // whether this environment offers the rail at all. Rejected on a server
     // where the rail is off, which is the ordinary case today.
-    httpsCallable<{ companyId: string }, { configured: boolean; connection: StripeConnectionSummary }>(
-      functions, "getStripePaymentConnection")({ companyId }),
+    // `purpose: "settings"` because this tile is where connecting starts. Since
+    // SL-17 the server answers `configured: false` to every OTHER surface until
+    // the workspace has a Stripe account, and without the purpose this tile
+    // heard that too: a workspace that had never connected found Stripe under
+    // Coming soon with no Set up button (found 30 Oct 2026 writing the guide).
+    httpsCallable<{ companyId: string; purpose: "settings" }, { configured: boolean; connection: StripeConnectionSummary }>(
+      functions, "getStripePaymentConnection")({ companyId, purpose: "settings" }),
     // Gated off on most servers, so a rejection here is the ordinary case and
     // settles as an empty list — the card then reads "Available", which is
     // what it said before this connector existed.
