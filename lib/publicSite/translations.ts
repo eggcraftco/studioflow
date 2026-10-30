@@ -1123,7 +1123,7 @@ export const PUBLIC_SITE_EN = {
   "integrations.note.dhl": "You need MyDHL API access from DHL for your own DHL Express account: request it with Get Access on the MyDHL API page of developer.dhl.com. DHL sends a test key first and decides when production access opens; it gave the first NivaDesk business production access on 27 October 2026.",
   "integrations.summary.stripe": "Send a customer a card payment link for an order, paid into your own Stripe account.",
   "integrations.detail.stripe": "From an order in NivaDesk, create a payment link for a deposit, an instalment or the balance, and send it to your customer. They pay on Stripe's secure page by card, or with Apple Pay and Google Pay where Stripe offers them. The money goes straight to your own Stripe account, and the order is updated when Stripe confirms the payment. NivaDesk takes no commission; Stripe's own fees apply. The link is short, can use your own domain, and stays open until it is paid or you cancel it.",
-  "integrations.note.stripe": "Available on request while the first real payments run: it is switched on business by business, and each business sets up its own Stripe account through Stripe from Settings → Integrations."
+  "integrations.note.stripe": "Each business connects its own Stripe account from Settings → Integrations; the money goes straight to that account and NivaDesk never holds it."
 } as const;
 
 export type PublicSiteTranslationKey = keyof typeof PUBLIC_SITE_EN;
@@ -11733,57 +11733,57 @@ const FILL_TRANSLATIONS_STRIPE_LINKS: Partial<Record<StudioLanguage, Partial<Rec
   "Türkçe": {
     "integrations.summary.stripe": "Bir sipariş için müşterinize kartla ödeme bağlantısı gönderin; para kendi Stripe hesabınıza yatar.",
     "integrations.detail.stripe": "NivaDesk'teki bir siparişten kapora, ara ödeme ya da kalan tutar için ödeme bağlantısı oluşturun ve müşterinize gönderin. Müşteri Stripe'ın güvenli sayfasında kartla, Stripe sunuyorsa Apple Pay ya da Google Pay ile öder. Para doğrudan kendi Stripe hesabınıza geçer; Stripe ödemeyi onaylayınca sipariş güncellenir. NivaDesk komisyon almaz; Stripe'ın kendi ücretleri geçerlidir. Bağlantı kısadır, kendi alan adınızı kullanabilir ve ödenene ya da siz iptal edene kadar açık kalır.",
-    "integrations.note.stripe": "İlk gerçek ödemeler sürerken talep üzerine açılıyor: işletme işletme etkinleştiriliyor ve her işletme kendi Stripe hesabını Ayarlar → Entegrasyonlar bölümünden Stripe üzerinden kuruyor."
+    "integrations.note.stripe": "Her işletme kendi Stripe hesabını Ayarlar → Entegrasyonlar'dan bağlar; para doğrudan o hesaba yatar, NivaDesk parayı hiç tutmaz."
   },
   "Deutsch": {
     "integrations.summary.stripe": "Senden Sie Kunden einen Kartenzahlungslink für einen Auftrag – bezahlt wird direkt auf Ihr eigenes Stripe-Konto.",
     "integrations.detail.stripe": "Erstellen Sie aus einem Auftrag in NivaDesk einen Zahlungslink für eine Anzahlung, eine Teilzahlung oder den Restbetrag und senden Sie ihn Ihrem Kunden. Bezahlt wird auf der sicheren Seite von Stripe per Karte oder, wo Stripe es anbietet, mit Apple Pay und Google Pay. Das Geld geht direkt auf Ihr eigenes Stripe-Konto, und der Auftrag wird aktualisiert, sobald Stripe die Zahlung bestätigt. NivaDesk erhebt keine Provision; es gelten die Gebühren von Stripe. Der Link ist kurz, kann Ihre eigene Domain nutzen und bleibt offen, bis er bezahlt ist oder Sie ihn stornieren.",
-    "integrations.note.stripe": "Auf Anfrage verfügbar, solange die ersten echten Zahlungen laufen: Die Funktion wird Unternehmen für Unternehmen freigeschaltet, und jedes Unternehmen richtet sein eigenes Stripe-Konto über Stripe unter Einstellungen → Integrationen ein."
+    "integrations.note.stripe": "Jedes Unternehmen verbindet sein eigenes Stripe-Konto unter Einstellungen → Integrationen; das Geld geht direkt auf dieses Konto, NivaDesk hält es nie."
   },
   "Français": {
     "integrations.summary.stripe": "Envoyez à un client un lien de paiement par carte pour une commande, réglé directement sur votre propre compte Stripe.",
     "integrations.detail.stripe": "Depuis une commande dans NivaDesk, créez un lien de paiement pour un acompte, un versement ou le solde, et envoyez-le à votre client. Il paie sur la page sécurisée de Stripe par carte, ou avec Apple Pay et Google Pay lorsque Stripe les propose. L'argent arrive directement sur votre propre compte Stripe, et la commande est mise à jour quand Stripe confirme le paiement. NivaDesk ne prend aucune commission ; les frais de Stripe s'appliquent. Le lien est court, peut utiliser votre propre domaine et reste ouvert jusqu'au paiement ou jusqu'à ce que vous l'annuliez.",
-    "integrations.note.stripe": "Disponible sur demande pendant les premiers paiements réels : la fonction est activée entreprise par entreprise, et chaque entreprise configure son propre compte Stripe via Stripe depuis Paramètres → Intégrations."
+    "integrations.note.stripe": "Chaque entreprise connecte son propre compte Stripe depuis Paramètres → Intégrations ; l'argent arrive directement sur ce compte et NivaDesk ne le détient jamais."
   },
   "Italiano": {
     "integrations.summary.stripe": "Invia a un cliente un link di pagamento con carta per un ordine, accreditato direttamente sul tuo account Stripe.",
     "integrations.detail.stripe": "Da un ordine in NivaDesk crea un link di pagamento per un acconto, una rata o il saldo e invialo al cliente. Il cliente paga sulla pagina sicura di Stripe con carta oppure, dove Stripe li offre, con Apple Pay e Google Pay. Il denaro arriva direttamente sul tuo account Stripe e l'ordine si aggiorna quando Stripe conferma il pagamento. NivaDesk non trattiene commissioni; si applicano le tariffe di Stripe. Il link è breve, può usare il tuo dominio e resta aperto finché non viene pagato o lo annulli.",
-    "integrations.note.stripe": "Disponibile su richiesta mentre sono in corso i primi pagamenti reali: viene attivata azienda per azienda e ogni azienda configura il proprio account Stripe tramite Stripe da Impostazioni → Integrazioni."
+    "integrations.note.stripe": "Ogni attività collega il proprio account Stripe da Impostazioni → Integrazioni; il denaro arriva direttamente su quell'account e NivaDesk non lo detiene mai."
   },
   "Español (Spanish)": {
     "integrations.summary.stripe": "Envía a un cliente un enlace de pago con tarjeta para un pedido, abonado directamente en tu propia cuenta de Stripe.",
     "integrations.detail.stripe": "Desde un pedido en NivaDesk, crea un enlace de pago para un anticipo, un plazo o el saldo pendiente y envíaselo a tu cliente. Paga en la página segura de Stripe con tarjeta, o con Apple Pay y Google Pay cuando Stripe los ofrece. El dinero llega directamente a tu propia cuenta de Stripe y el pedido se actualiza cuando Stripe confirma el pago. NivaDesk no cobra comisión; se aplican las tarifas de Stripe. El enlace es corto, puede usar tu propio dominio y sigue abierto hasta que se pague o lo canceles.",
-    "integrations.note.stripe": "Disponible bajo solicitud mientras se realizan los primeros pagos reales: se activa empresa por empresa, y cada empresa configura su propia cuenta de Stripe a través de Stripe desde Ajustes → Integraciones."
+    "integrations.note.stripe": "Cada negocio conecta su propia cuenta de Stripe desde Ajustes → Integraciones; el dinero va directamente a esa cuenta y NivaDesk nunca lo retiene."
   },
   "Português": {
     "integrations.summary.stripe": "Envie a um cliente uma ligação de pagamento com cartão para uma encomenda, paga diretamente na sua própria conta Stripe.",
     "integrations.detail.stripe": "A partir de uma encomenda no NivaDesk, crie uma ligação de pagamento para um sinal, uma prestação ou o saldo e envie-a ao seu cliente. O cliente paga na página segura da Stripe com cartão ou, quando a Stripe os disponibiliza, com Apple Pay e Google Pay. O dinheiro vai diretamente para a sua própria conta Stripe e a encomenda é atualizada quando a Stripe confirma o pagamento. O NivaDesk não cobra comissão; aplicam-se as taxas da Stripe. A ligação é curta, pode usar o seu próprio domínio e fica aberta até ser paga ou até a cancelar.",
-    "integrations.note.stripe": "Disponível a pedido enquanto decorrem os primeiros pagamentos reais: é ativado empresa a empresa, e cada empresa configura a sua própria conta Stripe através da Stripe em Definições → Integrações."
+    "integrations.note.stripe": "Cada empresa liga a sua própria conta Stripe em Definições → Integrações; o dinheiro vai diretamente para essa conta e a NivaDesk nunca o retém."
   },
   "Русский (Russian)": {
     "integrations.summary.stripe": "Отправьте клиенту ссылку для оплаты заказа картой — деньги поступят прямо на ваш собственный счёт Stripe.",
     "integrations.detail.stripe": "Прямо из заказа в NivaDesk создайте ссылку на оплату предоплаты, очередного взноса или остатка и отправьте её клиенту. Клиент платит на защищённой странице Stripe картой либо через Apple Pay и Google Pay, если Stripe их предлагает. Деньги поступают прямо на ваш собственный счёт Stripe, а заказ обновляется, когда Stripe подтверждает платёж. NivaDesk не берёт комиссию; действуют тарифы Stripe. Ссылка короткая, может использовать ваш собственный домен и действует, пока её не оплатят или вы её не отмените.",
-    "integrations.note.stripe": "Доступно по запросу, пока проходят первые реальные платежи: функция включается для каждой компании отдельно, и каждая компания настраивает собственный аккаунт Stripe через Stripe в разделе Настройки → Интеграции."
+    "integrations.note.stripe": "Каждый бизнес подключает собственный аккаунт Stripe в разделе Настройки → Интеграции; деньги поступают прямо на него, NivaDesk их не держит."
   },
   "日本語 (Japanese)": {
     "integrations.summary.stripe": "注文ごとにカード決済リンクをお客様に送信できます。代金はご自身の Stripe アカウントに直接入金されます。",
     "integrations.detail.stripe": "NivaDesk の注文から、前金・分割払い・残額の支払いリンクを作成してお客様に送信できます。お客様は Stripe の安全なページで、カード、または Stripe が対応している場合は Apple Pay や Google Pay で支払います。代金はご自身の Stripe アカウントに直接入金され、Stripe が支払いを確認すると注文が更新されます。NivaDesk は手数料を受け取りません。Stripe 所定の手数料がかかります。リンクは短く、独自ドメインを使うこともでき、支払われるかキャンセルするまで有効です。",
-    "integrations.note.stripe": "最初の実際のお支払いを確認している間は、ご依頼に応じて提供しています。事業者ごとに有効化し、各事業者は 設定 → 連携 から Stripe を通じてご自身の Stripe アカウントを設定します。"
+    "integrations.note.stripe": "各事業者が 設定 → 連携 から自分の Stripe アカウントを接続します。お金はそのアカウントに直接入り、NivaDesk が預かることはありません。"
   },
   "中文 (Chinese)": {
     "integrations.summary.stripe": "为订单向客户发送银行卡付款链接，款项直接进入您自己的 Stripe 账户。",
     "integrations.detail.stripe": "在 NivaDesk 的订单中，为定金、分期款或尾款创建付款链接并发送给客户。客户在 Stripe 的安全页面上用银行卡付款；在 Stripe 支持的情况下，也可使用 Apple Pay 和 Google Pay。款项直接进入您自己的 Stripe 账户，Stripe 确认付款后订单会自动更新。NivaDesk 不收取佣金，但需支付 Stripe 的手续费。链接简短，可以使用你自己的域名，并在付款或你取消之前一直有效。",
-    "integrations.note.stripe": "在首批真实付款进行期间按申请开放：逐个商家开通，每个商家都在 设置 → 集成 中通过 Stripe 设置自己的 Stripe 账户。"
+    "integrations.note.stripe": "每家企业在 设置 → 集成 中连接自己的 Stripe 账户；款项直接进入该账户，NivaDesk 从不经手。"
   },
   "العربية (Arabic)": {
     "integrations.summary.stripe": "أرسل إلى عميلك رابط دفع بالبطاقة لطلب ما، ويُدفع المبلغ مباشرةً إلى حسابك الخاص في Stripe.",
     "integrations.detail.stripe": "من طلب داخل NivaDesk، أنشئ رابط دفع لعربون أو دفعة جزئية أو المبلغ المتبقي وأرسله إلى عميلك. يدفع العميل على صفحة Stripe الآمنة بالبطاقة، أو عبر Apple Pay وGoogle Pay حيث توفّرهما Stripe. يذهب المبلغ مباشرةً إلى حسابك الخاص في Stripe، ويُحدَّث الطلب عندما تؤكد Stripe الدفعة. لا يأخذ NivaDesk أي عمولة، وتُطبَّق رسوم Stripe الخاصة. الرابط قصير ويمكن أن يستخدم نطاقك الخاص، ويبقى صالحًا حتى يُدفع أو تلغيه.",
-    "integrations.note.stripe": "متاح عند الطلب خلال تنفيذ أولى المدفوعات الحقيقية: يُفعَّل لكل نشاط تجاري على حدة، ويُعدّ كل نشاط تجاري حسابه الخاص في Stripe عبر Stripe من الإعدادات ← التكاملات."
+    "integrations.note.stripe": "يربط كل نشاط تجاري حساب Stripe الخاص به من الإعدادات ← التكاملات؛ وتذهب الأموال مباشرة إلى ذلك الحساب ولا تحتفظ بها NivaDesk أبدًا."
   },
   "हिन्दी (Hindi)": {
     "integrations.summary.stripe": "किसी ऑर्डर के लिए ग्राहक को कार्ड भुगतान लिंक भेजें; भुगतान सीधे आपके अपने Stripe खाते में जाता है।",
     "integrations.detail.stripe": "NivaDesk में किसी ऑर्डर से एडवांस, किस्त या बकाया राशि के लिए भुगतान लिंक बनाएँ और अपने ग्राहक को भेजें। ग्राहक Stripe के सुरक्षित पेज पर कार्ड से, या जहाँ Stripe उपलब्ध कराता है वहाँ Apple Pay और Google Pay से भुगतान करता है। पैसा सीधे आपके अपने Stripe खाते में जाता है, और Stripe के भुगतान की पुष्टि करते ही ऑर्डर अपडेट हो जाता है। NivaDesk कोई कमीशन नहीं लेता; Stripe के अपने शुल्क लागू होते हैं। लिंक छोटा होता है, आपके अपने डोमेन का उपयोग कर सकता है और भुगतान होने या आपके रद्द करने तक खुला रहता है।",
-    "integrations.note.stripe": "पहले असली भुगतानों के दौरान अनुरोध पर उपलब्ध: इसे एक-एक व्यवसाय के लिए चालू किया जा रहा है, और हर व्यवसाय Settings → Integrations से Stripe के ज़रिए अपना Stripe खाता सेट करता है।"
+    "integrations.note.stripe": "हर व्यवसाय सेटिंग्स → इंटीग्रेशन से अपना Stripe खाता जोड़ता है; पैसा सीधे उसी खाते में जाता है और NivaDesk उसे कभी अपने पास नहीं रखता।"
   }
 };
 
