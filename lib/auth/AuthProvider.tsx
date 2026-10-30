@@ -4,7 +4,8 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { User } from "firebase/auth";
 import { onAuthStateChanged } from "firebase/auth";
 import { arrayUnion, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-import { auth, clearFirestoreLocalCache, db } from "@/lib/firebase/client";
+import { httpsCallable } from "firebase/functions";
+import { auth, clearFirestoreLocalCache, db, functions } from "@/lib/firebase/client";
 import { studioLanguageForLocaleTag } from "@/lib/studioflow/language";
 import { accessLost, accessWatchStep, mayReloadForAccess, memberAccessFingerprint } from "@/lib/studioflow/accessWatch";
 import { bootMark } from "@/lib/studioflow/bootTrace";
@@ -203,6 +204,31 @@ async function ensurePersonalWorkspace(currentUser: User) {
     billingStorageLimitMB: 50,
     billingTeamMemberLimit: 1
   }, { merge: true });
+  inBackground(startSignupTrialForProviderAccount(currentUser));
+}
+
+/**
+ * The fortnight the site and the setup wizard promise, for an account made with Google or
+ * Apple.
+ *
+ * Only the e-mail form called initializeFreeDemoWorkspace, the one place that grants it, so
+ * every Google and Apple sign-up opened on Free while the plan step said "Your 14 days are
+ * free" (30 Oct 2026: 0 of 69 such accounts ever had a trial). The workspace above is the
+ * same automatic bootstrap the server already accepts and upgrades, so this only asks it
+ * to — once, for an account made in the last ten minutes. The server keeps every refusal:
+ * an existing workspace, a plan already set, a trial already used.
+ */
+async function startSignupTrialForProviderAccount(currentUser: User) {
+  const providers = currentUser.providerData.map(provider => provider.providerId);
+  if (!providers.includes("google.com") && !providers.includes("apple.com")) return;
+  const created = Date.parse(currentUser.metadata.creationTime || "");
+  if (!Number.isFinite(created) || Date.now() - created > 10 * 60 * 1000) return;
+  const email = currentUser.email ?? "";
+  const emailName = email.endsWith("@privaterelay.appleid.com") ? "" : email.split("@")[0];
+  // The server wants a name of two letters or more; Apple can sign someone in without one.
+  const fullName = [currentUser.displayName ?? "", emailName].map(cleanText).find(name => name.length >= 2) || "Owner";
+  const initialise = httpsCallable<Record<string, string>, unknown>(functions, "initializeFreeDemoWorkspace");
+  await initialise({ fullName, workspaceName: "My Studio", language: cachedLanguage() || browserDefaultLanguage() });
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
