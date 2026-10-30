@@ -35,6 +35,7 @@ import {
   amazonReasonText, amazonCallableErrorText, activeAmazonConnection, amazonStatusLabel,
   type AmazonAuthorizationMode, type AmazonConnection
 } from "@/lib/studioflow/amazon";
+import { amazonStartUrl } from "@/lib/studioflow/amazonAppstore";
 
 type Props = { workspace: WorkspaceContext; language?: string };
 
@@ -60,6 +61,10 @@ export function AmazonIntegrationSection({ workspace, language = "English" }: Pr
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  // The seller pressed "Authorize" in Amazon's Appstore and was sent here to
+  // sign in (AMZ-3). Kept for this visit only: Connect then returns them to
+  // Amazon's confirm page rather than opening a fresh consent.
+  const [fromAppstore, setFromAppstore] = useState(false);
 
   const connection = activeAmazonConnection(connections);
 
@@ -82,7 +87,8 @@ export function AmazonIntegrationSection({ workspace, language = "English" }: Pr
   useEffect(() => { void refresh(); }, [refresh]);
 
   // The zone lands the seller back on /settings?section=integrations with
-  // ?amazon=connected|error (&reason=…). Read once, then taken out of the
+  // ?amazon=connected|error (&reason=…), or ?amazon=appstore when Amazon's
+  // Appstore sent them to sign in first. Read once, then taken out of the
   // address bar so a reload does not repeat the message.
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -94,6 +100,7 @@ export function AmazonIntegrationSection({ workspace, language = "English" }: Pr
     const query = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${query ? `?${query}` : ""}`);
     if (outcome === "connected") setNotice(t("Amazon account connected."));
+    else if (outcome === "appstore") setFromAppstore(true);
     else setError(t(amazonReasonText(reason)));
     void refresh(true);
   }, [t, refresh]);
@@ -116,7 +123,7 @@ export function AmazonIntegrationSection({ workspace, language = "English" }: Pr
       setError(t("Amazon did not complete the connection. Try again."));
       return;
     }
-    window.location.href = result.url;
+    window.location.href = amazonStartUrl(result.url, fromAppstore);
   });
 
   if (loading) return <section className="card app-card"><p className="muted-copy">{t("Loading…")}</p></section>;
@@ -159,6 +166,11 @@ export function AmazonIntegrationSection({ workspace, language = "English" }: Pr
             <p className="muted-copy">
               {t("Connect your Amazon seller account once; orders arrive on their own.")}
             </p>
+            {fromAppstore ? (
+              <p className="success-copy">
+                {t("Amazon sent you here to finish connecting your seller account. Check this is the right workspace, then press Connect Amazon.")}
+              </p>
+            ) : null}
             {/* The honest sentence, and deliberately not "Beta", "Coming soon"
                 or "Early access": Amazon is a supported integration, and what is
                 pending is Amazon's review of our application, not this feature. */}

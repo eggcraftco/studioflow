@@ -145,7 +145,8 @@ const REASON_TEXT: Record<string, string> = {
   session: "This connection was started in a different browser. Start again from this page.",
   denied: "Amazon access was not granted. Nothing was changed.",
   exchange: "Amazon did not complete the connection. Try again.",
-  activation: "Amazon connected, but the account could not be set up. Try again."
+  activation: "Amazon connected, but the account could not be set up. Try again.",
+  appstore: "That Amazon Appstore link could not be used. Press Connect Amazon below to connect from here instead."
 };
 
 export function amazonReasonText(reason: string): string {

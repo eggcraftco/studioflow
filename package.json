@@ -114,6 +114,7 @@
     "test:sec-logout-cache": "npx tsx scripts/check-sec-logout-cache.mts",
     "test:sec-session-lock": "npx tsx scripts/check-sec-session-lock.mts",
     "test:sec-oauth-connect": "npx tsx scripts/check-sec-oauth-connect.mts",
+    "test:amazon-appstore": "npx tsx scripts/check-amazon-appstore.mts",
     "test:sec-bundle-emails": "npx tsx scripts/check-sec-bundle-emails.mts",
     "test:qa-hooks-prod": "npx tsx scripts/check-qa-hooks-not-in-prod.mts",
     "test:sec-csp": "npx tsx scripts/check-sec-csp.mts",
