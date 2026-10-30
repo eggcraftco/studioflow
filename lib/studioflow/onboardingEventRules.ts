@@ -47,7 +47,8 @@ export function onboardingEventKey(event: OnboardingEvent, nowMs: number): strin
 /** Top-level app routes, by their first path segment. */
 const SCREEN_BY_SEGMENT: Record<string, string> = {
   home: "dashboard",
-  dashboard: "dashboard",
+  // /dashboard is the money overview; the apps send their Dashboard tab as "finance" too.
+  dashboard: "finance",
   orders: "orders",
   customers: "customers",
   production: "production",

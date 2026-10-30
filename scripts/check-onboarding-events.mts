@@ -26,6 +26,7 @@ check("a section name, never a path: ids and searches stay in the browser", () =
   assert.strictEqual(screenForPath("/orders?orderId=abc123&q=jane"), "orders");
   assert.strictEqual(screenForPath("/customers/abc123"), "customers");
   assert.strictEqual(screenForPath("/home"), "dashboard");
+  assert.strictEqual(screenForPath("/dashboard"), "finance", "the money overview, as the apps name it");
   assert.strictEqual(screenForPath("/plan"), "plans");
   assert.strictEqual(screenForPath("/somewhere-new"), "other");
   for (const path of ["/", "/admin", "/login", "/signup", "/pricing", "/privacy", "/invite/x", "/p/abc"]) {
