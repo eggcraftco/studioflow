@@ -7,11 +7,19 @@ export type AppAssistantAnswer = {
   needsChatGPT?: boolean;
   needsSupport?: boolean;
   sources?: { id: string; path: string }[];
+  /** "full": the whole guide, with steps (Starter, Pro, Team, a running trial).
+   *  "short": what each part is for (Free). */
+  depth?: "full" | "short";
 };
 
 export type AppAssistantAvailability = {
   available?: boolean;
   reason?: string;
+  depth?: "full" | "short";
+  /** Sent to NivaDesk support admins only, when the shared OpenAI key is
+   *  missing ("missing_key", "disabled", "missing_company"): the helper is
+   *  hidden from everyone else and this is the only place that says why. */
+  offReason?: string;
 };
 
 export async function getAppAssistantAvailability(): Promise<AppAssistantAvailability> {

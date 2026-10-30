@@ -104,6 +104,7 @@
     "test:todo-patch": "npx tsx scripts/check-todo-patch.mts",
     "test:web-small-fixes": "npx tsx scripts/check-web-small-fixes.mts",
     "test:claude-guide": "npx tsx scripts/check-claude-guide.mts",
+    "test:guide-coverage": "npx tsx scripts/check-guide-coverage.mts",
     "test:gn12-order-finance": "npx tsx scripts/check-gn12-order-finance.mts",
     "test:k5-channel-shipping": "npx tsx scripts/check-k5-channel-shipping.mts",
     "test:sales-list-requests": "node scripts/check-sales-list-requests.mjs",

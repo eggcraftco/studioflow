@@ -515,7 +515,11 @@ const TREE_EN: GuideNode[] = [
             "Use Edit headings to customize the Spending / Cost headings so they match how you track costs.",
             "The tax rate, rule and transition date come from Settings ▸ Financial and apply across your orders."
           ] },
-          { kind: "para", text: "This card only appears for roles allowed to see finances; for everyone else the order's money stays hidden." }
+          { kind: "para", text: "This card only appears for roles allowed to see finances; for everyone else the order's money stays hidden." },
+          { kind: "sub", text: "Payment links (Stripe): ask the customer to pay online" },
+          { kind: "bullets", items: [
+            "Once Stripe is connected, Payment links inside this card shows Still to pay and Not yet asked for. + New payment link creates a link for a Deposit, an Instalment or the Remaining balance; Copy link and send it to your customer. See Settings › Stripe card payments and payment links."
+          ] }
         ]
       },
       {
@@ -550,6 +554,10 @@ const TREE_EN: GuideNode[] = [
           { kind: "bullets", items: [
             "If the courier cannot be auto-detected, choose it manually and refresh again.",
             "Live tracking support depends on the courier; the system retries automatically and you can still check the courier's own website."
+          ] },
+          { kind: "sub", text: "DHL Express labels" },
+          { kind: "bullets", items: [
+            "With DHL Express connected, + Prepare a DHL shipment in this card creates the label and, where customs needs one, the commercial invoice. See Settings › DHL Express."
           ] }
         ]
       },
@@ -639,6 +647,68 @@ const TREE_EN: GuideNode[] = [
         "A workload panel shows how busy each member is overall, and an upcoming list highlights the next deadlines.",
         "Tap a day in the calendar to jump the schedule there, and filter by status or member.",
         "Open any job to work on it. Team Schedule is part of the Team plan."
+      ] }
+    ]
+  },
+  {
+    id: "calendar",
+    title: "Calendar",
+    blocks: [
+      { kind: "para", text: "One calendar for the whole workshop: meetings, tasks with reminders and a list of overdue ones, daily notes, work days and days off, each kept private, shared with the people you choose or shared with the whole workspace. Orders with a due date and note reminders show up on it, and your own Google Calendar or Outlook meetings can sit beside your work." },
+      { kind: "para", text: "The Calendar is on the web app; the Mac, iPhone, iPad and Android apps do not have it yet. Schedule stays what it was: your orders laid out by delivery date." },
+      { kind: "sub", text: "Opening the calendar and moving around (Day, Week, Month, Agenda)" },
+      { kind: "bullets", items: [
+        "Calendar is in the sidebar of the web app, between Banking and Schedule. Every member has it, on every plan.",
+        "Today jumps back to today, the ‹ and › arrows move one period, and Go to date picks any day.",
+        "Day, Week, Month and Agenda switch the view. Month is the default (Agenda on a narrow screen) and your last choice is remembered on that browser.",
+        "Search entries finds an entry by its words, 180 days either side of today unless you change Search from and Search until."
+      ] },
+      { kind: "sub", text: "Adding an entry: meeting, task, daily note, work day" },
+      { kind: "bullets", items: [
+        "＋ New entry opens the form. In Month view click a day, in Week view use the ＋ on a day, and in Day view click an hour to start a meeting at that time.",
+        "Day view also has quick buttons: ＋ Meeting, ＋ Task, ＋ Daily note and ＋ Work day.",
+        "Pick the type (Meeting, Task, Daily note, Work day or Unavailable), then Title (Note text for a daily note), Date, and either All day or Starts and Ends. Save keeps it.",
+        "More options adds Description, Assigned to (for a task) or Who it is about, Linked order, Repeat (Every day, or Every week on the days you pick, with Repeat ends) and, for a meeting, Location and Meeting link.",
+        "An entry can last up to 62 days and repeat up to 500 times."
+      ] },
+      { kind: "sub", text: "Who can see an entry: only me, selected people, whole workspace" },
+      { kind: "bullets", items: [
+        "Who can see it: Only me (🔒), Selected people (🔗) or Whole workspace (🏢). The same mark shows on the entry in the calendar.",
+        "With Selected people, set each person to Can view or Can edit. With Whole workspace, choose Everyone can view or Everyone can edit.",
+        "Whole workspace can be chosen by the owner, an admin or a member. View Only members can be shown an entry but not given Can edit.",
+        "Only the person who made an entry can delete it or change who sees it."
+      ] },
+      { kind: "sub", text: "Tasks, reminders, overdue tasks and repeating entries" },
+      { kind: "bullets", items: [
+        "Click an entry to open its detail. A task has Mark done, Reopen and Cancel task; the person it is assigned to can change its status too.",
+        "Reminder: Off, At the time, 15 minutes before, 1 hour before or 1 day before (an all-day entry also has Reminder time). Reminders appear inside NivaDesk, under Calendar reminders in the notification bell; they are not sent by email, text message or phone notification.",
+        "Overdue tasks: open Day view on today. Open tasks planned in the last 14 days that are not done yet are listed there, each with Late since.",
+        "Editing or deleting a repeating entry asks Only this one or This and following.",
+        "Edit and Delete are at the bottom of the detail. Delete cannot be undone."
+      ] },
+      { kind: "sub", text: "Order due dates and note reminders on the calendar, and filters" },
+      { kind: "bullets", items: [
+        "An order with a due date appears as Order due (📦) for people who can see Orders; Open order takes you to it. The date comes from the order, so change it on the order.",
+        "A note reminder appears as Note reminder (🔔) for people who can see Notes, with Open in Notes.",
+        "Filters narrows the calendar: My entries, Shared with me, Team entries, Who it is about, Type, Status and Linked order. Filters are remembered on this device, never change who can see an entry, and Reset filters clears them."
+      ] },
+      { kind: "sub", text: "Connecting Google Calendar or Outlook (your other calendars)" },
+      { kind: "steps", items: [
+        "Press 🌐 Your other calendars, then Connect Google Calendar or Connect Outlook.",
+        "Approve on Google's or Microsoft's page; you come back to the Calendar with Calendar connected.",
+        "Calendars to show picks which of your calendars appear; press Save. Sync now fetches straight away (once a minute at most), and it also syncs on its own about every 30 minutes.",
+        "Disconnect… then Disconnect removes the connection. Your Google or Outlook calendar itself is not changed. Connect again appears if the connection has expired."
+      ] },
+      { kind: "bullets", items: [
+        "It is read-only and one way: NivaDesk never writes to Google or Outlook, and those meetings never become NivaDesk entries, tasks or orders.",
+        "Only you see your Google or Outlook meetings — not your team and not the owner. They cover 30 days back to 180 days ahead, and a meeting with a link has Join meeting and Open in Google Calendar or Open in Outlook.",
+        "The 🌐 Your other calendars button only appears once this connection is switched on for your account; it is being opened gradually. If you do not see it, it is not on for you yet.",
+        "A work or school Outlook account may need your IT admin to approve NivaDesk first."
+      ] },
+      { kind: "sub", text: "Adding entries without a connection (offline)" },
+      { kind: "bullets", items: [
+        "Offline, a banner says changes stay on this device until the connection is back, with Waiting to be confirmed and a count. The form says Not confirmed yet and you can close it.",
+        "When the connection returns you are told Saved after the connection came back. A save NivaDesk refused is listed above the calendar with Open and Discard."
       ] }
     ]
   },
@@ -814,16 +884,17 @@ const TREE_EN: GuideNode[] = [
     id: "banking",
     title: "Bank Spending",
     blocks: [
-      { kind: "para", text: "Connect your business bank through Open Banking and see spending as it happens: categories, VAT treatment, receipts matched to transactions and recurring payments. NivaDesk only reads your transactions — it can never move money. Bank access is owner-only unless the owner grants a member the Bank Spending permission." },
+      { kind: "para", text: "Connect your business bank through Open Banking and see spending as it happens: categories, VAT treatment, receipts matched to transactions and recurring payments. Photograph a receipt and NivaDesk attaches it to its bank payment and reads its VAT. NivaDesk only reads your transactions — it can never move money. Bank Spending is part of Pro and Team. It is the owner's: a member the owner gives the Bank Spending permission can look, but not change anything." },
       { kind: "para", text: "PayPal beside the bank: connect your PayPal account from Integrations with the Client ID and Secret of your own PayPal app (create it in the PayPal Developer dashboard under Live and enable Transaction Search). NivaDesk checks the credentials, stores the secret encrypted and imports the last six months; from then on PayPal is read with every bank refresh. Payments received and sent, fees and refunds arrive as rows with the fee shown beside the gross, so categories, VAT, receipts and rules work exactly as for a bank row. A withdrawal from PayPal to your bank is not a row: it is matched to the bank statement's incoming row and marked as a processor payout, so the same sales are never counted twice." },
       { kind: "para", text: "Refunds and chargebacks: money that went back to a customer is not spending. Open the outgoing row, choose Customer refund or Chargeback, pick the order and press Record on the order: NivaDesk writes a negative payment entry on that order with the bank row's id, lowers the amount paid and keeps a refunded total, and the row leaves the spending totals. A PayPal refund names the payment it reverses, so when that payment was matched to an order the order is offered before you search. Remove from the order takes the entry back out; a row recorded as a refund cannot also be linked as an expense." },
-      { kind: "para", text: "QuickBooks Online: connect the official accounting company from Integrations with Intuit's own sign-in. NivaDesk verifies the company, reads its chart of accounts, VAT codes, customers, suppliers and products, proposes account and VAT mappings for you or your accountant to confirm, and follows what changes in QuickBooks through webhooks and change tracking. Only one provider keeps the books for a period: with Pandle connected you choose to keep Pandle primary and QuickBooks read-only, or migrate to QuickBooks from a date so Pandle stops the day before. Nothing is posted to QuickBooks in this phase, and NivaDesk never creates bank-feed rows there." },
-      { kind: "sub", text: "Connecting a bank" },
+      { kind: "para", text: "Accounting software: a read-only QuickBooks Online connection is built — it reads the chart of accounts, VAT codes, customers and items and never posts anything back — but a real QuickBooks company cannot connect until Intuit's production access is arranged. Xero (read-only) is set up with us on request. Pandle is not available yet." },
+      { kind: "sub", text: "Connecting a bank, and when it says Reconnect" },
       { kind: "steps", items: [
-        "Open Banking and choose Connect; pick your bank and approve access on the bank's own page.",
-        "Transactions sync automatically in the background, and Refresh fetches on demand.",
-        "Open Banking consent lasts 90 days: NivaDesk shows the renewal date, warns when it is close, and Reconnect renews it in a minute.",
-        "Disconnect keeps everything already imported; deleting the imported data is a separate, explicit choice. The Activity view shows the connection's own diary — syncs, failures, connects and disconnects."
+        "In the sidebar open Banking and press + Connect bank; pick your bank and approve access on the bank's own page. Once a bank is linked, ＋ Add account ▸ Bank adds another, and ＋ Add account ▸ PayPal adds PayPal.",
+        "Transactions sync in the background, and Refresh fetches straight away.",
+        "The account bar shows the connection: Connected, Sync failing, Reconnect needed, Waiting for bank consent… or Disconnected — data kept, with Last sync and Consent renews by (amber from 14 days before).",
+        "Open Banking consent lasts about 90 days. When the bank stops sharing data the bar says so and ⟳ Reconnect renews it in a minute; Needs attention on the Overview lists it too.",
+        "Disconnect account keeps everything already imported; after disconnecting, the 🗑 Delete imported data icon removes it as a separate choice. 🕑 Activity shows the connection's own diary — syncs, failures, connects and disconnects."
       ] },
       { kind: "sub", text: "Choosing the period, and any date range" },
       { kind: "bullets", items: [
@@ -833,27 +904,37 @@ const TREE_EN: GuideNode[] = [
       ] },
       { kind: "sub", text: "Transactions, categories and VAT" },
       { kind: "bullets", items: [
-        "Every transaction gets a category; rules apply them automatically ('always categorise this keyword as Software') and each automatic change says which rule did it.",
-        "VAT treatment is recorded per transaction with NivaDesk's own codes (standard, reduced, zero-rated, exempt and more), independent of any accounting provider.",
-        "Review statuses track what still needs a look; bulk actions handle a whole month in one pass.",
+        "The tabs are Overview, Transactions, Recurring, Receipts and Rules (and Payment Links once Stripe is connected). Transactions filters All, Needs attention, Incoming and Spending, with Search transactions and ☑ Select for bulk edits.",
+        "Every transaction gets a category; rules apply them automatically ('always categorise this keyword as Software') and each automatic change says which rule did it. Save & create rule saves a change and makes it a rule.",
+        "VAT / Tax code in a transaction: Standard rate (20%), Reduced rate (5%), Zero-rated (0%), Exempt, Outside scope, No VAT receipt, Reverse charge, Import VAT, Mixed / split VAT or No VAT — NivaDesk's own codes, independent of any accounting provider.",
+        "Needs attention and the Accounting review groups (Ready for accounting, Needs information, Missing receipt, Missing VAT code) show what still needs a look.",
         "A transaction that covers several things can be split into lines; the lines must add up to the bank amount, to the penny."
       ] },
-      { kind: "sub", text: "Receipts" },
+      { kind: "sub", text: "Scan receipt: photograph a receipt and match it to the bank payment" },
       { kind: "steps", items: [
-        "Open a transaction and attach its receipt: upload a photo or PDF, or Choose from Files to reference an invoice already in your library — nothing is copied twice.",
-        "Or snap the receipt first: NivaDesk reads the amount and date and suggests the matching transaction.",
-        "If the receipt arrives before the bank does (card payments often land 1–3 days later), keep it waiting — it attaches itself when the transaction appears.",
-        "Everything waiting sits under Receipts in a 'Waiting for the bank' section, which is always there and says so even when it is empty. Receipts sent from the NivaDesk ChatGPT app land here too when their payment has not reached the feed yet. Match now retries the matching, or you can assign one to a transaction by hand — or remove it."
+        "Press 📷 Scan receipt at the top of Banking (the owner, once a bank is linked), or Home ▸ Quick actions ▸ Scan receipt. Take a photo, or pick a photo or a PDF.",
+        "NivaDesk reads the amount, the date and the VAT and looks for the bank payment: ✅ Receipt attached when it is sure, or Likely payment found with Attach to this payment when you should confirm.",
+        "If the payment has not reached the bank yet — card payments often land 1–3 days later — it says ⏳ Saved — waiting for the bank payment and attaches itself when the payment arrives.",
+        "📷 Scan another does the next one; Done closes it. Inside a transaction, Upload new attaches a photo or PDF to that one, and Choose from Files uses an invoice already in your library — nothing is stored twice."
       ] },
-      { kind: "sub", text: "Recurring and incoming" },
+      { kind: "sub", text: "Receipts waiting for the bank" },
       { kind: "bullets", items: [
-        "Recurring payments are detected from history — usual amount, expected day of the month and a confidence grade; upcoming ones are estimates, clearly marked. You can also mark a vendor as recurring yourself.",
-        "Incoming money can be matched to an order as its payment — never duplicated — or marked as a transfer, an owner contribution or a loan so it does not count as revenue."
+        "Receipts ▸ Waiting for the bank (N) lists every receipt still waiting, where it came from (Web, ChatGPT, Claude, iPhone, Android or Mac) and how many days it has waited. The Overview shows ⏳ N receipts waiting for the bank → when there are any.",
+        "⟳ Match now tries the matching again. Each receipt has View, Assign to a transaction (to attach it by hand) and Remove.",
+        "After 14 days a receipt turns red: Still no payment — check the amount or assign it by hand. Possibly already matched comes with View that receipt.",
+        "A receipt in another currency keeps its own amount (for example USD 838.80). In the Assign list a bank payment whose bank text names that amount is marked with it, which is how a foreign supplier's invoice paid by card is found."
       ] },
-      { kind: "sub", text: "Accountant sync (Pandle)" },
+      { kind: "sub", text: "VAT read from the receipt" },
       { kind: "bullets", items: [
-        "If you use Pandle, connect it on the Banking page: confirmed transactions are pushed with your own category and VAT mapping.",
-        "NivaDesk matches transactions Pandle already has instead of creating them again, and asks you to confirm when a match is not certain."
+        "Once a receipt is attached, the transaction's VAT / Tax code shows 🧾 Read from the receipt with the VAT amount (one line per rate on a mixed receipt), and ⚡ Auto-applied when NivaDesk set the code for you.",
+        "A receipt with more than one VAT rate offers ⑃ Split by VAT rate (from the receipt), which opens the split already filled in.",
+        "For a foreign supplier's document NivaDesk does not guess: choose Import VAT for goods or Reverse charge for services yourself."
+      ] },
+      { kind: "sub", text: "Recurring payments and incoming money" },
+      { kind: "bullets", items: [
+        "The Recurring tab lists payments found in your history — usual amount, expected day and a confidence grade; a price change shows as ↑ £x → £y. Upcoming ones are estimates and marked as such.",
+        "Mark one yourself in a transaction: ↻ Recurring ▸ Mark as recurring… (Weekly, Monthly or Yearly). Same payee as… groups payments to the same payee, and Stop treating as recurring undoes it. Yours carry Marked by you.",
+        "Incoming money: Match to Order payment, Invoice, Deposit, Refund received, Owner contribution, Loan, Transfer between own accounts, Other income or Processor payout. Find matching payment and Match this payment link it to an order's payment — never duplicated — and Record as a new payment on this order adds it there."
       ] }
     ]
   },
@@ -884,12 +965,21 @@ const TREE_EN: GuideNode[] = [
     id: "messages",
     title: "Messages",
     blocks: [
-      { kind: "para", text: "Talk to your team inside NivaDesk: direct messages and group conversations, kept right next to your work." },
+      { kind: "para", text: "Talk to your team inside NivaDesk — direct messages and group conversations kept next to your work — and, where it is switched on, answer your customers' WhatsApp and Instagram messages from one inbox. Messages is part of the Team plan." },
+      { kind: "sub", text: "Team messages: direct and group conversations" },
       { kind: "bullets", items: [
-        "Start a Direct message with a teammate or a Group conversation.",
-        "Send text, files and images; forward, edit or leave a conversation.",
-        "The workspace owner controls whether direct messages, group chats and file sending are allowed.",
-        "Team messaging is available on the Team plan. (To raise a ticket instead, use Settings ▸ Support / Tickets.)"
+        "Messages ▸ Team: New conversation starts a direct message or a group. Send text, files and images, search, mute, forward, edit or leave a conversation.",
+        "The owner decides what is allowed in Settings ▸ Message Settings: Direct messages, Group conversations and File & image sharing.",
+        "Without the Team plan the page says Messages is not included in your plan, with View Team plan.",
+        "To raise a ticket with NivaDesk instead, use Settings ▸ Support / Tickets."
+      ] },
+      { kind: "sub", text: "Customer messages: WhatsApp and Instagram inbox" },
+      { kind: "bullets", items: [
+        "Messages ▸ Customers is the customer inbox. It runs for one business today: connecting your own WhatsApp Business number or Instagram professional account opens once Meta's approvals are in place, and until then those tiles in Settings ▸ Integrations say Coming soon.",
+        "Where it runs, Link this conversation ties a conversation to its order, with Assign to, Labels, Mark as done and Delete conversation. Reply on WhatsApp sends your answer; Attach a photo or PDF adds a file (Instagram replies are text only).",
+        "WhatsApp only allows replies within 24 hours of the customer's last message, and approved templates are not set up yet, so NivaDesk cannot start a conversation. Messages are deleted after 90 days and photos and PDFs after 30.",
+        "On every plan a customer's page has 💬 WhatsApp and ◎ Instagram buttons that open the conversation in WhatsApp or Instagram itself.",
+        "Who sees customer messages is set per role in Settings ▸ Team Access."
       ] }
     ]
   },
@@ -924,6 +1014,37 @@ const TREE_EN: GuideNode[] = [
             "Language: choose one of 12 languages for the whole app.",
             "Profile: your name and account details.",
             "Security: manage how you sign in and protect your account."
+          ] }
+        ]
+      },
+      {
+        id: "set-security",
+        title: "Profile & Security: two-step verification",
+        blocks: [
+          { kind: "para", text: "Two-step verification asks for a code from an authenticator app on your phone as well as your password, so a stolen password alone cannot open your account. It works with email sign-in, Google and Apple, and comes with ten recovery codes for the day the phone is lost." },
+          { kind: "sub", text: "Turning on two-step verification (authenticator app)" },
+          { kind: "steps", items: [
+            "[Web] Settings ▸ Profile & Security ▸ Two-step verification. Searching Settings for 2fa or authenticator finds it.",
+            "Update NivaDesk on your iPhone, iPad, Mac and Android to version 2.3 or later first — older apps cannot finish a sign-in with a code — then tick My NivaDesk apps are up to date. Your email must be verified (Send verification email if it is not).",
+            "Press Set up authenticator app. If asked to confirm it is you, enter your password (or Continue with Google / Continue with Apple).",
+            "Scan the QR code with your authenticator app, or type the Setup key; enter the 6-digit code it shows and press Turn on.",
+            "Save the recovery codes with Copy or Download, then press I saved them. They are shown only once."
+          ] },
+          { kind: "bullets", items: [
+            "Turning it on, removing it, new recovery codes and Sign out everywhere are done in the web app. The iPhone, iPad, Mac and Android apps only ask for the code when you sign in.",
+            "It is for the owner or an admin of the workspace; one authenticator per account."
+          ] },
+          { kind: "sub", text: "Signing in with a code, and a lost phone (recovery codes)" },
+          { kind: "bullets", items: [
+            "After your password (or Google or Apple), Two-step verification asks for the 6-digit code from your authenticator app; press Verify.",
+            "Lost your phone? Use a recovery code: the code turns two-step verification off and signs out every device. Sign in again with your password, then turn it on again with a new phone.",
+            "Make new recovery codes (N left) replaces the old codes with ten new ones.",
+            "No recovery codes and no phone: write to NivaDesk Support from your account's email address."
+          ] },
+          { kind: "sub", text: "Turning it off, and signing out everywhere (log out of all devices)" },
+          { kind: "bullets", items: [
+            "Remove on the authenticator turns two-step verification off; your password alone protects the account again.",
+            "Sign out everywhere (shown while two-step verification is on) signs out every device, this one included. ChatGPT and Claude connections stay; disconnect them in Settings ▸ Integrations."
           ] }
         ]
       },
@@ -1012,6 +1133,10 @@ const TREE_EN: GuideNode[] = [
             "Other platforms: Wix, Squarespace, Zapier and Make have their own cards and all open the same generic order webhook — connect a custom site the same way.",
             "Etsy and eBay are not among those: each has a connection of its own, described in the sections that follow.",
             "Coming soon cards carry no setup because that integration does not exist yet; Request an integration opens a support ticket if you need one."
+          ] },
+          { kind: "sub", text: "Amazon" },
+          { kind: "bullets", items: [
+            "The Amazon connection is complete on NivaDesk's side, with customer data kept in a separate, hardened environment, and is waiting on Amazon's review of the app, so a seller cannot authorise it yet. Listing management is not offered."
           ] }
         ]
       },
@@ -1064,7 +1189,7 @@ const TREE_EN: GuideNode[] = [
         id: "set-ebay",
         title: "eBay",
         blocks: [
-          { kind: "para", text: "Connect your eBay seller account and your eBay orders appear in NivaDesk's Orders alongside everything else, with the buyer's username, the items, totals, taxes and any tracking eBay has. NivaDesk reads your orders; it does not change your listings, prices or stock. Buyer contact details are kept in a protected place and shown only when you ask for them." },
+          { kind: "para", text: "Connect your eBay seller account and your eBay orders appear in NivaDesk's Orders alongside everything else, with the buyer's username, the items, totals, taxes and any tracking eBay has. Every workspace can connect eBay. NivaDesk reads your orders; it does not change your listings, prices or stock. Buyer contact details are kept in a protected place and shown only when you ask for them." },
           { kind: "sub", text: "Connecting your account" },
           { kind: "bullets", items: [
             "[Web] Settings → Integrations → eBay → Set up, then Connect eBay. Approve the connection on eBay in the same browser and you come straight back.",
@@ -1074,14 +1199,14 @@ const TREE_EN: GuideNode[] = [
           ] },
           { kind: "sub", text: "Choosing what comes in" },
           { kind: "bullets", items: [
-            "Pick how far back to import (up to 90 days), whether unpaid or cancelled orders come in, and which eBay sites.",
+            "Choose How far back (7, 30 or 90 days), and whether to Include orders that are not paid yet and Include cancelled orders. Which eBay sites come in, and Check eBay for new and changed orders automatically, are set later in What comes in, once the first orders have arrived.",
             "Preview shows how many orders were found and how many duplicates were prevented before anything is written.",
             "A large import may pause and ask you to press Import again; nothing is lost in between.",
             "If an order or two could not be brought in, the card says so and Retry tries just those again."
           ] },
           { kind: "sub", text: "Staying up to date" },
           { kind: "bullets", items: [
-            "NivaDesk checks eBay for changed orders every few minutes and once more each night with an overlap, so a change is never missed.",
+            "NivaDesk checks eBay for new and changed orders on its own through the day and once more each night with an overlap, so a change is never missed.",
             "Sync now checks the last 24 hours immediately.",
             "Sync health shows the last successful check, pending retries and anything that needs a look.",
             "Your production work is yours — stages, notes, schedule, files — and a sync never writes over it."
@@ -1094,13 +1219,107 @@ const TREE_EN: GuideNode[] = [
           ] },
           { kind: "sub", text: "If eBay asks you to reconnect" },
           { kind: "bullets", items: [
-            "When eBay stops accepting the connection (permission removed, a changed eBay password, or the 18-month authorisation ends) the card says Reconnect required; press Reconnect and approve again.",
+            "When eBay stops accepting the connection (permission removed, a changed eBay password, or the 18-month authorisation ends) the card says Reconnect required; press Reconnect eBay and approve again.",
             "Nothing already imported is lost, and orders that changed while you were disconnected are picked up.",
-            "If the card says eBay is not set up on this server yet, the connector is not switched on for you — contact support."
+            "eBay is open to every workspace; if the card ever says it is not available, send it to NivaDesk Support."
           ] },
           { kind: "sub", text: "Disconnecting" },
           { kind: "bullets", items: [
             "Disconnect removes NivaDesk's access to your eBay account and stops syncing; the orders you imported stay."
+          ] },
+          { kind: "sub", text: "Daily call budget, a full plan and the counts on the card" },
+          { kind: "bullets", items: [
+            "The card shows Calls used today. Each connection has a daily share of eBay's call allowance; when it is used up the card says Today's call budget for this connection is used up. Sync resumes tomorrow. Nothing is lost — the next sync picks everything up.",
+            "On a plan with an order limit, new eBay orders wait under Parked (plan full) once the limit is reached; mark finished orders delivered, or change plan, and they come in.",
+            "The counts show eBay orders in NivaDesk, Waiting for retry, Needs review and Failed.",
+            "A DHL label cannot be created for an eBay order."
+          ] }
+        ]
+      },
+      {
+        id: "set-stripe",
+        title: "Stripe card payments and payment links",
+        blocks: [
+          { kind: "para", text: "On the paid plans, send a customer a card payment link — for an order (a deposit, an instalment or the balance), or on its own before there is an order — and the money is paid into your own Stripe account. The customer pays on Stripe's secure page by card, or with Apple Pay or Google Pay where Stripe offers them, and NivaDesk records it when Stripe confirms the payment. NivaDesk takes no commission; Stripe's own fees apply." },
+          { kind: "sub", text: "Connecting Stripe (owner)" },
+          { kind: "steps", items: [
+            "Settings ▸ Integrations ▸ Stripe ▸ Set up (Manage once connected).",
+            "Press Connect Stripe, choose Country your business is registered in, then Continue to Stripe. The country cannot be changed later; a country that is not in the list is one Stripe does not accept yet.",
+            "Finish Stripe's own sign-up in the Stripe tab, come back and press Check again.",
+            "The screen says Ready to take payments when you can create links. Stripe needs more information or Finish setting up with Stripe means Stripe is still waiting for something — Continue with Stripe opens it again."
+          ] },
+          { kind: "bullets", items: [
+            "Stripe payments are part of the paid plans. On Free the Stripe screen says so, with See plans, instead of Connect Stripe; links already sent can still be paid, copied, cancelled and refunded.",
+            "Only the owner can connect or disconnect; everyone can see whether payments work.",
+            "Disconnect asks first. Links already sent keep working at Stripe but are no longer recorded in NivaDesk, so cancel open links before you disconnect. Your Stripe account itself is not closed.",
+            "Stripe sends the customer a receipt only when Successful payments is turned on in your Stripe Dashboard (Settings → Customer emails)."
+          ] },
+          { kind: "sub", text: "Sending a payment link for a deposit, an instalment or the balance" },
+          { kind: "steps", items: [
+            "Open the order ▸ Financial Info card ▸ Payment links. It shows Still to pay and Not yet asked for.",
+            "Press + New payment link, choose Deposit, Instalment or Remaining balance, check the amount and press Create link.",
+            "Copy link and send it to your customer yourself — by email, message or however you talk to them. NivaDesk never sends it for you."
+          ] },
+          { kind: "bullets", items: [
+            "The link is in your workspace's currency. Amounts take at most two decimals, and 12,50 means 12.50 in every language.",
+            "Each link shows its status: Open, Processing, Paid, Expired, Cancelled, Refunded, Partially refunded or Disputed. Cancel closes an open link.",
+            "When the customer pays, the order's paid and remaining amounts update on their own.",
+            "Creating a link needs the Financial Info card and permission to edit the order. The iPhone, iPad and Android apps can create and cancel links too; connecting Stripe is done on the web.",
+            "Banking ▸ Payment Links lists every link of the workspace (Open, Paid, Expired, Cancelled, Refunded / Disputed, All). Link for an order there opens the order picker; New payment link makes a link without an order (below)."
+          ] },
+          { kind: "sub", text: "A payment link without an order (the order opens when the customer pays)" },
+          { kind: "steps", items: [
+            "Banking ▸ Payment Links ▸ New payment link.",
+            "Fill in What is this payment for? and the Amount (in your workspace's currency); add Customer name (optional) and Customer email (optional) if you know them, and tick Ask for phone number or Ask for delivery address if you need them. Press Create link.",
+            "Copy link and send it. Until it is paid the row says The order opens when the customer pays.; when the customer pays, NivaDesk opens the order with the details they enter, and the row links to it."
+          ] },
+          { kind: "sub", text: "Refunding a payment" },
+          { kind: "bullets", items: [
+            "[Web] On the order, a paid link has Refund payment (owner). Enter the Amount to refund — less than the full amount for a partial refund — pick the Reason (Customer asked for a refund or Duplicate payment) and press Refund with the amount.",
+            "A refund cannot be undone; the money comes from your Stripe balance and Stripe keeps its processing fee. Refund pending means Stripe will finish it when your balance allows.",
+            "A disputed payment, or a link paid more than once, is refunded in your Stripe Dashboard instead."
+          ] },
+          { kind: "sub", text: "Your own address for payment links (pay.yourdomain)" },
+          { kind: "bullets", items: [
+            "Links are short, like pay.yourdomain/p/code. Without a domain of your own they use your customer portal domain, or nivadesk.app.",
+            "Settings ▸ Integrations ▸ Stripe ▸ Payment link address: type the address, press Use this address, add the CNAME record it shows at your domain provider, then Check again. It goes from DNS required to Domain verified to Live."
+          ] }
+        ]
+      },
+      {
+        id: "set-dhl",
+        title: "DHL Express",
+        blocks: [
+          { kind: "para", text: "Prepare DHL Express shipments straight from your orders: see the DHL services for the parcel's route, create the label, add the commercial invoice where customs needs one (including between Great Britain and Northern Ireland) and follow the tracking. Each business connects its own DHL Express account and MyDHL API access, so DHL bills you directly. NivaDesk does not book courier pickups." },
+          { kind: "sub", text: "Getting a MyDHL API key from DHL" },
+          { kind: "bullets", items: [
+            "You need MyDHL API access for your own DHL Express account. On the MyDHL API page of developer.dhl.com choose Get Access and fill in DHL's form with your DHL Express account number (Open the MyDHL API page in the DHL Express settings links there).",
+            "DHL sends a test key first and decides when production access opens."
+          ] },
+          { kind: "sub", text: "Connecting DHL Express (owner)" },
+          { kind: "steps", items: [
+            "Settings ▸ Integrations ▸ Shipping ▸ DHL Express ▸ Set up (Manage once connected).",
+            "Choose DHL test environment or DHL production, fill in API key, API secret, DHL Express account number and, if you have one, Duties account number (optional).",
+            "Press Connect DHL Express.",
+            "In Sender details add your Title / Position and Registration numbers (EORI, VAT) with + Add a registration number, then Save sender details."
+          ] },
+          { kind: "bullets", items: [
+            "Only the owner can connect or disconnect DHL Express; the owner or an admin keeps the sender details.",
+            "Every workspace can connect it."
+          ] },
+          { kind: "sub", text: "Creating a DHL label for an order" },
+          { kind: "steps", items: [
+            "Open the order ▸ Shipping & Tracking card ▸ + Prepare a DHL shipment.",
+            "Check Sender, Recipient and Parcels. Under Contents and customs choose Goods to declare or Documents and who pays duties (DAP, or DDP where your account allows it), then Confirm the declaration.",
+            "Press Show DHL services for this parcel, pick a service, then Check and create — or Save draft to finish later.",
+            "Create DHL label. The order then has Open label and, where customs needs one, Open commercial invoice."
+          ] },
+          { kind: "bullets", items: [
+            "Prices for the services are shown to people who can see finances.",
+            "Refresh tracking fetches the latest status; it also refreshes about every hour. Statuses run from Draft and Label created to In transit, In customs, Out for delivery and Delivered.",
+            "A label is not a dispatch: you still hand the parcel to DHL or book the pickup with DHL yourself.",
+            "Needs a check means NivaDesk could not confirm whether DHL created the shipment; Find shipments made on MyDHL or Search DHL again settles it before anything is created twice.",
+            "Declaring goods and the commercial invoice need finance access. A DHL label cannot be created for an eBay order."
           ] }
         ]
       },
@@ -1148,19 +1367,41 @@ const TREE_EN: GuideNode[] = [
         id: "set-plan",
         title: "Plan & Access",
         blocks: [
-          { kind: "para", text: "See your current plan, your usage limits and which features are available, and manage billing. Review the Free/Demo, Lite, Pro and Team options here." }
+          { kind: "para", text: "See your current plan, your usage limits and which features are available, and manage billing. Compare Free, Starter, Pro and Team here; the plan page also says where your subscription is billed — the website, the App Store, Google Play or Shopify — because that is the only place it can be changed." }
         ]
       },
       {
         id: "set-team",
         title: "Team Access",
         blocks: [
-          { kind: "para", text: "Invite your team and control exactly what each person can see and do." },
+          { kind: "para", text: "Invite people to your workspace by email or let them ask to join, choose what each of them can see and do, and take a member's access away — for a while or for good — without losing anything they did. Adding and managing people is for the workspace owner, on the Team plan." },
+          { kind: "sub", text: "Inviting someone by email (invitation link)" },
+          { kind: "steps", items: [
+            "Settings ▸ Team Access ▸ Advanced: connect with Company ID › opens the Team page (Getting started ▸ Invite a team member opens it too).",
+            "Press Invite Member, choose By email, enter their email, pick a role and press Send Invitation.",
+            "They get an email with a link to nivadesk.app/invite/…, valid for 14 days. They sign in (or press I do not have an account yet and create one with the invited email) and press Accept Invitation."
+          ] },
           { kind: "bullets", items: [
-            "Give each member a role: Member, View Only, Workflow Only, or your own custom role.",
-            "The Permission matrix shows every role side by side — what each one can view, edit or delete at a glance, with member counts per role.",
-            "Control which menus, order cards and settings each role can see.",
+            "If the email could not be sent, the invitation is still created: copy the link it shows and send it yourself.",
+            "Waiting to be accepted lists invitations not used yet; Withdraw cancels one."
+          ] },
+          { kind: "sub", text: "Letting someone ask to join (Company ID)" },
+          { kind: "bullets", items: [
+            "Copy invite code in Settings ▸ Team Access copies your Company ID. The person signs up, chooses Request Access and sends a request with your email or the Company ID.",
+            "Their request appears in Team Access: choose a role, then Approve or Decline."
+          ] },
+          { kind: "sub", text: "Roles and what each person can do" },
+          { kind: "bullets", items: [
+            "Roles: Member, View Only, Workflow Only, or a role profile of your own. The owner's role is fixed.",
+            "The Permission matrix shows every role side by side — what each can view, edit or delete — with how many people have it.",
+            "Control which menus, order cards and settings each role can see, including Bank Spending, Customer messages (WhatsApp, Instagram) and Team messages.",
             "Assign specific projects to specific people, and appoint support managers to handle workspace tickets."
+          ] },
+          { kind: "sub", text: "Seats, removing access and giving it back" },
+          { kind: "bullets", items: [
+            "Team includes 5 seats; extra seats are £5 a month or £50 a year each, up to 10 users. A person whose access is removed does not use a seat.",
+            "On the Team page, Remove Access takes someone's access away: nothing they did is deleted, they show No access, and Restore Access gives it back.",
+            "Remove takes a person out of the workspace altogether."
           ] }
         ]
       },
@@ -1280,6 +1521,13 @@ const TREE_EN: GuideNode[] = [
           { kind: "bullets", items: [
             "It does not change anything in Shopify, Etsy, WooCommerce, Square, Amazon or eBay, and it does not write to your bank or your accounting software. It cannot write a message of its own to a customer either — the only thing that reaches them is your workspace's own status update, in your workspace's own words.",
             "When a figure depends on a shop or bank sync that is behind, the answer says so instead of presenting old numbers as live."
+          ] },
+          { kind: "sub", text: "NivaDesk in Claude (the Claude connector)" },
+          { kind: "bullets", items: [
+            "Claude, Anthropic's assistant, can work with your workspace through the NivaDesk connector, on every plan: it looks up orders, notes, stock and figures and makes the changes your role allows, as the ChatGPT app does.",
+            "In Claude open Settings › Connectors, choose Add custom connector and paste the connector address https://nivadesk.app/claudeMcp (until NivaDesk appears in Claude's own directory), then sign in with your NivaDesk account and choose the workspace.",
+            "For a receipt, Claude gives you a NivaDesk upload link for one transaction, valid for 15 minutes; the file never passes through Claude.",
+            "You stay connected: you sign in again only if it was disconnected, your access changed, or it went unused for 90 days. Disconnect it in Settings ▸ Integrations."
           ] }
         ]
       },
@@ -1319,6 +1567,26 @@ const TREE_EN: GuideNode[] = [
         "[iPhone/iPad] There is no room for the row, so the sections live behind the menu button in the top bar. Tap it, pick the section, and its tabs appear inside.",
         "[Android] The same: the menu in the top bar lists the sections, and tabs sit inside the section you pick.",
         "Everything after the first ▸ — the tabs, the buttons, the fields — is named the same on all four, so once you are in the right section the steps read the same."
+      ] }
+    ]
+  },
+  {
+    id: "help-assistant",
+    title: "The help assistant (How do I…?)",
+    blocks: [
+      { kind: "para", text: "Inside the app, the help assistant (How do I…?) answers from this guide. On Starter, Pro and Team it gives the steps — where to go and what to press. It reads the guide, not your workspace, so it never sees your orders or figures." },
+      { kind: "sub", text: "Where the help assistant is" },
+      { kind: "bullets", items: [
+        "Press How do I…? — the button at the bottom right of the screen, in the web app and in the Mac, iPhone, iPad and Android apps.",
+        "Getting started ▸ Ask the help assistant a question opens it too.",
+        "On nivadesk.app the chat in the corner answers as well; signed in on Starter, Pro or Team it gives the same steps as the assistant in the app."
+      ] },
+      { kind: "sub", text: "What it can and cannot answer" },
+      { kind: "bullets", items: [
+        "Ask how something works, where a button is or how to set something up, in any language.",
+        "It cannot see your workspace. For questions about your own data — which orders are late, how much you made — it points you to the NivaDesk ChatGPT app.",
+        "When the guide does not cover a question, Send this to NivaDesk Support turns it into a ticket with the answer it gave attached; See your tickets shows the reply.",
+        "Starter, Pro and Team can ask 40 questions a day."
       ] }
     ]
   },
@@ -1822,7 +2090,11 @@ const TREE_TR: GuideNode[] = [
             "Başlıkları Düzenle ile Spending / Cost başlıklarını maliyetleri izleme şeklinize göre özelleştirin.",
             "Vergi oranı, kuralı ve geçiş tarihi Settings ▸ Financial'dan gelir ve tüm siparişlerinize uygulanır."
           ] },
-          { kind: "para", text: "Bu kart yalnızca finansı görmeye izinli rollerde görünür; diğer herkes için siparişin parası gizli kalır." }
+          { kind: "para", text: "Bu kart yalnızca finansı görmeye izinli rollerde görünür; diğer herkes için siparişin parası gizli kalır." },
+          { kind: "sub", text: "Ödeme bağlantıları (Stripe): müşteriden online ödeme ya da kapora istemek" },
+          { kind: "bullets", items: [
+            "Stripe bağlandıktan sonra bu karttaki Ödeme bağlantıları, Kalan tutar ve Henüz istenmedi'yi gösterir. + Yeni ödeme bağlantısı Kapora, Taksit ya da Kalan tutar için bir bağlantı oluşturur; Bağlantıyı kopyala ve müşterinize gönderin. Bkz. Ayarlar › Stripe ile kartla ödeme ve ödeme bağlantıları."
+          ] }
         ]
       },
       {
@@ -1857,6 +2129,10 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Kurye otomatik algılanamazsa elle seçip tekrar yenileyin.",
             "Canlı takip desteği kuryeye bağlıdır; sistem otomatik tekrar dener, ayrıca kuryenin kendi sitesinden de kontrol edebilirsiniz."
+          ] },
+          { kind: "sub", text: "DHL Express etiketleri" },
+          { kind: "bullets", items: [
+            "DHL Express bağlıysa bu karttaki + DHL gönderisi hazırla etiketi ve gümrüğün istediği yerde ticari faturayı oluşturur. Bkz. Ayarlar › DHL Express."
           ] }
         ]
       },
@@ -1925,7 +2201,7 @@ const TREE_TR: GuideNode[] = [
   },
   {
     id: "schedule",
-    title: "Schedule (Takvim)",
+    title: "Planlama (Schedule)",
     blocks: [
       { kind: "para", text: "Siparişlerinizin teslim tarihine göre takvim görünümü; haftanızı planlayın ve yaklaşanları görün." },
       { kind: "bullets", items: [
@@ -1933,6 +2209,68 @@ const TREE_TR: GuideNode[] = [
         "Doğrudan takvimden yeni bir planlı proje oluşturun.",
         "Bir sipariş için tüm-gün takvim dosyası indirip kendi takvim uygulamanıza ekleyin (NivaDesk Starter'tan itibaren).",
         "Aralıktaki herhangi bir siparişi açıp üzerinde çalışın."
+      ] }
+    ]
+  },
+  {
+    id: "calendar",
+    title: "Takvim",
+    blocks: [
+      { kind: "para", text: "Tüm atölye için tek takvim: toplantılar, hatırlatıcılı görevler ve gecikmiş görevlerin listesi, günlük notlar, çalışma günleri ve izin günleri; her biri yalnız size özel kalabilir, seçtiğiniz kişilerle ya da tüm çalışma alanıyla paylaşılabilir. Teslim tarihi olan siparişler ve not hatırlatmaları da takvimde görünür; kendi Google Takvim ya da Outlook toplantılarınız da işinizin yanında durabilir." },
+      { kind: "para", text: "Takvim web uygulamasındadır; Mac, iPhone, iPad ve Android uygulamalarında henüz yoktur. Planlama ekranı (Schedule) olduğu gibi kalır: siparişlerinizin teslim tarihine göre dizilişi." },
+      { kind: "sub", text: "Takvimi açmak ve içinde gezinmek (Gün, Hafta, Ay, Ajanda)" },
+      { kind: "bullets", items: [
+        "Takvim, web uygulamasının kenar çubuğunda Banka ile Planlama arasındadır. Her plandaki her üyede vardır.",
+        "Bugün sizi bugüne döndürür, ‹ ve › okları bir dönem ileri ya da geri gider, Tarihe git ise istediğiniz günü açar.",
+        "Gün, Hafta, Ay ve Ajanda görünümü değiştirir. Varsayılan Ay'dır (dar ekranda Ajanda) ve son seçiminiz o tarayıcıda hatırlanır.",
+        "Kayıtlarda ara bir kaydı içindeki kelimelerle bulur; Şu tarihten ara ve Şu tarihe kadar alanlarını değiştirmezseniz bugünün 180 gün öncesine ve sonrasına bakar."
+      ] },
+      { kind: "sub", text: "Takvime kayıt eklemek: toplantı, görev, günlük not, çalışma günü, izin günü" },
+      { kind: "bullets", items: [
+        "＋ Yeni kayıt formu açar. Ay görünümünde bir güne tıklayın, Hafta görünümünde günün ＋ düğmesini kullanın, Gün görünümünde ise bir saate tıklayarak o saatte başlayan bir toplantı açın.",
+        "Gün görünümünde hızlı düğmeler de vardır: ＋ Toplantı, ＋ Görev, ＋ Günlük not ve ＋ Çalışma günü.",
+        "Türü seçin (Toplantı, Görev, Günlük not, Çalışma günü ya da izin günleri için Kullanılamıyor), sonra Başlık (günlük notta Not metni), Tarih ve Tüm gün ya da Başlangıç ile Bitiş. Kaydet kaydı saklar.",
+        "Diğer seçenekler şunları ekler: Açıklama, Atandı (görevde) ya da Kimin için, Bağlı sipariş, Tekrar (Her gün ya da seçtiğiniz günlerde Her hafta şu günlerde, Tekrar bitişi ile) ve toplantıda Konum ile Toplantı bağlantısı.",
+        "Bir kayıt en çok 62 gün sürebilir ve en çok 500 kez tekrarlanabilir."
+      ] },
+      { kind: "sub", text: "Bir kaydı kim görür: yalnızca ben, seçtiğim kişiler, tüm çalışma alanı (paylaşma)" },
+      { kind: "bullets", items: [
+        "Kim görebilir: Yalnızca ben (🔒), Seçtiğim kişiler (🔗) ya da tüm çalışma alanı için Çalışma alanı (🏢). Aynı işaret takvimdeki kaydın üstünde de görünür.",
+        "Seçtiğim kişiler'de her kişiyi Görüntüleyebilir ya da Düzenleyebilir yapın. Çalışma alanı'nda Herkes görüntüleyebilir ya da Herkes düzenleyebilir'i seçin.",
+        "Çalışma alanı seçeneğini sahip, yönetici (admin) ya da üye seçebilir. Sadece Görüntüleme üyelerine bir kayıt gösterilebilir ama Düzenleyebilir yetkisi verilemez.",
+        "Bir kaydı yalnız onu oluşturan kişi silebilir ya da kimin göreceğini değiştirebilir."
+      ] },
+      { kind: "sub", text: "Görevler, hatırlatıcılar, gecikmiş görevler ve tekrarlayan kayıtlar" },
+      { kind: "bullets", items: [
+        "Ayrıntısını açmak için bir kayda tıklayın. Görevde Tamamlandı işaretle, Yeniden Aç ve Görevi iptal et vardır; görevin atandığı kişi de durumunu değiştirebilir.",
+        "Hatırlatıcı: Kapalı, Tam zamanında, 15 dakika önce, 1 saat önce ya da 1 gün önce (tüm gün süren kayıtlarda ayrıca Hatırlatma saati). Hatırlatmalar NivaDesk'in içinde, bildirim zilinde Takvim hatırlatmaları altında görünür; e-posta, SMS ya da telefon bildirimi olarak gönderilmez.",
+        "Gecikmiş görevler: bugünde Gün görünümünü açın. Son 14 günde planlanıp henüz bitmemiş açık görevler Gecikmiş başlığı altında listelenir; her birinde ne zamandan beri geciktiği yazar (… tarihinden beri gecikmiş).",
+        "Tekrarlayan bir kaydı düzenlemek ya da silmek Yalnız bu mu, Bu ve sonrakiler mi diye sorar.",
+        "Düzenle ve Sil ayrıntının en altındadır. Silme geri alınamaz."
+      ] },
+      { kind: "sub", text: "Takvimde sipariş teslim tarihleri, not hatırlatmaları ve filtreler" },
+      { kind: "bullets", items: [
+        "Teslim tarihi olan bir sipariş, Siparişler'i görebilen kişilere Sipariş teslim zamanı (📦) olarak görünür; Siparişi aç sizi siparişe götürür. Tarih siparişten gelir; değiştirmek için siparişte değiştirin.",
+        "Bir not hatırlatması, Notlar'ı görebilen kişilere Not hatırlatması (🔔) olarak, Notes'ta aç ile birlikte görünür.",
+        "Filtreler takvimi daraltır: Benim kayıtlarım, Benimle paylaşılanlar, Ekibin kayıtları, Kimin için, Tür, Durum ve Bağlı sipariş. Filtreler bu cihazda hatırlanır, bir kaydı kimin görebileceğini asla değiştirmez; Filtreleri sıfırla hepsini temizler."
+      ] },
+      { kind: "sub", text: "Google Takvim ya da Outlook takvimini bağlamak (diğer takvimleriniz)" },
+      { kind: "steps", items: [
+        "🌐 Diğer takvimleriniz'e, sonra Google Takvim bağla ya da Outlook bağla'ya basın.",
+        "Google'ın ya da Microsoft'un sayfasında onaylayın; Takvim'e Takvim bağlandı mesajıyla dönersiniz.",
+        "Gösterilecek takvimler, takvimlerinizden hangilerinin görüneceğini seçer; Kaydet'e basın. Şimdi senkronla hemen çeker (en çok dakikada bir); takvim ayrıca yaklaşık her 30 dakikada bir kendiliğinden senkronlanır.",
+        "Bağlantıyı kes… ve ardından Bağlantıyı kes bağlantıyı kaldırır. Google ya da Outlook takviminizin kendisi değişmez. Bağlantının süresi dolduysa Yeniden bağla görünür."
+      ] },
+      { kind: "bullets", items: [
+        "Salt okunurdur ve tek yönlüdür: NivaDesk Google'a ya da Outlook'a asla yazmaz; oradaki toplantılar asla NivaDesk kaydına, görevine ya da siparişine dönüşmez.",
+        "Google ya da Outlook toplantılarınızı yalnız siz görürsünüz — ekibiniz de, sahip de görmez. 30 gün öncesinden 180 gün sonrasına kadar gelirler; bağlantısı olan bir toplantıda Toplantıya katıl ile Google Takvim'de aç ya da Outlook'ta aç bulunur.",
+        "🌐 Diğer takvimleriniz düğmesi ancak bu bağlantı hesabınız için açıldığında görünür; kademeli olarak açılıyor. Görmüyorsanız sizin için henüz açılmamıştır.",
+        "İş ya da okul Outlook hesabında BT yöneticinizin önce NivaDesk'i onaylaması gerekebilir."
+      ] },
+      { kind: "sub", text: "Bağlantı yokken kayıt eklemek (çevrimdışı)" },
+      { kind: "bullets", items: [
+        "Çevrimdışıyken bir şerit, değişikliklerin bağlantı geri gelene kadar bu cihazda kaldığını söyler; yanında Onay bekleyen ve bir sayı görünür. Form Henüz onaylanmadı der ve formu kapatabilirsiniz.",
+        "Bağlantı geri gelince Bağlantı geri gelince kaydedildi diye haber verilir. NivaDesk'in reddettiği bir kayıt takvimin üstünde Açık ve Vazgeç düğmeleriyle listelenir."
       ] }
     ]
   },
@@ -2108,46 +2446,57 @@ const TREE_TR: GuideNode[] = [
     id: "banking",
     title: "Banka Harcamaları",
     blocks: [
-      { kind: "para", text: "İşletme bankanızı Open Banking ile bağlayın ve harcamayı olurken görün: kategoriler, KDV işlemi, hareketlere eşlenmiş fişler ve tekrarlayan ödemeler. NivaDesk hareketlerinizi yalnızca okur — asla para taşıyamaz. Banka erişimi, sahibi bir üyeye Banka Harcamaları iznini vermedikçe yalnız sahibindedir." },
-      { kind: "para", text: "Bankanın yanında PayPal: PayPal hesabını Integrations'tan, kendi PayPal uygulamanın Client ID ve Secret'ıyla bağla (uygulamayı PayPal Developer panelinde Live altında oluşturup Transaction Search'ü aç). NivaDesk kimlik bilgilerini doğrular, secret'ı şifreli saklar ve son altı ayı içe alır; sonrasında PayPal her banka yenilemesinde okunur. Alınan ve gönderilen ödemeler, ücretler ve iadeler satır olarak gelir, ücret brütün yanında gösterilir; kategoriler, KDV, fişler ve kurallar banka satırındaki gibi çalışır. PayPal'dan bankana çekim bir satır değildir: banka ekstresindeki gelen satırla eşleştirilir ve işlemci ödemesi olarak işaretlenir, aynı satışlar asla iki kez sayılmaz." },
+      { kind: "para", text: "İşletme bankanızı Open Banking ile bağlayın ve harcamayı olurken görün: kategoriler, KDV işlemi, hareketlere eşlenmiş fişler ve tekrarlayan ödemeler. Bir fişin fotoğrafını çekin; NivaDesk onu banka ödemesine ekler ve KDV'sini okur. NivaDesk hareketlerinizi yalnızca okur — asla para taşıyamaz. Banka Harcamaları Pro ve Team planlarının parçasıdır. Sahibe aittir: sahibin Banka Harcamaları iznini verdiği bir üye bakabilir ama hiçbir şeyi değiştiremez." },
+      { kind: "para", text: "Bankanın yanında PayPal: PayPal hesabınızı Entegrasyonlar'dan, kendi PayPal uygulamanızın Client ID ve Secret'ıyla bağlayın (uygulamayı PayPal Developer panelinde Live altında oluşturup Transaction Search'ü açın). NivaDesk kimlik bilgilerini doğrular, secret'ı şifreli saklar ve son altı ayı içe alır; sonrasında PayPal her banka yenilemesinde okunur. Alınan ve gönderilen ödemeler, ücretler ve iadeler satır olarak gelir, ücret brütün yanında gösterilir; kategoriler, KDV, fişler ve kurallar banka satırındaki gibi çalışır. PayPal'dan bankanıza çekim bir satır değildir: banka ekstresindeki gelen satırla eşleştirilir ve işlemci ödemesi olarak işaretlenir, aynı satışlar asla iki kez sayılmaz." },
       { kind: "para", text: "İadeler ve ters ibrazlar: müşteriye geri dönen para harcama değildir. Giden satırı açıp Müşteri iadesi veya Ters ibraz'ı seçin, siparişi seçin ve Siparişe kaydet'e basın: NivaDesk o siparişe banka satırının kimliğiyle eksi bir ödeme girdisi yazar, ödenen tutarı düşürür ve iade toplamını tutar; satır harcama toplamlarından çıkar. PayPal iadesi geri aldığı ödemeyi adıyla bildirir; o ödeme bir siparişle eşleştirilmişse sipariş siz aramadan önerilir. Siparişten kaldır girdiyi geri alır; iade olarak kaydedilen bir satır ayrıca gider olarak bağlanamaz." },
-      { kind: "para", text: "QuickBooks Online: resmî muhasebe şirketini Integrations'tan Intuit'in kendi girişiyle bağlayın. NivaDesk şirketi doğrular; hesap planını, KDV kodlarını, müşterileri, tedarikçileri ve ürünleri okur; hesap ve KDV eşlemelerini sizin ya da muhasebecinizin onaylaması için önerir; QuickBooks'taki değişiklikleri webhook ve değişiklik takibiyle izler. Bir dönemde defteri yalnızca tek sağlayıcı tutar: Pandle bağlıyken ya Pandle'ı birincil bırakıp QuickBooks'u salt-okunur tutarsınız ya da bir tarihten itibaren QuickBooks'a geçersiniz, Pandle bir gün önce durur. Bu aşamada QuickBooks'a hiçbir kayıt yazılmaz ve NivaDesk orada asla banka akışı satırı oluşturmaz." },
-      { kind: "sub", text: "Banka bağlama" },
+      { kind: "para", text: "Muhasebe yazılımı: salt okunur bir QuickBooks Online bağlantısı hazırdır — hesap planını, KDV kodlarını, müşterileri ve ürünleri okur, QuickBooks'a hiçbir şey geri yazmaz — ama Intuit'in canlı (production) erişimi ayarlanana kadar gerçek bir QuickBooks şirketi bağlanamaz. Xero (salt okunur) istek üzerine bizimle birlikte kurulur. Pandle henüz kullanılamıyor." },
+      { kind: "sub", text: "Banka bağlamak ve Yeniden bağlan uyarısı" },
       { kind: "steps", items: [
-        "Banka bölümünü açıp Bağlan'ı seçin; bankanızı seçin ve erişimi bankanın kendi sayfasında onaylayın.",
-        "Hareketler arka planda kendiliğinden eşitlenir; Yenile anında çeker.",
-        "Open Banking rızası 90 gün sürer: NivaDesk yenileme tarihini gösterir, yaklaşınca uyarır; Yeniden bağlan bir dakikada tazeler.",
-        "Bağlantıyı kes içe aktarılmış her şeyi korur; veriyi silmek ayrı ve açık bir karardır. Etkinlik görünümü bağlantının kendi günlüğünü gösterir — eşitlemeler, hatalar, bağlanma ve kesilmeler."
+        "Kenar çubuğunda Banka'yı açın ve + Banka bağla'ya basın; bankanızı seçin ve erişimi bankanın kendi sayfasında onaylayın. Bir banka bağlandıktan sonra ＋ Hesap ekle ▸ Banka bir başka banka, ＋ Hesap ekle ▸ PayPal ise PayPal ekler.",
+        "İşlemler arka planda senkronlanır; Yenile hemen çeker.",
+        "Hesap çubuğu bağlantının durumunu gösterir: Bağlandı, Senkron başarısız, Yeniden bağlanmalı, Banka onayı bekleniyor… ya da Bağlantı kesildi — veriler korundu; yanında Son senkron ve Rıza yenileme tarihi (son 14 günde sarıya döner).",
+        "Open Banking rızası yaklaşık 90 gün sürer. Banka veri paylaşmayı bırakınca çubuk bunu söyler ve ⟳ Yeniden bağlan bir dakikada yeniler; Genel bakış'taki İlgi bekliyor da onu listeler.",
+        "Hesap bağlantısını kes, içe aktarılmış her şeyi korur; bağlantıyı kestikten sonra 🗑 İçe aktarılan verileri sil simgesi onları ayrı bir seçim olarak siler. 🕑 Etkinlik bağlantının kendi günlüğünü gösterir — senkronlar, hatalar, bağlanma ve kesilmeler."
       ] },
       { kind: "sub", text: "Dönem seçimi ve istediğiniz tarih aralığı" },
       { kind: "bullets", items: [
         "Haftalık, Aylık ve Yıllık, yanındaki oklarla tam dönemler arasında gezinir.",
-        "Tarih aralığı ise istediğiniz iki tarihi alır — hangi sırayla seçerseniz seçin, ekrandaki her rakam (harcama, gelen, kategoriler, hareket listesi) o aralığa uyar.",
+        "Tarih aralığı ise istediğiniz iki tarihi alır — hangi sırayla seçerseniz seçin, ekrandaki her rakam (harcama, gelen, kategoriler, işlem listesi) o aralığa uyar.",
         "Tarih aralığında oklar kalkar, çünkü elle seçtiğiniz bir aralığın öncesi ya da sonrası yoktur; 'vs' karşılaştırması da aralığınızın başladığı günün bir öncesinde biten, aynı sayıda güne karşı yapılır."
       ] },
-      { kind: "sub", text: "Hareketler, kategoriler ve KDV" },
+      { kind: "sub", text: "İşlemler (hareketler), kategoriler ve KDV" },
       { kind: "bullets", items: [
-        "Her hareket bir kategori alır; kurallar bunu kendiliğinden uygular ('bu kelimeyi hep Yazılım yap') ve her otomatik değişiklik hangi kuralın yaptığını söyler.",
-        "KDV işlemi, muhasebe sağlayıcısından bağımsız olarak NivaDesk'in kendi kodlarıyla hareket başına kaydedilir (standart, indirimli, sıfır oranlı, istisna ve daha fazlası).",
-        "İnceleme durumları hâlâ bakılması gerekeni izler; toplu işlemler koca bir ayı tek geçişte halleder.",
-        "Birden çok şeyi kapsayan hareket satırlara bölünebilir; satırlar banka tutarına kuruşuna kadar denk gelmek zorundadır."
+        "Sekmeler Genel bakış, İşlemler, Tekrarlayan, Fişler ve Kurallar'dır (Stripe bağlıysa Ödeme Bağlantıları da). İşlemler Tümü, İlgi bekliyor, Gelen ve Harcama diye süzülür; İşlemlerde ara ve toplu düzenleme için ☑ Seç de vardır.",
+        "Her işlem bir kategori alır; kurallar bunu kendiliğinden uygular ('bu kelimeyi hep Yazılım yap') ve her otomatik değişiklik hangi kuralın yaptığını söyler. Kaydet ve kural oluştur bir değişikliği kaydedip onu kural yapar.",
+        "İşlemdeki KDV / Vergi kodu: Standart oran (%20), İndirimli oran (%5), Sıfır oranlı (%0), İstisna, KDV kapsamı dışı, KDV fişi yok, Ters KDV, İthalat KDV'si, Karma / bölünmüş KDV ya da KDV yok — NivaDesk'in kendi kodları, hiçbir muhasebe sağlayıcısına bağlı değil.",
+        "İlgi bekliyor ve Muhasebe incelemesi grupları (Muhasebeye hazır, Bilgi gerekli, Fiş eksik, KDV kodu eksik) hâlâ bakılması gerekeni gösterir.",
+        "Birden çok şeyi kapsayan bir işlem satırlara bölünebilir; satırlar banka tutarına kuruşuna kadar denk gelmek zorundadır."
       ] },
-      { kind: "sub", text: "Fişler" },
+      { kind: "sub", text: "Fiş tara: fişin ya da makbuzun fotoğrafını çekip banka ödemesiyle eşleştirmek" },
       { kind: "steps", items: [
-        "Hareketi açın ve fişini ekleyin: fotoğraf ya da PDF yükleyin, veya kütüphanenizdeki faturayı Dosyalardan seç ile bağlayın — hiçbir şey ikinci kez kopyalanmaz.",
-        "Ya da önce fişi çekin: NivaDesk tutarı ve tarihi okur, eşleşen hareketi önerir.",
-        "Fiş bankadan önce gelirse (kart ödemeleri çoğu kez 1–3 gün sonra düşer) bekletin — hareket görünür görünmez kendiliğinden eklenir.",
-        "Bekleyen her şey Fişler altındaki 'Bankayı bekleyenler' bölümündedir; bu bölüm hep oradadır ve boşken de bunu söyler. NivaDesk ChatGPT uygulamasından gönderilen, ödemesi henüz akışa düşmemiş fişler de buraya iner. Şimdi eşleştir yeniden dener, ya da elle bir harekete atarsınız — veya kaldırırsınız."
+        "Banka'nın üstündeki 📷 Fiş tara'ya basın (sahip, bir banka bağlandıktan sonra) ya da Ana Sayfa ▸ Hızlı işlemler ▸ Fiş tara. Fotoğraf çekin ya da bir fotoğraf veya PDF seçin.",
+        "NivaDesk tutarı, tarihi ve KDV'yi okur ve banka ödemesini arar: eminse ✅ Fiş eklendi der; onaylamanız gerekiyorsa Olası ödeme bulundu ile Bu ödemeye ekle'yi gösterir.",
+        "Ödeme bankaya henüz düşmediyse — kart ödemeleri çoğu kez 1–3 gün sonra düşer — ⏳ Kaydedildi — banka hareketi bekleniyor der ve ödeme gelince fiş kendiliğinden eklenir.",
+        "📷 Başka fiş tara sıradakini yapar; Bitti kapatır. Bir işlemin içinde Yeni yükle o işleme fotoğraf ya da PDF ekler, Dosyalar'dan seç ise kütüphanenizdeki bir faturayı kullanır — hiçbir şey iki kez saklanmaz."
       ] },
-      { kind: "sub", text: "Tekrarlayan ve gelen" },
+      { kind: "sub", text: "Bankayı bekleyen fişler ve makbuzlar" },
       { kind: "bullets", items: [
-        "Tekrarlayan ödemeler geçmişten saptanır — olağan tutar, ayın beklenen günü ve güven derecesiyle; yaklaşanlar tahmindir ve öyle işaretlenir. Bir satıcıyı kendiniz de tekrarlayan olarak işaretleyebilirsiniz.",
-        "Gelen para bir siparişin ödemesi olarak eşlenebilir — asla çift kayıt olmadan — ya da transfer, sahip katkısı veya kredi olarak işaretlenir ki hasılat sayılmasın."
+        "Fişler ▸ Bankayı bekleyenler (N) hâlâ bekleyen her fişi, nereden geldiğini (Web, ChatGPT, Claude, iPhone, Android ya da Mac) ve kaç gündür beklediğini listeler. Bekleyen fiş varsa Genel bakış'ta ⏳ N fiş bankayı bekliyor → görünür.",
+        "⟳ Şimdi eşleştir eşleştirmeyi yeniden dener. Her fişte Görüntüle, Bir işleme ata (elle eklemek için) ve Kaldır vardır.",
+        "14 gün sonra fiş kırmızıya döner: Hâlâ ödeme yok — tutarı kontrol et ya da elle ata. Zaten eşleşmiş olabilir, O fişi görüntüle ile birlikte gelir.",
+        "Başka para birimindeki bir fiş kendi tutarını korur (örneğin USD 838.80). Bir işleme ata listesinde, banka metni o tutarı anan banka ödemesi bununla işaretlenir; kartla ödenmiş yabancı bir tedarikçi faturası böyle bulunur."
       ] },
-      { kind: "sub", text: "Muhasebe eşitlemesi (Pandle)" },
+      { kind: "sub", text: "Fişten okunan KDV" },
       { kind: "bullets", items: [
-        "Pandle kullanıyorsanız Banka sayfasından bağlayın: onaylanmış hareketler sizin kategori ve KDV eşlemenizle gönderilir.",
-        "NivaDesk, Pandle'da zaten olan hareketi yeniden yaratmak yerine eşler; eşleşme kesin değilse size sorar."
+        "Fiş eklenince işlemin KDV / Vergi kodu 🧾 Fişten okundu ile KDV tutarını gösterir (karma fişte her oran için bir satır); kodu NivaDesk sizin için koyduysa ⚡ Otomatik uygulandı yazar.",
+        "Birden çok KDV oranı olan bir fiş ⑃ KDV oranına göre böl (fişten) önerir; bu, bölmeyi önceden doldurulmuş olarak açar.",
+        "Yabancı bir tedarikçinin belgesinde NivaDesk tahmin yürütmez: mal için İthalat KDV'si, hizmet için Ters KDV'yi kendiniz seçin."
+      ] },
+      { kind: "sub", text: "Tekrarlayan ödemeler ve gelen para" },
+      { kind: "bullets", items: [
+        "Tekrarlayan sekmesi geçmişinizde bulunan ödemeleri listeler — olağan tutar, beklenen gün ve bir güven derecesiyle; fiyat değişikliği ↑ £x → £y olarak görünür. Yaklaşanlar tahmindir ve öyle işaretlenir.",
+        "Bir işlemde kendiniz işaretleyin: ↻ Tekrarlayan ▸ Tekrarlayan olarak işaretle… (Haftalık, Aylık ya da Yıllık). Şununla aynı alıcı… aynı alıcıya giden ödemeleri gruplar, Tekrarlayan saymayı bırak bunu geri alır. Sizin işaretledikleriniz Senin işaretlediğin etiketini taşır.",
+        "Gelen para, Şununla eşleştir ile Sipariş ödemesi, Fatura, Kapora, Alınan iade, Sahip sermaye katkısı, Kredi, Kendi hesaplar arası transfer, Diğer gelir ya da İşlemci ödemesi olarak işaretlenir. Eşleşen ödemeyi bul ve Bu ödemeyi eşleştir onu bir siparişin ödemesine bağlar — asla çift kayıt olmadan — Bu siparişe yeni ödeme olarak kaydet ise oraya ekler."
       ] }
     ]
   },
@@ -2176,14 +2525,23 @@ const TREE_TR: GuideNode[] = [
   },
   {
     id: "messages",
-    title: "Messages (Mesajlar)",
+    title: "Mesajlar",
     blocks: [
-      { kind: "para", text: "Ekibinizle NivaDesk içinde konuşun: direkt mesajlar ve grup sohbetleri, tam işinizin yanında." },
+      { kind: "para", text: "Ekibinizle NivaDesk içinde konuşun — işinizin yanında duran direkt mesajlar ve grup sohbetleri — ve açık olduğu yerde müşterilerinizin WhatsApp ve Instagram mesajlarını tek bir gelen kutusundan yanıtlayın. Mesajlar, Team planının parçasıdır." },
+      { kind: "sub", text: "Ekip mesajları: direkt mesajlar ve grup sohbetleri" },
       { kind: "bullets", items: [
-        "Bir ekip arkadaşıyla Direct mesaj veya bir Group sohbeti başlatın.",
-        "Metin, dosya ve görsel gönderin; bir konuşmayı iletin (forward), düzenleyin veya ayrılın.",
-        "Direkt mesajlara, grup sohbetlerine ve dosya göndermeye izin verilip verilmeyeceğini çalışma alanı sahibi kontrol eder.",
-        "Ekip mesajlaşması Team planında kullanılabilir. (Bunun yerine ticket açmak için Settings ▸ Support / Tickets.)"
+        "Mesajlar ▸ Ekip: Yeni sohbet bir direkt mesaj ya da grup başlatır. Metin, dosya ve görsel gönderin; arayın, sessize alın, iletin, düzenleyin ya da bir sohbetten ayrılın.",
+        "Neye izin verileceğine sahip Ayarlar ▸ Mesaj Ayarları'nda karar verir: Doğrudan mesajlar, Grup konuşmaları ve Dosya ve görsel paylaşımı.",
+        "Team planı olmadan sayfa, Mesajlar'ın planınıza dahil olmadığını söyler ve Team planını görüntüle düğmesini gösterir.",
+        "Bunun yerine NivaDesk'e destek talebi açmak için Ayarlar ▸ Destek / Talepler'i kullanın."
+      ] },
+      { kind: "sub", text: "Müşteri mesajları: WhatsApp ve Instagram gelen kutusu" },
+      { kind: "bullets", items: [
+        "Mesajlar ▸ Müşteriler müşteri gelen kutusudur. Bugün tek bir işletme için çalışır: kendi WhatsApp Business numaranızı ya da Instagram profesyonel hesabınızı bağlamak, Meta'nın onayları tamamlanınca açılır; o zamana dek Ayarlar ▸ Entegrasyonlar'daki bu kutucuklarda Yakında yazar.",
+        "Çalıştığı yerde Bu sohbeti bağla bir sohbeti siparişine bağlar; Ata, Etiketler, Tamamlandı olarak işaretle ve Sohbeti sil de vardır. WhatsApp'tan yanıtla yanıtınızı gönderir; Fotoğraf veya PDF ekle bir dosya ekler (Instagram yanıtları yalnızca metindir).",
+        "WhatsApp yalnızca müşterinin son mesajından sonraki 24 saat içinde yanıta izin verir ve onaylı şablonlar henüz kurulu değildir; bu yüzden NivaDesk bir sohbet başlatamaz. Mesajlar 90 gün, fotoğraflar ve PDF'ler 30 gün sonra silinir.",
+        "Her planda müşteri sayfasında, sohbeti WhatsApp'ın ya da Instagram'ın kendisinde açan 💬 WhatsApp ve ◎ Instagram düğmeleri vardır.",
+        "Müşteri mesajlarını kimin göreceği Ayarlar ▸ Ekip Erişimi'nde rol bazında ayarlanır."
       ] }
     ]
   },
@@ -2218,6 +2576,37 @@ const TREE_TR: GuideNode[] = [
             "Dil: tüm uygulama için 12 dilden birini seçin.",
             "Profil: adınız ve hesap bilgileriniz.",
             "Güvenlik: nasıl giriş yaptığınızı ve hesabınızı korumanızı yönetin."
+          ] }
+        ]
+      },
+      {
+        id: "set-security",
+        title: "Profil ve Güvenlik: iki adımlı doğrulama",
+        blocks: [
+          { kind: "para", text: "İki adımlı doğrulama (2FA), parolanızın yanında telefonunuzdaki bir doğrulama uygulamasından (authenticator) bir kod da ister; böylece çalınan bir parola tek başına hesabınızı açamaz. E-postayla giriş, Google ve Apple ile çalışır ve telefonun kaybolacağı gün için on kurtarma kodu ile gelir." },
+          { kind: "sub", text: "İki adımlı doğrulamayı açmak (doğrulama uygulaması, 2FA)" },
+          { kind: "steps", items: [
+            "[Web] Ayarlar ▸ Profil ve Güvenlik ▸ İki adımlı doğrulama. Ayarlar'da 2fa ya da authenticator diye aramak da onu bulur.",
+            "Önce iPhone, iPad, Mac ve Android'deki NivaDesk'i 2.3 ya da sonraki sürüme güncelleyin — eski uygulamalar kodla girişi tamamlayamaz — sonra NivaDesk uygulamalarım güncel kutusunu işaretleyin. E-postanız doğrulanmış olmalıdır (değilse Doğrulama e-postası gönder).",
+            "Doğrulama uygulamasını kur'a basın. Siz olduğunuzu onaylamanız istenirse parolanızı girin (ya da Google ile devam et / Apple ile devam et).",
+            "QR kodu doğrulama uygulamanızla okutun ya da Kurulum anahtarını yazın; uygulamanın gösterdiği 6 haneli kodu girip Aç'a basın.",
+            "Kurtarma kodlarını Kopyala ya da İndir ile saklayın, sonra Kaydettim'e basın. Kodlar yalnızca bir kez gösterilir."
+          ] },
+          { kind: "bullets", items: [
+            "Açmak, kaldırmak, yeni kurtarma kodları ve Her yerden çıkış yap web uygulamasında yapılır. iPhone, iPad, Mac ve Android uygulamaları yalnızca giriş yaparken kodu sorar.",
+            "Çalışma alanının sahibi ya da yöneticisi (admin) içindir; her hesapta bir doğrulama uygulaması olur."
+          ] },
+          { kind: "sub", text: "Kodla giriş yapmak ve kurtarma kodları (telefon kaybolursa)" },
+          { kind: "bullets", items: [
+            "Parolanızdan (ya da Google veya Apple'dan) sonra İki adımlı doğrulama, doğrulama uygulamanızdaki 6 haneli kodu ister; Doğrula'ya basın.",
+            "Telefonunuzu mu kaybettiniz? Kurtarma kodu kullanın: kod iki adımlı doğrulamayı kapatır ve her cihazda oturumu kapatır. Parolanızla yeniden giriş yapın, sonra yeni telefonla yeniden açın.",
+            "Yeni kurtarma kodları oluştur (N kaldı) eski kodların yerine on yenisini koyar.",
+            "Ne kurtarma kodu ne telefon varsa: hesabınızın e-posta adresinden NivaDesk Destek'e yazın."
+          ] },
+          { kind: "sub", text: "İki adımlı doğrulamayı kapatmak ve her yerden çıkış yapmak (tüm cihazlarda oturumu kapatma)" },
+          { kind: "bullets", items: [
+            "Doğrulama uygulamasının yanındaki Kaldır iki adımlı doğrulamayı kapatır; hesabı yeniden yalnızca parolanız korur.",
+            "Her yerden çıkış yap (iki adımlı doğrulama açıkken görünür) bu cihaz dahil her cihazda oturumu kapatır. ChatGPT ve Claude bağlantıları kalır; onları Ayarlar ▸ Entegrasyonlar'dan kesin."
           ] }
         ]
       },
@@ -2306,6 +2695,10 @@ const TREE_TR: GuideNode[] = [
             "Diğer platformlar: Wix, Squarespace, Zapier ve Make'in kendi kartları var ve hepsi aynı generic sipariş webhook'unu açar — özel bir siteyi de aynı yoldan bağlarsın.",
             "Etsy ve eBay bunlardan değil: her birinin kendi bağlantısı var, sonraki bölümlerde anlatılıyor.",
             "Coming soon kartlarında kurulum yoktur, çünkü o entegrasyon henüz yok; ihtiyacın varsa Request an integration bir destek talebi açar."
+          ] },
+          { kind: "sub", text: "Amazon" },
+          { kind: "bullets", items: [
+            "Amazon bağlantısı NivaDesk tarafında tamamdır — müşteri verileri ayrı, güçlendirilmiş bir ortamda tutulur — ve Amazon'un uygulamayı incelemesini bekliyor; bu yüzden bir satıcı onu henüz yetkilendiremez. İlan yönetimi sunulmaz."
           ] }
         ]
       },
@@ -2358,7 +2751,7 @@ const TREE_TR: GuideNode[] = [
         id: "set-ebay",
         title: "eBay",
         blocks: [
-          { kind: "para", text: "eBay satıcı hesabınızı bağlayın; eBay siparişleriniz alıcı kullanıcı adı, ürünler, tutarlar, vergiler ve eBay'deki kargo takibiyle birlikte Siparişler'de diğer her şeyin yanında görünür. NivaDesk siparişlerinizi okur; ilanlarınızı, fiyatlarınızı veya stoğunuzu değiştirmez. Alıcı iletişim bilgileri korumalı bir yerde tutulur ve yalnızca siz istediğinizde gösterilir." },
+          { kind: "para", text: "eBay satıcı hesabınızı bağlayın; eBay siparişleriniz alıcı kullanıcı adı, ürünler, tutarlar, vergiler ve eBay'deki kargo takibiyle birlikte Siparişler'de diğer her şeyin yanında görünür. Her çalışma alanı eBay'i bağlayabilir. NivaDesk siparişlerinizi okur; ilanlarınızı, fiyatlarınızı veya stoğunuzu değiştirmez. Alıcı iletişim bilgileri korumalı bir yerde tutulur ve yalnızca siz istediğinizde gösterilir." },
           { kind: "sub", text: "Hesabı bağlama" },
           { kind: "bullets", items: [
             "[Web] Settings → Integrations → eBay → Set up, ardından Connect eBay. Bağlantıyı eBay'de aynı tarayıcıda onaylayın; doğrudan geri dönersiniz.",
@@ -2368,14 +2761,14 @@ const TREE_TR: GuideNode[] = [
           ] },
           { kind: "sub", text: "Neyin geleceğini seçme" },
           { kind: "bullets", items: [
-            "Ne kadar geriye gidileceğini (90 güne kadar), ödenmemiş ya da iptal edilmiş siparişlerin gelip gelmeyeceğini ve hangi eBay sitelerinin dahil olacağını seçin.",
+            "Ne kadar geriye'den 7, 30 ya da 90 günü seçin; Henüz ödenmemiş siparişleri de al ve İptal edilmiş siparişleri de al kutularını isteğinize göre işaretleyin. Hangi eBay sitelerinin geleceği ve Yeni ve değişen siparişler için eBay'i otomatik kontrol et, ilk siparişler geldikten sonra Neler gelsin bölümünde ayarlanır.",
             "Preview, hiçbir şey yazılmadan önce kaç sipariş bulunduğunu ve kaç kopyanın önlendiğini gösterir.",
             "Büyük bir içe aktarma duraklayıp Import'a yeniden basmanızı isteyebilir; arada hiçbir şey kaybolmaz.",
             "Bir iki sipariş alınamadıysa kart bunu söyler ve Retry yalnızca onları yeniden dener."
           ] },
           { kind: "sub", text: "Güncel kalma" },
           { kind: "bullets", items: [
-            "NivaDesk değişen siparişler için eBay'i birkaç dakikada bir, ayrıca her gece bir kez örtüşen bir aralıkla kontrol eder; böylece bir değişiklik atlanmaz.",
+            "NivaDesk yeni ve değişen siparişler için eBay'i gün boyunca kendiliğinden, ayrıca her gece bir kez örtüşen bir aralıkla kontrol eder; böylece bir değişiklik atlanmaz.",
             "Sync now son 24 saati hemen kontrol eder.",
             "Sync health son başarılı kontrolü, bekleyen yeniden denemeleri ve bakılması gereken her şeyi gösterir.",
             "Üretim işiniz sizindir — aşamalar, notlar, takvim, dosyalar — ve senkronizasyon bunların üzerine asla yazmaz."
@@ -2388,13 +2781,107 @@ const TREE_TR: GuideNode[] = [
           ] },
           { kind: "sub", text: "eBay yeniden bağlanmanızı isterse" },
           { kind: "bullets", items: [
-            "eBay bağlantıyı kabul etmeyi bıraktığında (izin kaldırıldı, eBay şifresi değişti ya da 18 aylık yetki bitti) kartta Reconnect required yazar; Reconnect'e basıp yeniden onaylayın.",
+            "eBay bağlantıyı kabul etmeyi bıraktığında (izin kaldırıldı, eBay şifresi değişti ya da 18 aylık yetki bitti) kartta Yeniden bağlantı gerekli yazar; eBay'i yeniden bağla'ya basıp yeniden onaylayın.",
             "İçe aktarılmış hiçbir şey kaybolmaz ve siz bağlı değilken değişen siparişler sonradan alınır.",
-            "Kart eBay'in bu sunucuda henüz kurulu olmadığını söylüyorsa bağlayıcı sizin için açılmamıştır — destekle iletişime geçin."
+            "eBay her çalışma alanına açıktır; kart bir gün eBay'in kullanılamadığını söylerse bunu NivaDesk Destek'e iletin."
           ] },
           { kind: "sub", text: "Bağlantıyı kesme" },
           { kind: "bullets", items: [
             "Disconnect, NivaDesk'in eBay hesabınıza erişimini kaldırır ve senkronizasyonu durdurur; içe aktardığınız siparişler kalır."
+          ] },
+          { kind: "sub", text: "Günlük çağrı bütçesi, dolu plan ve karttaki sayılar" },
+          { kind: "bullets", items: [
+            "Kart Bugün kullanılan çağrı'yı gösterir. Her bağlantının eBay'in çağrı hakkından günlük bir payı vardır; bu pay bitince kart şunu söyler: Bu bağlantının bugünkü çağrı bütçesi doldu. Senkron yarın sürer. Hiçbir şey kaybolmaz — bir sonraki senkron her şeyi alır.",
+            "Sipariş sınırı olan bir planda sınıra ulaşılınca yeni eBay siparişleri Bekletilen (plan dolu) altında bekler; biten siparişleri teslim edildi olarak işaretleyin ya da planı değiştirin, içeri gelirler.",
+            "Sayılar NivaDesk'teki eBay siparişleri, Yeniden deneme bekliyor, İnceleme gerekli ve Başarısız'ı gösterir.",
+            "eBay siparişi için DHL etiketi oluşturulamaz."
+          ] }
+        ]
+      },
+      {
+        id: "set-stripe",
+        title: "Stripe ile kartla ödeme ve ödeme bağlantıları",
+        blocks: [
+          { kind: "para", text: "Ücretli planlarda müşterinize kartla ödeme bağlantısı gönderin — bir sipariş için (kapora, taksit ya da kalan tutar) ya da henüz sipariş yokken tek başına — ve para kendi Stripe hesabınıza ödensin. Müşteri Stripe'ın güvenli sayfasında kartla, Stripe'ın sunduğu yerlerde Apple Pay ya da Google Pay ile öder; Stripe ödemeyi onaylayınca NivaDesk bunu kaydeder. NivaDesk komisyon almaz; Stripe'ın kendi ücretleri geçerlidir." },
+          { kind: "sub", text: "Stripe'ı bağlamak (sahip)" },
+          { kind: "steps", items: [
+            "Ayarlar ▸ Entegrasyonlar ▸ Stripe ▸ Kur (bağlandıktan sonra Yönet).",
+            "Stripe'ı bağla'ya basın, İşletmenizin kayıtlı olduğu ülke'yi seçin, sonra Stripe'a devam et. Ülke sonradan değiştirilemez; listede olmayan bir ülke, Stripe'ın henüz kabul etmediği bir ülkedir.",
+            "Stripe sekmesinde Stripe'ın kendi kaydını bitirin, geri dönüp Yeniden kontrol et'e basın.",
+            "Bağlantı oluşturabildiğinizde ekranda Ödeme almaya hazır yazar. Stripe'ın daha fazla bilgiye ihtiyacı var ya da Stripe ile kurulumu tamamlayın, Stripe'ın hâlâ bir şey beklediği anlamına gelir — Stripe ile devam et onu yeniden açar."
+          ] },
+          { kind: "bullets", items: [
+            "Stripe ödemeleri ücretli planlarda yer alır. Free'de Stripe ekranı bunu söyler ve Stripe'ı bağla yerine Planları gör düğmesi çıkar; gönderilmiş bağlantılar yine ödenebilir, kopyalanabilir, iptal ve iade edilebilir.",
+            "Bağlantıyı yalnız sahip kurabilir ya da kesebilir; ödemelerin çalışıp çalışmadığını herkes görebilir.",
+            "Bağlantıyı kes önce sorar. Gönderilmiş bağlantılar Stripe'ta çalışmaya devam eder ama artık NivaDesk'e kaydedilmez; bu yüzden bağlantıyı kesmeden önce açık bağlantıları iptal edin. Stripe hesabınızın kendisi kapanmaz.",
+            "Stripe müşteriye makbuzu yalnızca Stripe Dashboard'unuzda Successful payments açıksa gönderir (Settings → Customer emails)."
+          ] },
+          { kind: "sub", text: "Kapora, taksit ya da kalan tutar için ödeme bağlantısı göndermek" },
+          { kind: "steps", items: [
+            "Siparişi açın ▸ Finansal Bilgiler kartı ▸ Ödeme bağlantıları. Burada Kalan tutar ve Henüz istenmedi görünür.",
+            "+ Yeni ödeme bağlantısı'na basın, Kapora, Taksit ya da Kalan tutar'ı seçin, tutarı kontrol edip Bağlantı oluştur'a basın.",
+            "Bağlantıyı kopyala ve müşterinize kendiniz gönderin — e-postayla, mesajla ya da onunla nasıl konuşuyorsanız öyle. NivaDesk onu sizin yerinize asla göndermez."
+          ] },
+          { kind: "bullets", items: [
+            "Bağlantı çalışma alanınızın para birimindedir. Tutarlar en çok iki ondalık alır ve 12,50 her dilde 12.50 demektir.",
+            "Her bağlantı durumunu gösterir: Açık, İşleniyor, Ödenen, Süresi doldu, İptal Edildi, İade Edildi, Kısmen iade edildi ya da İtiraz edildi. İptal açık bir bağlantıyı kapatır.",
+            "Müşteri ödeyince siparişin ödenen ve kalan tutarları kendiliğinden güncellenir.",
+            "Bağlantı oluşturmak için Finansal Bilgiler kartı ve siparişi düzenleme izni gerekir. iPhone, iPad ve Android uygulamaları da bağlantı oluşturup iptal edebilir; Stripe'ı bağlamak web'de yapılır.",
+            "Banka ▸ Ödeme Bağlantıları çalışma alanının tüm bağlantılarını listeler (Açık, Ödenen, Süresi doldu, İptal Edildi, İade / İtiraz, Tümü). Oradaki Sipariş için bağlantı sipariş seçiciyi açar; Yeni ödeme bağlantısı siparişsiz bir bağlantı oluşturur (aşağıda)."
+          ] },
+          { kind: "sub", text: "Siparişsiz ödeme bağlantısı (sipariş, müşteri ödeyince açılır)" },
+          { kind: "steps", items: [
+            "Banka ▸ Ödeme Bağlantıları ▸ Yeni ödeme bağlantısı.",
+            "Bu ödeme ne için? ve Tutar'ı doldurun (çalışma alanınızın para biriminde); biliyorsanız Müşteri adı (isteğe bağlı) ve Müşteri e-postası (isteğe bağlı) ekleyin, gerekiyorsa Telefon numarası iste ya da Teslimat adresi iste'yi işaretleyin. Bağlantı oluştur'a basın.",
+            "Bağlantıyı kopyalayıp gönderin. Ödenene kadar satırda Sipariş, müşteri ödediğinde açılır. yazar; müşteri ödeyince NivaDesk siparişi müşterinin girdiği bilgilerle açar ve satır siparişe bağlanır."
+          ] },
+          { kind: "sub", text: "Ödemeyi iade etmek (para iadesi)" },
+          { kind: "bullets", items: [
+            "[Web] Siparişte, ödenmiş bir bağlantıda Ödemeyi iade et (sahip) bulunur. İade edilecek tutarı girin — kısmi iade için tam tutardan az — Sebep'i seçin (Müşteri iade istedi ya da Mükerrer ödeme) ve tutarı yazan … iade et düğmesine basın.",
+            "İade geri alınamaz; para Stripe bakiyenizden çıkar ve Stripe işlem ücretini tutar. İade bekliyor, Stripe'ın iadeyi bakiyeniz izin verdiğinde tamamlayacağı anlamına gelir.",
+            "İtiraz edilmiş bir ödeme ya da birden çok kez ödenmiş bir bağlantı ise Stripe Dashboard'unuzdan iade edilir."
+          ] },
+          { kind: "sub", text: "Ödeme bağlantıları için kendi adresiniz (pay.alanadiniz)" },
+          { kind: "bullets", items: [
+            "Bağlantılar kısadır, örneğin pay.alanadiniz/p/kod. Kendi alan adınız yoksa müşteri portalı alan adınızı ya da nivadesk.app'i kullanırlar.",
+            "Ayarlar ▸ Entegrasyonlar ▸ Stripe ▸ Ödeme bağlantısı adresi: adresi yazın, Bu adresi kullan'a basın, gösterilen CNAME kaydını alan adı sağlayıcınıza ekleyin, sonra Yeniden kontrol et. Durum DNS gerekli'den Alan adı doğrulandı'ya, oradan Canlı'ya geçer."
+          ] }
+        ]
+      },
+      {
+        id: "set-dhl",
+        title: "DHL Express",
+        blocks: [
+          { kind: "para", text: "DHL Express gönderilerini doğrudan siparişlerinizden hazırlayın: kolinin rotası için DHL servislerini görün, etiketi oluşturun, gümrüğün istediği yerde ticari faturayı ekleyin (Büyük Britanya ile Kuzey İrlanda arası dahil) ve takibi izleyin. Her işletme kendi DHL Express hesabını ve MyDHL API erişimini bağlar; böylece DHL size doğrudan fatura keser. NivaDesk kurye alımı (pickup) ayarlamaz." },
+          { kind: "sub", text: "DHL'den MyDHL API anahtarı almak" },
+          { kind: "bullets", items: [
+            "Kendi DHL Express hesabınız için MyDHL API erişimi gerekir. developer.dhl.com'daki MyDHL API sayfasında Get Access'i seçin ve DHL'in formunu DHL Express hesap numaranızla doldurun (DHL Express ayarlarındaki MyDHL API sayfasını açın bağlantısı oraya götürür).",
+            "DHL önce bir test anahtarı gönderir ve canlı (production) erişimin ne zaman açılacağına kendisi karar verir."
+          ] },
+          { kind: "sub", text: "DHL Express'i bağlamak (sahip)" },
+          { kind: "steps", items: [
+            "Ayarlar ▸ Entegrasyonlar ▸ Kargo ▸ DHL Express ▸ Kur (bağlandıktan sonra Yönet).",
+            "DHL test ortamı ya da DHL canlı ortamı'nı seçin; API anahtarı, API gizli anahtarı, DHL Express hesap numarası ve varsa Vergi hesabı numarası (isteğe bağlı) alanlarını doldurun.",
+            "DHL Express'i bağla'ya basın.",
+            "Gönderici bilgileri'nde Unvan / Görev'i ve + Kayıt numarası ekle ile Kayıt numaralarını (EORI, KDV) girin, sonra Gönderici bilgilerini kaydet."
+          ] },
+          { kind: "bullets", items: [
+            "DHL Express'i yalnız sahip bağlayabilir ya da bağlantısını kesebilir; gönderici bilgilerini sahip ya da yönetici (admin) tutar.",
+            "Her çalışma alanı bağlayabilir."
+          ] },
+          { kind: "sub", text: "Sipariş için DHL etiketi oluşturmak (gönderi, gümrük, ticari fatura)" },
+          { kind: "steps", items: [
+            "Siparişi açın ▸ Kargo ve Takip kartı ▸ + DHL gönderisi hazırla.",
+            "Gönderici, Alıcı ve Koliler'i kontrol edin. İçerik ve gümrük altında Beyan edilecek eşya ya da Belgeler'i ve gümrük vergisini kimin ödeyeceğini (DAP ya da hesabınız izin veriyorsa DDP) seçin, sonra Beyanı onayla.",
+            "Bu koli için DHL servislerini göster'e basın, bir servis seçin, sonra Kontrol et ve oluştur — ya da sonra bitirmek için Taslağı kaydet.",
+            "DHL etiketi oluştur. Siparişte artık Etiketi aç ve gümrüğün istediği yerde Ticari faturayı aç bulunur."
+          ] },
+          { kind: "bullets", items: [
+            "Servislerin fiyatları finansı görebilen kişilere gösterilir.",
+            "Takibi yenile en son durumu çeker; takip ayrıca yaklaşık saatte bir yenilenir. Durumlar Taslak ve Etiket oluşturuldu'dan Yolda, Gümrükte, Dağıtımda ve Teslim Edildi'ye ilerler.",
+            "Etiket, kargoya vermek demek değildir: koliyi yine DHL'e kendiniz teslim eder ya da alımı DHL'den kendiniz ayarlarsınız.",
+            "Kontrol gerekiyor, NivaDesk'in DHL'in gönderiyi oluşturup oluşturmadığını doğrulayamadığı anlamına gelir; MyDHL'de açılmış gönderileri bul ya da DHL'de yeniden ara, bir şey iki kez oluşturulmadan önce durumu netleştirir.",
+            "Eşya beyanı ve ticari fatura finans erişimi ister. eBay siparişi için DHL etiketi oluşturulamaz."
           ] }
         ]
       },
@@ -2442,19 +2929,41 @@ const TREE_TR: GuideNode[] = [
         id: "set-plan",
         title: "Plan & Access",
         blocks: [
-          { kind: "para", text: "Mevcut planınızı, kullanım limitlerinizi ve hangi özelliklerin kullanılabilir olduğunu görün ve faturalandırmayı yönetin. Free/Demo, Lite, Pro ve Team seçeneklerini buradan inceleyin." }
+          { kind: "para", text: "Mevcut planınızı, kullanım limitlerinizi ve hangi özelliklerin kullanılabilir olduğunu görün ve faturalandırmayı yönetin. Free, Starter, Pro ve Team'i burada karşılaştırın; plan sayfası aboneliğinizin nerede faturalandığını da söyler — web sitesi, App Store, Google Play ya da Shopify — çünkü abonelik yalnızca orada değiştirilebilir." }
         ]
       },
       {
         id: "set-team",
-        title: "Team Access",
+        title: "Ekip Erişimi",
         blocks: [
-          { kind: "para", text: "Ekibinizi davet edin ve herkesin tam olarak neyi görüp yapabileceğini kontrol edin." },
+          { kind: "para", text: "İnsanları çalışma alanınıza e-postayla davet edin ya da katılmak istemelerine izin verin, her birinin neyi görüp yapabileceğini seçin ve bir üyenin erişimini — bir süreliğine ya da tamamen — yaptığı hiçbir şeyi kaybetmeden kaldırın. Kişi eklemek ve yönetmek, Team planında çalışma alanı sahibinin işidir." },
+          { kind: "sub", text: "Ekibe birini e-postayla davet etmek (davet bağlantısı)" },
+          { kind: "steps", items: [
+            "Ayarlar ▸ Ekip Erişimi ▸ Gelişmiş: Şirket ID ile bağlan › Ekip sayfasını açar (Başlarken ▸ Ekip üyesi davet et de onu açar).",
+            "Üye Davet Et'e basın, E-posta ile'yi seçin, kişinin e-postasını girin, bir rol seçin ve Daveti Gönder'e basın.",
+            "Kişiye nivadesk.app/invite/… bağlantılı, 14 gün geçerli bir e-posta gider. Giriş yapar (ya da Henüz hesabım yok'a basıp davet edilen e-postayla hesap açar) ve Daveti Kabul Et'e basar."
+          ] },
           { kind: "bullets", items: [
-            "Her üyeye bir rol verin: Üye, Sadece Görüntüleme, Sadece İş Akışı veya kendi özel rolünüz.",
-            "Yetki matrisi tüm rolleri yan yana gösterir — her rolün neyi görüp düzenleyip silebildiği ve kaç üyeyi kapsadığı tek bakışta.",
-            "Her rolün hangi menü, sipariş kartı ve ayarları göreceğini kontrol edin.",
-            "Belirli projeleri belirli kişilere atayın ve çalışma alanı ticketlarını yönetmek için support yöneticileri belirleyin."
+            "E-posta gönderilemediyse davet yine de oluşturulur: gösterilen bağlantıyı kopyalayıp kendiniz gönderin.",
+            "Kabul edilmeyi bekliyor henüz kullanılmamış davetleri listeler; Geri Çek bir daveti iptal eder."
+          ] },
+          { kind: "sub", text: "Birinin katılmak istemesine izin vermek (Şirket ID, davet kodu)" },
+          { kind: "bullets", items: [
+            "Ayarlar ▸ Ekip Erişimi'ndeki Davet kodunu kopyala, Şirket ID'nizi kopyalar. Kişi kaydolur, Erişim İste'yi seçer ve e-postanızla ya da Şirket ID ile bir istek gönderir.",
+            "İsteği Ekip Erişimi'nde görünür: bir rol seçip Onayla ya da Reddet'e basın."
+          ] },
+          { kind: "sub", text: "Roller, yetkiler ve her kişinin neler yapabileceği" },
+          { kind: "bullets", items: [
+            "Roller: Üye, Sadece Görüntüleme, Sadece İş Akışı ya da kendi rol profiliniz. Sahibin rolü sabittir.",
+            "Yetki matrisi tüm rolleri yan yana gösterir — her rolün neyi görüp düzenleyip silebildiği — ve her rolün kaç kişide olduğunu.",
+            "Her rolün hangi menüleri, sipariş kartlarını ve ayarları göreceğini kontrol edin; Banka Harcamaları, Müşteri mesajları (WhatsApp, Instagram) ve Ekip mesajları dahil.",
+            "Belirli projeleri belirli kişilere atayın ve çalışma alanı destek taleplerini yönetmek için destek yöneticileri belirleyin."
+          ] },
+          { kind: "sub", text: "Koltuklar, erişimi kaldırmak ve geri vermek" },
+          { kind: "bullets", items: [
+            "Team 5 koltuk içerir; ek koltukların her biri ayda £5 ya da yılda £50'dir, en çok 10 kullanıcıya kadar. Erişimi kaldırılan kişi koltuk kullanmaz.",
+            "Ekip sayfasında Erişimi Kaldır birinin erişimini alır: yaptığı hiçbir şey silinmez, Erişim yok olarak görünür ve Erişimi Geri Ver erişimini geri verir.",
+            "Kaldır kişiyi çalışma alanından tamamen çıkarır."
           ] }
         ]
       },
@@ -2568,6 +3077,13 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Shopify, Etsy, WooCommerce, Square, Amazon ya da eBay'de hiçbir şeyi değiştirmez; bankanıza veya muhasebe yazılımınıza yazmaz. Müşterinize kendi cümlesiyle bir mesaj da yazamaz — müşteriye ulaşan tek şey çalışma alanınızın kendi durum bildirimidir, kendi kelimelerinizle.",
             "Bir rakam geride kalmış bir mağaza ya da banka senkronuna bağlıysa yanıt bunu söyler; eski sayıları canlıymış gibi sunmaz."
+          ] },
+          { kind: "sub", text: "Claude'da NivaDesk (Claude bağlayıcısı)" },
+          { kind: "bullets", items: [
+            "Anthropic'in asistanı Claude, NivaDesk bağlayıcısıyla her planda çalışma alanınızla çalışabilir: ChatGPT uygulaması gibi siparişlere, notlara, stoğa ve rakamlara bakar ve rolünüzün izin verdiği değişiklikleri yapar.",
+            "Claude'da Settings › Connectors'ı açın, Add custom connector'ı seçin ve bağlayıcı adresini yapıştırın: https://nivadesk.app/claudeMcp (NivaDesk Claude'un kendi dizininde görünene kadar); sonra NivaDesk hesabınızla giriş yapıp çalışma alanını seçin.",
+            "Bir fiş için Claude size tek bir işleme ait, 15 dakika geçerli bir NivaDesk yükleme bağlantısı verir; dosya hiçbir zaman Claude'dan geçmez.",
+            "Bağlı kalırsınız: yalnızca bağlantı kesildiyse, erişiminiz değiştiyse ya da 90 gün kullanılmadıysa yeniden giriş yaparsınız. Bağlantıyı Ayarlar ▸ Entegrasyonlar'dan kesin."
           ] }
         ]
       },
@@ -2607,6 +3123,26 @@ const TREE_TR: GuideNode[] = [
         "[iPhone/iPad] Sıra için yer yok; bölümler üst bardaki menü düğmesinin arkasındadır. Dokunun, bölümü seçin, sekmeleri içinde açılır.",
         "[Android] Aynısı: üst bardaki menü bölümleri listeler, sekmeler seçtiğiniz bölümün içindedir.",
         "İlk ▸ işaretinden sonrası — sekmeler, düğmeler, alanlar — dört uygulamada da aynı adı taşır; doğru bölüme girdikten sonra adımlar aynı okunur."
+      ] }
+    ]
+  },
+  {
+    id: "help-assistant",
+    title: "Yardım asistanı (Nasıl yaparım…?)",
+    blocks: [
+      { kind: "para", text: "Uygulamanın içindeki yardım asistanı (Nasıl yaparım…?) bu kılavuzdan yanıt verir. Starter, Pro ve Team'de adımları — nereye gidileceğini ve neye basılacağını — söyler. Çalışma alanınızı değil kılavuzu okur; bu yüzden siparişlerinizi ya da rakamlarınızı asla görmez." },
+      { kind: "sub", text: "Yardım asistanı nerede" },
+      { kind: "bullets", items: [
+        "Nasıl yaparım…? düğmesine basın — ekranın sağ altındaki düğme; web uygulamasında ve Mac, iPhone, iPad ve Android uygulamalarında.",
+        "Başlarken ▸ Yardım asistanına bir soru sorun da onu açar.",
+        "nivadesk.app'te köşedeki sohbet de yanıt verir; Starter, Pro ya da Team ile oturum açmışsanız uygulamadaki asistanla aynı adımları verir."
+      ] },
+      { kind: "sub", text: "Neyi yanıtlar, neyi yanıtlayamaz" },
+      { kind: "bullets", items: [
+        "Bir şeyin nasıl çalıştığını, bir düğmenin nerede olduğunu ya da bir şeyi nasıl kuracağınızı herhangi bir dilde sorun.",
+        "Çalışma alanınızı göremez. Kendi verilerinizle ilgili sorular için — hangi siparişler gecikti, ne kadar kazandınız — sizi NivaDesk ChatGPT uygulamasına yönlendirir.",
+        "Kılavuz bir soruyu kapsamıyorsa Bunu NivaDesk Destek'e gönder, soruyu verdiği yanıtla birlikte bir destek talebine çevirir; Taleplerini gör yanıtı gösterir.",
+        "Starter, Pro ve Team günde 40 soru sorabilir."
       ] }
     ]
   },

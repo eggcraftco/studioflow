@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { OPEN_HELP_ASSISTANT_EVENT } from "@/lib/studioflow/gettingStarted";
-import { askAppAssistant, getAppAssistantAvailability, type AppAssistantAnswer } from "@/lib/studioflow/appAssistant";
+import { askAppAssistant, getAppAssistantAvailability, type AppAssistantAnswer, type AppAssistantAvailability } from "@/lib/studioflow/appAssistant";
 import { createNivaDeskSupportTicket } from "@/lib/studioflow/supportTickets";
 import { type WorkspaceContext } from "@/lib/studioflow/firestore";
 
@@ -13,6 +13,10 @@ type HelpTurn = { question: string; answer: AppAssistantAnswer; ticket?: "sendin
 // In-app "how do I…?" helper. It answers from the user guide only: it has no
 // access to workspace data, and points at the ChatGPT app or at support when a
 // question is outside what the guide covers.
+//
+// It is hidden for everyone whenever the shared OpenAI key is missing — which it
+// was from 17 Sep 2026, so the owner saw no helper and no reason. A support admin
+// now sees a paused button that says why (offReason, sent to them only).
 export default function AppHelpAssistant({
   workspace,
   language,
@@ -22,7 +26,9 @@ export default function AppHelpAssistant({
   language: string;
   t: (text: string) => string;
 }) {
-  const [available, setAvailable] = useState(false);
+  const [availability, setAvailability] = useState<AppAssistantAvailability>({});
+  const available = availability.available === true;
+  const paused = !available && Boolean(availability.offReason);
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<HelpTurn[]>([]);
@@ -34,7 +40,7 @@ export default function AppHelpAssistant({
     let cancelled = false;
     void (async () => {
       const result = await getAppAssistantAvailability();
-      if (!cancelled) setAvailable(Boolean(result.available));
+      if (!cancelled) setAvailability(result);
     })();
     return () => { cancelled = true; };
   }, [workspace?.id]);
@@ -93,7 +99,41 @@ export default function AppHelpAssistant({
     return () => window.removeEventListener(OPEN_HELP_ASSISTANT_EVENT, openNow);
   }, [pathname]);
 
-  if (!available) return null;
+  if (!available && !paused) return null;
+
+  if (paused) {
+    return (
+      <>
+        <button type="button" className="app-help-bubble is-paused" onClick={() => setOpen(value => !value)} aria-expanded={open}
+                aria-label={t("Help assistant off")}>
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="10" cy="10" r="7.5" />
+            <path d="M8 7.5v5M12 7.5v5" />
+          </svg>
+          <span>{t("Help assistant off")}</span>
+        </button>
+        {open ? (
+          <div className="app-help-panel" role="dialog" aria-label={t("Help assistant off")}>
+            <div className="app-help-head">
+              <div>
+                <strong>{t("Help assistant off")}</strong>
+                <span>{t("Only NivaDesk support admins see this.")}</span>
+              </div>
+              <button type="button" onClick={() => setOpen(false)} aria-label={t("Close")}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
+            <div className="app-help-thread">
+              <p className="app-help-intro">{t("The OpenAI key both NivaDesk assistants use is missing, so members do not see this helper and the website chat cannot answer. Save the key again in Settings ▸ AI Reply Settings ▸ OpenAI API Key on the workspace that runs the assistants.")}</p>
+              <p className="app-help-sources">{t("Reason")}: {availability.offReason}</p>
+            </div>
+          </div>
+        ) : null}
+      </>
+    );
+  }
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
