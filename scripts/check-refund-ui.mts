@@ -182,8 +182,12 @@ function cardProblems(card: string): string[] {
   if (!/inputMode="decimal"/.test(region(card, "{t(\"Amount to refund\")}", "</label>"))) out.push("the amount field is not a decimal field");
   // The id: kept while the same submit is retried, new for a different one, dropped only after an answer.
   if (!/previous\.amountMinor === parsed\.amountMinor\s*&& previous\.reason === refundReason\s*\? previous\s*: \{[^}]*clientRefundId: newClientRefundId\(\) \}/.test(submit)) out.push("the id is not kept for a retried submit");
-  const cleared = submit.indexOf("refundAttempt.current = null;");
-  if ((submit.match(/refundAttempt\.current = null;/g) || []).length !== 1 || cleared < submit.indexOf("await refundOrderPayment(")) out.push("the id is dropped before the refund is answered");
+  // A definite refusal (a reason that is not Stripe failing) starts a new id; Stripe failing or a lost answer keeps it.
+  const guarded = /if \(refusal\.reason && refusal\.reason !== "refund_provider_error"\) refundAttempt\.current = null;/;
+  if (!guarded.test(submit)) out.push("a definite refusal does not start a new refund id");
+  const unguarded = submit.replace(guarded, "");
+  const cleared = unguarded.indexOf("refundAttempt.current = null;");
+  if ((unguarded.match(/refundAttempt\.current = null;/g) || []).length !== 1 || cleared < unguarded.indexOf("await refundOrderPayment(")) out.push("the id is dropped before the refund is answered");
   if ((card.match(/newClientRefundId\(\)/g) || []).length !== 1) out.push("ids are made in more than one place");
   if (!/clientRefundId: attempt\.clientRefundId/.test(submit)) out.push("the call does not send the attempt's id");
   // Refusals: details.reason through the client, never the raw message; the max from details.
@@ -224,6 +228,8 @@ const cardMutants: Array<[string, string]> = [
   ["the amount loses its comma reading", cardSource.replace("const parsed = parseRequestAmount(refundAmount, rowCurrency, locale);", "const parsed = { ok: true as const, amountMinor: Math.round(Number(refundAmount) * 100) };")],
   ["a new id on every submit", cardSource.replace("&& previous.reason === refundReason\n      ? previous", "&& previous.reason === refundReason && false\n      ? previous")],
   ["the id dropped on a failure", cardSource.replace("      const refusal = refundRefusal(e);\n", "      refundAttempt.current = null;\n      const refusal = refundRefusal(e);\n")],
+  ["a Stripe failure drops the id", cardSource.replace(' && refusal.reason !== "refund_provider_error") refundAttempt', ") refundAttempt")],
+  ["a definite refusal keeps the id", cardSource.replace('      if (refusal.reason && refusal.reason !== "refund_provider_error") refundAttempt.current = null;\n', "")],
   ["the raw message shown", cardSource.replace("setRefundError(t(refusal.text)", "setRefundError((e as Error).message || t(refusal.text)")],
   ["no refresh while pending", cardSource.replace('\n      || (row.refundPendingMinor ?? 0) > 0),', "),")],
   ["no reload after the refund", cardSource.replace("      await load();\n    } catch (e) {\n      const refusal", "    } catch (e) {\n      const refusal")],
