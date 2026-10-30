@@ -18,6 +18,7 @@
 // for why the draft is kept in this browser and not on the workspace.
 
 import { useEffect, useMemo, useState } from "react";
+import { trackOnboarding } from "@/lib/studioflow/onboardingEvents";
 import {
   ONBOARDING_GOALS,
   ONBOARDING_GOAL_TASKS,
@@ -330,6 +331,13 @@ export function OnboardingWizard({
     if (!touched) return;
     writeOnboardingProgress(companyId, userId, { step: stepKey, answers });
   }, [companyId, userId, stepKey, answers, touched]);
+
+  // The draft above stays on this device; this is the only part the server sees — which
+  // step was on screen, never what was typed into it — so a setup abandoned at step two
+  // reads as step two, not as nothing at all.
+  useEffect(() => {
+    trackOnboarding("setup_step_viewed", { step: stepKey });
+  }, [stepKey]);
 
   // Fourteen days from now, which is what sign-up wrote. Shown so the price has
   // a date attached rather than being an abstract "later".
@@ -725,6 +733,10 @@ export function OnboardingReady({
     : t("We've set up your workspace for {workflow}."))
     .replace("{workflow}", t(workflowLabel))
     .replace("{kind}", t(kindLabel));
+
+  useEffect(() => {
+    trackOnboarding("setup_step_viewed", { step: "ready" });
+  }, []);
 
   return (
     <section className="onboard-shell" aria-label={t("Your workspace is ready")}>

@@ -12,6 +12,7 @@ import { CardTitle } from "@/components/CardTitle";
 import { isAnalyticsExcluded, setAnalyticsExclusion } from "@/lib/landingTracking";
 import { AdminFeedbackInbox } from "@/components/AdminFeedbackInbox";
 import { AdminLivePanel, useLiveAppNow } from "@/components/AdminLivePanel";
+import { AdminDropoffPanel } from "@/components/AdminDropoffPanel";
 import { PRESENCE_APPS, appBuckets, downloadCsv, toCsv } from "@/lib/studioflow/adminLivePresence";
 import {
   countryShares,
@@ -3539,7 +3540,8 @@ type AdminHubPage =
   | "customorderlanding"
   | "onboarding"
   | "feedback"
-  | "activation";
+  | "activation"
+  | "dropoff";
 
 /* Fourteen flat links became five groups (29 Oct 2026): what is happening now, money, the
    customers themselves, how the product is used, and the public website. Order inside a group is
@@ -3552,6 +3554,7 @@ const ADMIN_HUB_GROUPS: { label: string; pages: { id: AdminHubPage; label: strin
     pages: [
       { id: "users", label: "Users & Workspaces" },
       { id: "activation", label: "Activation" },
+      { id: "dropoff", label: "Drop-off" },
       { id: "onboarding", label: "Setup Answers" },
       { id: "feedback", label: "Customer Feedback" },
       { id: "lookup", label: "User Lookup" }
@@ -3608,7 +3611,7 @@ export function AdminInsightsHub() {
   }, []);
 
   // The toggle only means something on the pages that count workspaces or members.
-  const viewPages: AdminHubPage[] = ["overview", "live", "users", "subscriptions", "revenue", "plans", "features", "storage", "onboarding", "activation"];
+  const viewPages: AdminHubPage[] = ["overview", "live", "users", "subscriptions", "revenue", "plans", "features", "storage", "onboarding", "activation", "dropoff"];
   const currentLabel = ADMIN_HUB_GROUPS.flatMap(group => group.pages).find(item => item.id === page)?.label || "Overview";
 
   return (
@@ -3662,6 +3665,7 @@ export function AdminInsightsHub() {
         {page === "customorderlanding" ? <AdminCustomOrderLandingSection /> : null}
         {page === "onboarding" ? <AdminOnboardingDetail onBack={goOverview} view={view} /> : null}
         {page === "activation" ? <AdminActivationFunnelSection view={view} /> : null}
+        {page === "dropoff" ? <AdminDropoffPanel view={view} /> : null}
         {page === "feedback" ? <AdminFeedbackInbox /> : null}
       </section>
     </div>

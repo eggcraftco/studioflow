@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
+import { trackOnboarding } from "@/lib/studioflow/onboardingEvents";
 
 export type StripeBillingItemKey =
   | "lite_monthly"
@@ -58,6 +59,7 @@ export async function createStripeCheckoutSession({
   successUrl?: string;
   cancelUrl?: string;
 }) {
+  trackOnboarding("checkout_started", { rail: "stripe" });
   const callable = httpsCallable<Record<string, unknown>, StripeBillingActionResult>(functions, "createStripeCheckoutSession");
   const origin = currentOrigin();
   const result = await callable({

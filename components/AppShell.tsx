@@ -17,6 +17,8 @@ import { inAppLink, OPEN_IN_APP_EVENT } from "@/lib/studioflow/openInApp";
 import { hiddenMoneyLabel, usePricePrivacy } from "@/components/PricePrivacy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { WEB_BUILD_ID } from "@/lib/studioflow/webBuild";
+import { trackOnboarding } from "@/lib/studioflow/onboardingEvents";
+import { errorCodeOf, screenForPath } from "@/lib/studioflow/onboardingEventRules";
 import { localizeActivityNotification } from "@/lib/studioflow/notificationText";
 import { bootMark } from "@/lib/studioflow/bootTrace";
 import { useQuickActionEvent, type QuickActionPayload } from "@/lib/studioflow/quickActions";
@@ -2429,6 +2431,22 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     !setupPassthrough &&
     (setupResumeRequested || setupTakeoverIsAutomatic),
   );
+
+  /**
+   * A new account's way in (onboarding telemetry, first 30 days only): that the app was
+   * opened today, and which section was on screen — the section name, never the path,
+   * so an order id or a search never leaves the browser. While setup covers every route
+   * the wizard reports its own steps instead.
+   */
+  useEffect(() => {
+    if (!user?.uid || !workspace?.id) return;
+    trackOnboarding("app_opened");
+    if (showWorkspaceOnboarding) return;
+    const screen = screenForPath(pathname);
+    if (!screen) return;
+    trackOnboarding("screen_viewed", { screen });
+    if (screen === "plans") trackOnboarding("plan_page_viewed");
+  }, [user?.uid, workspace?.id, pathname, showWorkspaceOnboarding]);
   /**
    * Whether the wizard can be walked out of.
    *
@@ -2776,7 +2794,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         await refreshWorkspaceAfterPlanChange(user.uid);
       }
       setFinishedAnswers(answers);
+      trackOnboarding("setup_finished", { start: answers.start || "other", plan: trialPlan?.plan || answers.plan || "none" });
     } catch (failure) {
+      trackOnboarding("error_shown", { where: "setup_save", code: errorCodeOf(failure) });
       setOnboardingError(failure instanceof Error ? failure.message : t("Could not save your setup."));
     } finally {
       setOnboardingSaving(false);
@@ -2825,6 +2845,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   }, [showWorkspaceOnboarding, workspace?.id]);
 
   function connectFromOnboarding(_answers: OnboardingAnswers, href: string) {
+    const provider = ["shopify", "etsy", "woocommerce", "ebay", "square", "bank", "chatgpt"].find(name => href.toLowerCase().includes(name)) || "other";
+    trackOnboarding("store_connect_started", { provider });
     const url = `${href}${href.includes("?") ? "&" : "?"}fromSetup=1`;
     window.open(url, "_blank", "noopener,noreferrer");
   }

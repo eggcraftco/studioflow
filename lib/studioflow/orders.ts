@@ -21,6 +21,8 @@ import { deviceStudioLanguage } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { temporaryOrderSaveMessage } from "@/lib/studioflow/orderCallableErrors";
+import { trackOnboarding } from "@/lib/studioflow/onboardingEvents";
+import { errorCodeOf } from "@/lib/studioflow/onboardingEventRules";
 
 /** Toasts fired from this module are read by a person, so they get translated. */
 const toastT = (text: string) => studioT(text, deviceStudioLanguage());
@@ -318,6 +320,9 @@ export async function createOrderFromWeb(workspace: WorkspaceContext, input: Par
     throw new Error(canCreateOrdersForRole(workspace.role) ? ASSIGNED_ONLY_CANNOT_CREATE_MESSAGE : "Your workspace role cannot create projects.");
   }
 
+  // Every create-order button comes through here, so this is where a new account's
+  // first attempt is noted (and below, an attempt that failed in front of them).
+  trackOnboarding("order_form_opened", { via: "new_order" });
   try {
     return await withWebSyncStatus(async () => {
       const callable = httpsCallable<Record<string, unknown>, CreateOrderResult>(functions, "createWebOrder");
@@ -346,6 +351,7 @@ export async function createOrderFromWeb(workspace: WorkspaceContext, input: Par
       return response.data;
     }, "Saving new project to cloud.");
   } catch (error) {
+    trackOnboarding("error_shown", { where: "order_create", code: errorCodeOf(error) });
     throw new Error(friendlyCreateOrderError(error));
   }
 }
