@@ -7,6 +7,7 @@ import type { PaymentReturnLanguage } from "@/lib/publicSite/paymentReturn";
 import {
   PAYMENT_LINK_COPY,
   paymentLinkAmount,
+  paymentPageTheme,
   type PaymentLinkStatus,
   type PaymentLinkView
 } from "@/lib/publicSite/paymentLink";
@@ -35,11 +36,14 @@ function readableOn(accent: string): string {
 export function PaymentLinkContent({
   code,
   language,
-  direction
+  direction,
+  fontClassName = ""
 }: {
   code: string;
   language: PaymentReturnLanguage;
   direction: "rtl" | "ltr";
+  /** next/font's variable class for the optional theme font (Poppins), not preloaded. */
+  fontClassName?: string;
 }) {
   const copy = PAYMENT_LINK_COPY[language];
   const [view, setView] = useState<PaymentLinkView | null>(null);
@@ -116,8 +120,29 @@ export function PaymentLinkContent({
     }
   }
 
-  const accent = view?.accentColor && /^#[0-9a-f]{6}$/i.test(view.accentColor) ? view.accentColor : "#2563eb";
-  const buttonStyle = { "--pay-accent": accent, "--pay-on-accent": readableOn(accent) } as CSSProperties;
+  // The business's own look, when it has one (companySettings.paymentPageTheme); otherwise the neutral card.
+  const theme = paymentPageTheme(view?.theme);
+  const accent = theme?.buttonColor || (view?.accentColor && /^#[0-9a-f]{6}$/i.test(view.accentColor) ? view.accentColor : "#2563eb");
+  const buttonStyle = {
+    "--pay-accent": accent,
+    "--pay-on-accent": theme?.buttonColor ? theme.buttonTextColor : readableOn(accent)
+  } as CSSProperties;
+  const themeStyle = theme
+    ? ({
+        ...(theme.pageBackground ? { "--pay-bg": theme.pageBackground } : {}),
+        ...(theme.textColor ? { "--pay-text": theme.textColor } : {}),
+        ...(theme.mutedColor ? { "--pay-muted": theme.mutedColor } : {})
+      } as CSSProperties)
+    : undefined;
+  const pageClass = [
+    styles.page,
+    fontClassName,
+    theme ? styles.themed : "",
+    theme?.font === "poppins" ? styles.poppins : "",
+    theme?.titleFont === "serif" ? styles.serifTitle : ""
+  ].filter(Boolean).join(" ");
+  const buttonClass = [styles.pay, theme?.buttonShape === "pill" ? styles.pill : "", theme?.buttonUppercase ? styles.upper : ""].filter(Boolean).join(" ");
+  const productLayout = theme?.layout === "product";
 
   const closed: Record<Exclude<PaymentLinkStatus, "open">, { title: string; body: string; mark: string; tone: string }> = {
     paid: { title: copy.paidTitle, body: copy.paidBody, mark: "✓", tone: styles.paid },
@@ -128,9 +153,23 @@ export function PaymentLinkContent({
   };
 
   return (
-    <main className={styles.page} lang={language} dir={direction} data-status={status}>
-      <section className={styles.card}>
-        {view && (view.logoUrl || view.businessName) ? (
+    <main className={pageClass} style={themeStyle} lang={language} dir={direction} data-status={status} data-themed={theme ? "true" : undefined}>
+      {productLayout && view?.logoUrl ? (
+        // The shop's own header: its logo on a thin bar, as on its website.
+        <header className={styles.siteBar}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={view.logoUrl} alt={view.businessName || ""} />
+        </header>
+      ) : null}
+      <div className={productLayout ? styles.product : styles.single}>
+      {productLayout && theme?.heroImageUrl ? (
+        <div className={`${styles.hero} ${theme.heroImageFocus === "top" ? styles.heroTop : ""}`}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={theme.heroImageUrl} alt="" />
+        </div>
+      ) : null}
+      <section className={productLayout ? styles.details : styles.card}>
+        {view && !(productLayout && view.logoUrl) && (view.logoUrl || view.businessName) ? (
           <header className={styles.brand}>
             {view.logoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -150,7 +189,7 @@ export function PaymentLinkContent({
               <span className={styles.amountLabel}>{copy.amount}</span>
               <strong className={styles.amount}>{paymentLinkAmount(view.amountMinor, view.currency, language)}</strong>
             </div>
-            <button type="button" className={styles.pay} style={buttonStyle} disabled={opening} onClick={() => void pay()}>
+            <button type="button" className={buttonClass} style={buttonStyle} disabled={opening} onClick={() => void pay()}>
               {opening ? copy.opening : copy.pay}
             </button>
             {failure ? (
@@ -182,6 +221,7 @@ export function PaymentLinkContent({
 
         {view?.showPoweredBy !== false ? <p className={styles.powered}>{copy.poweredBy}</p> : null}
       </section>
+      </div>
     </main>
   );
 }

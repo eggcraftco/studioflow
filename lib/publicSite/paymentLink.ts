@@ -8,6 +8,26 @@ import type { PaymentReturnLanguage } from "./paymentReturn";
 
 export type PaymentLinkStatus = "open" | "processing" | "paid" | "cancelled" | "closed" | "unavailable";
 
+/**
+ * A business's own look for this page (companySettings.paymentPageTheme, read by the server and
+ * re-checked here): EGGcraft's is its shop's product page — Poppins, a serif title, a royal-blue pill
+ * button, white, the hand-painting illustration beside the details. Absent = the neutral card.
+ */
+export type PaymentPageTheme = {
+  font: "default" | "poppins";
+  titleFont: "default" | "serif";
+  buttonColor: string;
+  buttonTextColor: string;
+  buttonShape: "rounded" | "pill";
+  buttonUppercase: boolean;
+  pageBackground: string;
+  textColor: string;
+  mutedColor: string;
+  heroImageUrl: string;
+  heroImageFocus: "top" | "center";
+  layout: "card" | "product";
+};
+
 export type PaymentLinkView = {
   businessName: string;
   logoUrl: string;
@@ -17,7 +37,37 @@ export type PaymentLinkView = {
   amountMinor: number;
   currency: string;
   status: PaymentLinkStatus;
+  theme?: Partial<PaymentPageTheme> | null;
 };
+
+const HEX = /^#[0-9a-f]{6}$/i;
+
+/**
+ * Only what this page knows how to draw: hex colours, an https image, the listed choices. Anything
+ * else falls back to the neutral page, so a typo in a business's settings never breaks a payment.
+ */
+export function paymentPageTheme(raw: unknown): PaymentPageTheme | null {
+  if (!raw || typeof raw !== "object") return null;
+  const value = raw as Record<string, unknown>;
+  const color = (key: string, fallback: string) => (typeof value[key] === "string" && HEX.test(value[key] as string) ? (value[key] as string).toLowerCase() : fallback);
+  const pick = <T extends string>(key: string, allowed: readonly T[], fallback: T): T =>
+    (allowed as readonly string[]).includes(String(value[key])) ? (value[key] as T) : fallback;
+  const hero = typeof value.heroImageUrl === "string" && /^https:\/\/[^\s"'<>]{4,500}$/.test(value.heroImageUrl) ? value.heroImageUrl : "";
+  return {
+    font: pick("font", ["default", "poppins"] as const, "default"),
+    titleFont: pick("titleFont", ["default", "serif"] as const, "default"),
+    buttonColor: color("buttonColor", ""),
+    buttonTextColor: color("buttonTextColor", "#ffffff"),
+    buttonShape: pick("buttonShape", ["rounded", "pill"] as const, "rounded"),
+    buttonUppercase: value.buttonUppercase === true,
+    pageBackground: color("pageBackground", ""),
+    textColor: color("textColor", ""),
+    mutedColor: color("mutedColor", ""),
+    heroImageUrl: hero,
+    heroImageFocus: pick("heroImageFocus", ["top", "center"] as const, "center"),
+    layout: pick("layout", ["card", "product"] as const, "card")
+  };
+}
 
 export type PaymentLinkCopy = {
   title: string;

@@ -11,7 +11,7 @@
 //   npm run test:payment-link
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { PAYMENT_LINK_COPY, PAYMENT_LINK_PATH_PREFIX, paymentLinkAmount, paymentLinkCode } from "../lib/publicSite/paymentLink.ts";
+import { PAYMENT_LINK_COPY, PAYMENT_LINK_PATH_PREFIX, paymentLinkAmount, paymentLinkCode, paymentPageTheme } from "../lib/publicSite/paymentLink.ts";
 import { PAYMENT_RETURN_LANGUAGES } from "../lib/publicSite/paymentReturn.ts";
 
 const webRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
@@ -99,6 +99,26 @@ for (const key of [
   const count = (line.match(/": "/g) || []).length;
   expect(`Stripe words in eleven languages: ${key.slice(0, 44)}`, count === 11, String(count));
 }
+
+// 5. A business's own look (SL-18, 30 Oct 2026): EGGcraft's shop on its payment page
+const egg = { font: "poppins", titleFont: "serif", buttonColor: "#1346AF", buttonTextColor: "#ffffff", buttonShape: "pill", buttonUppercase: true,
+  pageBackground: "#ffffff", textColor: "#2b2b2b", mutedColor: "#8f8f8f", heroImageUrl: "https://eggcraft.co.uk/wp-content/uploads/2025/10/3_3-1536x1536.webp",
+  heroImageFocus: "top", layout: "product" };
+expect("theme: a valid one passes, colours lower-cased", JSON.stringify(paymentPageTheme(egg)) === JSON.stringify({ ...egg, buttonColor: "#1346af" }));
+const dropped = paymentPageTheme({ font: "comic", buttonColor: "red", heroImageUrl: "javascript:alert(1)", buttonUppercase: "yes", layout: "grid" });
+expect("theme: what the page cannot draw is dropped", !!dropped && dropped.font === "default" && dropped.buttonColor === "" && dropped.heroImageUrl === ""
+  && dropped.buttonUppercase === false && dropped.layout === "card");
+expect("theme: http images are refused", paymentPageTheme({ heroImageUrl: "http://x.test/a.png" })?.heroImageUrl === "");
+expect("theme: not an object = no theme", paymentPageTheme("x") === null && paymentPageTheme(null) === null);
+expect("Poppins only when a theme asks, never preloaded", /Poppins\(\{[^}]*preload: false/.test(page) && /fontClassName=\{poppins\.variable\}/.test(page));
+expect("the page re-checks the server's theme", /const theme = paymentPageTheme\(view\?\.theme\)/.test(content));
+expect("the theme's button colour wins over the accent", /theme\?\.buttonColor \|\| \(view\?\.accentColor/.test(content));
+expect("the hero image is the theme's https image only", /theme\?\.heroImageUrl \? \(/.test(content) && /<img src=\{theme\.heroImageUrl\}/.test(content));
+expect("the shop's header bar only in the product layout", /productLayout && view\?\.logoUrl \? \(/.test(content));
+const css = read("app/p/[code]/payLink.module.css");
+expect("a themed page stays light in dark mode", /\.themed \{[^}]*color-scheme: light/.test(css) && /@media \(prefers-color-scheme: dark\) \{\s*\.themed/.test(css));
+expect("the pill and uppercase button exist", /\.pill \{ border-radius: 999px/.test(css) && /\.upper \{ text-transform: uppercase/.test(css));
+expect("the hero crop hides the illustration's caption", /\.heroTop \{ aspect-ratio: 1 \/ 0\.7; \}/.test(css) && /\.heroTop img \{ object-position: top; \}/.test(css));
 
 console.log(failures ? `${failures} of ${checks} payment-link checks FAILED` : `All ${checks} payment-link checks passed.`);
 process.exit(failures ? 1 : 0);

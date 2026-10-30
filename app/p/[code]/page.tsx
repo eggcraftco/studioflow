@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Poppins } from "next/font/google";
 import { headers } from "next/headers";
 import { paymentReturnDirection, paymentReturnLanguage } from "@/lib/publicSite/paymentReturn";
 import { paymentLinkCode } from "@/lib/publicSite/paymentLink";
@@ -18,10 +19,13 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+// A business theme may ask for Poppins (EGGcraft's shop font). Not preloaded: the neutral page never downloads it.
+const poppins = Poppins({ subsets: ["latin"], weight: ["400", "500", "600"], display: "swap", preload: false, variable: "--font-poppins" });
+
 export default async function PaymentLinkPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
   const language = paymentReturnLanguage((await headers()).get("accept-language"));
   return (
-    <PaymentLinkContent code={paymentLinkCode(code)} language={language} direction={paymentReturnDirection(language)} />
+    <PaymentLinkContent code={paymentLinkCode(code)} language={language} direction={paymentReturnDirection(language)} fontClassName={poppins.variable} />
   );
 }
