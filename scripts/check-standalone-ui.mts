@@ -298,7 +298,9 @@ function panelProblems(panel: string): string[] {
   if (!/\{row\.title \|\| t\("Payment"\)\}/.test(cell)) out.push("a standalone row does not show its title");
   if (!/\{row\.orderId \? \(\s*onOpenOrder \? \(\s*<button type="button" onClick=\{\(\) => onOpenOrder\(row\.orderId\)\}/.test(cell)) out.push("a paid standalone row does not link to its order");
   if (!/return reference \? t\("Order \{reference\}"\)\.replace\("\{reference\}", reference\) : t\("Open order"\);/.test(panel)) out.push("the order is not named Order #N");
-  if (/refundOrderPayment|canRefund|clientRefundId/.test(panel)) out.push("the panel gained a refund action");
+  // Refunds are made from this panel since 31 Oct 2026, but by components/RefundPaymentDialog.tsx (check-refund-ui
+  // pins it and which rows offer it): the panel itself never calls the refund or makes a refund id.
+  if (/refundOrderPayment|clientRefundId|newClientRefundId/.test(panel)) out.push("the panel makes a refund itself instead of through RefundPaymentDialog");
   return out;
 }
 
@@ -333,7 +335,7 @@ function cardProblems(card: string): string[] {
   if (!/const planAllowed = usePaymentLinksPlan\(companyId\);/.test(card)) out.push("the card does not ask the plan");
   if (!/\{canCreate && planAllowed !== false && state\.headroomMinor > 0 \? \(/.test(card)) out.push("New payment link is not hidden on Free");
   if (!/setCreateError\(t\(orderLinkRefusalText\(e\)\)\);/.test(card)) out.push("the plan refusal is not said in its own sentence");
-  if (!/\{busy === row\.paymentRequestId \? t\("Cancelling…"\) : t\("Cancel"\)\}/.test(card) || !/row\.canRefund === true/.test(card)) out.push("cancel or refund was taken away (the server allows both on Free)");
+  if (!/\{busy === row\.paymentRequestId \? t\("Cancelling…"\) : t\("Cancel"\)\}/.test(card) || !/row\.canRefund === true/.test(card)) out.push("cancel, or the line pointing to Banking's refund, was taken away (the server allows both on Free)");
   return out;
 }
 const cardMutants: Array<[string, string]> = [

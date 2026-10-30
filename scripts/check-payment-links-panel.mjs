@@ -46,7 +46,7 @@ try {
   const unexpected = diagnostics
     .split("\n")
     .filter((line) => /error TS\d+:/.test(line))
-    .filter((line) => !(/error TS2307:/.test(line) && /'(@\/lib\/[^']+|firebase\/[a-z]+|react\/[a-z-]+|react)'/.test(line)));
+    .filter((line) => !(/error TS2307:/.test(line) && /'(@\/lib\/[^']+|@\/components\/RefundPaymentDialog|firebase\/[a-z]+|react\/[a-z-]+|react)'/.test(line)));
   if (unexpected.length) {
     console.log("FAIL tsc reported something other than the expected unresolved imports:");
     for (const line of unexpected) console.log("   " + line);
@@ -78,6 +78,9 @@ try {
     "export const usePaymentLinksPlan = () => null;",
     "export const loadWorkspaceSettingsOverview = refuse('loadWorkspaceSettingsOverview');",
     "export const workspaceCurrencyCodes = refuse('workspaceCurrencyCodes');",
+    // The refund form a paid row opens (31 Oct 2026): components/RefundPaymentDialog.tsx, checked by
+    // check-refund-ui.mts. Nothing here renders it.
+    "export default function RefundPaymentDialog() { throw new Error('check-payment-links-panel: RefundPaymentDialog must not be rendered'); }",
     "export const useCallback = (fn) => fn;",
     "export const useEffect = () => {};",
     "export const useMemo = (fn) => fn();",
@@ -91,7 +94,7 @@ try {
 
   const compiled = path.join(outDir, "PaymentLinksPanel.js");
   writeFileSync(compiled, readFileSync(compiled, "utf8").replace(
-    /from ['"](react\/jsx-runtime|react|firebase\/[a-z]+|@\/lib\/[^'"]+)['"]/g,
+    /from ['"](react\/jsx-runtime|react|firebase\/[a-z]+|@\/lib\/[^'"]+|@\/components\/RefundPaymentDialog)['"]/g,
     "from './io-stub.js'",
   ));
 

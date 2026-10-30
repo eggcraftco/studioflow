@@ -7,6 +7,10 @@
  * place. The tabs are the plan's (§4.2) and they are the states the reducer
  * actually produces, so a row can never fall between them.
  *
+ * Refunds are made here too (31 Oct 2026), and only here: a paid row the server says this person may refund
+ * (`canRefund`) has a "Refund…" action that opens RefundPaymentDialog under the row. It used to be a button on
+ * the order's Finance card, one press from a refund by mistake; the card now points to this tab.
+ *
  * Two deliberate refusals, both about not lying to the workspace:
  *
  *   - the raw Stripe URL is not printed in the list. It is a live payment page
@@ -25,8 +29,9 @@ import { minorToInputText, parseRequestAmount, requestAmountMessage } from "@/li
 import { ETSY_COPY_LINK_NOTE, isEtsyOrderId } from "@/lib/studioflow/etsyOrder";
 import {
   createStandalonePaymentRequest, isStandaloneRow, newClientRequestId, orderLinkRefusalText, orderReferenceOfRow,
-  paymentLinkRefusal, standaloneFormProblem, STANDALONE_TITLE_MAX,
+  paymentLinkRefusal, standaloneFormProblem, STANDALONE_TITLE_MAX, type PaymentRequestRefundFields,
 } from "@/lib/studioflow/stripeConnect";
+import RefundPaymentDialog, { type RefundAttempt, type RefundNotice } from "@/components/RefundPaymentDialog";
 import { usePaymentLinksPlan } from "@/lib/studioflow/usePaymentLinksAvailable";
 import { loadWorkspaceSettingsOverview } from "@/lib/studioflow/firestore";
 import { workspaceCurrencyCodes } from "@/lib/studioflow/orderCurrency";
@@ -86,6 +91,9 @@ function sameStandaloneSubmit(a: StandaloneSubmit, b: StandaloneSubmit): boolean
   return a.title === b.title && a.amountMinor === b.amountMinor && a.customerName === b.customerName
     && a.customerEmail === b.customerEmail && a.collectPhone === b.collectPhone && a.collectAddress === b.collectAddress;
 }
+
+/** A row as this list reads it: the shared fields, plus what the server says about refunding it (SL-22). */
+type ListedRow = PaymentLinkRow & PaymentRequestRefundFields;
 
 type Tab = "open" | "paid" | "expired" | "cancelled" | "problem" | "all";
 
@@ -163,7 +171,7 @@ export default function PaymentLinksPanel({
   /** The workspace's orders, for the picker. null while they are still loading. */
   orders?: { id: string; customerName: string; designName: string }[] | null;
 }) {
-  const [rows, setRows] = useState<PaymentLinkRow[] | null>(null);
+  const [rows, setRows] = useState<ListedRow[] | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [error, setError] = useState("");
   const [tab, setTab] = useState<Tab>("open");
@@ -195,6 +203,13 @@ export default function PaymentLinksPanel({
   const standaloneAttempt = useRef<StandaloneAttempt | null>(null);
   const standaloneFieldRef = useRef<HTMLInputElement | null>(null);
   const standaloneOpenerRef = useRef<HTMLButtonElement | null>(null);
+  // Refunds (SL-21; here since 31 Oct 2026): one refund form at a time, under its own row. The last submit is kept
+  // here rather than in the form, so closing and reopening it cannot turn a retry into a second refund.
+  const [refundFor, setRefundFor] = useState("");
+  const [refunding, setRefunding] = useState(false);
+  const [refundNotice, setRefundNotice] = useState<(RefundNotice & { id: string }) | null>(null);
+  const refundAttempt = useRef<RefundAttempt | null>(null);
+  const refundOpenerRef = useRef<HTMLButtonElement | null>(null);
 
   // Which load is the newest. Two can be in flight at once — React remounts the
   // panel on a tab switch, and Strict Mode runs the effect twice in development
@@ -208,7 +223,7 @@ export default function PaymentLinksPanel({
     const ticket = ++latest.current;
     setError("");
     try {
-      const call = httpsCallable<{ companyId: string }, { requests: PaymentLinkRow[]; truncated: boolean }>(
+      const call = httpsCallable<{ companyId: string }, { requests: ListedRow[]; truncated: boolean }>(
         functions, "listWorkspacePaymentRequests");
       const response = await call({ companyId });
       if (ticket !== latest.current) return;
@@ -238,10 +253,22 @@ export default function PaymentLinksPanel({
     return out;
   }, [rows]);
 
+  // A refunded row leaves the Paid tab (it is "Partially refunded" or "Refunded" now). Until the tab changes it
+  // stays where the person refunded it, with what Stripe made of the refund under it.
   const visible = useMemo(
-    () => (rows ?? []).filter((row) => tab === "all" || tabForStatus(row.publicStatus) === tab),
-    [rows, tab]
+    () => (rows ?? []).filter((row) => tab === "all" || tabForStatus(row.publicStatus) === tab
+      || row.paymentRequestId === refundNotice?.id),
+    [rows, tab, refundNotice]
   );
+
+  // A refund Stripe holds as pending (the balance cannot cover it yet) finishes, or fails, through the webhook:
+  // while one is waiting the list is read again every 15 seconds the tab is visible, so the row follows it.
+  const refundWaiting = useMemo(() => (rows ?? []).some((row) => (row.refundPendingMinor ?? 0) > 0), [rows]);
+  useEffect(() => {
+    if (!refundWaiting || typeof document === "undefined") return;
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load(); }, 15000);
+    return () => window.clearInterval(timer);
+  }, [refundWaiting, load]);
 
   /**
    * Ask a customer to pay.
@@ -407,6 +434,26 @@ export default function PaymentLinksPanel({
     } finally {
       setBusyId("");
     }
+  };
+
+  // ---- Refunds (SL-21 / SL-22; moved here from the order card, 31 Oct 2026) -------------------------------------
+  // The form, its checks and the call are RefundPaymentDialog's; this list decides which rows offer it (only where
+  // the server says canRefund), keeps the last submit, and reads itself again once the server has answered.
+  const openRefund = (row: ListedRow, opener: HTMLButtonElement) => {
+    refundOpenerRef.current = opener;
+    setRefundNotice(null);
+    setRefundFor(row.paymentRequestId);
+  };
+  const closeRefund = () => {
+    if (refunding) return; // the answer is on its way; the form stays until it arrives
+    setRefundFor("");
+    refundOpenerRef.current?.focus();
+  };
+  const refunded = async (row: ListedRow, notice: RefundNotice) => {
+    setRefundNotice({ ...notice, id: row.paymentRequestId });
+    setRefundFor("");
+    // The list again: the row's refunded and refundable amounts, and its new status.
+    await load();
   };
 
   const copy = async (row: PaymentLinkRow) => {
@@ -600,7 +647,7 @@ export default function PaymentLinksPanel({
         {TABS.map(([key, label]) => (
           <button
             key={key} type="button" role="tab" aria-selected={tab === key}
-            onClick={() => setTab(key)}
+            onClick={() => { setTab(key); setRefundNotice(null); }}
             style={{
               border: 0, background: "transparent", cursor: "pointer", fontSize: 13, fontWeight: 700,
               padding: "8px 12px", marginBottom: -1,
@@ -654,7 +701,7 @@ export default function PaymentLinksPanel({
               </tr>
             </thead>
             <tbody>
-              {visible.map((row) => (
+              {visible.map((row) => [
                 <tr key={row.paymentRequestId} style={{ borderTop: "1px solid rgba(120,120,140,0.18)" }}>
                   <td style={{ padding: "9px 10px 9px 0", fontVariantNumeric: "tabular-nums" }}>
                     {isStandaloneRow(row) ? (
@@ -689,6 +736,11 @@ export default function PaymentLinksPanel({
                     {row.refundedAmountMinor > 0 ? (
                       <div style={{ fontSize: 11.5, opacity: 0.7 }}>
                         {t("Refunded")} {formatMinor(row.refundedAmountMinor, row.currency)}
+                      </div>
+                    ) : null}
+                    {(row.refundPendingMinor ?? 0) > 0 ? (
+                      <div style={{ fontSize: 11.5, color: "#b45309" }} title={t("Refund pending. Stripe will finish this when your Stripe balance allows.")}>
+                        {t("Refund pending")} {formatMinor(row.refundPendingMinor ?? 0, row.currency)}
                       </div>
                     ) : null}
                   </td>
@@ -759,6 +811,20 @@ export default function PaymentLinksPanel({
                         </button>
                       </>
                     ) : null}
+                    {/* A paid row, and only when the server says THIS person may refund it now: an older server, a
+                        member without the right and a payment with nothing left send no canRefund, and see nothing. */}
+                    {tabForStatus(row.publicStatus) !== "open" && row.canRefund === true && (row.refundableMinor ?? 0) > 0 ? (
+                      <button
+                        type="button"
+                        aria-expanded={refundFor === row.paymentRequestId}
+                        aria-controls={`refund-form-${row.paymentRequestId}`}
+                        disabled={refunding || busyId !== ""}
+                        onClick={(e) => (refundFor === row.paymentRequestId ? closeRefund() : openRefund(row, e.currentTarget))}
+                        style={{ border: 0, background: "transparent", color: "#b91c1c", cursor: "pointer", padding: "2px 6px", font: "inherit" }}
+                      >
+                        {t("Refund…")}
+                      </button>
+                    ) : null}
                     {/* Etsy API Terms: an Etsy order's link is never sent to the buyer by NivaDesk. */}
                     {isEtsyOrderId(row.orderId) && row.url && tabForStatus(row.publicStatus) === "open" ? (
                       <div role={copiedId === row.paymentRequestId ? "status" : undefined} data-etsy-compliance="copy-link"
@@ -770,8 +836,32 @@ export default function PaymentLinksPanel({
                       <div style={{ marginTop: 6, textAlign: "left", wordBreak: "break-all", fontSize: 11.5, opacity: 0.8 }}>{row.url}</div>
                     ) : null}
                   </td>
-                </tr>
-              ))}
+                </tr>,
+                refundFor === row.paymentRequestId || refundNotice?.id === row.paymentRequestId ? (
+                  <tr key={`${row.paymentRequestId}:refund`}>
+                    <td colSpan={7} style={{ padding: "0 0 10px" }}>
+                      {refundNotice && refundNotice.id === row.paymentRequestId ? (
+                        <p role="status" style={{ margin: "0 0 6px", fontSize: 12.5, color: refundNotice.tone === "done" ? "#047857" : "#b45309" }}>
+                          {refundNotice.text}
+                        </p>
+                      ) : null}
+                      {refundFor === row.paymentRequestId ? (
+                        <RefundPaymentDialog
+                          companyId={companyId}
+                          row={row}
+                          t={t}
+                          locale={locale}
+                          attemptRef={refundAttempt}
+                          onBusyChange={setRefunding}
+                          onClose={closeRefund}
+                          onRefunded={(notice) => refunded(row, notice)}
+                          onRowChanged={() => void load()}
+                        />
+                      ) : null}
+                    </td>
+                  </tr>
+                ) : null,
+              ])}
             </tbody>
           </table>
         </div>
