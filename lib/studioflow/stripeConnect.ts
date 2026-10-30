@@ -224,6 +224,8 @@ export async function refundOrderPayment(input: RefundOrderPaymentInput): Promis
 export type RefundRefusal = {
   /** `details.reason`, or "" when the error carried none (a lost reply, a network failure). */
   reason: string;
+  /** `details.retry`: Stripe may have the refund already, so the same submit may be sent again as the same refund. */
+  retry: boolean;
   /** The sentence to show, a key in the translation table. "{amount}" stands for the most that can be refunded. */
   text: string;
   /** `details.refundableMinor` when the server sent it (refund_amount_too_large), else null. */
@@ -231,12 +233,13 @@ export type RefundRefusal = {
 };
 
 export function refundRefusal(error: unknown): RefundRefusal {
-  const details = (error as { details?: { reason?: unknown; refundableMinor?: unknown } } | null)?.details;
+  const details = (error as { details?: { reason?: unknown; refundableMinor?: unknown; retry?: unknown } } | null)?.details;
   const reason = typeof details?.reason === "string" ? details.reason : "";
   const most = Number(details?.refundableMinor);
   const code = String((error as { code?: string } | null)?.code || "");
   return {
     reason,
+    retry: details?.retry === true,
     text: refundRefusalText(reason, code),
     refundableMinor: details?.refundableMinor != null && Number.isInteger(most) && most >= 0 ? most : null,
   };

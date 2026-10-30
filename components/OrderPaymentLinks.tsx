@@ -316,8 +316,8 @@ export default function OrderPaymentLinks({
       await load();
     } catch (e) {
       const refusal = refundRefusal(e);
-      // A definite answer about this row (not Stripe failing, not a lost connection): the next submit is a new refund.
-      if (refusal.reason && refusal.reason !== "refund_provider_error") refundAttempt.current = null;
+      // A definite answer (the server said no, and not "it may have reached Stripe"): the next submit is a new refund.
+      if (refusal.reason && !refusal.retry) refundAttempt.current = null;
       setRefundError(t(refusal.text).replace("{amount}", formatMinor(refusal.refundableMinor ?? most, rowCurrency)));
       // A refusal with a reason is the server's answer about this row as it is now (refunded elsewhere, disputed,
       // less left): read the list again so the row says so too. The form and its sentence stay.
