@@ -242,9 +242,8 @@ export default function CalendarPage() {
   // Keyboard: whatever opened the form or the detail panel gets the focus back when it closes.
   const formOpener = useRef<HTMLElement | null>(null);
   const detailOpener = useRef<HTMLElement | null>(null);
-  // The day view's hour list was last scrolled for this list element, day and first hour (once, then left to the person;
-  // a list mounted again, e.g. back from the week view, is scrolled again).
-  const hoursScrolledFor = useRef<{ el: HTMLOListElement | null; key: string }>({ el: null, key: "" });
+  // The day view starts at 07:00 (or the first meeting, if earlier) until the person asks for the night hours.
+  const [earlyHoursShown, setEarlyHoursShown] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) router.replace("/login");
@@ -693,16 +692,12 @@ export default function CalendarPage() {
     const allDayRows = rows.filter((r) => r.item.allDay || r.asCompletion);
     const timed = rows.filter((r) => !r.item.allDay && !r.asCompletion);
     const hourOf = (ms: number | null) => (ms === null ? 0 : Number(core.localParts(ms, viewerTz).time.slice(0, 2)));
-    // Opens an hour before the first timed entry (08:00 on an empty day), not at midnight: on 30 Oct nine empty hours
-    // sat above the 09:00 meetings.
-    const firstHour = timed.length ? Math.min(...timed.map((r) => hourOf(r.item.startMs))) : 9;
-    const scrollKey = `${anchor}|${firstHour}`;
-    const scrollHours = (el: HTMLOListElement | null) => {
-      if (!el || (hoursScrolledFor.current.el === el && hoursScrolledFor.current.key === scrollKey)) return;
-      hoursScrolledFor.current = { el, key: scrollKey };
-      const row = el.children[Math.max(0, firstHour - 1)] as HTMLElement | undefined;
-      el.scrollTop = row ? row.offsetTop : 0;
-    };
+    // 30 Oct: the day opened on empty night hours above the 09:00 meetings, and scrolling the hour list to the morning
+    // was undone by later layout (it showed 02:00). The night hours now fold away, as on iPhone and Android, unless
+    // something is planned there (an entry at 05:30 opens the list from 05:00).
+    const firstHour = timed.length ? Math.min(...timed.map((r) => hourOf(r.item.startMs))) : 7;
+    const startHour = earlyHoursShown ? 0 : Math.min(7, firstHour);
+    const earlyRange = `00:00 – ${String(Math.max(0, startHour - 1)).padStart(2, "0")}:00`;
     return (
       <div className="cal-day">
         <div className="cal-quick-add" role="group" aria-label={`${t("New entry")} · ${dayLabel(anchor, locale)}`}>
@@ -729,8 +724,13 @@ export default function CalendarPage() {
           <span className="cal-hour-label">{t("All day")}</span>
           <div className="cal-chips">{allDayRows.length ? allDayRows.map((r) => chip(r)) : <span className="muted-copy">—</span>}</div>
         </div>
-        <ol className="cal-hours" ref={scrollHours}>
-          {Array.from({ length: 24 }, (_, h) => h).map((h) => {
+        {startHour > 0 ? (
+          <button type="button" className="cal-link-button cal-early-hours" onClick={() => setEarlyHoursShown(true)} aria-label={`${t("Show earlier")} · ${earlyRange}`}>
+            ⌄ {earlyRange}
+          </button>
+        ) : null}
+        <ol className="cal-hours">
+          {Array.from({ length: 24 - startHour }, (_, i) => startHour + i).map((h) => {
             const inHour = timed.filter((r) => hourOf(r.item.startMs) === h);
             const hh = `${String(h).padStart(2, "0")}:00`;
             return (

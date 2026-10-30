@@ -34211,6 +34211,13 @@ body[data-studio-theme="dark"] .inbox-status-toggle { color: #5fe39b; }
   flex: 1 0 auto;
   width: 100%;
   min-width: 0;
+  /* Room under the last row for the floating help / support buttons (fixed at the bottom right), so they never sit
+     on top of content the person cannot scroll out from under them (30 Oct: the calendar's last rows). */
+  padding-bottom: 76px;
+}
+
+@media (max-width: 560px) {
+  .app-shell-content { padding-bottom: 128px; }
 }
 
 .app-shell-content:not(.is-wide) {
@@ -36689,7 +36696,9 @@ body[data-studio-theme="dark"] .inv-categories .btn-danger { color: #f87171; bor
 .cal-add-here { margin-top: auto; border: 1px dashed var(--border); background: none; border-radius: 8px; color: var(--muted); cursor: pointer; padding: 4px; }
 .cal-day { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow: hidden; }
 .cal-day-allday { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; padding: 8px; border-bottom: 1px solid var(--border); background: var(--panel); }
-.cal-hours { list-style: none; margin: 0; padding: 0; max-height: 70vh; overflow-y: auto; position: relative; }
+/* No inner scroll box: the night hours fold away instead (30 Oct), and the page scrolls once, not twice. */
+.cal-hours { list-style: none; margin: 0; padding: 0; }
+.cal-early-hours { display: block; padding: 6px 8px; font-size: 13px; border-bottom: 1px solid var(--border); width: 100%; text-align: start; }
 .cal-hour-row { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 8px; min-height: 40px; padding: 4px 8px; border-bottom: 1px solid var(--border); }
 .cal-hour-row .cal-chips { cursor: pointer; }
 .cal-hour-label { border: 0; background: none; color: var(--muted); font-size: 12px; font-weight: 700; text-align: start; padding: 2px 0; cursor: pointer; }
