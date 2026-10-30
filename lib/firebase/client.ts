@@ -15,6 +15,23 @@ const USE_EMULATOR =
   typeof window !== "undefined" &&
   ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
 
+// Which emulator. The defaults are the suite's own (firebase.json); an isolated
+// stack on the same machine (scripts/isolated-drive-stack.sh) sits on other
+// ports, so each can be overridden. Each is its own variable because Next only
+// inlines `process.env.NEXT_PUBLIC_*` when the name is written out. Read only
+// under USE_EMULATOR, so the live site never consults them.
+const EMULATOR_HOST = process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_HOST || "127.0.0.1";
+const emulatorPort = (raw: string | undefined, fallback: number) => {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 && n < 65536 ? n : fallback;
+};
+const EMULATOR_PORTS = {
+  auth: emulatorPort(process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_AUTH_PORT, 9099),
+  firestore: emulatorPort(process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_FIRESTORE_PORT, 8080),
+  functions: emulatorPort(process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_FUNCTIONS_PORT, 5001),
+  storage: emulatorPort(process.env.NEXT_PUBLIC_FIREBASE_EMULATOR_STORAGE_PORT, 9199)
+};
+
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -58,7 +75,7 @@ if (typeof window !== "undefined" && APP_CHECK_SITE_KEY && !USE_EMULATOR) {
 
 export const auth = getAuth(app);
 if (USE_EMULATOR) {
-  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectAuthEmulator(auth, `http://${EMULATOR_HOST}:${EMULATOR_PORTS.auth}`, { disableWarnings: true });
 }
 
 // Persistent IndexedDB cache: repeat visits render instantly from disk while
@@ -112,9 +129,9 @@ export const storage = getStorage(app);
 export const functions = getFunctions(app, "europe-west2");
 
 if (USE_EMULATOR) {
-  connectFirestoreEmulator(db, "127.0.0.1", 8080);
-  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-  connectStorageEmulator(storage, "127.0.0.1", 9199);
+  connectFirestoreEmulator(db, EMULATOR_HOST, EMULATOR_PORTS.firestore);
+  connectFunctionsEmulator(functions, EMULATOR_HOST, EMULATOR_PORTS.functions);
+  connectStorageEmulator(storage, EMULATOR_HOST, EMULATOR_PORTS.storage);
 }
 
 // A wipe that did not finish before the last page left (sign-out with another

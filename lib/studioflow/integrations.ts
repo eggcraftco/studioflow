@@ -29,6 +29,7 @@ import { getEbayConnections } from "@/lib/studioflow/ebay";
 import { getAmazonStatus, type AmazonAuthorizationMode, type AmazonConnection } from "@/lib/studioflow/amazon";
 import { getIntegrationWebhookInfo, type IntegrationWebhookInfo } from "@/lib/studioflow/planActions";
 import { loadCustomerChannelStatus, type CustomerChannelCard } from "@/lib/studioflow/customerInbox";
+import { getStorageStatus, type StorageStatusResult } from "@/lib/studioflow/storage";
 
 export type IntegrationCategory = "commerce" | "banking" | "automation" | "messaging";
 
@@ -45,7 +46,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
 // "dhl" is not in INTEGRATION_PROVIDERS: DHL Express is shown only where the server
 // has opened it for the workspace, and never on the public integrations page.
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "claude" | "dhl" | "whatsapp" | "instagram" | "stripe" | "tracking";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "claude" | "dhl" | "whatsapp" | "instagram" | "stripe" | "tracking" | "storage" | "gdrive" | "onedrive" | "dropbox" | "box";
 
 export type IntegrationProvider = {
   id: string;
@@ -189,15 +190,34 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     blurb: "Sales, fees and refunds from your PayPal account, beside your bank.",
     capabilities: ["Payments received and sent", "Fees beside the gross", "Withdrawals matched to your bank"], manage: "paypal",
   },
+  // "Use your own cloud" (own-cloud CONTRACT, 30 Oct 2026). Four tiles, one
+  // manage screen: each opens the Cloud storage card with its own row
+  // highlighted. A provider the server cannot connect yet resolves to
+  // "planned" below, so no tile offers a consent page that cannot complete.
   {
-    id: "googledrive", name: "Google Drive", category: "automation", kind: "planned", mark: "G",
-    blurb: "", capabilities: [], manage: "",
+    id: "gdrive", name: "Google Drive", category: "automation", kind: "native", mark: "G",
+    blurb: "Keep this workspace's order files in your own Google Drive. NivaDesk only sees the files it saves there.",
+    capabilities: ["Order files"], manage: "gdrive",
   },
   {
-    id: "dropbox", name: "Dropbox", category: "automation", kind: "planned", mark: "D",
-    blurb: "", capabilities: [], manage: "",
+    id: "onedrive", name: "OneDrive", category: "automation", kind: "native", mark: "O",
+    blurb: "Keep this workspace's order files in your own OneDrive or SharePoint. NivaDesk only sees the files it saves there.",
+    capabilities: ["Order files"], manage: "onedrive",
+  },
+  {
+    id: "dropbox", name: "Dropbox", category: "automation", kind: "native", mark: "D",
+    blurb: "Keep this workspace's order files in your own Dropbox. NivaDesk only sees the files it saves there.",
+    capabilities: ["Order files"], manage: "dropbox",
+  },
+  {
+    id: "box", name: "Box", category: "automation", kind: "native", mark: "B",
+    blurb: "Keep this workspace's order files in your own Box. NivaDesk only sees the files it saves there.",
+    capabilities: ["Order files"], manage: "box",
   },
 ];
+
+/** The four own-cloud tiles: their ids are the storage provider ids. */
+const STORAGE_TILE_IDS: readonly string[] = ["gdrive", "onedrive", "dropbox", "box"];
 
 /**
  * What a card says about itself right now.
@@ -245,7 +265,7 @@ export type IntegrationLiveState = {
  */
 export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
   if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
-  const [stores, inbound, banks, etsy, woo, square, stripe, ebay, amazon, accounting, chatgpt, retired, channels] = await Promise.allSettled([
+  const [stores, inbound, banks, etsy, woo, square, stripe, ebay, amazon, accounting, chatgpt, retired, channels, storage] = await Promise.allSettled([
     httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
       functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
     getIntegrationWebhookInfo("inbound", companyId),
@@ -282,6 +302,11 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     // plan has no Messages is refused here, which settles as "could not
     // check" — never as "not connected", and never as connectable.
     loadCustomerChannelStatus(companyId),
+    // Own cloud storage: readable by any member (a member who cannot change it
+    // still needs to know where their files go). A server without the
+    // callable rejects, which settles as null and the four tiles read
+    // "Coming soon" — what they said before this connector existed.
+    getStorageStatus(companyId),
   ]);
   const channel = (result: PromiseSettledResult<IntegrationWebhookInfo>) =>
     result.status === "fulfilled"
@@ -346,6 +371,7 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
       ? (retired.value.data?.holds ?? []).map((row) => (row.kind === "shopify" ? "shopify" : row.kind))
       : [],
     customerChannels: channels.status === "fulfilled" ? channels.value.cards : null,
+    storage: storage.status === "fulfilled" ? storage.value : null,
   };
 }
 
@@ -442,6 +468,8 @@ export type IntegrationSignals = {
   stripePayments?: { configured: boolean; connection: StripeConnectionSummary | null } | null;
   /** The customer channel cards (WhatsApp, Instagram) as the server measured them; null = the read failed; undefined = not read yet. */
   customerChannels?: CustomerChannelCard[] | null;
+  /** Own cloud storage (storageStatus). null = the read failed; undefined = not read yet. */
+  storage?: StorageStatusResult | null;
 };
 
 /**
@@ -465,6 +493,24 @@ function resolveProviderState(
   signals: IntegrationSignals,
 ): IntegrationLiveState {
   if (provider.kind === "planned") return { state: "planned" };
+
+  // Own cloud storage. A revoked row is no connection (it is what disconnecting
+  // leaves); a live one is "connected" (and says when new files go there); a
+  // stopped one needs the owner. A provider the server cannot connect yet — or
+  // a server that could not be read — is "planned": no button, no consent page
+  // for an app that does not exist.
+  if (STORAGE_TILE_IDS.includes(provider.id)) {
+    const status = signals.storage;
+    if (!status) return { state: "planned" };
+    const rows = status.connections.filter((row) => row.provider === provider.id && row.status && row.status !== "revoked");
+    if (rows.some((row) => row.status === "connected")) {
+      return { state: "connected", detail: status.primary.provider === provider.id ? "New files are saved here" : undefined };
+    }
+    if (rows.some((row) => row.status === "limited")) return { state: "attention", detail: "Some permissions missing" };
+    if (rows.length > 0) return { state: "attention", detail: "Reconnect required" };
+    const offer = status.providers.find((row) => row.id === provider.id);
+    return offer?.available ? { state: "available" } : { state: "planned" };
+  }
 
   if (provider.id === "stripe") {
     const rail = signals.stripePayments;

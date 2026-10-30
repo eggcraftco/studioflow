@@ -20,6 +20,7 @@ import { CHANNEL_SHIPPING_COST_TRANSLATIONS } from "./channelShippingCost";
 import { ETSY_ORDER_VIEW_TRANSLATIONS } from "./etsyOrderViewTranslations";
 import { SECURITY_FIX_TRANSLATIONS } from "./securityFixTranslations";
 import { CALENDAR_TRANSLATIONS } from "./calendarTranslations";
+import { STORAGE_TRANSLATIONS } from "./storageTranslations";
 
 import { SECOND_FACTOR_TRANSLATIONS } from "./secondFactorTranslations";
 
@@ -9483,6 +9484,7 @@ mergeIntoTranslations(SECOND_FACTOR_TRANSLATIONS);
 // Calendar V1 (28 Oct 2026): the /calendar screen and the bell's calendar reminders. Last, and filling only
 // gaps, so no wording elsewhere changes.
 mergeMissingIntoTranslations(CALENDAR_TRANSLATIONS);
+mergeMissingIntoTranslations(STORAGE_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

@@ -575,6 +575,14 @@ export type ClientFileDetail = {
   uploadedAt: Date | null;
   source: string;
   note: string;
+  // A row the common file service recorded (own-cloud storage), drawn beside
+  // the order's own `clientFiles[]` rows. OPTIONAL: `mapClientFiles` builds
+  // rows straight from the order document and has none of it, and a row
+  // without these fields is a legacy row — exactly what the screen assumes.
+  //   serviceRef  the provider-qualified ref openOrderFile / detachOrderFile take
+  //   provider    "nivadesk" for NivaDesk Cloud, else gdrive | onedrive | dropbox | box
+  serviceRef?: string;
+  provider?: string;
 };
 
 export type ClientFileListItem = ClientFileDetail & {

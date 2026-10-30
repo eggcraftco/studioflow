@@ -113,7 +113,9 @@ function stringValue(value: unknown, fallback = "") {
   return typeof value === "string" && value.trim().length > 0 ? value : fallback;
 }
 
-function extensionForFile(file: File) {
+// Exported so orderFileService.ts (own-cloud uploads) reuses the SAME allow-list
+// and the SAME content-type mapping rather than keeping a second copy that drifts.
+export function extensionForFile(file: File) {
   const name = file.name.trim();
   const extension = name.includes(".") ? name.split(".").pop()?.toLowerCase() ?? "" : "";
   if (!ALLOWED_CLIENT_FILE_EXTENSIONS.has(extension)) {
@@ -122,7 +124,7 @@ function extensionForFile(file: File) {
   return extension;
 }
 
-function contentTypeForFile(file: File, extension: string) {
+export function contentTypeForFile(file: File, extension: string) {
   if (extension === "pdf") return "application/pdf";
   if (extension === "zip") return "application/zip";
   if (extension === "psd") return "image/vnd.adobe.photoshop";

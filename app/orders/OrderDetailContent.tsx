@@ -57,6 +57,29 @@ import {
   renameClientFileForOrder,
   uploadClientFileForOrder
 } from "@/lib/studioflow/clientFiles";
+// Own cloud storage (CONTRACT, 30 Oct 2026). The server decides where a file
+// goes; this screen only reads `storageStatus().primary` to pick the ROUTE:
+// NivaDesk Cloud keeps the live upload path above untouched, a connected
+// provider goes through the common file service.
+import {
+  deleteConfirmSentence,
+  detachOrderFileViaService,
+  isProviderHosted,
+  listOrderFilesViaService,
+  openOrderFileInTab,
+  providerBadgeLabel,
+  serviceOnlyRows,
+  uploadOrderFile,
+  type OrderServiceFile
+} from "@/lib/studioflow/orderFileService";
+import {
+  MANAGED_STORAGE,
+  getStorageStatusCached,
+  storageHasServiceFiles,
+  storageProviderLabel,
+  storageRoute,
+  type StorageStatusResult
+} from "@/lib/studioflow/storage";
 import {
   UPLOAD_POLICY_BUILTIN_SENTENCE,
   type UploadPolicyAcceptance,
@@ -2198,11 +2221,47 @@ export function OrderDetailContent({
   const [browserUploadPolicyAcceptance, setBrowserUploadPolicyAcceptance] = useState<UploadPolicyAcceptance | null>(null);
   const browserAcceptedUploadPolicy = browserUploadPolicyAcceptance !== null;
   const clientFileInputRef = useRef<HTMLInputElement | null>(null);
+  // Own cloud storage: the workspace's storage answer (null until read, and
+  // when the read fails — both mean NivaDesk Cloud, the live path), and the
+  // order's files the common file service recorded in a connected provider.
+  const [storageStatus, setStorageStatus] = useState<StorageStatusResult | null>(null);
+  const [serviceFiles, setServiceFiles] = useState<OrderServiceFile[]>([]);
+  const [serviceFilesError, setServiceFilesError] = useState<string | null>(null);
+  const [serviceFilesToken, setServiceFilesToken] = useState(0);
+  const clientFilesFeature = Boolean(workspace.entitlements.features.client_files);
+  useEffect(() => {
+    let cancelled = false;
+    setStorageStatus(null);
+    if (!clientFilesFeature) return () => { cancelled = true; };
+    void getStorageStatusCached(workspace.id).then(status => {
+      if (!cancelled) setStorageStatus(status);
+    });
+    return () => { cancelled = true; };
+  }, [clientFilesFeature, workspace.id]);
+  const clientFileStorage = storageRoute(storageStatus);
   // Client file uploads run through a queue: two at a time, each row with the
   // storage task's measured bytes, a cancel, and a retry that keeps the same
   // file id and path. The order reloads after every finished file.
   const clientFileUploads = useUploadQueue<undefined>(async (file, slot, hooks) => {
     if (!user) throw new Error("Sign in again before uploading a client file.");
+    // The route is asked at the moment the file starts, not taken from the
+    // render: an upload chosen before the answer arrived must not slip into
+    // NivaDesk Cloud for a workspace that keeps its files elsewhere.
+    const route = storageRoute(await getStorageStatusCached(workspace.id));
+    if (route !== MANAGED_STORAGE) {
+      hooks.onStage?.("uploading");
+      hooks.onProgress?.(0, file.size);
+      await uploadOrderFile({
+        workspace,
+        orderId: order.id,
+        file,
+        signal: hooks.signal,
+        onProgress: ({ sentBytes, totalBytes }) => hooks.onProgress?.(sentBytes, totalBytes)
+      });
+      setServiceFilesToken(value => value + 1);
+      await onReloadOrder();
+      return;
+    }
     await uploadClientFileForOrder({
       workspace,
       orderId: order.id,
@@ -2960,13 +3019,60 @@ export function OrderDetailContent({
   const activeScheduleItems = useMemo(() => scheduleItems.filter(item => item.status !== "Done"), [scheduleItems]);
   const completedScheduleItems = useMemo(() => scheduleItems.filter(item => item.status === "Done"), [scheduleItems]);
   const headerScheduleItem = useMemo(() => nextHeaderScheduleItem(activeScheduleItems), [activeScheduleItems]);
+  // The files the common file service recorded for this order (a connected
+  // provider's, or NivaDesk Cloud's when a provider upload fell back on the
+  // server). Asked only when the workspace has, or had, a storage connection:
+  // every other workspace's card is exactly the order document's array.
+  useEffect(() => {
+    let cancelled = false;
+    if (!canUseClientFiles || !storageHasServiceFiles(storageStatus)) {
+      setServiceFiles([]);
+      setServiceFilesError(null);
+      return () => { cancelled = true; };
+    }
+    void listOrderFilesViaService({ workspace, orderId: order.id })
+      .then(listing => {
+        if (cancelled) return;
+        setServiceFiles(serviceOnlyRows(listing.files));
+        setServiceFilesError(null);
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setServiceFiles([]);
+        setServiceFilesError(error instanceof Error ? error.message : "Could not load this order's files.");
+      });
+    return () => { cancelled = true; };
+    // Keyed on the workspace's id, not the prop object, so a parent that
+    // rebuilds the object each render does not refire this every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canUseClientFiles, order.id, serviceFilesToken, storageStatus, workspace.id]);
+
   const clientFileItems = useMemo(() => {
-    return [...order.clientFiles].sort((first, second) => {
+    // Legacy rows exactly as before; service rows beside them, carrying the ref
+    // openOrderFile / detachOrderFile take and the provider that holds them.
+    // They have no URL and no path by design: a link is minted per open.
+    const serviceRows = serviceFiles.map<ClientFileDetail>(row => ({
+      id: `svc:${row.fileId || row.ref}`,
+      fileName: row.fileName,
+      downloadURL: "",
+      storagePath: "",
+      contentType: row.contentType,
+      fileSize: row.sizeBytes,
+      uploadedByUid: "",
+      uploadedByEmail: row.uploadedByEmail,
+      uploadedBy: row.uploadedByEmail,
+      uploadedAt: row.uploadedAtMs ? new Date(row.uploadedAtMs) : null,
+      source: "service",
+      note: "",
+      serviceRef: row.ref,
+      provider: row.provider
+    }));
+    return [...order.clientFiles, ...serviceRows].sort((first, second) => {
       const firstTime = first.uploadedAt?.getTime() ?? 0;
       const secondTime = second.uploadedAt?.getTime() ?? 0;
       return secondTime - firstTime;
     });
-  }, [order.clientFiles]);
+  }, [order.clientFiles, serviceFiles]);
   const previewableClientFiles = useMemo(
     () => clientFileItems.filter(file => canUseClientFiles && Boolean(file.downloadURL || file.storagePath)),
     [canUseClientFiles, clientFileItems]
@@ -4027,6 +4133,34 @@ export function OrderDetailContent({
       return;
     }
 
+    // A file the common file service recorded is detached through it. In a
+    // connected provider that is a move to the provider's own bin, never a
+    // destruction — and the sentence says so instead of "cannot be undone".
+    if (file.serviceRef) {
+      const providerFile = { provider: file.provider ?? "", fileName: file.fileName };
+      const movesToBin = isProviderHosted(providerFile);
+      const providerName = providerBadgeLabel(file.provider ?? "");
+      const ok = window.confirm(
+        t(deleteConfirmSentence(providerFile)).replace("{name}", file.fileName).replace("{provider}", providerName)
+      );
+      if (!ok) return;
+      setActioningFileId(file.id);
+      setFileActionStatus(movesToBin ? "Moving file to the bin..." : "Deleting file...");
+      try {
+        await detachOrderFileViaService({ workspace, orderId: order.id, ref: file.serviceRef });
+        setServiceFilesToken(value => value + 1);
+        setFileActionStatus(movesToBin
+          ? t("Moved {name} to the bin in {provider}.").replace("{name}", file.fileName).replace("{provider}", providerName)
+          : t("Deleted {name}.").replace("{name}", file.fileName));
+      } catch (detachFailure) {
+        setFileActionStatus(null);
+        setFileActionError(detachFailure instanceof Error ? detachFailure.message : "Delete failed. Please try again.");
+      } finally {
+        setActioningFileId(null);
+      }
+      return;
+    }
+
     const confirmed = window.confirm(
       t("Delete \"{name}\" from this order? This cannot be undone.").replace("{name}", file.fileName)
     );
@@ -4050,6 +4184,36 @@ export function OrderDetailContent({
       setFileActionError(deleteFailure instanceof Error ? deleteFailure.message : "Delete failed. Please try again.");
     } finally {
       setActioningFileId(null);
+    }
+  }
+
+  /**
+   * Open a file the common file service recorded. `openOrderFile` mints a
+   * one-time link; a provider file's link is our own endpoint and is fetched
+   * with this person's ID token in the Authorization header — never navigated
+   * to — and the bytes are shown from this page. A browser that refuses the new
+   * tab gets the bytes as a download instead of a click that does nothing.
+   */
+  async function handleOpenServiceFile(file: ClientFileDetail) {
+    setFileActionError(null);
+    if (!file.serviceRef) return;
+    try {
+      const outcome = await openOrderFileInTab({ workspace, orderId: order.id, ref: file.serviceRef });
+      if (outcome.shown) return;
+      if (outcome.blobUrl) {
+        const anchor = document.createElement("a");
+        anchor.href = outcome.blobUrl;
+        anchor.download = file.fileName;
+        anchor.rel = "noopener";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(outcome.blobUrl as string), 60_000);
+        return;
+      }
+      setFileActionError("The browser blocked the new tab. Allow pop-ups for this site and try again.");
+    } catch (openFailure) {
+      setFileActionError(openFailure instanceof Error ? openFailure.message : "That file could not be opened.");
     }
   }
 
@@ -4903,13 +5067,20 @@ export function OrderDetailContent({
       // Also add the uploaded preview image to Client Files so it's listed there too.
       if (canManageClientFiles) {
         try {
-          await uploadClientFileForOrder({
-            workspace,
-            orderId: order.id,
-            file,
-            uploadSafety,
-            user: { uid: user.uid, email: user.email, displayName: user.displayName }
-          });
+          // The copy follows the workspace's storage like any other client
+          // file: a workspace that keeps its files in its own cloud gets it there.
+          if (storageRoute(await getStorageStatusCached(workspace.id)) !== MANAGED_STORAGE) {
+            await uploadOrderFile({ workspace, orderId: order.id, file });
+            setServiceFilesToken(value => value + 1);
+          } else {
+            await uploadClientFileForOrder({
+              workspace,
+              orderId: order.id,
+              file,
+              uploadSafety,
+              user: { uid: user.uid, email: user.email, displayName: user.displayName }
+            });
+          }
           await onReloadOrder();
         } catch {
           // Preview is set; failing to mirror it into Client Files is non-fatal.
@@ -9159,6 +9330,12 @@ export function OrderDetailContent({
                 </div>
               ) : null}
               {!canUseClientFiles ? <ClientFilesUpgradeHint /> : null}
+              {canUseClientFiles && clientFileStorage !== MANAGED_STORAGE ? (
+                <p className="muted-copy" data-client-files-storage={clientFileStorage}>
+                  {t("New files are saved to: {provider}").replace("{provider}", storageProviderLabel(clientFileStorage))}
+                </p>
+              ) : null}
+              {serviceFilesError ? <p className="file-action-error">{t(serviceFilesError)}</p> : null}
               {fileActionStatus ? <p className="file-action-status">{t(fileActionStatus)}</p> : null}
               {fileActionError ? <p className="file-action-error">{t(fileActionError)}</p> : null}
               <UploadQueuePanel
@@ -9187,6 +9364,7 @@ export function OrderDetailContent({
                       actioning={actioningFileId === file.id}
                       actionDisabled={Boolean(actioningFileId)}
                       onPreview={() => setPreviewingClientFileId(file.id)}
+                      onOpenService={() => void handleOpenServiceFile(file)}
                       onRename={() => handleRenameFile(file)}
                       onDelete={() => handleDeleteFile(file)}
                       onUseAsPreview={() => handleUseFileAsPreview(file)}
@@ -12470,6 +12648,7 @@ function ClientFileCard({
   actioning,
   actionDisabled,
   onPreview,
+  onOpenService,
   onRename,
   onDelete,
   onUseAsPreview,
@@ -12483,6 +12662,8 @@ function ClientFileCard({
   actioning: boolean;
   actionDisabled: boolean;
   onPreview: () => void;
+  /** A row the common file service recorded: opened through openOrderFile. */
+  onOpenService?: () => void;
   onRename: () => void;
   onDelete: () => void;
   onUseAsPreview: () => void;
@@ -12495,6 +12676,10 @@ function ClientFileCard({
   const [openProblem, setOpenProblem] = useState("");
   const byline = clientFileByline(file);
   const detailLocale = useDetailLocale();
+  // A row in the workspace's own cloud: opened by minting, binned not deleted,
+  // and not renamed here (renameClientFile rewrites the order's own array).
+  const serviceRow = Boolean(file.serviceRef);
+  const movesToBin = serviceRow && isProviderHosted({ provider: file.provider ?? "" });
 
   return (
     <article className="client-file-list-row">
@@ -12526,6 +12711,9 @@ function ClientFileCard({
             {clientFileSizeLabel(file.fileSize)} · {t("Uploaded {date}").replace("{date}", formatDate(file.uploadedAt, detailLocale))}
           </p>
           {byline ? <p className="muted-copy">{byline}</p> : null}
+          {serviceRow && movesToBin ? (
+            <p className="muted-copy"><span className="studio-pill" data-file-provider={file.provider}>{providerBadgeLabel(file.provider ?? "")}</span></p>
+          ) : null}
           {openProblem ? <p className="layout-error" role="alert">{t(openProblem)}</p> : null}
         </div>
       </button>
@@ -12537,6 +12725,18 @@ function ClientFileCard({
             <a className="client-file-icon-button is-primary" href={file.storagePath ? "#" : maskFileUrl(file.downloadURL, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openStoredFile(file, brandedHost).then(status => setOpenProblem(openOutcomeProblem(status))); }} title={t("Open / Download")} aria-label={t("Open or download file")}>
               <ClientFileActionIcon name="download" />
             </a>
+          ) : serviceRow && onOpenService ? (
+            // No permanent URL by design: the link is minted when pressed.
+            <button
+              className="client-file-icon-button is-primary"
+              type="button"
+              onClick={onOpenService}
+              disabled={actionDisabled}
+              title={t("Open / Download")}
+              aria-label={t("Open or download file")}
+            >
+              <ClientFileActionIcon name="download" />
+            </button>
           ) : (
             <span className="client-file-locked-pill">{t("No URL")}</span>
           )
@@ -12551,17 +12751,19 @@ function ClientFileCard({
         ) : null}
         {canManageClientFiles ? (
           <>
-            <button className="client-file-icon-button" type="button" onClick={onRename} disabled={actionDisabled} title={t("Rename")} aria-label={t("Rename file")}>
-              {actioning ? <span className="client-file-action-loading">...</span> : <ClientFileActionIcon name="rename" />}
-            </button>
+            {serviceRow ? null : (
+              <button className="client-file-icon-button" type="button" onClick={onRename} disabled={actionDisabled} title={t("Rename")} aria-label={t("Rename file")}>
+                {actioning ? <span className="client-file-action-loading">...</span> : <ClientFileActionIcon name="rename" />}
+              </button>
+            )}
             {canDeleteFile ? (
               <button
                 className="client-file-icon-button is-danger"
                 type="button"
                 onClick={onDelete}
                 disabled={actionDisabled}
-                title={t("Delete")}
-                aria-label={t("Delete file")}
+                title={t(movesToBin ? "Move to bin" : "Delete")}
+                aria-label={t(movesToBin ? "Move to bin" : "Delete file")}
               >
                 <ClientFileActionIcon name="delete" />
               </button>

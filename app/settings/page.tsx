@@ -57,6 +57,7 @@ import {
 import { getEtsyConnections, type EtsyConnection } from "@/lib/studioflow/etsy";
 import { httpsCallable } from "firebase/functions";
 import { ChatGPTIntegrationSection } from "./ChatGPTIntegrationSection";
+import { StorageIntegrationSection } from "./StorageIntegrationSection";
 import { EtsyIntegrationSection } from "./EtsyIntegrationSection";
 import { WooCommerceIntegrationSection } from "./WooCommerceIntegrationSection";
 import { SquareIntegrationSection } from "./SquareIntegrationSection";
@@ -247,6 +248,12 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   whatsapp: "integrations",
   instagram: "integrations",
   "customer-channels": "integrations",
+  // Own cloud storage: the Cloud storage card, one row per provider.
+  storage: "integrations",
+  gdrive: "integrations",
+  onedrive: "integrations",
+  dropbox: "integrations",
+  box: "integrations",
   sms: "sms-notifications",
   notification: "notifications",
   "notification-settings": "notifications",
@@ -746,9 +753,20 @@ export default function SettingsPage() {
       rawRequested === "inbound" ||
       rawRequested === "etsy" ||
       rawRequested === "square" || rawRequested === "ebay" || rawRequested === "amazon" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero" ||
-      rawRequested === "dhl" || rawRequested === "whatsapp" || rawRequested === "instagram" || rawRequested === "stripe" || rawRequested === "tracking"
+      rawRequested === "dhl" || rawRequested === "whatsapp" || rawRequested === "instagram" || rawRequested === "stripe" || rawRequested === "tracking" ||
+      rawRequested === "storage" || rawRequested === "gdrive" || rawRequested === "onedrive" || rawRequested === "dropbox" || rawRequested === "box"
     ) {
       setIntegrationProvider(rawRequested);
+    }
+    // The return from a cloud storage consent: /oauth/<provider>/callback spends
+    // the code on the server and sends the person here with ?storage=<outcome>
+    // &provider=<id> (and the drive-night page's ?gdrive=<outcome>). The card
+    // that reports it has to be the one that opens, on a phone too.
+    if (params.get("storage") || params.get("gdrive")) {
+      const returned = params.get("provider") || (params.get("gdrive") ? "gdrive" : "");
+      setIntegrationProvider(returned === "gdrive" || returned === "onedrive" || returned === "dropbox" || returned === "box" ? returned : "storage");
+      setActiveSection("integrations");
+      setMobileDetail(true);
     }
     // Stripe sends the owner back from its hosted onboarding to
     // /settings?stripe=connected (or =retry) with no section of its own. The
@@ -5806,6 +5824,13 @@ function IntegrationsSection({
   const t = (text: string) => studioT(text, language);
   const companyId = workspace.id.trim();
   const [managing, setManaging] = useState<IntegrationManageTarget>(openProvider ?? "");
+  // `useState(openProvider)` reads the prop once. A consent return can name the
+  // provider a moment after the grid is on screen, so the card follows the prop
+  // afterwards — but never on "" (which is also what closing a card leaves).
+  useEffect(() => {
+    if (openProvider) setManaging(openProvider);
+  }, [openProvider]);
+  const managingStorage = managing === "storage" || managing === "gdrive" || managing === "onedrive" || managing === "dropbox" || managing === "box";
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "connected" | "available" | "planned">("all");
   const [signals, setSignals] = useState<IntegrationSignals>(EMPTY_INTEGRATION_SIGNALS);
@@ -5857,7 +5882,7 @@ function IntegrationsSection({
         <nav className="integrations-crumb">
           <button type="button" onClick={() => setManaging("")}>{t("Integrations")}</button>
           <span aria-hidden="true">/</span>
-          <strong>{managing === "dhl" ? "DHL Express" : managing === "tracking" ? t("17TRACK tracking") : t(INTEGRATION_PROVIDERS.find((p) => p.manage === managing && p.kind !== "planned")?.name ?? "Setup")}</strong>
+          <strong>{managingStorage ? t("Cloud storage") : managing === "dhl" ? "DHL Express" : managing === "tracking" ? t("17TRACK tracking") : t(INTEGRATION_PROVIDERS.find((p) => p.manage === managing && p.kind !== "planned")?.name ?? "Setup")}</strong>
         </nav>
         {managing === "shopify" ? <ShopifyIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "etsy" ? <EtsyIntegrationSection workspace={workspace} language={language} /> : null}
@@ -5876,6 +5901,7 @@ function IntegrationsSection({
         {managing === "chatgpt" ? <ChatGPTIntegrationSection workspace={workspace} language={language} assistant="chatgpt" /> : null}
         {managing === "claude" ? <ChatGPTIntegrationSection workspace={workspace} language={language} assistant="claude" /> : null}
         {managing === "inbound" ? <InboundWebhookSection workspace={workspace} language={language} /> : null}
+        {managingStorage ? <StorageIntegrationSection workspace={workspace} language={language} focus={managing === "storage" ? "" : managing} /> : null}
       </div>
     );
   }

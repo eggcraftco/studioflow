@@ -73,6 +73,7 @@ try {
     "export const getIntegrationWebhookInfo = refuse('getIntegrationWebhookInfo');",
     "export const getAmazonStatus = refuse('getAmazonStatus');",
     "export const loadCustomerChannelStatus = refuse('loadCustomerChannelStatus');",
+    "export const getStorageStatus = refuse('getStorageStatus');",
     "",
   ].join("\n"));
 
@@ -198,6 +199,29 @@ try {
     expect("etsy: needs-reconnect still wins over first import",
       state("etsy", { etsyShops: [{ ...shop("none"), needsReconnect: true }] }).detail !== "Choose what to import");
     expect("etsy: no shop is 'available'", state("etsy", { etsyShops: [] }).state === "available");
+  }
+
+  // --- Own cloud storage: four tiles, the server's word (30 Oct 2026) -------
+  {
+    const offers = (available) => ["gdrive", "onedrive", "dropbox", "box"].map((id) => ({ id, label: id, available: available.includes(id) }));
+    const status = (available, connections = [], primary = "managed") =>
+      ({ storage: { provider: "gdrive", available: false, providers: offers(available), primary: { provider: primary, connectionId: "", label: "" }, connections, canConnect: true, canDisconnect: true, reason: "" } });
+    for (const id of ["gdrive", "onedrive", "dropbox", "box"]) {
+      expect(`${id}: a server that could not be read (or has no callable) offers nothing`, state(id, { storage: null }).state === "planned");
+      expect(`${id}: not configured on the server is 'planned', with no button`,
+        state(id, status([])).state === "planned" && integrationStateOffersNoAction(state(id, status([])).state));
+      expect(`${id}: configured is 'available'`, state(id, status([id])).state === "available");
+    }
+    const live = [{ connectionId: "c1", provider: "gdrive", status: "connected" }];
+    expect("gdrive: a live primary connection is connected and says new files go there",
+      state("gdrive", status(["gdrive"], live, "gdrive")).state === "connected"
+        && state("gdrive", status(["gdrive"], live, "gdrive")).detail === "New files are saved here");
+    expect("onedrive: a Drive connection is not OneDrive's", state("onedrive", status(["onedrive"], live, "gdrive")).state === "available");
+    expect("box: a revoked row is no connection", state("box", status(["box"], [{ connectionId: "c2", provider: "box", status: "revoked" }])).state === "available");
+    expect("dropbox: a lapsed consent needs attention",
+      state("dropbox", status(["dropbox"], [{ connectionId: "c3", provider: "dropbox", status: "reauth_required" }])).state === "attention");
+    expect("the four storage tiles are native and open the storage card",
+      ["gdrive", "onedrive", "dropbox", "box"].every((id) => provider(id).kind === "native" && provider(id).manage === id));
   }
 
   {
