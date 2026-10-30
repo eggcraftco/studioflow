@@ -127,7 +127,9 @@ const unkeyed = fs.readdirSync(path.join(root, "app"), { withFileTypes: true })
   .filter((d) => d.isDirectory() && fs.existsSync(path.join(root, "app", d.name, "page.tsx")))
   .map((d) => `/${d.name}`)
   .filter((route) => !(route in access.PAGE_ACCESS_BY_PATH) && read(`app${route}/page.tsx`).includes("loadWorkspaceContext("));
-const KNOWN_UNKEYED = ["/home", "/plan", "/sales", "/admin", "/review-demo", "/connect", "/invite", "/custom-order-management", "/changelog", "/integrations", "/square", "/quickbooks", "/xero", "/etsy", "/ebay", "/pandle", "/chatgpt", "/signup", "/login", "/account-deletion"];
+// /calendar (30 Oct): every member's own calendar; each record is gated by its own sharing (accessUids/visibility, CAL-1/2),
+// orders only through the orders key (CAL-3), the person's Google/Outlook rows only to that person (CAL-5) — no page key by design.
+const KNOWN_UNKEYED = ["/home", "/calendar", "/plan", "/sales", "/admin", "/review-demo", "/connect", "/invite", "/custom-order-management", "/changelog", "/integrations", "/square", "/quickbooks", "/xero", "/etsy", "/ebay", "/pandle", "/chatgpt", "/signup", "/login", "/account-deletion"];
 check(`workspace pages without a key are only the known ones (${unkeyed.filter((r) => !KNOWN_UNKEYED.includes(r)).join(", ") || "none new"})`, unkeyed.every((r) => KNOWN_UNKEYED.includes(r)));
 
 // 6. Export entry points behind exportData.
