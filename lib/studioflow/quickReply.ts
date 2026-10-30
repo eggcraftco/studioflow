@@ -14,6 +14,8 @@ export type QuickReplySaveInput = {
   quickReplyLength?: string;
   aiKnowledgeBase?: string;
   openAIKey?: string;
+  /** Only this removes a saved key; an empty openAIKey alone is ignored by the server guard. */
+  clearOpenAIKey?: boolean;
   products?: QuickReplyTemplateItem[];
   rules?: QuickReplyTemplateItem[];
 };

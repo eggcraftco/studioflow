@@ -3615,7 +3615,11 @@ function QuickReplySettingsSection({
       if (canEditCore) {
         const ownerResult = await saveQuickReplySettings(workspace, {
           aiKnowledgeBase: mainKnowledgeBase,
-          ...(apiKeyInput.trim() || clearOpenAIKey ? { openAIKey: clearOpenAIKey ? "" : apiKeyInput.trim() } : {})
+          // Clearing says so in words (clearOpenAIKey). The server used to read any
+          // empty openAIKey as "delete": the Mac and iPhone apps sent one with every
+          // owner settings save and deleted the key both NivaDesk assistants run on
+          // (17 Sep 2026). With the server guard, only this flag removes a key.
+          ...(apiKeyInput.trim() || clearOpenAIKey ? { openAIKey: clearOpenAIKey ? "" : apiKeyInput.trim(), ...(clearOpenAIKey ? { clearOpenAIKey: true } : {}) } : {})
         });
         if (ownerResult.settings) onSaved(ownerResult.settings);
       }
