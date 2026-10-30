@@ -48,7 +48,9 @@ for name in NEXT_PUBLIC_FIREBASE_API_KEY NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN NEXT_P
   NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID NEXT_PUBLIC_FIREBASE_APP_ID \
   NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID NEXT_PUBLIC_FIREBASE_VAPID_KEY NEXT_PUBLIC_STAGING_NO_INDEX; do
   value=$(grep -E "^${name}=" "$ENV_FILE" | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//')
-  [ -n "$value" ] || [ "$name" = "NEXT_PUBLIC_STAGING_NO_INDEX" ] || { echo "missing $name in $ENV_FILE"; exit 1; }
+  # MEASUREMENT_ID is set on Hostinger but read nowhere in the code; STAGING_NO_INDEX is "false" in production.
+  [ -n "$value" ] || [ "$name" = "NEXT_PUBLIC_STAGING_NO_INDEX" ] || [ "$name" = "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID" ] \
+    || { echo "missing $name in $ENV_FILE"; exit 1; }
   subs="$subs,_${name}=${value}"
 done
 
@@ -68,7 +70,7 @@ gcloud run deploy "$SERVICE" --project="$PROJECT" --region="$REGION" --image="$I
   --min-instances=1 --max-instances=10 --cpu=1 --memory=1Gi --concurrency=80 --timeout=60 \
   --execution-environment=gen2 --port=8080 \
   --set-env-vars="NIVADESK_TRUSTED_PROXY_HOPS=$TRUSTED_HOPS" \
-  --set-secrets="NIVADESK_EBAY_CALLBACK_KEY=EBAY_CALLBACK_KEY:latest"
+  --set-secrets="NIVADESK_EBAY_CALLBACK_KEY=EBAY_CALLBACK_KEY:1"
 
 echo "══ readback"
 gcloud run services describe "$SERVICE" --region="$REGION" --project="$PROJECT" \
