@@ -124,7 +124,12 @@ const integrations: Integration[] = [
   // real seller account; open to every workspace once "ebay:*" is true in
   // appConfig/commerce.connectors.workspaces (the owner's switch, 29 October 2026 package).
   { name: "eBay", logo: "/integration-logos/ebay.svg", website: "https://www.ebay.com/", category: "Commerce", summary: { key: "integrations.summary.ebay" }, detail: { key: "integrations.detail.ebay" }, state: "live", note: "integrations.note.ebay" },
-  { name: "Amazon", logo: "/integration-logos/amazon.png", website: "https://www.amazon.com/", category: "Commerce", summary: "Marketplace order visibility, with a careful approach to customer data.", detail: "The Amazon connection is complete on our side, with customer data kept in a separate, hardened environment. Amazon approved our developer profile on 17 September 2026; the app itself is still in Amazon's review, so a seller cannot authorise it yet. General connection and listing management are not offered.", state: "limited", note: "integrations.note.amazon" },
+  // Amazon, 30 October 2026: no logo file. Amazon's Website Guidelines for solution providers
+  // and its Trademark Usage Guidelines allow its marks only with Amazon's written approval, and
+  // a logo on this page was a listed reason to refuse the Appstore listing; the tile keeps an
+  // initial, like Meta's, DHL's and Stripe's. The detail states facts only — nothing that reads
+  // as Amazon's endorsement of NivaDesk.
+  { name: "Amazon", mark: "A", website: "https://www.amazon.com/", category: "Commerce", summary: "Marketplace order visibility, with a careful approach to customer data.", detail: "The Amazon connection is complete on our side, with Amazon data kept in a separate, hardened environment. The app is still in Amazon's review, so a seller cannot authorise it yet. It reads orders only: NivaDesk makes no listing, price or stock changes on Amazon.", state: "limited", note: "integrations.note.amazon" },
   { name: "DHL Express", mark: "D", website: "https://www.dhl.com/", category: "Shipping", summary: { key: "integrations.summary.dhl" }, detail: { key: "integrations.detail.dhl" }, state: "live", note: "integrations.note.dhl" },
   // Stripe (card payment links), STRIPE-LINKS 29–30 October 2026: payment links paid into each
   // business's own Stripe account (Connect, direct charges), live Stripe mode, open to every
@@ -138,7 +143,6 @@ const logoVariants: Record<string, string> = {
   PayPal: styles.paypalBrand,
   ChatGPT: styles.chatgptBrand,
   WhatsApp: styles.whatsAppBrand,
-  Amazon: styles.amazonBrand,
 };
 
 function IntegrationsDirectoryContent() {
@@ -165,7 +169,7 @@ function IntegrationsDirectoryContent() {
           <span className={`${styles.pathDot} ${styles.dotOne}`} aria-hidden="true" /><span className={`${styles.pathDot} ${styles.dotTwo}`} aria-hidden="true" /><span className={`${styles.pathDot} ${styles.dotThree}`} aria-hidden="true" />
           <div className={`${styles.serviceNode} ${styles.nodeShopify}`}><img src="/integration-logos/shopify.svg" alt="Shopify" width={58} height={32} /></div>
           <div className={`${styles.serviceNode} ${styles.nodeEtsy}`}><img src="/integration-logos/etsy.svg" alt="Etsy" width={54} height={32} /></div>
-          <div className={`${styles.serviceNode} ${styles.nodeAmazon}`}><img src="/integration-logos/amazon.png" alt="Amazon" width={64} height={32} /></div>
+          <div className={`${styles.serviceNode} ${styles.nodeSquare}`}><img src="/integration-logos/square.svg" alt="Square" width={56} height={32} /></div>
           <div className={`${styles.serviceNode} ${styles.nodeQuickBooks}`}><img src="/integration-logos/quickbooks.png" alt="QuickBooks" width={42} height={42} /></div>
           <div className={`${styles.serviceNode} ${styles.nodePayPal}`}><img src="/integration-logos/paypal.png" alt="PayPal" width={44} height={42} /></div>
           <div className={`${styles.serviceNode} ${styles.nodeChatGpt}`}><img src="/integration-logos/chatgpt.svg" alt="ChatGPT" width={46} height={46} /></div>

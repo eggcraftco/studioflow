@@ -13,7 +13,7 @@
 .paypalBrand{width:70px}.paypalBrand img{max-width:66px;width:66px;height:62px;max-height:62px}
 .chatgptBrand{width:70px}.chatgptBrand img{max-width:62px;width:62px;height:62px;max-height:62px}
 .whatsAppBrand{width:64px}.whatsAppBrand img{max-width:58px;width:58px;height:58px;max-height:58px}
-.amazonBrand{width:136px;overflow:hidden;justify-content:center}.amazonBrand img{max-width:136px;width:136px;height:56px;max-height:56px;transform:scale(1.75);transform-origin:center}
+
 .brand:focus-visible{outline:2px solid #2f6f6d;outline-offset:5px;border-radius:4px}
 /* A brand we have no file for keeps an initial on a quiet tile (Instagram Direct and DHL Express,
    28 September 2026): the mark is theirs and is not redrawn, as in the app's own integration tiles. */
@@ -42,7 +42,7 @@
 .visual{background:radial-gradient(ellipse at 50% 50%,#fffefa 0,#edf3e8 55%,#e4eddf 100%)}.visualLabel{top:25px;z-index:4}.network{width:440px;height:330px;margin-top:30px}.orbitLine{inset:22px 7px;border:1px dashed #a3ba96}.orbitLineInner{inset:74px 60px;border:1px solid #d2dfca}.orbitLine:before,.orbitLine:after{display:none}.serviceNode{position:absolute;z-index:3;width:82px;height:82px;border:1px solid #dfe8db;border-radius:23px;background:#fffefa;box-shadow:0 13px 28px #34533b18;display:grid;place-items:center}.serviceNode img{display:block;max-width:56px;max-height:46px;width:auto;height:auto;object-fit:contain}.nodeShopify{left:67px;top:0}.nodeEtsy{right:62px;top:5px}.nodeSquare{left:0;top:132px}.nodeQuickBooks{right:0;top:133px}.nodePayPal{left:87px;bottom:0}.nodeTwilio{right:91px;bottom:-1px}.hub{left:112px;top:91px;width:216px;height:142px;border-radius:26px;background:linear-gradient(135deg,#3b7859,#214d3e);box-shadow:0 22px 46px #315e4b38}.hub img{width:176px;filter:brightness(0) invert(1)}.hub span{font-family:Georgia,serif;font-size:15px;color:#e3ecdd;margin-top:13px}.pathDot{position:absolute;z-index:2;width:12px;height:12px;border-radius:50%;background:#83a176;box-shadow:0 0 0 5px #edf3e8}.dotOne{left:115px;top:64px}.dotTwo{right:89px;top:145px}.dotThree{left:198px;bottom:18px}.ghostNode{position:absolute;z-index:1;width:63px;height:63px;border-radius:18px;background:#fffefa99;display:grid;place-items:center;color:#6d8e71;font-size:17px;letter-spacing:3px;filter:blur(1.5px);opacity:.62}.ghostNode img{max-width:35px;max-height:35px;width:auto;height:auto}.ghostLeft{left:-66px;top:118px}.ghostTop{left:12px;top:-20px}.ghostRight{right:-63px;top:73px}.ghostBottom{right:-47px;bottom:23px}.visualNote{bottom:20px}.visualIntro{display:none}@media(max-width:700px){.visual{height:355px}.network{transform:scale(.77);margin-top:3px}.visualNote{bottom:13px;font-size:9px}}
 .visual{overflow:hidden}
 .ghostNode{filter:blur(1.8px);opacity:.68}.ghostLeft{left:5px;top:118px}.ghostTop{left:15px;top:10px}.ghostUpperRight{right:12px;top:22px}.ghostRight{right:5px;top:84px}.ghostLowerLeft{left:27px;bottom:8px}.ghostBottom{right:18px;bottom:9px}
-.nodeAmazon{left:0;top:132px}.nodeAmazon img{max-width:66px}.nodeChatGpt{right:91px;bottom:-1px}.nodeChatGpt img{width:46px;height:46px}
+.nodeChatGpt{right:91px;bottom:-1px}.nodeChatGpt img{width:46px;height:46px}
 .ghostTopCenter{left:188px;top:-8px}.hub img{filter:none}
 
 /* Availability, measured on 28 September 2026 (docs/deploys/site-integrations-2026-09-28).
