@@ -5920,7 +5920,9 @@ function IntegrationsSection({
   const matches = (row: (typeof resolved)[number]) => {
     if (needle && !row.provider.name.toLowerCase().includes(needle)
       && !(row.provider.keywords ?? []).some((word) => word.includes(needle))) return false;
-    if (filter === "connected") return row.live.state === "connected" || row.live.state === "attention";
+    // "info" (the Cloud storage tile for a member) is storage that is working, so it
+    // sits with the connected tiles — but it is not counted as a connection.
+    if (filter === "connected") return row.live.state === "connected" || row.live.state === "attention" || row.live.state === "info";
     if (filter === "available") return row.live.state === "available" || row.live.state === "webhook" || row.live.state === "checking" || row.live.state === "unverified";
     if (filter === "planned") return row.live.state === "planned";
     return true;
@@ -5936,7 +5938,7 @@ function IntegrationsSection({
   // ones that do not exist yet as a compact row.
   const inCategory = (row: (typeof resolved)[number]) => !category || shopFirst || row.provider.category === category;
   const groups = [
-    { id: "connected", title: "Connected", rows: shown.filter(row => inCategory(row) && (row.live.state === "connected" || row.live.state === "attention")) },
+    { id: "connected", title: "Connected", rows: shown.filter(row => inCategory(row) && (row.live.state === "connected" || row.live.state === "attention" || row.live.state === "info")) },
     // A card still being checked, or whose check failed, sits with the ones it
     // may turn out to be — without the Set up button until the server has said so.
     { id: "available", title: "Ready to connect", rows: shown.filter(row => inCategory(row) && (row.live.state === "available" || row.live.state === "webhook" || row.live.state === "checking" || row.live.state === "unverified")) }
@@ -6126,7 +6128,7 @@ function IntegrationCard({
           ) : null}
           {provider.manage && !integrationStateOffersNoAction(live.state) ? (
             <button type="button" className="button secondary" onClick={onManage}>
-              {t(live.state === "connected" || live.state === "attention" ? "Manage" : "Set up")}
+              {t(live.state === "connected" || live.state === "attention" ? "Manage" : live.state === "info" ? "View" : "Set up")}
             </button>
           ) : provider.id === "openbanking" ? (
             <Link className="button secondary" href="/bank">

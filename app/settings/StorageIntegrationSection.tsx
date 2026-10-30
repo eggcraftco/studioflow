@@ -25,7 +25,7 @@ import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
 import {
   MANAGED_STORAGE, STORAGE_PROVIDER_IDS,
-  beginStorageConnect, disconnectStorage, getStorageStatus, isStorageProviderId, liveStorageConnection,
+  beginStorageConnect, disconnectStorage, getStorageStatus, isStorageProviderId, liveStorageConnection, providerRevokesOnDisconnect,
   storageConnectionNeedingReconnect, storageProviderLabel, storageReasonText,
   type StorageConnectionRow, type StorageProviderId, type StorageStatusResult
 } from "@/lib/studioflow/storage";
@@ -82,6 +82,11 @@ function readReturn(): { outcome: string; provider: string } {
 export function StorageIntegrationSection({ workspace, language = "English", focus = "" }: Props) {
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const companyId = workspace.id.trim();
+  // v2: the owner's card asks the server to check the live provider when it
+  // opens (one light call), so a consent withdrawn at Google reads "Reconnect"
+  // now rather than at the next failed upload. The server honours it for the
+  // owner only; members get the plain read.
+  const checkOnOpen = workspace.role === "owner";
 
   const [loading, setLoading] = useState(true);
   const [answer, setAnswer] = useState<StorageStatusResult | null>(null);
@@ -92,13 +97,13 @@ export function StorageIntegrationSection({ workspace, language = "English", foc
 
   const asked = useRef({ companyId: "", seq: 0 });
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options: { check?: boolean } = {}) => {
     if (!companyId) return;
     const seq = asked.current.seq + 1;
     asked.current = { companyId, seq };
     setLoading(true);
     try {
-      const result = await getStorageStatus(companyId);
+      const result = await getStorageStatus(companyId, { check: options.check === true });
       if (asked.current.companyId !== companyId || asked.current.seq !== seq) return;
       setAnswer(result);
       setErrorText("");
@@ -115,8 +120,8 @@ export function StorageIntegrationSection({ workspace, language = "English", foc
     setAnswer(null);
     setNotice("");
     setConfirming("");
-    void load();
-  }, [load]);
+    void load({ check: checkOnOpen });
+  }, [load, checkOnOpen]);
 
   // The consent return, read ONCE in a useState initialiser so no later
   // re-render (the language resolving, the workspace loading) can take the
@@ -153,14 +158,22 @@ export function StorageIntegrationSection({ workspace, language = "English", foc
   });
 
   const disconnect = (row: StorageConnectionRow) => run(`disconnect:${row.provider}`, async () => {
-    await disconnectStorage(companyId, row.connectionId);
+    const done = await disconnectStorage(companyId, row.connectionId);
     setConfirming("");
-    setNotice(t("Disconnected. NivaDesk deleted the access it stored. To remove NivaDesk from your {provider} account too, do it in that account's settings.")
+    // Says what actually happened at the provider: Google, Dropbox and Box
+    // withdraw the grant when asked (v2); Microsoft cannot be asked, so the
+    // person is told where to remove it themselves.
+    setNotice(t(done.providerRevoked
+      ? "Disconnected. NivaDesk deleted the access it stored and {provider} withdrew it."
+      : "Disconnected. NivaDesk deleted the access it stored. To remove NivaDesk from your {provider} account too, do it in that account's settings.")
       .replace("{provider}", storageProviderLabel(row.provider)));
     await load();
   });
 
   const primary = answer?.primary.provider || MANAGED_STORAGE;
+  // What the open-time check found, when it could not reach the provider at all
+  // (a lapsed consent needs no sentence here: its row turns to Reconnect).
+  const unreachable = answer?.checked === true && answer.checkError === "unreachable";
   const offers = new Map((answer?.providers || []).map((offer) => [offer.id, offer]));
   const returnLabel = storageProviderLabel(returned.provider || "gdrive");
 
@@ -182,6 +195,11 @@ export function StorageIntegrationSection({ workspace, language = "English", foc
           <p className="muted-copy" data-storage-primary={primary}>
             {t("New files are saved to: {provider}").replace("{provider}", storageProviderLabel(primary))}
           </p>
+          {unreachable ? (
+            <p className="layout-error" role="status" data-storage-check="unreachable">
+              {t("{provider} could not be reached just now. Your files stay where they are; try again in a moment.").replace("{provider}", storageProviderLabel(primary))}
+            </p>
+          ) : null}
           <ul style={{ listStyle: "none", margin: "4px 0 12px", padding: 0 }}>
             <li data-storage-row="managed" style={ROW_STYLE}>
               <span>
@@ -219,7 +237,9 @@ export function StorageIntegrationSection({ workspace, language = "English", foc
                     <span className={`studio-pill${live ? " success" : ""}`} data-storage-state={row ? row.status : available ? "available" : "unavailable"}>
                       {row ? (live && primary === provider ? t("In use") : statusLabel(row.status, t)) : available ? t("Not connected") : t("Not available yet")}
                     </span>
-                    {live && answer.canDisconnect && confirming !== provider ? (
+                    {/* A stopped connection can be disconnected too: an owner who
+                        does not want to reconnect gets NivaDesk Cloud back. */}
+                    {row && answer.canDisconnect && confirming !== provider ? (
                       <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={() => setConfirming(provider)}>
                         {t("Disconnect")}
                       </button>
@@ -230,16 +250,18 @@ export function StorageIntegrationSection({ workspace, language = "English", foc
                       </button>
                     ) : null}
                   </span>
-                  {live && confirming === provider ? (
+                  {row && confirming === provider ? (
                     <div style={{ flexBasis: "100%", display: "grid", gap: 8 }} data-storage-confirm={provider}>
                       <p className="muted-copy" style={{ margin: 0 }}>
                         {t("New files will be saved to NivaDesk Cloud. Files already in {provider} stay there.").replace("{provider}", label)}
                       </p>
                       <p className="muted-copy" style={{ margin: 0 }}>
-                        {t("NivaDesk deletes the access it stored. It stays listed in your {provider} account's connected apps until you remove it there.").replace("{provider}", label)}
+                        {t(providerRevokesOnDisconnect(provider)
+                          ? "NivaDesk deletes the access it stored and asks {provider} to withdraw it too."
+                          : "NivaDesk deletes the access it stored. It stays listed in your {provider} account's connected apps until you remove it there.").replace("{provider}", label)}
                       </p>
                       <div className="settings-action-row">
-                        <button type="button" className="button" disabled={working} onClick={() => disconnect(live)}>
+                        <button type="button" className="button" disabled={working} onClick={() => disconnect(row)}>
                           {working ? t("Disconnecting…") : t("Disconnect")}
                         </button>
                         <button type="button" className="button secondary" onClick={() => setConfirming("")}>

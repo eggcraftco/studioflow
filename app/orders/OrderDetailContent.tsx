@@ -2251,13 +2251,18 @@ export function OrderDetailContent({
     if (route !== MANAGED_STORAGE) {
       hooks.onStage?.("uploading");
       hooks.onProgress?.(0, file.size);
-      await uploadOrderFile({
+      const attached = await uploadOrderFile({
         workspace,
         orderId: order.id,
         file,
         signal: hooks.signal,
         onProgress: ({ sentBytes, totalBytes }) => hooks.onProgress?.(sentBytes, totalBytes)
       });
+      // The same file was already on this order at the provider (one request
+      // or, v2, the chunked begin): nothing was sent twice, and it is said so.
+      if (attached.alreadyAttached) {
+        setFileActionStatus(t("{name} was already attached.").replace("{name}", attached.fileName || file.name));
+      }
       setServiceFilesToken(value => value + 1);
       await onReloadOrder();
       return;

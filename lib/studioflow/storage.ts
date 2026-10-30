@@ -77,6 +77,10 @@ export type StorageStatusResult = {
   canDisconnect: boolean;
   /** Why not, when a capability is false: "needs_owner", "workflow_only", … */
   reason: string;
+  /** v2: true when this answer was checked against the provider just now (owner + `check: true` only). */
+  checked: boolean;
+  /** v2: what that check found — "" (fine), "reauth_required" or "unreachable". */
+  checkError: string;
 };
 
 export type StorageConsent = {
@@ -147,12 +151,23 @@ export function normalizeStorageStatus(raw: unknown): StorageStatusResult {
     canConnect: answer.canConnect === true,
     canDisconnect: answer.canDisconnect === true,
     reason: text(answer.reason),
+    checked: answer.checked === true,
+    checkError: text(answer.checkError),
   };
 }
 
-export async function getStorageStatus(companyId: string): Promise<StorageStatusResult> {
+/**
+ * The workspace's storage answer.
+ *
+ * `check: true` (v2) asks the server to make ONE light call to the live
+ * provider first, so a consent the person withdrew at Google shows up as
+ * "Reconnect" in this very answer instead of at the next failed upload. The
+ * server honours it for the owner only; the Cloud storage card sends it when it
+ * opens, and the order screens never do (they keep the plain, cheap read).
+ */
+export async function getStorageStatus(companyId: string, options: { check?: boolean } = {}): Promise<StorageStatusResult> {
   const callable = httpsCallable<Record<string, unknown>, Record<string, unknown>>(functions, "storageStatus");
-  const answer = (await callable({ companyId })).data || {};
+  const answer = (await callable({ companyId, ...(options.check ? { check: true } : {}) })).data || {};
   return normalizeStorageStatus(answer);
 }
 
@@ -274,11 +289,22 @@ export async function finishStorageConnect(
   };
 }
 
-export async function disconnectStorage(companyId: string, connectionId: string): Promise<StorageConnectionRow> {
+/**
+ * Disconnect: the server destroys the grant it stored and (v2) asks the
+ * provider to withdraw it too — Google, Dropbox and Box can; Microsoft has no
+ * per-grant revoke, so for OneDrive `providerRevoked` is false and the person
+ * removes the app in their account.
+ */
+export async function disconnectStorage(companyId: string, connectionId: string): Promise<{ connection: StorageConnectionRow; providerRevoked: boolean }> {
   const callable = httpsCallable<Record<string, unknown>, Record<string, unknown>>(functions, "storageDisconnect");
   const answer = record((await callable({ companyId, connectionId })).data);
   forgetStorageStatus(companyId);
-  return normalizeStorageRow(answer.connection);
+  return { connection: normalizeStorageRow(answer.connection), providerRevoked: answer.providerRevoked === true };
+}
+
+/** Whether a provider can withdraw a grant from our side (v2): all but Microsoft. */
+export function providerRevokesOnDisconnect(provider: string): boolean {
+  return provider === "gdrive" || provider === "dropbox" || provider === "box";
 }
 
 const isLive = (row: StorageConnectionRow) => row.status === "connected" || row.status === "limited";

@@ -49,7 +49,7 @@ const clientFilesPath = path.join(webRoot, "lib", "studioflow", "clientFiles.ts"
 // quietly skipped half its checks has happened in this repo before — and the
 // first version of THIS file exited 1 with four of its checks run, because the
 // module failed to load. The count is compared, not just printed.
-const EXPECTED_CHECKS = 53;
+const EXPECTED_CHECKS = 57;
 
 let failures = 0;
 let checks = 0;
@@ -513,6 +513,20 @@ export function throwIfCancelled(signal?: AbortSignal) { if (signal?.aborted) th
     `${cancelled}; ${parts.length} chunk(s); ${transport.CALLS.map(entry => entry.name).join(" > ")}`
   );
 
+  // v2: begin says the same file is already attached -> no chunk, no complete.
+  transport.CALLS.length = 0;
+  transport.REPLIES.beginOrderFileUpload = () => ({
+    ok: true, alreadyAttached: true, ref: "box:f-77", fileId: "f-77", fileName: "big.psd",
+    sizeBytes: BODY.length, provider: "box", sessionId: ""
+  });
+  const again = await service.attachOrderFileResumable({ workspace, orderId: "o-1", file: chunkedFile() });
+  check(
+    "v2: an 'already attached' begin sends no chunk and no completion, and says so",
+    again.alreadyAttached === true && again.ref === "box:f-77"
+      && transport.CALLS.map(entry => entry.name).join(",") === "beginOrderFileUpload",
+    transport.CALLS.map(entry => entry.name).join(" > ")
+  );
+
   // ---- storage.ts: the ROUTING RULE, compiled and called --------------------
   const storageSrc = readFileSync(path.join(webRoot, "lib", "studioflow", "storage.ts"), "utf8")
     .replace(/from "firebase\/functions"/g, 'from "./stub-functions"')
@@ -565,6 +579,34 @@ export function throwIfCancelled(signal?: AbortSignal) { if (signal?.aborted) th
     storage.liveStorageConnection([{ provider: "box", status: "revoked" }], "box") === null
       && storage.storageConnectionNeedingReconnect([{ provider: "box", status: "revoked" }], "box") === null
       && storage.storageConnectionNeedingReconnect([{ provider: "box", status: "reauth_required" }], "box")?.status === "reauth_required"
+  );
+
+  const checkedAnswer = storage.normalizeStorageStatus({ checked: true, checkError: "reauth_required",
+    primary: { provider: "dropbox" }, connections: [{ connectionId: "c5", provider: "dropbox", status: "reauth_required" }] });
+  check(
+    "v2: a checked answer carries checked/checkError, and its reauth row is a reconnect, not live",
+    checkedAnswer.checked === true && checkedAnswer.checkError === "reauth_required"
+      && storage.liveStorageConnection(checkedAnswer.connections, "dropbox") === null
+      && storage.storageConnectionNeedingReconnect(checkedAnswer.connections, "dropbox")?.connectionId === "c5"
+  );
+  storageTransport.REPLIES.storageStatus = {};
+  await storage.getStorageStatus("ws-1", { check: true });
+  const statusCall = storageTransport.CALLS[storageTransport.CALLS.length - 1];
+  await storage.getStorageStatus("ws-1");
+  const plainCall = storageTransport.CALLS[storageTransport.CALLS.length - 1];
+  check(
+    "v2: the card's open sends check:true; the plain read (order screens) does not",
+    statusCall?.name === "storageStatus" && statusCall.payload.check === true && !("check" in plainCall.payload),
+    JSON.stringify([statusCall?.payload, plainCall?.payload])
+  );
+
+  storageTransport.REPLIES.storageDisconnect = { connection: { connectionId: "c7", provider: "box", status: "revoked" }, providerRevoked: true };
+  const gone = await storage.disconnectStorage("ws-1", "c7");
+  check(
+    "v2: disconnect reports whether the provider withdrew the grant; only Microsoft cannot",
+    gone.providerRevoked === true && gone.connection.status === "revoked"
+      && ["gdrive", "dropbox", "box"].every((id) => storage.providerRevokesOnDisconnect(id))
+      && storage.providerRevokesOnDisconnect("onedrive") === false
   );
 
   // The consent start leaves the web-flow mark for its own callback page.

@@ -216,7 +216,10 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
  */
 // "checking" is the server not having answered yet and "unverified" a read that
 // did not come back: neither is "Available", and neither offers Set up.
-export type IntegrationState = "connected" | "attention" | "available" | "webhook" | "planned" | "checking" | "unverified";
+// "info" is neutral: working, nothing to set up and nothing wrong — the Cloud
+// storage tile for a member whose workspace keeps its files in NivaDesk Cloud.
+// It opens its card read-only ("View"), never "Set up".
+export type IntegrationState = "connected" | "attention" | "available" | "webhook" | "planned" | "checking" | "unverified" | "info";
 
 /** States that never offer the Set up / Manage button. */
 export function integrationStateOffersNoAction(state: IntegrationState): boolean {
@@ -487,21 +490,32 @@ function resolveProviderState(
 ): IntegrationLiveState {
   if (provider.kind === "planned") return { state: "planned" };
 
-  // Own cloud storage, one tile. A revoked row is no connection (it is what
-  // disconnecting leaves). A stopped or limited connection needs the owner and
-  // outranks green; a live one is "connected" with the provider new files go to
-  // as its detail (a brand name, never translated). No connection: "available"
-  // when the server can connect at least one provider, else "planned".
+  // Own cloud storage, one tile — the v2 rule every platform shows the same
+  // (own-cloud CONTRACT "v2 additions"), in this order:
+  //   no status (call failed / older server) -> "planned", as before;
+  //   a connection whose status is `connected` -> connected, detail = the
+  //     provider's name (where new files go when the primary is a provider);
+  //   limited -> attention "Some permissions missing"; reauth_required / error
+  //     -> attention "Reconnect required" (a revoked row is no connection);
+  //   no connection: the OWNER (canConnect) with any provider available ->
+  //     "available" (Set up), none available -> "planned";
+  //   a MEMBER (canConnect false) -> neutral "info", detail "NivaDesk Cloud" —
+  //     never "Set up", because a member has nothing to set up.
   if (provider.id === "cloudstorage") {
     const status = signals.storage;
     if (!status) return { state: "planned" };
     const rows = status.connections.filter((row) => row.status && row.status !== "revoked");
+    const live = rows.find((row) => row.status === "connected");
+    if (live) {
+      const where = status.primary.provider !== "managed" && rows.some((row) => row.provider === status.primary.provider && row.status === "connected")
+        ? status.primary.provider
+        : live.provider;
+      return { state: "connected", detail: storageProviderLabel(where) };
+    }
     if (rows.some((row) => row.status === "limited")) return { state: "attention", detail: "Some permissions missing" };
     if (rows.some((row) => row.status === "reauth_required" || row.status === "error")) return { state: "attention", detail: "Reconnect required" };
-    if (rows.some((row) => row.status === "connected")) {
-      return { state: "connected", detail: storageProviderLabel(status.primary.provider) };
-    }
-    return status.providers.some((row) => row.available) ? { state: "available" } : { state: "planned" };
+    if (status.canConnect) return status.providers.some((row) => row.available) ? { state: "available" } : { state: "planned" };
+    return { state: "info", detail: storageProviderLabel("managed") };
   }
 
   if (provider.id === "stripe") {
@@ -741,4 +755,5 @@ export const INTEGRATION_STATE_LABELS: Record<IntegrationState, string> = {
   planned: "Coming soon",
   checking: "Checking…",
   unverified: "Could not check",
+  info: "In use",
 };

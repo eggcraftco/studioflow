@@ -319,6 +319,11 @@ export type OrderUploadProgress = {
 };
 
 type BegunUpload = {
+  /** v2: true when this exact file is already attached at the provider (then no session). */
+  alreadyAttached?: boolean;
+  ref?: string;
+  fileId?: string;
+  fileName?: string;
   sessionId: string;
   uploadKey: string;
   offset: number;
@@ -380,6 +385,19 @@ export async function attachOrderFileResumable({
   };
 
   const begun = (await callable<typeof identity, BegunUpload>("beginOrderFileUpload")(identity)).data;
+  // v2: the same file (same order, name, size and stamp) is already attached
+  // at the provider and still there. Nothing to send and nothing to complete —
+  // the answer is the record, exactly what the one-request path reports.
+  if (begun.alreadyAttached === true) {
+    onProgress?.({ sentBytes: file.size, totalBytes: file.size, resumed: false });
+    return {
+      ref: String(begun.ref || ""),
+      fileId: String(begun.fileId || ""),
+      fileName: String(begun.fileName || file.name),
+      sizeBytes: Number(begun.sizeBytes || file.size),
+      alreadyAttached: true
+    };
+  }
   let offset = Number(begun.offset) || 0;
   onProgress?.({ sentBytes: offset, totalBytes: file.size, resumed: begun.adopted === true });
 

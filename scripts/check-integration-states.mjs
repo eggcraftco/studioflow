@@ -184,7 +184,7 @@ try {
     // Every card must resolve to a real state for empty signals — a provider
     // added without a rule would otherwise fall through to whatever the last
     // branch happens to return.
-    const LEGAL = new Set(["connected", "attention", "available", "webhook", "planned", "checking", "unverified"]);
+    const LEGAL = new Set(["connected", "attention", "available", "webhook", "planned", "checking", "unverified", "info"]);
     const bad = INTEGRATION_PROVIDERS.filter((row) => !LEGAL.has(resolveIntegrationState(row, EMPTY_INTEGRATION_SIGNALS).state));
     expect(`every one of the ${INTEGRATION_PROVIDERS.length} cards resolves to a real state`, bad.length === 0);
     if (bad.length) console.log("   offenders:", bad.map((row) => row.id).join(", "));
@@ -203,22 +203,37 @@ try {
     expect("etsy: no shop is 'available'", state("etsy", { etsyShops: [] }).state === "available");
   }
 
-  // --- Own cloud storage: ONE tile (as on iPhone/Mac and Android), the server's word (30 Oct 2026)
+  // --- Own cloud storage: ONE tile, the v2 rule every platform shows (CONTRACT "v2 additions", 30 Oct 2026)
   {
     const offers = (available) => ["gdrive", "onedrive", "dropbox", "box"].map((id) => ({ id, label: id, available: available.includes(id) }));
-    const status = (available, connections = [], primary = "managed") =>
-      ({ storage: { provider: "gdrive", available: false, providers: offers(available), primary: { provider: primary, connectionId: "", label: "" }, connections, canConnect: true, canDisconnect: true, reason: "" } });
+    const status = (available, connections = [], primary = "managed", canConnect = true) =>
+      ({ storage: { provider: "gdrive", available: false, providers: offers(available), primary: { provider: primary, connectionId: "", label: "" }, connections, canConnect, canDisconnect: canConnect, reason: canConnect ? "" : "needs_owner", checked: false, checkError: "" } });
     const cs = (signals) => state("cloudstorage", signals);
-    expect("cloudstorage: a server that could not be read (or has no callable) offers nothing", cs({ storage: null }).state === "planned");
-    expect("cloudstorage: no provider configured is 'planned', with no button",
+    expect("cloudstorage: no status (failed read / older server) is 'planned', no button",
+      cs({ storage: null }).state === "planned" && integrationStateOffersNoAction(cs({ storage: null }).state));
+    expect("cloudstorage: owner, nothing connectable -> 'planned', no button",
       cs(status([])).state === "planned" && integrationStateOffersNoAction(cs(status([])).state));
-    expect("cloudstorage: one configured provider is enough for 'available'", cs(status(["box"])).state === "available");
+    expect("cloudstorage: owner, one provider connectable -> 'available' (Set up)", cs(status(["box"])).state === "available");
+    const member = cs(status(["gdrive", "box"], [], "managed", false));
+    expect("cloudstorage: MEMBER with no connection -> neutral 'info', detail NivaDesk Cloud, never 'available'",
+      member.state === "info" && member.detail === "NivaDesk Cloud" && !integrationStateOffersNoAction(member.state));
+    expect("cloudstorage: member with nothing connectable is still neutral, not 'Coming soon'",
+      cs(status([], [], "managed", false)).state === "info");
     const live = [{ connectionId: "c1", provider: "gdrive", status: "connected" }];
-    expect("cloudstorage: a live connection is connected and names where new files go",
+    expect("cloudstorage: a connected provider -> connected, detail = the provider name",
       cs(status(["gdrive"], live, "gdrive")).state === "connected" && cs(status(["gdrive"], live, "gdrive")).detail === "Google Drive");
-    expect("cloudstorage: a revoked row is no connection", cs(status(["box"], [{ connectionId: "c2", provider: "box", status: "revoked" }])).state === "available");
-    expect("cloudstorage: a lapsed consent needs attention, even beside a live one",
-      cs(status(["dropbox"], [...live, { connectionId: "c3", provider: "dropbox", status: "reauth_required" }], "gdrive")).state === "attention");
+    expect("cloudstorage: a member sees the connection too (connected, provider name)",
+      cs(status(["gdrive"], live, "gdrive", false)).detail === "Google Drive");
+    expect("cloudstorage: the detail names the PRIMARY when two are connected",
+      cs(status(["gdrive", "box"], [...live, { connectionId: "c9", provider: "box", status: "connected" }], "box")).detail === "Box");
+    expect("cloudstorage: limited -> attention 'Some permissions missing'",
+      cs(status(["onedrive"], [{ connectionId: "c4", provider: "onedrive", status: "limited" }], "onedrive")).detail === "Some permissions missing");
+    expect("cloudstorage: reauth_required -> attention 'Reconnect required'",
+      cs(status(["dropbox"], [{ connectionId: "c3", provider: "dropbox", status: "reauth_required" }], "dropbox")).state === "attention"
+        && cs(status(["dropbox"], [{ connectionId: "c3", provider: "dropbox", status: "reauth_required" }], "dropbox")).detail === "Reconnect required");
+    expect("cloudstorage: a revoked row is no connection (owner -> available, member -> info)",
+      cs(status(["box"], [{ connectionId: "c2", provider: "box", status: "revoked" }])).state === "available"
+        && cs(status(["box"], [{ connectionId: "c2", provider: "box", status: "revoked" }], "managed", false)).state === "info");
     expect("cloudstorage: one native tile opening the storage card, with the four brands as its chips",
       provider("cloudstorage").kind === "native" && provider("cloudstorage").manage === "cloudstorage"
         && provider("cloudstorage").capabilities.join(",") === "Google Drive,OneDrive,Dropbox,Box"
