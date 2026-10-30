@@ -21,6 +21,8 @@ import { ETSY_ORDER_VIEW_TRANSLATIONS } from "./etsyOrderViewTranslations";
 import { SECURITY_FIX_TRANSLATIONS } from "./securityFixTranslations";
 import { CALENDAR_TRANSLATIONS } from "./calendarTranslations";
 
+import { SECOND_FACTOR_TRANSLATIONS } from "./secondFactorTranslations";
+
 export const SUPPORTED_STUDIO_LANGUAGES = [
   "English",
   "Türkçe",
@@ -9405,6 +9407,9 @@ mergeIntoTranslations(ETSY_ORDER_VIEW_TRANSLATIONS);
 
 // Security fixes (28 Oct 2026): the sign-out question about undelivered writes, the re-authentication prompt.
 mergeIntoTranslations(SECURITY_FIX_TRANSLATIONS);
+
+// GN-10 two-step verification (22 Oct 2026). Merged last on purpose.
+mergeIntoTranslations(SECOND_FACTOR_TRANSLATIONS);
 
 // Calendar V1 (28 Oct 2026): the /calendar screen and the bell's calendar reminders. Last, and filling only
 // gaps, so no wording elsewhere changes.
