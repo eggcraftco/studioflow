@@ -11,7 +11,7 @@ check(Boolean(cond), "the connect/continue button is offered for disconnected, o
 const at = cond ? cond.index : -1;
 const block = at >= 0 ? section.slice(at, at + 900) : "";
 check(/disabled=\{!isOwner \|\| busy === "connect"\}/.test(block), "only the workspace owner can press it (unchanged)");
-check(/onClick=\{\(\) => void connect\(\)\}/.test(block), "it runs the same connect() that asks the server for an onboarding link");
+check(/onClick=\{\(\) => (?:void connect\(\)|\(status === "disconnected" && countryOptions\.length > 0 \? setPickingCountry\(true\) : void connect\(\)\))\}/.test(block), "it runs the same connect() that asks the server for an onboarding link (a disconnected account picks its country first, SC-8)");
 check(/status === "disconnected" \? t\("Connect Stripe"\) : t\("Continue with Stripe"\)/.test(block), "a restricted or onboarding account reads \"Continue with Stripe\"; only a disconnected one reads \"Connect Stripe\"");
 check(/beginStripeConnectOnboarding/.test(read("lib/studioflow/stripeConnect.ts")), "connect() still calls beginStripeConnectOnboarding (the server reuses the stored account id)");
 const row = lang.match(/^\s*"Continue with Stripe": \{([^\n]*)\}/m);
