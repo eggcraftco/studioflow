@@ -1,0 +1,26 @@
+# Builds the nivadesk.app image (Dockerfile at the repository root) in Cloud Build, europe-west2.
+# The NEXT_PUBLIC_* values are the public Firebase web config: build arguments, never secrets.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=NEXT_PUBLIC_FIREBASE_API_KEY=${_NEXT_PUBLIC_FIREBASE_API_KEY}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_PROJECT_ID=${_NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${_NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_APP_ID=${_NEXT_PUBLIC_FIREBASE_APP_ID}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=${_NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_VAPID_KEY=${_NEXT_PUBLIC_FIREBASE_VAPID_KEY}
+      - --build-arg=NEXT_PUBLIC_STAGING_NO_INDEX=${_NEXT_PUBLIC_STAGING_NO_INDEX}
+      - --build-arg=NV_BUILD_ID=${_NV_BUILD_ID}
+      - --label=org.opencontainers.image.revision=${_GIT_COMMIT}
+      - -t
+      - ${_IMAGE}
+      - .
+images:
+  - ${_IMAGE}
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+timeout: 1800s

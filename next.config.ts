@@ -61,6 +61,9 @@ const NV_FIREBASE_EMULATOR = process.env.NEXT_PUBLIC_FIREBASE_EMULATOR === "1" ?
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Off-Hostinger hosting (Cloud Run behind Google's load balancer, 30 Oct 2026): the container runs
+  // Next's self-contained server. Only that build sets NIVADESK_STANDALONE=1; Hostinger's build is unchanged.
+  ...(process.env.NIVADESK_STANDALONE === "1" ? { output: "standalone" as const } : {}),
   env: { NEXT_PUBLIC_NV_BUILD_ID: NV_BUILD_ID, NEXT_PUBLIC_FIREBASE_EMULATOR: NV_FIREBASE_EMULATOR },
   // "x-powered-by: Next.js" tells an attacker which framework to look up.
   poweredByHeader: false,
