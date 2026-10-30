@@ -19,3 +19,23 @@ export function amazonStartUrl(url: string, fromAppstore: boolean): string {
     return url;
   }
 }
+
+/** The zone's Login URI for an Appstore "Authorize" (AMZ-3). */
+export const AMAZON_APPSTORE_LANDING = "https://amazon.nivadesk.app/oauth/appstore";
+
+/**
+ * Developer Central still names https://nivadesk.app/login as the application's Login URI, and the
+ * registration cannot be edited while Amazon reviews the listing. So /login hands an Appstore arrival
+ * (amazon_callback_uri + amazon_state) to the zone, which does all the checking. Only Amazon's four
+ * parameters travel, to one fixed address; anything else in the query is dropped.
+ */
+export function amazonAppstoreForward(search: string): string | null {
+  const params = new URLSearchParams(search);
+  if (!params.get("amazon_callback_uri") || !params.get("amazon_state")) return null;
+  const out = new URLSearchParams();
+  for (const key of ["amazon_callback_uri", "amazon_state", "selling_partner_id", "version"]) {
+    const value = params.get(key);
+    if (value) out.set(key, value);
+  }
+  return `${AMAZON_APPSTORE_LANDING}?${out.toString()}`;
+}

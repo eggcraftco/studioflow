@@ -44,7 +44,24 @@ if (m) {
   ok("an http URL is never given the flag", m.amazonStartUrl("http://amazon.nivadesk.app/oauth/start?intent=x", true) === "http://amazon.nivadesk.app/oauth/start?intent=x");
   ok("garbage is returned as is", m.amazonStartUrl("not a url", true) === "not a url");
   ok("an existing appstore value is not duplicated", new URL(m.amazonStartUrl(`${start}&appstore=0`, true)).searchParams.getAll("appstore").join() === "1");
+
+  // /login forwarder: Developer Central still names /login as the Login URI.
+  const cb = "https://amazon.com/apps/authorize/confirm/amzn1.sp.solution.0993d5c7-fba1-4fb7-9541-2ceeb8222bfd";
+  const arrival = new URLSearchParams({ amazon_callback_uri: cb, amazon_state: "abc~1", selling_partner_id: "A3EXAMPLE", version: "beta", next: "https://evil.example", other: "x" });
+  const fwd = m.amazonAppstoreForward(`?${arrival}`);
+  const fwdUrl = fwd ? new URL(fwd) : null;
+  ok("forward: goes to the zone's fixed Login URI", fwdUrl && `${fwdUrl.origin}${fwdUrl.pathname}` === "https://amazon.nivadesk.app/oauth/appstore");
+  ok("forward: Amazon's values travel unchanged", fwdUrl && fwdUrl.searchParams.get("amazon_callback_uri") === cb && fwdUrl.searchParams.get("amazon_state") === "abc~1"
+    && fwdUrl.searchParams.get("selling_partner_id") === "A3EXAMPLE" && fwdUrl.searchParams.get("version") === "beta");
+  ok("forward: nothing else travels", fwdUrl && !fwdUrl.searchParams.has("next") && !fwdUrl.searchParams.has("other"));
+  ok("forward: an ordinary /login (or ?next=) is left alone", m.amazonAppstoreForward("") === null && m.amazonAppstoreForward("?next=%2Fsettings") === null);
+  ok("forward: both Amazon values are required", m.amazonAppstoreForward(`?amazon_state=x`) === null && m.amazonAppstoreForward(`?amazon_callback_uri=${encodeURIComponent(cb)}`) === null);
 }
+
+const login = read("app/login/page.tsx");
+ok("login: imports the forwarder", /import \{ amazonAppstoreForward \} from "@\/lib\/studioflow\/amazonAppstore";/.test(login));
+ok("login: forwards with location.replace", /if \(appstoreForward\) window\.location\.replace\(appstoreForward\);/.test(login));
+ok("login: the signed-in redirect waits for the forward", /if \(appstoreForward\) return;\s*\n\s*if \(!loading && user\) router\.replace/.test(login));
 
 // 2. the panel
 const section = read("app/settings/AmazonIntegrationSection.tsx");

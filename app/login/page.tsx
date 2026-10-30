@@ -13,6 +13,7 @@ import { LoadingScreen } from "@/components/LoadingScreen";
 import { studioT, type StudioLanguage } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import { safeNextFromLocation } from "@/lib/security/safeNext";
+import { amazonAppstoreForward } from "@/lib/studioflow/amazonAppstore";
 import {
   PublicSiteLanguageProvider,
   usePublicSiteLanguage
@@ -69,9 +70,18 @@ function LoginPageContent() {
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetSending, setResetSending] = useState(false);
 
+  // AMZ-3: an Amazon Appstore "Authorize" can still arrive here (Developer Central names /login as
+  // the Login URI until the registration can be edited). The zone takes it from here, before any
+  // signed-in redirect could send the seller somewhere else.
+  const [appstoreForward] = useState(() => (typeof window === "undefined" ? null : amazonAppstoreForward(window.location.search)));
   useEffect(() => {
+    if (appstoreForward) window.location.replace(appstoreForward);
+  }, [appstoreForward]);
+
+  useEffect(() => {
+    if (appstoreForward) return;
     if (!loading && user) router.replace(nextDestination(HOME_AFTER_SIGN_IN));
-  }, [loading, router, user]);
+  }, [appstoreForward, loading, router, user]);
 
   async function handleEmailLogin(event: FormEvent) {
     event.preventDefault();
