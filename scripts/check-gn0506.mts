@@ -182,7 +182,7 @@ const facts = { setupFinished: false, hasCustomer: false, hasOrder: false, hasSt
     assert.ok(!settings.includes('{t("Up to date")}'), "the unconditional pill is back");
     assert.ok(settings.includes("<WebAboutVersion t={t} isLocal={isLocal} />"));
     assert.ok(!settings.includes("CHANGELOG[0]"), "About shows an app release's number as the web's version");
-    assert.ok(read("next.config.ts").includes("env: { NEXT_PUBLIC_NV_BUILD_ID: NV_BUILD_ID }"));
+    assert.ok(/env: \{ NEXT_PUBLIC_NV_BUILD_ID: NV_BUILD_ID[,\s}]/.test(read("next.config.ts")), "the build id is no longer handed to the bundle");
     assert.ok(read("app/api/app-build/route.ts").includes('"Cache-Control": "no-store, max-age=0"'));
   });
 
