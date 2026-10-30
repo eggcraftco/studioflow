@@ -15,6 +15,8 @@ import { studioT } from "@/lib/studioflow/language";
 // Microsoft's answers that mean "an administrator of this organisation has to approve the app first" (work/school
 // accounts). Passed on as one plain code, to the web message below and to the apps.
 const ADMIN_CONSENT = /AADSTS(65001|90094|90095|90008)\b/;
+// Microsoft answers a declined consent screen with error=consent_required + AADSTS65004, not access_denied (pilot, 30 Oct).
+const USER_DECLINED = /AADSTS65004\b/;
 const ADMIN_TEXT = "Your organisation has to approve NivaDesk before this Outlook account can be connected. Ask your IT administrator, or connect a personal Outlook account.";
 
 function CalendarConnectReturn() {
@@ -32,7 +34,9 @@ function CalendarConnectReturn() {
   // Read once, then clear the address bar (the code is single-use, but it should not sit in history either).
   if (params.current === null && typeof window !== "undefined") {
     const error = searchParams.get("error") || "";
-    params.current = { code: searchParams.get("code") || "", state: searchParams.get("state") || "", error: error && ADMIN_CONSENT.test(searchParams.get("error_description") || "") ? "admin_consent_required" : error };
+    const description = searchParams.get("error_description") || "";
+    params.current = { code: searchParams.get("code") || "", state: searchParams.get("state") || "",
+      error: !error ? "" : ADMIN_CONSENT.test(description) ? "admin_consent_required" : USER_DECLINED.test(description) ? "access_denied" : error };
   }
 
   useEffect(() => {
