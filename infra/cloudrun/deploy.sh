@@ -12,6 +12,7 @@
 # NEXT_PUBLIC_* lines from hPanel → nivadesk.app → Ortam değişkenleri. The one server secret,
 # NIVADESK_EBAY_CALLBACK_KEY, is bound from Secret Manager (EBAY_CALLBACK_KEY) and never read here.
 set -euo pipefail
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 PROJECT="${PROJECT:-eggcraft-studio}"
 REGION=europe-west2
 SERVICE=nivadesk-web

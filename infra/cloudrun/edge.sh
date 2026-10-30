@@ -16,6 +16,8 @@
 # the project. No Cloud Armor policy on purpose: the point of moving is that nobody's network is
 # throttled; Cloud Run's own limits and the app's own refusals stay as they are.
 set -euo pipefail
+# Never answer a gcloud prompt by accident (an unenabled API makes gcloud ask "enable it? (y/N)").
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 PROJECT="${PROJECT:-eggcraft-studio}"
 REGION=europe-west2
 SERVICE=nivadesk-web
@@ -39,12 +41,15 @@ auth_name() { echo "nivadesk-web-auth-${1//./-}"; }
 g() { gcloud "$@" --project="$PROJECT"; }
 has() { "$@" >/dev/null 2>&1; }
 
+missing_api=0
 for api in compute.googleapis.com certificatemanager.googleapis.com; do
   if ! g services list --enabled --format='value(config.name)' 2>/dev/null | grep -qx "$api"; then
     echo "API $api is NOT enabled on $PROJECT — the owner enables it (gcloud services enable $api --project=$PROJECT)."
-    [ "$ACTION" = "plan" ] && continue || exit 1
+    missing_api=1
   fi
 done
+# Nothing below may run against a disabled API: it would only fail, or ask to enable it.
+[ "$missing_api" = 0 ] || { [ "$ACTION" = "plan" ] && { echo "plan stops here — nothing changed"; exit 0; } || exit 1; }
 
 report() {
   for r in "compute addresses describe $IP --global" \
