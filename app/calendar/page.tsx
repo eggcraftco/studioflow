@@ -875,10 +875,15 @@ export default function CalendarPage() {
                 ))}
                 {rangeState.loading ? <p className="muted-copy cal-loading" role="status">{t("Loading calendar…")}</p> : null}
                 {(Object.values(connections) as CalendarConnection[]).map((c) => {
-                  // What is not loaded is said, never shown as "nothing there" (V1.1).
+                  // What is not loaded is said, never shown as "nothing there" (V1.1). In the month view only the month's
+                  // own days count: on 30 Oct the grid's 28-29 Sep made both notes show on the current month.
                   const label = t(PROVIDER_META[c.provider].label);
-                  const before = c.windowStartKey && range.fromKey < c.windowStartKey;
-                  const after = c.windowEndKey && range.toKey > c.windowEndKey;
+                  const monthStart = `${anchor.slice(0, 7)}-01`;
+                  const asMonth = view === "month" && !searching;
+                  const shownFrom = asMonth ? monthStart : range.fromKey;
+                  const shownTo = asMonth ? core.addDays(`${core.addDays(monthStart, 31).slice(0, 7)}-01`, -1) : range.toKey;
+                  const before = c.windowStartKey && shownFrom < c.windowStartKey;
+                  const after = c.windowEndKey && shownTo > c.windowEndKey;
                   const stale = c.status !== "active";
                   if (!before && !after && !stale) return null;
                   return (
