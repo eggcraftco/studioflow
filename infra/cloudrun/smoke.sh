@@ -8,6 +8,7 @@
 # Reads only. Every request is one a visitor could make; the OAuth/eBay routes get deliberately bad
 # input and must refuse it exactly as Hostinger does.
 set -uo pipefail
+# bash 3.2 (macOS) treats an empty array as unset under -u, hence ${NEW[@]+"${NEW[@]}"} below.
 LB_IP="${1:-}"
 LB_IP6="${2:-}"
 HOSTINGER=76.13.132.222
@@ -22,30 +23,30 @@ for p in / /integrations /integrations/amazon /pricing /features /faq /security 
          /.well-known/oauth-authorization-server /.well-known/oauth-protected-resource \
          "/f/x/y" "/square/callback?error=probe" "/etsy/callback?error=probe" "/robots.txt" "/sitemap.xml" \
          /_next/does-not-exist; do
-  n=$(curl -s "${NEW[@]}" -o /dev/null -w '%{http_code}/%{size_download}' "https://nivadesk.app$p")
+  n=$(curl -s ${NEW[@]+"${NEW[@]}"} -o /dev/null -w '%{http_code}/%{size_download}' "https://nivadesk.app$p")
   o=$(curl -s "${OLD[@]}" -o /dev/null -w '%{http_code}/%{size_download}' "https://nivadesk.app$p")
   verdict=ok; [ "${n%%/*}" = "${o%%/*}" ] || { verdict="STATUS DIFFERS"; fail=1; }
   row "$p" "$n" "$o" "$verdict"
 done
 
 echo "══ eBay ticket: a bad ticket is refused with 400 (503 would mean the secret is not bound)"
-n=$(curl -s "${NEW[@]}" -o /dev/null -w '%{http_code}' -X POST -H 'origin: https://nivadesk.app' -H 'sec-fetch-site: same-origin' \
+n=$(curl -s ${NEW[@]+"${NEW[@]}"} -o /dev/null -w '%{http_code}' -X POST -H 'origin: https://nivadesk.app' -H 'sec-fetch-site: same-origin' \
     -H 'content-type: application/json' --data '{"ticket":"probe"}' https://nivadesk.app/ebay/ticket)
 row "POST /ebay/ticket (bad ticket)" "$n" "-" "$([ "$n" = 400 ] && echo ok || { fail=1; echo 'EXPECTED 400'; })"
 
 echo "══ OAuth metadata (ChatGPT and Claude connectors)"
 for p in /.well-known/oauth-authorization-server /.well-known/openid-configuration; do
-  n=$(curl -s "${NEW[@]}" "https://nivadesk.app$p" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("issuer"),d.get("token_endpoint"))' 2>/dev/null)
+  n=$(curl -s ${NEW[@]+"${NEW[@]}"} "https://nivadesk.app$p" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("issuer"),d.get("token_endpoint"))' 2>/dev/null)
   o=$(curl -s "${OLD[@]}" "https://nivadesk.app$p" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("issuer"),d.get("token_endpoint"))' 2>/dev/null)
   [ "$n" = "$o" ] && row "$p" "same" "same" "ok" || { row "$p" "$n" "$o" "DIFFERS"; fail=1; }
 done
 
 echo "══ headers on /pricing (new)"
-curl -s "${NEW[@]}" -o /dev/null -D - https://nivadesk.app/pricing \
+curl -s ${NEW[@]+"${NEW[@]}"} -o /dev/null -D - https://nivadesk.app/pricing \
   | grep -i -E '^(strict-transport-security|x-frame-options|x-content-type-options|referrer-policy|permissions-policy|cross-origin-opener-policy|content-security-policy-report-only|cache-control):' \
   | cut -c1-80
 for h in strict-transport-security x-frame-options content-security-policy-report-only; do
-  curl -s "${NEW[@]}" -o /dev/null -D - https://nivadesk.app/pricing | grep -qi "^$h:" || { echo "missing header $h"; fail=1; }
+  curl -s ${NEW[@]+"${NEW[@]}"} -o /dev/null -D - https://nivadesk.app/pricing | grep -qi "^$h:" || { echo "missing header $h"; fail=1; }
 done
 
 echo "══ http → https and www"
