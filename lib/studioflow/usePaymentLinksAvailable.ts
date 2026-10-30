@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { paymentLinksAvailable } from "@/lib/studioflow/stripeConnect";
+import { paymentLinksAccess, paymentLinksAvailable } from "@/lib/studioflow/stripeConnect";
 
 /**
  * `true` once the server has said this workspace may use Payment Links;
@@ -24,4 +24,24 @@ export function usePaymentLinksAvailable(companyId: string): boolean | null {
     return () => { active = false; };
   }, [companyId]);
   return available;
+}
+
+/**
+ * SL-23 (30 Oct 2026): the plan's answer from the SAME read as `usePaymentLinksAvailable` (one call per
+ * workspace per page). `false` only when the server said the plan does not include Stripe payments (Free);
+ * `true` only when it said it does; `null` while asking, when the read failed, and from a server older than
+ * the plan gate. A "New payment link" button hides on exactly `false`; the order-less link shows on exactly
+ * `true` (it ships in the same server package as the plan answer, so an older server never sees its button).
+ */
+export function usePaymentLinksPlan(companyId: string): boolean | null {
+  const [plan, setPlan] = useState<boolean | null>(null);
+  useEffect(() => {
+    let active = true;
+    setPlan(null);
+    const id = String(companyId || "").trim();
+    if (!id) return () => { active = false; };
+    void paymentLinksAccess(id).then((answer) => { if (active) setPlan(answer.planAllowed); });
+    return () => { active = false; };
+  }, [companyId]);
+  return plan;
 }

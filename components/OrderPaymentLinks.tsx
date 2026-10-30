@@ -30,10 +30,10 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { formatMinor, tabForStatus, type PaymentLinkRow } from "@/components/PaymentLinksPanel";
 import { minorToInputText, parseRequestAmount, requestAmountMessage } from "@/lib/studioflow/money";
-import { usePaymentLinksAvailable } from "@/lib/studioflow/usePaymentLinksAvailable";
+import { usePaymentLinksAvailable, usePaymentLinksPlan } from "@/lib/studioflow/usePaymentLinksAvailable";
 import { ETSY_COPY_LINK_NOTE } from "@/lib/studioflow/etsyOrder";
 import {
-  newClientRefundId, refundOrderPayment, refundRefusal, refundRefusalText, refundResult,
+  newClientRefundId, orderLinkRefusalText, refundOrderPayment, refundRefusal, refundRefusalText, refundResult,
   type PaymentRequestRefundFields, type RefundReason,
 } from "@/lib/studioflow/stripeConnect";
 
@@ -98,6 +98,9 @@ export default function OrderPaymentLinks({
   // The pilot gate, as the server answers it (S2). Outside the pilot this card
   // does not exist: nothing is listed, nothing is asked, nothing is shown.
   const available = usePaymentLinksAvailable(companyId);
+  // SL-23: the plan's answer from the same read. On Free (exactly false) there is no "New payment link"; the
+  // links already sent stay listed, and can still be copied, cancelled and refunded (the server allows those).
+  const planAllowed = usePaymentLinksPlan(companyId);
   const [state, setState] = useState<ListResult | null>(null);
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
@@ -224,8 +227,8 @@ export default function OrderPaymentLinks({
       setAmount("");
       await load();
     } catch (e) {
-      // The server's own sentence, which names which fix applies.
-      setCreateError(t((e as Error).message || "That payment link cannot be created."));
+      // The server's own sentence, which names which fix applies; the plan refusal (SL-23) has its own.
+      setCreateError(t(orderLinkRefusalText(e)));
     } finally {
       setBusy("");
     }
@@ -366,7 +369,7 @@ export default function OrderPaymentLinks({
           {t("Payment links")}
           {state.requests.length > 0 ? <span className="finance-payments-count">{state.requests.length}</span> : null}
         </span>
-        {canCreate && state.headroomMinor > 0 ? (
+        {canCreate && planAllowed !== false && state.headroomMinor > 0 ? (
           <button type="button" className="finance-payments-add" onClick={() => { setOpen((value) => !value); setCreateError(""); if (!open && !amount) setAmount(minorToInputText(state.headroomMinor, currency, locale)); }}>
             {open ? t("Close") : `+ ${t("New payment link")}`}
           </button>

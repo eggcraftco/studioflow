@@ -13,8 +13,8 @@ import {
 } from "@/lib/publicSite/paymentLink";
 import styles from "./payLink.module.css";
 
-// Exactly what the server chose to send: the business's name and logo, the order's reference, the
-// amount and the link's state. No order, customer or Stripe id reaches this page, and the Stripe URL
+// Exactly what the server chose to send: the business's name and logo, the order's reference (or, for a
+// link made without an order, what it is for), the amount and the link's state. No order, customer or Stripe id reaches this page, and the Stripe URL
 // itself is only ever handed over when the customer presses Pay — it is fetched fresh then, because
 // Stripe's session lasts 24 hours and this link does not.
 
@@ -184,7 +184,12 @@ export function PaymentLinkContent({
         ) : status === "open" && view ? (
           <>
             <h1>{copy.title}</h1>
-            {view.reference ? <p className={styles.muted}>{copy.forOrder.replace("{reference}", view.reference)}</p> : null}
+            {/* An order's link names the order; an order-less one (SL-24) says what it is for, as the business wrote it. */}
+            {view.reference ? (
+              <p className={styles.muted}>{copy.forOrder.replace("{reference}", view.reference)}</p>
+            ) : typeof view.title === "string" && view.title.trim() ? (
+              <p className={styles.muted} data-pay-title>{view.title.trim()}</p>
+            ) : null}
             <div className={styles.amountBox}>
               <span className={styles.amountLabel}>{copy.amount}</span>
               <strong className={styles.amount}>{paymentLinkAmount(view.amountMinor, view.currency, language)}</strong>

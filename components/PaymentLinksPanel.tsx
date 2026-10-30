@@ -23,6 +23,13 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { minorToInputText, parseRequestAmount, requestAmountMessage } from "@/lib/studioflow/money";
 import { ETSY_COPY_LINK_NOTE, isEtsyOrderId } from "@/lib/studioflow/etsyOrder";
+import {
+  createStandalonePaymentRequest, isStandaloneRow, newClientRequestId, orderLinkRefusalText, orderReferenceOfRow,
+  paymentLinkRefusal, standaloneFormProblem, STANDALONE_TITLE_MAX,
+} from "@/lib/studioflow/stripeConnect";
+import { usePaymentLinksPlan } from "@/lib/studioflow/usePaymentLinksAvailable";
+import { loadWorkspaceSettingsOverview } from "@/lib/studioflow/firestore";
+import { workspaceCurrencyCodes } from "@/lib/studioflow/orderCurrency";
 
 export type PaymentLinkRow = {
   paymentRequestId: string;
@@ -52,7 +59,33 @@ export type PaymentLinkRow = {
    * is no worse than every row looked yesterday.
    */
   mode?: string;
+  /**
+   * Order-less links (SL-24, 30 Oct 2026). Optional for the same reason: an older server sends none, and every
+   * row is then an order's row. `kind: "standalone"` was made without an order, `title` says what it is for,
+   * and once it is paid the server opens the order and fills `orderId` (and, when it sends them, the order's
+   * number as `projectNumber` / `orderReference`).
+   */
+  kind?: "order" | "standalone";
+  title?: string;
+  projectNumber?: number;
+  orderReference?: string;
 };
+
+/** One order-less submit. Retried as it is, it keeps its id, so the server makes one link. */
+type StandaloneSubmit = {
+  title: string;
+  amountMinor: number;
+  customerName: string;
+  customerEmail: string;
+  collectPhone: boolean;
+  collectAddress: boolean;
+};
+type StandaloneAttempt = StandaloneSubmit & { clientRequestId: string };
+
+function sameStandaloneSubmit(a: StandaloneSubmit, b: StandaloneSubmit): boolean {
+  return a.title === b.title && a.amountMinor === b.amountMinor && a.customerName === b.customerName
+    && a.customerEmail === b.customerEmail && a.collectPhone === b.collectPhone && a.collectAddress === b.collectAddress;
+}
 
 type Tab = "open" | "paid" | "expired" | "cancelled" | "problem" | "all";
 
@@ -143,6 +176,25 @@ export default function PaymentLinksPanel({
   const [createError, setCreateError] = useState("");
   const [copiedId, setCopiedId] = useState("");
   const [shownId, setShownId] = useState("");
+  // SL-23: the plan's answer (same read as the pilot gate). Exactly false (Free): no "New payment link" here;
+  // exactly true: the server has order-less links too (SL-24 ships with the plan answer); null: as before.
+  const planAllowed = usePaymentLinksPlan(companyId);
+  // Order-less links (SL-24): the form, its one attempt, and the workspace's currency for reading the amount.
+  const [standaloneOpen, setStandaloneOpen] = useState(false);
+  const [standaloneTitle, setStandaloneTitle] = useState("");
+  const [standaloneAmount, setStandaloneAmount] = useState("");
+  const [standaloneName, setStandaloneName] = useState("");
+  const [standaloneEmail, setStandaloneEmail] = useState("");
+  const [standalonePhone, setStandalonePhone] = useState(false);
+  const [standaloneAddress, setStandaloneAddress] = useState(false);
+  const [standaloneError, setStandaloneError] = useState("");
+  const [standaloneBusy, setStandaloneBusy] = useState(false);
+  const [standaloneNotice, setStandaloneNotice] = useState("");
+  /** The workspace's ISO code when its symbol means exactly one; "" when not; null until read. */
+  const [standaloneCurrency, setStandaloneCurrency] = useState<string | null>(null);
+  const standaloneAttempt = useRef<StandaloneAttempt | null>(null);
+  const standaloneFieldRef = useRef<HTMLInputElement | null>(null);
+  const standaloneOpenerRef = useRef<HTMLButtonElement | null>(null);
 
   // Which load is the newest. Two can be in flight at once — React remounts the
   // panel on a tab switch, and Strict Mode runs the effect twice in development
@@ -237,11 +289,111 @@ export default function PaymentLinksPanel({
       await load();
     } catch (e) {
       // The server's own sentence, which names which fix applies — reduce this
-      // link, or cancel the one already open.
-      setCreateError(t((e as Error).message || "That payment link cannot be created."));
+      // link, or cancel the one already open. The plan refusal (SL-23) has its own.
+      setCreateError(t(orderLinkRefusalText(e)));
     } finally {
       setCreating(false);
     }
+  };
+
+  // ---- Order-less links (SL-24, 30 Oct 2026) ------------------------------------------------------------------
+  // Ask for money without an order: what it is for, the amount, optionally who pays, and whether Stripe asks for a
+  // phone number and a delivery address. When the customer pays, the server opens the order with what they typed.
+  // Nothing here messages the customer: the link is copied by a person who decides where it goes.
+
+  // The amount is read in the workspace's currency (the server charges in it, as for an order's link): a symbol
+  // that means one ISO code gives that code's decimals (a JPY workspace has none); one that means several (¥ is
+  // JPY or CNY), or none, reads with two, and the server refuses an ambiguous currency rather than guessing.
+  useEffect(() => {
+    if (!standaloneOpen || standaloneCurrency !== null || !companyId) return;
+    let active = true;
+    loadWorkspaceSettingsOverview(companyId)
+      .then((overview) => {
+        const codes = workspaceCurrencyCodes({ selectedCurrency: overview.selectedCurrency });
+        if (active) setStandaloneCurrency(codes.length === 1 ? codes[0] : "");
+      })
+      .catch(() => { if (active) setStandaloneCurrency(""); });
+    return () => { active = false; };
+  }, [standaloneOpen, standaloneCurrency, companyId]);
+
+  // Focus moves into the form when it opens, onto what the payment is for.
+  useEffect(() => {
+    if (standaloneOpen) standaloneFieldRef.current?.focus();
+  }, [standaloneOpen]);
+
+  const openStandalone = () => {
+    setCreateOpen(false);
+    setStandaloneError("");
+    setStandaloneNotice("");
+    setStandaloneOpen(true);
+  };
+  const closeStandalone = () => {
+    if (standaloneBusy) return; // the answer is on its way; the form stays until it arrives
+    setStandaloneOpen(false);
+    setStandaloneError("");
+    standaloneOpenerRef.current?.focus();
+  };
+
+  const createStandalone = async () => {
+    const problem = standaloneFormProblem({ title: standaloneTitle, customerEmail: standaloneEmail });
+    if (problem) { setStandaloneError(t(problem)); return; }
+    // Read exactly as the order link form reads an amount: "12,50" is 12.50 in every locale, and an amount that
+    // could mean two things is refused rather than guessed.
+    const parsed = parseRequestAmount(standaloneAmount, standaloneCurrency ?? "", locale);
+    if (!parsed.ok) { setStandaloneError(t(requestAmountMessage(parsed.reason))); return; }
+    const submit: StandaloneSubmit = {
+      title: standaloneTitle.trim(),
+      amountMinor: parsed.amountMinor,
+      customerName: standaloneName.trim(),
+      customerEmail: standaloneEmail.trim(),
+      collectPhone: standalonePhone,
+      collectAddress: standaloneAddress,
+    };
+    // The same submit, retried (the answer was lost), keeps its id, so it is one link however many times it is
+    // sent. Anything changed is a different link and gets a new id.
+    const previous = standaloneAttempt.current;
+    const attempt: StandaloneAttempt = previous && sameStandaloneSubmit(previous, submit)
+      ? previous
+      : { ...submit, clientRequestId: newClientRequestId() };
+    standaloneAttempt.current = attempt;
+    setStandaloneBusy(true);
+    setStandaloneError("");
+    try {
+      const result = await createStandalonePaymentRequest({
+        companyId,
+        title: attempt.title,
+        amountMinor: attempt.amountMinor,
+        customerName: attempt.customerName,
+        customerEmail: attempt.customerEmail,
+        collectPhone: attempt.collectPhone,
+        collectAddress: attempt.collectAddress,
+        clientRequestId: attempt.clientRequestId,
+      });
+      if (!result.ok) throw Object.assign(new Error(""), { code: "functions/unknown" });
+      standaloneAttempt.current = null;
+      setStandaloneOpen(false);
+      setStandaloneTitle(""); setStandaloneAmount(""); setStandaloneName(""); setStandaloneEmail("");
+      setStandalonePhone(false); setStandaloneAddress(false);
+      setStandaloneNotice(t("Payment link created. Copy it and send it to your customer."));
+      // The new link, shown under its row, on the tab it lives in.
+      setTab("open");
+      setShownId(String(result.request?.paymentRequestId ?? ""));
+      await load();
+    } catch (e) {
+      const refusal = paymentLinkRefusal(e);
+      // A definite answer (the server read this submit and said no): the next submit is a new link. A lost
+      // answer, or one the server marks retry, keeps the id, so trying again cannot make a second link.
+      if (refusal.definite) standaloneAttempt.current = null;
+      setStandaloneError(t(refusal.text));
+    } finally {
+      setStandaloneBusy(false);
+    }
+  };
+
+  /** "Order #1042" once the paid link has opened its order; "Open order" when the row names no number. */
+  const orderLinkLabel = (row: PaymentLinkRow) => {
+    const reference = orderReferenceOfRow(row);
+    return reference ? t("Order {reference}").replace("{reference}", reference) : t("Open order");
   };
 
   const cancel = async (row: PaymentLinkRow) => {
@@ -294,17 +446,113 @@ export default function PaymentLinksPanel({
 
   return (
     <section style={{ display: "grid", gap: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <button
-          type="button" onClick={() => { setCreateOpen((open) => !open); setCreateError(""); }}
-          style={{ border: 0, borderRadius: 8, background: "#2563eb", color: "#fff", cursor: "pointer",
-            font: "inherit", fontSize: 13, fontWeight: 700, padding: "8px 14px" }}
-        >
-          {createOpen ? t("Close") : t("New payment link")}
-        </button>
-      </div>
+      {planAllowed === false ? (
+        // Free (SL-23): no new links. The ones already sent stay below, and can still be copied and cancelled.
+        <p style={{ margin: 0, fontSize: 13, opacity: 0.8 }}>
+          {t("Stripe payments are part of the paid plans.")}{" "}
+          <a href="/settings?section=plan-access" style={{ color: "#2563eb", fontWeight: 700 }}>{t("See plans")}</a>
+        </p>
+      ) : planAllowed === true ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <button
+            type="button" ref={standaloneOpenerRef}
+            aria-expanded={standaloneOpen} aria-controls="standalone-link-form"
+            onClick={() => (standaloneOpen ? closeStandalone() : openStandalone())}
+            style={{ border: 0, borderRadius: 8, background: "#2563eb", color: "#fff", cursor: "pointer",
+              font: "inherit", fontSize: 13, fontWeight: 700, padding: "8px 14px" }}
+          >
+            {standaloneOpen ? t("Close") : t("New payment link")}
+          </button>
+          <button
+            type="button" onClick={() => { setStandaloneOpen(false); setCreateOpen((open) => !open); setCreateError(""); }}
+            style={{ border: "1px solid rgba(120,120,140,0.35)", borderRadius: 8, background: "transparent", color: "inherit",
+              cursor: "pointer", font: "inherit", fontSize: 13, fontWeight: 700, padding: "7px 13px" }}
+          >
+            {createOpen ? t("Close") : t("Link for an order")}
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <button
+            type="button" onClick={() => { setCreateOpen((open) => !open); setCreateError(""); }}
+            style={{ border: 0, borderRadius: 8, background: "#2563eb", color: "#fff", cursor: "pointer",
+              font: "inherit", fontSize: 13, fontWeight: 700, padding: "8px 14px" }}
+          >
+            {createOpen ? t("Close") : t("New payment link")}
+          </button>
+        </div>
+      )}
 
-      {createOpen ? (
+      {standaloneNotice ? <p role="status" style={{ margin: 0, fontSize: 12.5, color: "#047857" }}>{standaloneNotice}</p> : null}
+
+      {standaloneOpen && planAllowed === true ? (
+        <div
+          id="standalone-link-form"
+          role="dialog"
+          aria-labelledby="standalone-link-form-title"
+          aria-describedby="standalone-link-form-note"
+          onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closeStandalone(); } }}
+          style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start",
+            border: "1px solid rgba(120,120,140,0.22)", borderRadius: 10, padding: 12 }}
+        >
+          <strong id="standalone-link-form-title" style={{ flexBasis: "100%", fontSize: 13 }}>{t("New payment link")}</strong>
+          <label style={{ display: "grid", gap: 4, fontSize: 11.5, opacity: 0.75, flex: "1 1 260px" }}>
+            {t("What is this payment for?")}
+            <input
+              ref={standaloneFieldRef}
+              value={standaloneTitle} onChange={(e) => setStandaloneTitle(e.target.value)}
+              maxLength={STANDALONE_TITLE_MAX} disabled={standaloneBusy} style={field}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 4, fontSize: 11.5, opacity: 0.75 }}>
+            {standaloneCurrency ? `${t("Amount")} (${standaloneCurrency})` : t("Amount")}
+            <input
+              value={standaloneAmount} onChange={(e) => setStandaloneAmount(e.target.value)}
+              inputMode="decimal" disabled={standaloneBusy}
+              placeholder={minorToInputText(0, standaloneCurrency ?? "", locale)} style={{ ...field, width: 120 }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 4, fontSize: 11.5, opacity: 0.75, flex: "1 1 180px" }}>
+            {t("Customer name (optional)")}
+            <input value={standaloneName} onChange={(e) => setStandaloneName(e.target.value)} autoComplete="off" disabled={standaloneBusy} style={field} />
+          </label>
+          <label style={{ display: "grid", gap: 4, fontSize: 11.5, opacity: 0.75, flex: "1 1 220px" }}>
+            {t("Customer email (optional)")}
+            <input type="email" value={standaloneEmail} onChange={(e) => setStandaloneEmail(e.target.value)} autoComplete="off" disabled={standaloneBusy} style={field} />
+          </label>
+          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, flexBasis: "100%" }}>
+            <input type="checkbox" checked={standalonePhone} onChange={(e) => setStandalonePhone(e.target.checked)} disabled={standaloneBusy} />
+            {t("Ask for phone number")}
+          </label>
+          <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, flexBasis: "100%" }}>
+            <input type="checkbox" checked={standaloneAddress} onChange={(e) => setStandaloneAddress(e.target.checked)} disabled={standaloneBusy} />
+            {t("Ask for delivery address")}
+          </label>
+          <p id="standalone-link-form-note" style={{ margin: 0, flexBasis: "100%", fontSize: 12, opacity: 0.8 }}>
+            {t("When the customer pays, NivaDesk opens the order with the details they enter.")}
+          </p>
+          <button
+            type="button" disabled={standaloneBusy || standaloneCurrency === null} onClick={() => void createStandalone()}
+            style={{ border: 0, borderRadius: 8, background: "#2563eb", color: "#fff",
+              cursor: standaloneBusy ? "default" : "pointer", font: "inherit", fontSize: 13, fontWeight: 700,
+              padding: "8px 14px", opacity: standaloneBusy || standaloneCurrency === null ? 0.6 : 1 }}
+          >
+            {standaloneBusy ? t("Creating…") : t("Create link")}
+          </button>
+          <button
+            type="button" disabled={standaloneBusy} onClick={closeStandalone}
+            style={{ border: "1px solid rgba(120,120,140,0.35)", borderRadius: 8, background: "transparent", color: "inherit",
+              cursor: "pointer", font: "inherit", fontSize: 13, fontWeight: 700, padding: "7px 13px" }}
+          >
+            {t("Close")}
+          </button>
+          {standaloneError ? (
+            <p role="alert" style={{ margin: 0, flexBasis: "100%", fontSize: 12.5, color: "#b91c1c" }}>{standaloneError}</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {createOpen && planAllowed !== false ? (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start",
           border: "1px solid rgba(120,120,140,0.22)", borderRadius: 10, padding: 12 }}>
           <label style={{ display: "grid", gap: 4, fontSize: 11.5, opacity: 0.75 }}>
@@ -409,7 +657,23 @@ export default function PaymentLinksPanel({
               {visible.map((row) => (
                 <tr key={row.paymentRequestId} style={{ borderTop: "1px solid rgba(120,120,140,0.18)" }}>
                   <td style={{ padding: "9px 10px 9px 0", fontVariantNumeric: "tabular-nums" }}>
-                    {onOpenOrder ? (
+                    {isStandaloneRow(row) ? (
+                      // An order-less link: what it is for, then its order once the customer has paid and the
+                      // server has opened it (SL-25); while it is open, a line saying the order comes with the payment.
+                      <>
+                        <span style={{ fontWeight: 600, overflowWrap: "anywhere" }}>{row.title || t("Payment")}</span>
+                        <div style={{ fontSize: 11.5, opacity: 0.75 }}>
+                          {row.orderId ? (
+                            onOpenOrder ? (
+                              <button type="button" onClick={() => onOpenOrder(row.orderId)}
+                                style={{ border: 0, background: "transparent", color: "#2563eb", cursor: "pointer", padding: 0, font: "inherit" }}>
+                                {orderLinkLabel(row)}
+                              </button>
+                            ) : orderLinkLabel(row)
+                          ) : tabForStatus(row.publicStatus) === "open" ? t("The order opens when the customer pays.") : null}
+                        </div>
+                      </>
+                    ) : onOpenOrder ? (
                       <button type="button" onClick={() => onOpenOrder(row.orderId)}
                         style={{ border: 0, background: "transparent", color: "#2563eb", cursor: "pointer", padding: 0, font: "inherit" }}>
                         {row.orderId}

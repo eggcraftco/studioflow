@@ -65,6 +65,19 @@ try {
     // lib/studioflow/etsyOrder.ts (Etsy API Terms note on an Etsy order's row); checked by check-etsy-compliance.mts.
     "export const ETSY_COPY_LINK_NOTE = '';",
     "export const isEtsyOrderId = () => false;",
+    // Order-less links and the plan gate (SL-23/SL-24): lib/studioflow/stripeConnect.ts and the hook, the
+    // workspace currency read; checked by check-standalone-ui.mts. Nothing here reaches them.
+    "export const createStandalonePaymentRequest = refuse('createStandalonePaymentRequest');",
+    "export const newClientRequestId = refuse('newClientRequestId');",
+    "export const paymentLinkRefusal = refuse('paymentLinkRefusal');",
+    "export const orderLinkRefusalText = refuse('orderLinkRefusalText');",
+    "export const standaloneFormProblem = refuse('standaloneFormProblem');",
+    "export const isStandaloneRow = refuse('isStandaloneRow');",
+    "export const orderReferenceOfRow = refuse('orderReferenceOfRow');",
+    "export const STANDALONE_TITLE_MAX = 120;",
+    "export const usePaymentLinksPlan = () => null;",
+    "export const loadWorkspaceSettingsOverview = refuse('loadWorkspaceSettingsOverview');",
+    "export const workspaceCurrencyCodes = refuse('workspaceCurrencyCodes');",
     "export const useCallback = (fn) => fn;",
     "export const useEffect = () => {};",
     "export const useMemo = (fn) => fn();",

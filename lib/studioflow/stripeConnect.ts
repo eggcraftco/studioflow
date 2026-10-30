@@ -24,6 +24,10 @@ export type StripeConnectionView = {
   /** Settings only (SC-8): the workspace's own country if Stripe serves it, and
    *  the ISO codes the owner may choose from before the first connect. */
   onboarding: { country: string; supportedCountries: string[] } | null;
+  /** SL-23 (30 Oct 2026): whether the workspace's PLAN includes Stripe payments (Free does not). `null` when the
+   *  server did not say — a server from before the plan gate — which every surface reads as today's behaviour.
+   *  Only an exact `false` hides a button; only an exact `true` shows the order-less link (same server package). */
+  planAllowed: boolean | null;
 };
 
 /**
@@ -37,11 +41,15 @@ export type StripeConnectionView = {
  */
 export async function getStripeConnection(companyId: string, purpose: "" | "settings" = ""): Promise<StripeConnectionView> {
   const result = await call<{ companyId: string; purpose?: string }, {
-    ok: boolean; configured: boolean; reason?: string; connection: StripeConnectionSummary;
+    ok: boolean; configured: boolean; reason?: string; connection: StripeConnectionSummary & { planAllowed?: unknown };
     onboarding?: { country?: string; supportedCountries?: string[] };
+    planAllowed?: unknown;
   }>("getStripePaymentConnection")(purpose ? { companyId, purpose } : { companyId });
   const onboarding = result.data?.onboarding;
+  // On the connection summary (the contract's place) or beside it; a boolean either way, else "not said".
+  const plan = result.data?.connection?.planAllowed ?? result.data?.planAllowed;
   return {
+    planAllowed: typeof plan === "boolean" ? plan : null,
     configured: result.data?.configured === true,
     reason: String(result.data?.reason ?? ""),
     connection: result.data?.connection ?? null,
@@ -68,20 +76,28 @@ export async function getStripeConnection(companyId: string, purpose: "" | "sett
  * tries again — hiding is the safe direction, and an error is never shown for
  * a feature the workspace may not have.
  */
-const availability = new Map<string, Promise<boolean>>();
-export function paymentLinksAvailable(companyId: string): Promise<boolean> {
+export type PaymentLinksAccess = {
+  available: boolean;
+  /** The plan's answer from the same read (SL-23): `null` when the server did not say or the read failed. */
+  planAllowed: boolean | null;
+};
+const availability = new Map<string, Promise<PaymentLinksAccess>>();
+export function paymentLinksAccess(companyId: string): Promise<PaymentLinksAccess> {
   const id = String(companyId || "").trim();
-  if (!id) return Promise.resolve(false);
+  if (!id) return Promise.resolve({ available: false, planAllowed: null });
   const known = availability.get(id);
   if (known) return known;
   const pending = getStripeConnection(id)
-    .then((view) => view.configured === true)
-    .catch(() => {
+    .then((view): PaymentLinksAccess => ({ available: view.configured === true, planAllowed: view.planAllowed }))
+    .catch((): PaymentLinksAccess => {
       availability.delete(id);
-      return false;
+      return { available: false, planAllowed: null };
     });
   availability.set(id, pending);
   return pending;
+}
+export function paymentLinksAvailable(companyId: string): Promise<boolean> {
+  return paymentLinksAccess(companyId).then((answer) => answer.available);
 }
 
 /**
@@ -132,6 +148,159 @@ export function stripeStatusLabel(status: StripeConnectionSummary["status"] | ""
     case "error": return "Stripe could not be reached";
     default: return "Not connected";
   }
+}
+
+// ---- Order-less payment links and the Free plan gate (SL-23 / SL-24, 30 Oct 2026) -----------------------------
+// Kept above the refunds block on purpose: check-refund-ui reads every sentence from that marker to the end.
+
+/**
+ * What a payment request's summary says about where it came from (SL-24), beside the fields every row has.
+ *
+ * All OPTIONAL: a server from before order-less links sends none of them, and every row is then an order's row,
+ * exactly as today. `kind: "standalone"` is a link made without an order — `title` says what it is for — and once
+ * its customer pays, the server opens the order and the row carries that order's `orderId`.
+ */
+export type PaymentRequestKindFields = {
+  kind?: "order" | "standalone";
+  /** What the payment is for, as the business typed it (1–120 characters). */
+  title?: string;
+  /** The order's own number, when the server sends it with the row ("Order #1042"). */
+  projectNumber?: number;
+  /** The reference the customer saw ("#1042", or an invoice number), when the server sends it with the row. */
+  orderReference?: string;
+};
+
+/** Only an exact "standalone" is an order-less row; anything else (or nothing) is an order's row, as before. */
+export function isStandaloneRow(row: { kind?: unknown } | null | undefined): boolean {
+  return row?.kind === "standalone";
+}
+
+/** "#1042" when the row names its order, else "" (the screen then offers "Open order" by id). */
+export function orderReferenceOfRow(row: PaymentRequestKindFields | null | undefined): string {
+  const number = Number(row?.projectNumber);
+  if (Number.isSafeInteger(number) && number > 0) return `#${number}`;
+  return String(row?.orderReference ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+}
+
+/** The server's limit on `title` (what the payment is for). */
+export const STANDALONE_TITLE_MAX = 120;
+
+export type CreateStandalonePaymentInput = {
+  companyId: string;
+  /** What the payment is for: 1–120 characters, shown to the customer on the payment page and by Stripe. */
+  title: string;
+  /** Integer minor units of the workspace's currency (the server resolves it, as for order links), > 0. */
+  amountMinor: number;
+  /** Optional: fills Stripe's form for the customer. Sent only when typed. */
+  customerName?: string;
+  customerEmail?: string;
+  /** Stripe asks the customer for a phone number / a delivery address. */
+  collectPhone: boolean;
+  collectAddress: boolean;
+  /** Made once per submit (`newClientRequestId`), sent again when the same submit is retried: one link. */
+  clientRequestId: string;
+};
+
+export type CreateStandalonePaymentResult = {
+  ok: boolean;
+  /** The new row's summary, as the list would send it. */
+  request: (PaymentRequestKindFields & { paymentRequestId?: string; url?: string; amountMinor?: number; currency?: string }
+    & Record<string, unknown>) | null;
+};
+
+/**
+ * The id that makes a double submit one link. The server keeps one request per id
+ * (`^[A-Za-z0-9_-]{8,64}$`), so a retry of the same submit must send it again.
+ */
+export function newClientRequestId(): string {
+  return newClientRefundId();
+}
+
+/**
+ * Ask for money without an order (SL-24). Same permission as an order's link; the server checks it, the plan
+ * (SL-23), the amount and the currency again. When the customer pays, the server opens the order by itself.
+ */
+export async function createStandalonePaymentRequest(input: CreateStandalonePaymentInput): Promise<CreateStandalonePaymentResult> {
+  const customerName = String(input.customerName ?? "").trim();
+  const customerEmail = String(input.customerEmail ?? "").trim();
+  const data = (await call<Record<string, unknown>, Partial<CreateStandalonePaymentResult>>("createStandalonePaymentRequest")({
+    companyId: input.companyId,
+    title: String(input.title ?? "").trim(),
+    amountMinor: input.amountMinor,
+    ...(customerName ? { customerName } : {}),
+    ...(customerEmail ? { customerEmail } : {}),
+    collectPhone: input.collectPhone === true,
+    collectAddress: input.collectAddress === true,
+    clientRequestId: input.clientRequestId,
+  })).data;
+  return { ok: data?.ok === true, request: data?.request ?? null };
+}
+
+/** Why the server refused to create a link — an order's or an order-less one. */
+export type PaymentLinkRefusal = {
+  /** `details.reason`, or "" when the error carried none. */
+  reason: string;
+  /** `details.retry`: the server may have made the link, so the same submit may be sent again as the same link. */
+  retry: boolean;
+  /** The server read this submit and said no (a reason, or a code that is an answer): the next submit is a new link. */
+  definite: boolean;
+  /** The sentence to show, a key in the translation table (or the server's own sentence, translated when known). */
+  text: string;
+};
+
+const ANSWERED_CODES = /invalid-argument|failed-precondition|permission-denied|unauthenticated|not-found|out-of-range|already-exists|resource-exhausted/;
+
+export function paymentLinkRefusal(error: unknown): PaymentLinkRefusal {
+  const details = (error as { details?: { reason?: unknown; retry?: unknown } } | null)?.details;
+  const reason = typeof details?.reason === "string" ? details.reason : "";
+  const retry = details?.retry === true;
+  const code = String((error as { code?: string } | null)?.code || "");
+  const message = String((error as { message?: string } | null)?.message || "");
+  return {
+    reason,
+    retry,
+    definite: !retry && (reason !== "" || ANSWERED_CODES.test(code)),
+    text: paymentLinkRefusalText(reason, code, message),
+  };
+}
+
+/**
+ * One sentence per refusal. `stripe_plan_required` (SL-23) is the plan's own; the rest are what the server's
+ * code means to the person who pressed Create. A refusal the server explained in words keeps its words — they
+ * name which fix applies (ask for less, cancel the open link, Stripe still needs details) — as the order card
+ * always showed them.
+ */
+export function paymentLinkRefusalText(reason: string, code = "", message = ""): string {
+  if (reason === "stripe_plan_required") return "Stripe payments are part of the paid plans. Choose a plan to create payment links.";
+  if (/permission-denied/.test(code)) return "Your workspace access does not let you create payment links.";
+  if (/unauthenticated/.test(code)) return "Sign in again to see payment links.";
+  if (/resource-exhausted/.test(code)) return "Too many payment links were asked for just now. Wait a minute, then try again.";
+  const said = message.trim();
+  if (ANSWERED_CODES.test(code) && said && !/^(internal|not[ _-]?found|invalid[ _-]?argument|failed[ _-]?precondition)$/i.test(said)) return said;
+  if (ANSWERED_CODES.test(code)) return "That payment link cannot be created.";
+  // No answer reached the screen: the link may or may not exist. Trying again sends the same id, so it is one link.
+  return "The payment link could not be confirmed. Try again; it will not be made twice.";
+}
+
+/**
+ * The order-link forms (the order card, Banking's order picker): the server's own sentence, as they always
+ * showed it, except the plan refusal (SL-23), which has its own. Their request id is made per press, so the
+ * "will not be made twice" sentence of the order-less form is not theirs to say.
+ */
+export function orderLinkRefusalText(error: unknown): string {
+  const refusal = paymentLinkRefusal(error);
+  if (refusal.reason === "stripe_plan_required") return refusal.text;
+  return String((error as { message?: string } | null)?.message || "") || "That payment link cannot be created.";
+}
+
+/** What the form checks before anything is sent ("" = nothing); each sentence is a key in the translation table. */
+export function standaloneFormProblem(fields: { title: string; customerEmail: string }): string {
+  const title = fields.title.trim();
+  if (!title) return "Say what this payment is for.";
+  if (title.length > STANDALONE_TITLE_MAX) return "Keep what it is for to 120 characters or fewer.";
+  const email = fields.customerEmail.trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "That email address does not look right.";
+  return "";
 }
 
 // ---- Refunds from NivaDesk (SL-21 / SL-22, 30 Oct 2026) ------------------------------------------------------

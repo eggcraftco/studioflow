@@ -47,6 +47,7 @@
     "test:payment-return": "node scripts/check-payment-return.mts",
     "test:payment-link": "node scripts/check-payment-link.mts",
     "test:refund-ui": "node scripts/check-refund-ui.mts",
+    "test:standalone-ui": "node scripts/check-standalone-ui.mts",
     "test:stripe-card": "node scripts/check-stripe-card.mts",
     "test:stripe-resume": "node scripts/check-stripe-resume.mjs",
     "test:inventory-notes": "node scripts/check-inventory-notes.mjs",

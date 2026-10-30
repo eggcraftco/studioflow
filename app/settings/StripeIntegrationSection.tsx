@@ -59,6 +59,9 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
   const [onboarding, setOnboarding] = useState<{ country: string; supportedCountries: string[] } | null>(null);
   const [pickingCountry, setPickingCountry] = useState(false);
   const [country, setCountry] = useState("");
+  // SL-23 (30 Oct 2026): exactly false = the plan (Free) does not include Stripe payments. null = the server did
+  // not say (older server), which is read as today: the card offers Connect as before.
+  const [planAllowed, setPlanAllowed] = useState<boolean | null>(null);
   const latest = useRef(0);
 
   const load = useCallback(async () => {
@@ -74,6 +77,7 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
       if (view.onboarding?.country) setCountry(current => current || view.onboarding?.country || "");
       setConfigured(view.configured);
       setUnavailableReason(view.configured ? "" : view.reason);
+      setPlanAllowed(view.planAllowed);
       setKnown(true);
       // A success clears whatever the last failure said, or a recovered screen
       // keeps apologising.
@@ -185,7 +189,23 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
             </p>
           ) : null}
 
+          {planAllowed === false ? (
+            // Free (SL-23): no Connect, and the way to a plan instead. What the server still allows on Free —
+            // links already sent, cancelling and refunding them, disconnecting — stays where it is.
+            <div className="settings-card" style={{ marginTop: 8, display: "grid", gap: 8 }} data-stripe-plan-required>
+              <strong style={{ fontSize: 13 }}>{t("Stripe payments are part of the paid plans.")}</strong>
+              {status !== "disconnected" ? (
+                <p className="muted-copy" style={{ margin: 0 }}>{t("Payment links already sent still work, and they can still be cancelled or refunded.")}</p>
+              ) : null}
+              <div>
+                <a className="button secondary" href="/settings?section=plan-access">{t("See plans")}</a>
+              </div>
+            </div>
+          ) : null}
+
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            {/* Free (SL-23, exactly false): no Connect or Continue; the plan block above says why. */}
+            {planAllowed === false ? null : (<>
             {status === "disconnected" || status === "onboarding" || status === "restricted" ? (
               // A restricted account is one Stripe is still asking about: the
               // owner must be able to go back and answer, and the server resumes
@@ -196,6 +216,7 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
                 {busy === "connect" ? t("Opening…") : status === "disconnected" ? t("Connect Stripe") : t("Continue with Stripe")}
               </button>
             ) : null}
+            </>)}
             <button type="button" className="button secondary" disabled={!isOwner || busy === "refresh"} onClick={() => void recheck()}>
               {busy === "refresh" ? t("Checking…") : t("Check again")}
             </button>
@@ -206,7 +227,7 @@ export function StripeIntegrationSection({ workspace, language = "English" }: Pr
             ) : null}
           </div>
 
-          {pickingCountry && status === "disconnected" ? (
+          {pickingCountry && status === "disconnected" && planAllowed !== false ? (
             <div className="settings-card" style={{ marginTop: 10, display: "grid", gap: 8 }} data-stripe-country-picker>
               <label style={{ display: "grid", gap: 4 }}>
                 <strong style={{ fontSize: 13 }}>{t("Country your business is registered in")}</strong>

@@ -34,6 +34,9 @@ export type PaymentLinkView = {
   accentColor: string;
   showPoweredBy: boolean;
   reference: string;
+  /** SL-24 (30 Oct 2026): what an order-less link is for, as the business typed it. Optional: an older server
+   *  sends none. Shown when the link has no order reference (an order-less link has none until it is paid). */
+  title?: string;
   amountMinor: number;
   currency: string;
   status: PaymentLinkStatus;
