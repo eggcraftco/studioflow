@@ -3556,6 +3556,28 @@ function PublicSignupPageContent() {
     }
   }
 
+  /**
+   * Google / Apple on this page used to stop at "Your workspace is ready" with an Open
+   * NivaDesk button — one more click between a brand-new account and the app, on the one
+   * path every other way in skips (the e-mail form above and /login both go straight in).
+   * 30 Oct 2026: 53 of 67 new accounts never finished setup and nothing recorded whether
+   * they ever got past that panel (docs/onboarding/kopus-analizi-2026-10-30.md). So the
+   * sign-in goes in, and a brand-new account from the landing page is credited like an
+   * e-mail sign-up is; someone who already had an account and signed in here is not.
+   */
+  function enterAfterProviderSignIn() {
+    setError(null);
+    setSignupStarted(true);
+    const created = Date.parse(auth.currentUser?.metadata.creationTime || "");
+    const newAccount = Number.isFinite(created) && Date.now() - created < 10 * 60 * 1000;
+    if (newAccount && getLandingAttribution() !== null) {
+      trackLandingEvent("custom_order_landing_signup_completed");
+      fireGoogleAdsSignupConversion();
+      clearLandingAttribution();
+    }
+    router.replace(safeNextFromLocation("/orders"));
+  }
+
   if (user && !signupStarted) {
     return (
       <section className="public-page-hero public-signup-hero">
@@ -3620,7 +3642,7 @@ function PublicSignupPageContent() {
                 appleUnavailableMessage={t("auth.appleUnavailable")}
                 disabled={submitting}
                 onStart={() => setError(null)}
-                onSuccess={() => setError(null)}
+                onSuccess={enterAfterProviderSignIn}
                 onError={message => {
                   if (message) setError(message);
                 }}
