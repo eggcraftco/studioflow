@@ -53,9 +53,15 @@ const SECURITY_HEADERS = [
 // NV_BUILD_ID can be set by the build; otherwise the build's UTC minute.
 const NV_BUILD_ID = (process.env.NV_BUILD_ID || new Date().toISOString().replace(/\D/g, "").slice(0, 12)).slice(0, 40);
 
+// The emulator flag is fixed into every bundle as "1" or "" (never left as a runtime lookup), so a normal build
+// folds `process.env.NEXT_PUBLIC_FIREBASE_EMULATOR === "1"` to false and the minifier drops what hangs on it: the
+// QA sign-in hook (lib/firebase/client.ts) and the calendar's QA time-zone override never reach a production chunk
+// (scripts/check-qa-hooks-not-in-prod.mts reads the built chunks).
+const NV_FIREBASE_EMULATOR = process.env.NEXT_PUBLIC_FIREBASE_EMULATOR === "1" ? "1" : "";
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  env: { NEXT_PUBLIC_NV_BUILD_ID: NV_BUILD_ID },
+  env: { NEXT_PUBLIC_NV_BUILD_ID: NV_BUILD_ID, NEXT_PUBLIC_FIREBASE_EMULATOR: NV_FIREBASE_EMULATOR },
   // "x-powered-by: Next.js" tells an attacker which framework to look up.
   poweredByHeader: false,
   async rewrites() {

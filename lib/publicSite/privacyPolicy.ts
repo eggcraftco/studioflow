@@ -17,7 +17,7 @@ export type PrivacyPolicySection = {
 // and 10 (AI assistants: ChatGPT and Claude) were approved by the owner and
 // published on 17 October 2026. 18 October 2026: section 10 names the separate
 // ChatGPT and Claude cards in Settings › Integrations (owner-approved).
-export const PRIVACY_POLICY_LAST_UPDATED = "18 October 2026";
+export const PRIVACY_POLICY_LAST_UPDATED = "30 October 2026";
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -296,6 +296,28 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
         title: "",
         paragraphs: [
           "Disconnecting the account. When you disconnect the account in Settings, NivaDesk marks the connection as disconnected straight away and every sync stops: no further request is made to Amazon on your behalf, and nothing more is stored or sent to your workspace, including an order that was being read at that moment. NivaDesk then destroys the refresh token and deletes the order copies held in the dedicated system; if either step fails, it is retried automatically until it is done. Orders already created in your workspace are not deleted by disconnecting: delete them in your workspace if you no longer want them. A connection you make later is a new connection and is not affected by this cleanup. Amazon's own records of your orders are Amazon's, under Amazon's terms, and NivaDesk cannot delete them."
+        ]
+      },
+      {
+        title: "7.4 Your own Google Calendar and Outlook calendar (read only)",
+        paragraphs: [
+          "Availability. This connection is being tried out with a small number of named people at EGGcraft before it is offered to other workspaces; it is not open to customers yet.",
+          "If you choose to connect your own Google Calendar or Microsoft Outlook calendar, NivaDesk reads the meetings in the calendars you pick so that they appear in your own NivaDesk calendar. You give this permission on Google's or Microsoft's own consent page. NivaDesk asks only for read-only access: with Google, to see the list of your calendars and to see their events; with Microsoft, to read your calendars and to keep that access while you stay connected. NivaDesk does not read your e-mail and never creates, changes or deletes anything in your Google or Microsoft calendar.",
+          "Who sees them. The meetings NivaDesk reads are shown only to you, in your own NivaDesk calendar. Your workspace owner, administrators and other members cannot see them; they are not turned into tasks, orders or other workspace records, and they are not shared with other workspaces. NivaDesk's AI features and its connections for AI assistants do not read them.",
+          "What NivaDesk keeps, and for how long:"
+        ],
+        bullets: [
+          "a connection record (the account e-mail address the provider shows, the calendars you chose, and the time of the last sync), for as long as the connection exists;",
+          "an access token and a refresh token, stored encrypted and readable only by NivaDesk's servers, for as long as the connection exists;",
+          "a copy of each meeting in the calendars you chose that falls between 30 days ago and 180 days ahead: its title, time, place, video-call link and a link back to the meeting at Google or Microsoft. Copies are refreshed when you open your calendar and otherwise about every 30 minutes; a meeting that is changed, cancelled or deleted at the provider, or that leaves that period, is updated or removed at the next sync;",
+          "deleted copies can remain in NivaDesk's database backups for up to 14 days, until these expire."
+        ]
+      },
+      {
+        title: "",
+        paragraphs: [
+          "Disconnecting. You can disconnect at any time from the calendar ('Your other calendars'). NivaDesk then deletes the connection record, the tokens and every copy of your meetings, and asks Google to withdraw NivaDesk's access; with Microsoft you can also remove NivaDesk from your account's app permissions. Nothing in your Google or Microsoft calendar is changed. If you leave a workspace or your access is suspended, NivaDesk removes the connection and its copies at the next sync.",
+          "Google user data. NivaDesk's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy (https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. NivaDesk uses this information only to show you your own meetings: it does not use it for advertising, does not sell it, does not use it to develop or train AI models, and people at NivaDesk do not read it unless you ask us to, for security, or where the law requires it."
         ]
       }
     ]
