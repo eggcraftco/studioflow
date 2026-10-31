@@ -183,6 +183,13 @@ const integrations: Integration[] = [
   { name: "Zapier", category: "Payments, files & automation", summary: { key: "integrations.summary.zapier" }, detail: { key: "integrations.detail.webhook" }, state: "live", note: "integrations.note.webhook" },
   { name: "Make", category: "Payments, files & automation", summary: { key: "integrations.summary.make" }, detail: { key: "integrations.detail.webhook" }, state: "live", note: "integrations.note.webhook" },
   { name: "Cloud storage", category: "Payments, files & automation", summary: { key: "integrations.summary.cloudstorage" }, detail: { key: "integrations.detail.cloudstorage" }, state: "live", note: "integrations.note.cloudstorage" },
+  // Calendar, 31 October 2026 (parity with the app's Settings ▸ Integrations tile). Google Calendar and Outlook,
+  // read only, one person's own calendar. Both switches (appConfig/calendarConnectors google + microsoft) are
+  // "on" for every workspace since 31 October 2026 ~23:00Z, Google's OAuth verification was approved on 31 October
+  // 2026, and the web Calendar has run since 30 October. Microsoft's publisher verification (Partner Center) is
+  // still open, so the note says what a work or school Outlook account may show. The apps do not have the
+  // Calendar yet; the detail says "web app today".
+  { name: "Calendar", category: "Payments, files & automation", summary: { key: "integrations.summary.calendar" }, detail: { key: "integrations.detail.calendar" }, state: "live", note: "integrations.note.calendar" },
 ];
 
 function IntegrationsDirectoryContent() {

@@ -712,7 +712,8 @@ const TREE_EN: GuideNode[] = [
       { kind: "bullets", items: [
         "It is read-only and one way: NivaDesk never writes to Google or Outlook, and those meetings never become NivaDesk entries, tasks or orders.",
         "Only you see your Google or Outlook meetings — not your team and not the owner. They cover 30 days back to 180 days ahead, and a meeting with a link has Join meeting and Open in Google Calendar or Open in Outlook.",
-        "The 🌐 Your other calendars button only appears once this connection is switched on for your account; it is being opened gradually. If you do not see it, it is not on for you yet.",
+        "Connecting Google Calendar and Outlook is open to every member of every workspace, on the web app.",
+        "Settings ▸ Integrations ▸ Calendar explains these steps and shows whether Google Calendar and Outlook are connected for you. Microsoft is still verifying NivaDesk as a publisher, so a work or school Outlook account may show an “unverified publisher” notice.",
         "A work or school Outlook account may need your IT admin to approve NivaDesk first."
       ] },
       { kind: "sub", text: "Adding entries without a connection (offline)" },
@@ -2352,7 +2353,8 @@ const TREE_TR: GuideNode[] = [
       { kind: "bullets", items: [
         "Salt okunurdur ve tek yönlüdür: NivaDesk Google'a ya da Outlook'a asla yazmaz; oradaki toplantılar asla NivaDesk kaydına, görevine ya da siparişine dönüşmez.",
         "Google ya da Outlook toplantılarınızı yalnız siz görürsünüz — ekibiniz de, sahip de görmez. 30 gün öncesinden 180 gün sonrasına kadar gelirler; bağlantısı olan bir toplantıda Toplantıya katıl ile Google Takvim'de aç ya da Outlook'ta aç bulunur.",
-        "🌐 Diğer takvimleriniz düğmesi ancak bu bağlantı hesabınız için açıldığında görünür; kademeli olarak açılıyor. Görmüyorsanız sizin için henüz açılmamıştır.",
+        "Google Takvim ve Outlook bağlama, web uygulamasında her çalışma alanının her üyesine açıktır.",
+        "Ayarlar ▸ Entegrasyonlar ▸ Takvim bu adımları anlatır ve Google Takvim ile Outlook'un sizin için bağlı olup olmadığını gösterir. Microsoft NivaDesk'i yayıncı olarak hâlâ doğruluyor; bu yüzden iş ya da okul Outlook hesabı “doğrulanmamış yayıncı” uyarısı gösterebilir.",
         "İş ya da okul Outlook hesabında BT yöneticinizin önce NivaDesk'i onaylaması gerekebilir."
       ] },
       { kind: "sub", text: "Bağlantı yokken kayıt eklemek (çevrimdışı)" },

@@ -74,6 +74,9 @@ try {
     "export const getAmazonStatus = refuse('getAmazonStatus');",
     "export const loadCustomerChannelStatus = refuse('loadCustomerChannelStatus');",
     "export const getStorageStatus = refuse('getStorageStatus');",
+    "export const auth = { currentUser: null };",
+    "export const CALENDAR_PROVIDERS = ['google', 'microsoft'];",
+    "export const loadCalendarTileSignal = refuse('loadCalendarTileSignal');",
     "// Pure and called by the Cloud storage rule: the brand table, as lib/studioflow/storage.ts has it.",
     "export const storageProviderLabel = (id) => ({ gdrive: 'Google Drive', onedrive: 'OneDrive', dropbox: 'Dropbox', box: 'Box', managed: 'NivaDesk Cloud' })[id] || id;",
     "",
@@ -240,6 +243,28 @@ try {
         && ["dropbox", "onedrive", "box", "google drive"].every((word) => provider("cloudstorage").keywords.includes(word)));
     expect("no per-provider storage tiles beside it",
       !INTEGRATION_PROVIDERS.some((row) => ["gdrive", "googledrive", "onedrive", "dropbox", "box"].includes(row.id)));
+  }
+
+  // --- Calendar (Google Calendar / Outlook): ONE tile, the PERSON's own two connections (31 Oct 2026) -----------
+  {
+    const tile = (connections = {}) => ({ calendar: { connections } });
+    const cal = (signals) => state("calendar", signals);
+    const conn = (provider, status = "active") => ({ provider, accountEmail: "x@example.test", status, errorCode: null, calendars: [], lastSyncAtMs: null, windowStartKey: null, windowEndKey: null });
+    expect("calendar: not read yet is 'checking', no action", cal({ calendar: undefined }).state === "checking" && integrationStateOffersNoAction(cal({ calendar: undefined }).state));
+    expect("calendar: a failed read is 'unverified', never 'available' or 'Not connected'", cal({ calendar: null }).state === "unverified" && integrationStateOffersNoAction(cal({ calendar: null }).state));
+    expect("calendar: nothing connected -> 'available' (Set up opens the how-it-works card), never 'planned'",
+      cal(tile()).state === "available" && !integrationStateOffersNoAction(cal(tile()).state));
+    const one = cal(tile({ google: conn("google") }));
+    expect("calendar: an active Google connection -> connected, detail 'Google Calendar'", one.state === "connected" && one.detail === "Google Calendar");
+    const both = cal(tile({ google: conn("google"), microsoft: conn("microsoft") }));
+    expect("calendar: both connected -> detail names both", both.state === "connected" && both.detail === "Google Calendar, Outlook");
+    expect("calendar: a connection that needs the person (reconnect) -> attention 'Reconnect required'",
+      cal(tile({ google: conn("google", "reconnect") })).state === "attention" && cal(tile({ google: conn("google", "reconnect") })).detail === "Reconnect required");
+    expect("calendar: an errored connection is attention too, even beside an active one",
+      cal(tile({ google: conn("google"), microsoft: conn("microsoft", "error") })).state === "attention");
+    expect("calendar: an Outlook-only connection reads connected, detail 'Outlook'",
+      cal(tile({ microsoft: conn("microsoft") })).state === "connected" && cal(tile({ microsoft: conn("microsoft") })).detail === "Outlook");
+    expect("calendar: the tile is 'native' and opens its own card", provider("calendar").kind === "native" && provider("calendar").manage === "calendar");
   }
 
   {

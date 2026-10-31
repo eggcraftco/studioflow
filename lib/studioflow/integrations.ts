@@ -21,7 +21,7 @@
 
 import { collection, getDocs } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
-import { db, functions } from "@/lib/firebase/client";
+import { auth, db, functions } from "@/lib/firebase/client";
 import { getEtsyConnections } from "@/lib/studioflow/etsy";
 import { getWooConnections } from "@/lib/studioflow/woocommerce";
 import { getSquareConnections } from "@/lib/studioflow/square";
@@ -30,6 +30,7 @@ import { getAmazonStatus, type AmazonAuthorizationMode, type AmazonConnection } 
 import { getIntegrationWebhookInfo, type IntegrationWebhookInfo } from "@/lib/studioflow/planActions";
 import { loadCustomerChannelStatus, type CustomerChannelCard } from "@/lib/studioflow/customerInbox";
 import { getStorageStatus, storageProviderLabel, type StorageStatusResult } from "@/lib/studioflow/storage";
+import { CALENDAR_PROVIDERS, loadCalendarTileSignal, type CalendarTileSignal } from "@/lib/studioflow/calendarExternal";
 
 export type IntegrationCategory = "commerce" | "banking" | "automation" | "messaging";
 
@@ -46,7 +47,7 @@ export const INTEGRATION_CATEGORIES: { id: IntegrationCategory; title: string }[
 /** Which manage screen a card opens; "" for the ones with nothing to manage. */
 // "dhl" is not in INTEGRATION_PROVIDERS: DHL Express is shown only where the server
 // has opened it for the workspace, and never on the public integrations page.
-export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "claude" | "dhl" | "royalmail" | "whatsapp" | "instagram" | "stripe" | "tracking" | "cloudstorage" | "storage" | "gdrive" | "onedrive" | "dropbox" | "box";
+export type IntegrationManageTarget = "shopify" | "woocommerce" | "inbound" | "" | "etsy" | "square" | "ebay" | "amazon" | "paypal" | "quickbooks" | "xero" | "chatgpt" | "claude" | "dhl" | "royalmail" | "whatsapp" | "instagram" | "stripe" | "tracking" | "cloudstorage" | "storage" | "gdrive" | "onedrive" | "dropbox" | "box" | "calendar";
 
 export type IntegrationProvider = {
   id: string;
@@ -205,6 +206,17 @@ export const INTEGRATION_PROVIDERS: IntegrationProvider[] = [
     keywords: ["google drive", "drive", "onedrive", "sharepoint", "dropbox", "box", "storage", "files"],
     manage: "cloudstorage",
   },
+  // Calendar (31 Oct 2026): the PERSON's own Google Calendar / Outlook, read only, shown in the Calendar screen. ONE
+  // tile, like Cloud storage, with the two brand names as chips and search words. Connecting happens on the Calendar
+  // screen (consent return, calendar choice, Sync now already live there); this tile says how it works and where this
+  // person's two connections stand. The state is the person's, not the workspace's: nobody else can read it.
+  {
+    id: "calendar", name: "Calendar", category: "automation", kind: "native", mark: "C",
+    blurb: "Show your own Google Calendar or Outlook meetings in Calendar, read only. Only you can see them.",
+    capabilities: ["Google Calendar", "Outlook", "Read only"],
+    keywords: ["google calendar", "outlook", "microsoft", "agenda", "meetings", "calendar"],
+    manage: "calendar",
+  },
 ];
 
 /**
@@ -256,7 +268,7 @@ export type IntegrationLiveState = {
  */
 export async function loadIntegrationSignals(companyId: string): Promise<IntegrationSignals> {
   if (!companyId) return EMPTY_INTEGRATION_SIGNALS;
-  const [stores, inbound, banks, etsy, woo, square, stripe, ebay, amazon, accounting, chatgpt, retired, channels, storage] = await Promise.allSettled([
+  const [stores, inbound, banks, etsy, woo, square, stripe, ebay, amazon, accounting, chatgpt, retired, channels, storage, calendar] = await Promise.allSettled([
     httpsCallable<{ companyId: string }, { stores: { shop: string; status: string }[] }>(
       functions, "getShopifyIntegrationsForWorkspace")({ companyId }),
     getIntegrationWebhookInfo("inbound", companyId),
@@ -303,6 +315,9 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
     // callable rejects, which settles as null and the four tiles read
     // "Coming soon" — what they said before this connector existed.
     getStorageStatus(companyId),
+    // Calendar: the person's own connection documents (two plain reads; never the availability callable, which also
+    // syncs at the provider). No signed-in person = nothing to read, which settles as "could not check".
+    auth.currentUser?.uid ? loadCalendarTileSignal(companyId, auth.currentUser.uid) : Promise.reject(new Error("not signed in")),
   ]);
   const channel = (result: PromiseSettledResult<IntegrationWebhookInfo>) =>
     result.status === "fulfilled"
@@ -368,6 +383,7 @@ export async function loadIntegrationSignals(companyId: string): Promise<Integra
       : [],
     customerChannels: channels.status === "fulfilled" ? channels.value.cards : null,
     storage: storage.status === "fulfilled" ? storage.value : null,
+    calendar: calendar.status === "fulfilled" ? calendar.value : null,
   };
 }
 
@@ -466,6 +482,8 @@ export type IntegrationSignals = {
   customerChannels?: CustomerChannelCard[] | null;
   /** Own cloud storage (storageStatus). null = the read failed; undefined = not read yet. */
   storage?: StorageStatusResult | null;
+  /** The signed-in person's Calendar tile (their own connections). null = the read failed; undefined = not read yet. */
+  calendar?: CalendarTileSignal | null;
 };
 
 /**
@@ -516,6 +534,22 @@ function resolveProviderState(
     if (rows.some((row) => row.status === "reauth_required" || row.status === "error")) return { state: "attention", detail: "Reconnect required" };
     if (status.canConnect) return status.providers.some((row) => row.available) ? { state: "available" } : { state: "planned" };
     return { state: "info", detail: storageProviderLabel("managed") };
+  }
+
+  // Calendar, one tile, the PERSON's own two connections (Google Calendar, Outlook):
+  //   not read yet -> "checking"; read failed -> "unverified" (neither offers Set up);
+  //   a connection that needs the person (expired / error) -> attention "Reconnect required";
+  //   an active connection -> connected, detail = the connected names;
+  //   none -> "available" (Set up opens the how-it-works card). Whether the server switch is on is not readable here
+  //   without the availability callable (which syncs), so a switched-off server is told on the Calendar screen.
+  if (provider.id === "calendar") {
+    const tile = signals.calendar;
+    if (tile === undefined) return { state: "checking" };
+    if (tile === null) return { state: "unverified" };
+    const rows = CALENDAR_PROVIDERS.map((id) => tile.connections[id]).filter((row): row is NonNullable<typeof row> => Boolean(row));
+    if (rows.some((row) => row.status !== "active")) return { state: "attention", detail: "Reconnect required" };
+    if (rows.length) return { state: "connected", detail: rows.map((row) => (row.provider === "google" ? "Google Calendar" : "Outlook")).join(", ") };
+    return { state: "available" };
   }
 
   if (provider.id === "stripe") {

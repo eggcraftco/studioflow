@@ -4,7 +4,7 @@
 // Everything that matters happens on the server: the connect link, the token exchange, the reading. This file asks
 // for a link, comes back from the provider (app/oauth/calendar), listens to the person's own connection documents and
 // the meetings read through them. The rules let only that person read either; nothing here can write them.
-import { doc, onSnapshot, collection, query, where, type Unsubscribe } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, collection, query, where, type Unsubscribe } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase/client";
 import * as core from "./calendarCore";
@@ -44,6 +44,29 @@ function connectionOf(provider: CalendarProvider, d: Record<string, unknown> | u
 export async function calendarConnectorsAvailable(companyId: string): Promise<Record<CalendarProvider, boolean>> {
   const res = await httpsCallable<{ companyId: string }, Record<CalendarProvider, boolean>>(functions, "calendarConnectorsAvailable")({ companyId });
   return { google: Boolean(res.data?.google), microsoft: Boolean(res.data?.microsoft) };
+}
+
+/** What the Settings ▸ Integrations Calendar tile needs: this person's own connections (no connection document = not
+ *  connected). Two plain document reads — deliberately NOT `calendarConnectorsAvailable`: that callable also refreshes the
+ *  person's open connections at the provider (a few seconds each), which the Calendar screen wants when it opens and a
+ *  settings grid must never trigger. So the tile cannot know the provider switch is off; the Calendar screen says it
+ *  ("not switched on for this workspace yet"). A failed read rejects, which the tile shows as "could not check", never as
+ *  "not connected". */
+export type CalendarTileSignal = {
+  connections: Partial<Record<CalendarProvider, CalendarConnection>>;
+};
+
+export async function loadCalendarTileSignal(companyId: string, uid: string): Promise<CalendarTileSignal> {
+  const snaps = await Promise.all(
+    CALENDAR_PROVIDERS.map((provider) => getDoc(doc(db, "companies", companyId, "calendarConnections", `${uid}_${provider}`))),
+  );
+  const connections: Partial<Record<CalendarProvider, CalendarConnection>> = {};
+  CALENDAR_PROVIDERS.forEach((provider, index) => {
+    const snap = snaps[index];
+    const c = connectionOf(provider, snap.exists() ? (snap.data() as Record<string, unknown>) : undefined);
+    if (c) connections[provider] = c;
+  });
+  return { connections };
 }
 
 /** Asks for the provider's consent link and goes there. The state is remembered in this tab so the return page

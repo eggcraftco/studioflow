@@ -58,6 +58,7 @@ import { getEtsyConnections, type EtsyConnection } from "@/lib/studioflow/etsy";
 import { httpsCallable } from "firebase/functions";
 import { ChatGPTIntegrationSection } from "./ChatGPTIntegrationSection";
 import { StorageIntegrationSection } from "./StorageIntegrationSection";
+import { CalendarIntegrationSection } from "./CalendarIntegrationSection";
 import { EtsyIntegrationSection } from "./EtsyIntegrationSection";
 import { WooCommerceIntegrationSection } from "./WooCommerceIntegrationSection";
 import { SquareIntegrationSection } from "./SquareIntegrationSection";
@@ -253,6 +254,8 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   "customer-channels": "integrations",
   // Own cloud storage: the Cloud storage card, one row per provider.
   cloudstorage: "integrations",
+  // The Calendar tile (Google Calendar / Outlook, 31 Oct 2026) and its deep link.
+  calendar: "integrations",
   storage: "integrations",
   gdrive: "integrations",
   onedrive: "integrations",
@@ -758,7 +761,7 @@ export default function SettingsPage() {
       rawRequested === "etsy" ||
       rawRequested === "square" || rawRequested === "ebay" || rawRequested === "amazon" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero" ||
       rawRequested === "dhl" || rawRequested === "royalmail" || rawRequested === "whatsapp" || rawRequested === "instagram" || rawRequested === "stripe" || rawRequested === "tracking" ||
-      rawRequested === "cloudstorage" || rawRequested === "storage" || rawRequested === "gdrive" || rawRequested === "onedrive" || rawRequested === "dropbox" || rawRequested === "box"
+      rawRequested === "calendar" || rawRequested === "cloudstorage" || rawRequested === "storage" || rawRequested === "gdrive" || rawRequested === "onedrive" || rawRequested === "dropbox" || rawRequested === "box"
     ) {
       setIntegrationProvider(rawRequested);
     }
@@ -5917,6 +5920,7 @@ function IntegrationsSection({
         {managing === "chatgpt" ? <ChatGPTIntegrationSection workspace={workspace} language={language} assistant="chatgpt" /> : null}
         {managing === "claude" ? <ChatGPTIntegrationSection workspace={workspace} language={language} assistant="claude" /> : null}
         {managing === "inbound" ? <InboundWebhookSection workspace={workspace} language={language} /> : null}
+        {managing === "calendar" ? <CalendarIntegrationSection workspace={workspace} language={language} /> : null}
         {managingStorage ? <StorageIntegrationSection workspace={workspace} language={language} focus={managing === "cloudstorage" || managing === "storage" ? "" : managing} /> : null}
       </div>
     );

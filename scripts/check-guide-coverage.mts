@@ -190,12 +190,15 @@ const INTEGRATION_CHAPTERS: Record<string, string> = {
   tracking: "card-shipping",
   twilio: "set-sms",
   cloudstorage: "set-cloud-storage",
+  // Calendar (31 Oct 2026): the Settings ▸ Integrations tile and the site card both open the Calendar chapter, whose
+  // "Connecting Google Calendar or Outlook" part is the how-to.
+  calendar: "calendar",
 };
 // The name the chapter must use for it (the tile's own name where it differs from the id).
 const INTEGRATION_NAMES: Record<string, string> = {
   openbanking: "Open Banking", quickbooks: "QuickBooks", "dhl-express": "DHL Express", dhl: "DHL Express",
   tracking: "17TRACK", inbound: "webhook", truelayer: "Open Banking", chatgpt: "ChatGPT", twilio: "SMS",
-  cloudstorage: "Cloud storage",
+  cloudstorage: "Cloud storage", calendar: "Calendar",
   "open-banking": "Open Banking", "quickbooks-online": "QuickBooks", "17track-tracking": "17TRACK", "cloud-storage": "Cloud storage",
   "royal-mail-click-&-drop": "Royal Mail",
 };
