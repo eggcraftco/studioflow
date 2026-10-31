@@ -8512,6 +8512,9 @@ body[data-studio-theme="dark"] .order-platform-bar-item:hover { border-color: rg
   display: flex;
   justify-content: flex-end;
 }
+/* An open menu (its backdrop and panel live in this wrap's stacking context) rises above every other card's
+   "..." wrap, drag handle and resize handles, which share the same level and would otherwise paint over it. */
+.order-card-menu-wrap.is-open { z-index: var(--z-content-max); }
 
 /* The button is the 40 x 40 touch target; the 32 px disc inside is what is
    seen. Its centre sits on the title row's centre line (6 + 20 = 26), and
@@ -26404,6 +26407,72 @@ body[data-studio-theme="dark"] .studio-toast > .studio-toast-close { color: rgba
   cursor: pointer;
 }
 .customize-templates-row > button:hover { border-color: #2f6df6; color: #2f6df6; }
+
+/* ---- Customize cards, compact (owner, 31 Oct): the list ran far down the screen. Each category is its own block
+   and a wide screen sets the blocks side by side; rows are one tight line (icon, name, switch). The phone keeps
+   one column and its Move Up / Move Down buttons. ---- */
+.customize-card-group-block { display: grid; gap: 9px; align-content: start; min-width: 0; }
+/* Phone / narrow: one line per card — icon, name, the two arrows, the switch. */
+@media (max-width: 899px) {
+  .customize-card-row { flex-wrap: nowrap; min-height: 44px; padding: 6px 8px 6px 10px; border-radius: 12px; gap: 8px; }
+  .customize-card-main { flex: 1 1 0; flex-wrap: nowrap; min-width: 0; gap: 8px; }
+  .customize-card-row label { flex: 1 1 0; font-size: 14px; font-weight: 700; }
+  .customize-card-actions { flex: 0 0 auto; width: auto; flex-wrap: nowrap; gap: 4px; order: -1; }
+  .customize-card-actions .button.customize-card-move { width: 30px; height: 30px; padding: 0; border-radius: 8px; font-size: 15px; line-height: 1; }
+}
+/* Dark mode: the panel had no dark rules, so it stayed light while its labels turned white and disappeared. */
+body[data-studio-theme="dark"] .customize-cards-panel { border-color: rgba(255, 255, 255, 0.1); background: rgba(30, 30, 32, 0.98); color: rgba(255, 255, 255, 0.9); }
+body[data-studio-theme="dark"] .customize-cards-header h2 { color: rgba(255, 255, 255, 0.92); }
+body[data-studio-theme="dark"] .customize-cards-header p:not(.orders-kicker),
+body[data-studio-theme="dark"] .workspace-layout-mode-card p { color: rgba(255, 255, 255, 0.6); }
+body[data-studio-theme="dark"] .workspace-layout-mode-card { border-color: rgba(96, 165, 250, 0.22); background: rgba(255, 255, 255, 0.04); }
+body[data-studio-theme="dark"] .workspace-blocks-close { border-color: rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.85); }
+body[data-studio-theme="dark"] .customize-templates-row > button { border-color: rgba(255, 255, 255, 0.16); color: rgba(255, 255, 255, 0.85); }
+body[data-studio-theme="dark"] .customize-card-search { border-color: rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.04); }
+body[data-studio-theme="dark"] .customize-card-row { border-color: rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.05); box-shadow: none; }
+body[data-studio-theme="dark"] .customize-card-row label { color: rgba(255, 255, 255, 0.9); }
+body[data-studio-theme="dark"] .customize-card-icon { color: rgba(255, 255, 255, 0.6); --card-title-icon-cutout: #29292b; }
+body[data-studio-theme="dark"] .customize-card-row input:not(:checked) { background-color: rgba(255, 255, 255, 0.22); }
+@media (min-width: 900px) {
+  .customize-cards-panel {
+    width: min(980px, 100%);
+    max-width: 980px;
+    padding: 18px 20px 20px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 16px;
+    align-content: start;
+  }
+  .customize-cards-panel > * { grid-column: 1 / -1; }
+  .customize-cards-panel > .workspace-layout-mode-card { grid-column: 1; margin-bottom: 12px; }
+  .customize-cards-panel > .customize-templates { grid-column: 2; align-self: start; }
+  .customize-cards-panel > .customize-templates > .customize-card-group { margin-top: 0; }
+  .customize-cards-panel > .customize-card-search { margin-bottom: 12px; }
+  /* Columns, not a grid: a short category flows under the one before it instead of waiting for the tallest. */
+  .customize-card-list { display: block; columns: 4 200px; column-gap: 14px; }
+  .customize-card-group-block { gap: 6px; margin-bottom: 14px; break-inside: avoid; }
+  .customize-card-group-block > .customize-card-group { margin: 0 2px 2px; }
+  .customize-card-row {
+    min-height: 38px;
+    padding: 6px 10px 6px 8px;
+    border-radius: 10px;
+    gap: 6px;
+  }
+  /* One line: a long name ("Customer & Communication") wraps inside its label, never under the icon. */
+  .customize-card-main { gap: 8px; flex-wrap: nowrap; }
+  .customize-card-row label { flex: 1 1 0; }
+  .customize-card-icon { width: 22px; height: 22px; border-radius: 7px; }
+  .customize-card-icon svg { width: 16px; height: 16px; }
+  .customize-card-row label { gap: 8px; font-size: 13.5px; font-weight: 700; }
+  .customize-card-row input {
+    width: 32px;
+    height: 18px;
+    background: radial-gradient(circle at 9px 50%, #fff 0 6px, transparent 7px), #d1d5db;
+  }
+  .customize-card-row input:checked {
+    background: radial-gradient(circle at calc(100% - 9px) 50%, #fff 0 6px, transparent 7px), #0a84ff;
+  }
+}
 .schedule-first-use-guide {
   display: flex;
   align-items: center;
@@ -37199,6 +37268,9 @@ body[data-studio-theme="dark"] .inv-categories .btn-danger { color: #f87171; bor
   box-shadow: 0 1px 3px rgba(16, 24, 40, 0.14);
 }
 .order-view-toggle button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Expand all / Collapse all: the toggle's frame around one button that reads as an action, not a state. */
+.order-stack-fold-toggle button { color: var(--text); }
+.order-stack-fold-toggle button:hover { background: var(--surface); box-shadow: 0 1px 3px rgba(16, 24, 40, 0.14); }
 
 .order-detail-stack {
   display: grid;
@@ -39142,70 +39214,87 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="todo"] .app-to
   color: var(--sec-label);
 }
 
-/* -- Client Files: what the section holds as a sub-heading with Upload (solid) and Download all (tinted) at its
-      end; the upload rules in a tinted box; files as light rows with quiet icons; the Files library's links as a
-      list; the allowed types as a quiet line. -- */
+/* -- Client Files (owner's design, 31 Oct): what the section holds as quiet text with Upload (solid) and
+      Download all (tinted) at its end, both with outline tray icons; the upload rules in a bordered tinted box
+      with white chips; each file a white bordered row with its actions in small grey squares; a hairline, then
+      the Files library's heading in small capitals with "Manage" at its end and its links on one wrapping line;
+      the allowed types as a quiet line. -- */
 .order-stack-body[data-stack-card="clientFiles"] > .order-detail-card > .app-card-panel { gap: 18px; }
 /* One row that wraps (the phone rule's column turned the text's 220 px flex basis into a 220 px tall gap). */
-.order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro { flex-direction: row; align-items: center; gap: 12px 16px; }
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro { flex-direction: row; align-items: center; gap: 12px; }
 .order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro strong {
   font-size: 15px;
-  font-weight: 650;
-  line-height: 1.3;
-  color: var(--sec-text);
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--sec-label);
 }
 .order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro p { margin: 4px 0 0; font-size: 13.5px; font-weight: 400; line-height: 1.4; color: var(--sec-label); }
 .order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro > .app-upload-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-height: 42px;
-  padding: 0 20px;
+  padding: 0 18px;
   border: 0;
   border-radius: 10px;
   background: var(--sec-accent-solid);
   color: #fff;
-  font-size: 14.5px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 500;
   box-shadow: none;
 }
 .order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro > .app-upload-button.secondary { background: var(--sec-accent-soft); color: var(--sec-accent); }
 .order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro > .app-upload-button:disabled { opacity: 0.5; }
+.order-stack-body[data-stack-card="clientFiles"] .client-files-tray-icon {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .order-stack-body[data-stack-card="clientFiles"] .upload-safety-panel {
-  gap: 10px 8px;
+  gap: 12px 8px;
   margin: 0 !important;
-  padding: 15px 18px;
-  border: 0;
-  border-radius: 12px;
-  background: var(--sec-result-bg);
+  padding: 14px 16px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 14px;
+  background: var(--sec-field-bg);
 }
 .order-stack-body[data-stack-card="clientFiles"] .upload-safety-panel > .studio-pill {
   min-height: 0;
-  padding: 6px 10px;
-  border: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--sec-field-border);
   border-radius: 8px;
-  background: var(--sec-field-bg);
+  background: var(--sec-surface);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--sec-label);
 }
-.order-stack-body[data-stack-card="clientFiles"] .upload-safety-panel > .upload-safety-policy-text { font-size: 13.5px; font-weight: 400; line-height: 1.45; color: var(--sec-label); }
-.order-stack-body[data-stack-card="clientFiles"] .upload-safety-check { gap: 10px; font-size: 14px; font-weight: 500; color: var(--sec-text); }
-.order-stack-body[data-stack-card="clientFiles"] .upload-safety-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--sec-accent-solid); }
-.order-stack-body[data-stack-card="clientFiles"] .app-client-files-list { gap: 8px; }
+.order-stack-body[data-stack-card="clientFiles"] .upload-safety-panel > .upload-safety-policy-text { font-size: 14px; font-weight: 400; line-height: 1.5; color: var(--sec-label); }
+.order-stack-body[data-stack-card="clientFiles"] .upload-safety-check { gap: 10px; font-size: 15px; font-weight: 400; color: var(--sec-text); }
+.order-stack-body[data-stack-card="clientFiles"] .upload-safety-check input { width: 19px; height: 19px; margin: 0; accent-color: var(--sec-accent-solid); }
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-list { gap: 10px; }
 .order-stack-body[data-stack-card="clientFiles"] .client-file-list-row {
   min-height: 0;
-  padding: 11px 14px;
-  border: 1px solid transparent;
-  border-radius: 10px;
-  background: var(--sec-result-bg);
+  padding: 15px 14px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 14px;
+  background: var(--sec-surface);
 }
-.order-stack-body[data-stack-card="clientFiles"] .client-file-preview-trigger { grid-template-columns: 38px minmax(0, 1fr); gap: 12px; align-items: center; }
-.order-stack-body[data-stack-card="clientFiles"] .compact-file-preview { width: 38px; height: 38px; border-radius: 8px; }
-.order-stack-body[data-stack-card="clientFiles"] .client-file-main strong { font-size: 14.5px; font-weight: 600; line-height: 1.3; color: var(--sec-text); }
-.order-stack-body[data-stack-card="clientFiles"] .client-file-main .muted-copy { margin-top: 2px; font-size: 12.5px; font-weight: 400; line-height: 1.35; color: var(--sec-label); }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-preview-trigger { grid-template-columns: 40px minmax(0, 1fr); gap: 14px; align-items: center; }
+.order-stack-body[data-stack-card="clientFiles"] .compact-file-preview { width: 40px; height: 40px; border-radius: 8px; }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-main strong { font-size: 15px; font-weight: 600; line-height: 1.3; color: var(--sec-text); }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-main .muted-copy { margin-top: 3px; font-size: 14px; font-weight: 400; line-height: 1.4; color: var(--sec-label); }
 .order-stack-body[data-stack-card="clientFiles"] .client-file-icon-actions { gap: 4px; }
-.order-stack-body[data-stack-card="clientFiles"] .client-file-icon-button { width: 32px; height: 32px; border-radius: 8px; color: var(--sec-label); }
-.order-stack-body[data-stack-card="clientFiles"] .client-file-icon-button:hover { background: var(--sec-field-bg); color: var(--sec-text); }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-icon-button { width: 32px; height: 32px; border-radius: 8px; background: var(--sec-field-bg); color: var(--sec-label); }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-icon-button:hover { background: var(--sec-field-border); color: var(--sec-text); }
 .order-stack-body[data-stack-card="clientFiles"] .client-file-icon-button.is-primary { color: var(--sec-accent); }
 .order-stack-body[data-stack-card="clientFiles"] .client-file-icon-button.is-danger { color: var(--sec-red); }
+html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] .client-file-list-row { background: rgba(255, 255, 255, 0.03); }
+html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] .upload-safety-panel > .studio-pill { background: rgba(255, 255, 255, 0.06); }
 .order-stack-body[data-stack-card="clientFiles"] .app-client-files-empty {
   display: flex;
   flex-wrap: wrap;
@@ -39251,15 +39340,42 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="todo"] .app-to
   font-weight: 600;
   color: var(--sec-label);
 }
-.order-stack-body[data-stack-card="clientFiles"] .order-library-files > a {
-  font-size: 13.5px;
-  font-weight: 650;
-  text-decoration: none;
-  opacity: 1;
-  color: var(--sec-link);
+/* Client Files: the library's heading in small capitals with "Manage" at its end, its links on one wrapping line. */
+.order-stack-body[data-stack-card="clientFiles"] .order-library-files {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px 16px;
+  padding-top: 20px;
 }
-.order-stack-body[data-stack-card="clientFiles"] .order-library-files > a:hover { text-decoration: underline; }
-.order-stack-body[data-stack-card="clientFiles"] .app-client-files-note { margin: 0; font-size: 12.5px; font-weight: 400; line-height: 1.4; color: var(--sec-label); }
+.order-stack-body[data-stack-card="clientFiles"] .order-library-files-title {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="clientFiles"] .order-library-files ul { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.order-stack-body[data-stack-card="clientFiles"] .order-library-files li > button { font-size: 15px; font-weight: 400; color: var(--sec-link); }
+.order-stack-body[data-stack-card="clientFiles"] .order-library-files > a {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  font-size: 14px;
+  font-weight: 400;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  opacity: 1;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="clientFiles"] .order-library-files > a:hover { color: var(--sec-text); }
+/* Phone: heading and "Manage" do not fit one line, so "Manage" closes the block under the links. */
+@media (max-width: 560px) {
+  .order-stack-body[data-stack-card="clientFiles"] .order-library-files { grid-template-columns: minmax(0, 1fr); }
+  .order-stack-body[data-stack-card="clientFiles"] .order-library-files > a { grid-column: 1; grid-row: 3; justify-self: start; }
+}
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-note { margin: 0; font-size: 13.5px; font-weight: 400; line-height: 1.45; color: var(--sec-label); }
 .order-stack-body[data-stack-card="clientFiles"] .app-card-panel > p.muted-copy,
 .order-stack-body[data-stack-card="clientFiles"] .app-card-panel > :is(.file-action-status, .file-action-error) { margin: 0; font-size: 13.5px; }
 

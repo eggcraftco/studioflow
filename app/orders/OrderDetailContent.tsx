@@ -6040,22 +6040,28 @@ export function OrderDetailContent({
                     </label>
                   </div>
                   {isNarrowLayout ? (
+                    // Arrows inside the row (the words stay as the name a screen reader reads), so the phone list
+                    // is one line per card instead of a card and a button row.
                     <div className="customize-card-actions">
                       <button
-                        className="button secondary"
+                        className="button secondary customize-card-move"
                         type="button"
                         disabled={!canEditCardLayout || savingLayout || index === 0}
                         onClick={() => moveCard(cardId, -1)}
+                        title={t("Move Up")}
+                        aria-label={t("Move Up")}
                       >
-                        {t("Move Up")}
+                        ↑
                       </button>
                       <button
-                        className="button secondary"
+                        className="button secondary customize-card-move"
                         type="button"
                         disabled={!canEditCardLayout || savingLayout || index === customizeCardOrder.length - 1}
                         onClick={() => moveCard(cardId, 1)}
+                        title={t("Move Down")}
+                        aria-label={t("Move Down")}
                       >
-                        {t("Move Down")}
+                        ↓
                       </button>
                     </div>
                   ) : null}
@@ -9506,7 +9512,7 @@ export function OrderDetailContent({
                       disabled={clientFileRequiresPolicyAcceptance && !browserAcceptedUploadPolicy}
                       onClick={() => clientFileInputRef.current?.click()}
                     >
-                      {clientFileUploads.isActive ? t("Uploading...") : <>⇧ {t("Upload File")}</>}
+                      {clientFileUploads.isActive ? t("Uploading...") : <>{isStackView ? <ClientFilesTrayIcon direction="up" /> : "⇧ "}{t("Upload File")}</>}
                     </button>
                   </>
                 ) : null}
@@ -9517,7 +9523,7 @@ export function OrderDetailContent({
                     disabled={downloadingOrderFiles}
                     onClick={handleDownloadOrderFiles}
                   >
-                    {downloadingOrderFiles ? t("Preparing…") : <>⬇ {t("Download all")}</>}
+                    {downloadingOrderFiles ? t("Preparing…") : <>{isStackView ? <ClientFilesTrayIcon direction="down" /> : "⬇ "}{t("Download all")}</>}
                   </button>
                 ) : null}
               </div>
@@ -10745,6 +10751,28 @@ export function OrderDetailContent({
               <span>{t("Cards")}</span>
             </button>
           </div>
+          {isStackView && visibleMobileCards.length > 0 ? (() => {
+            // One button beside the toggle opens or closes every section; it says what it will do next.
+            const allSectionsOpen = visibleMobileCards.every(id => openStackSections.includes(id));
+            const label = t(allSectionsOpen ? "Collapse all" : "Expand all");
+            return (
+              <div className="order-view-toggle order-stack-fold-toggle" data-order-fold-toggle="">
+                <button
+                  type="button"
+                  aria-pressed={allSectionsOpen}
+                  title={label}
+                  onClick={allSectionsOpen ? collapseAllStackSections : expandAllStackSections}
+                >
+                  {allSectionsOpen ? (
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l5 5 5-5M7 20l5-5 5 5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 9l5-5 5 5M7 15l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  )}
+                  <span>{label}</span>
+                </button>
+              </div>
+            );
+          })() : null}
           {canAssignProjects ? (
             <div className="order-actions-menu-wrap" onClick={event => event.stopPropagation()}>
               <button
@@ -11200,11 +11228,12 @@ export function OrderDetailContent({
                   .filter(cardId => group.ids.includes(cardId))
                   .filter(cardId => !needle || CARD_LABELS[cardId].toLowerCase().includes(needle));
                 if (groupIds.length === 0) return null;
+                // Each category in its own block, so a wide screen can set the categories side by side.
                 return (
-                  <Fragment key={group.label}>
+                  <div key={group.label} className="customize-card-group-block">
                     <p className="customize-card-group">{t(group.label)}</p>
                     {groupIds.map(cardId => renderCustomizeRow(cardId, customizeCardOrder.indexOf(cardId)))}
-                  </Fragment>
+                  </div>
                 );
               })}
             </div>
@@ -13118,6 +13147,16 @@ function ClientFileActionIcon({ name }: { name: ClientFileActionIconName }) {
       <path d="M8 10v9h8v-9" />
       <path d="M10.5 12.5v4" />
       <path d="M13.5 12.5v4" />
+    </svg>
+  );
+}
+
+// Sections view, Client Files: the outline tray icons of the owner's design in place of the ⇧ / ⬇ glyphs.
+function ClientFilesTrayIcon({ direction }: { direction: "up" | "down" }) {
+  return (
+    <svg className="client-files-tray-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      {direction === "up" ? <path d="M12 15V4M8 8l4-4 4 4" /> : <path d="M12 4v11M8 11l4 4 4-4" />}
+      <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
     </svg>
   );
 }
