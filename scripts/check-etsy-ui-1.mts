@@ -305,7 +305,7 @@ await check("C5 the new code reaches no layout write: no persistLayout / save*Ca
 const detail = read("app/orders/OrderDetailContent.tsx");
 await check("D1 the jump bar sits under the order header (inside the sticky head, after the tab bar) on every order", () => {
   assert.match(detail, /\{renderOrderTabs\(\)\}\s*\{renderJumpBar\(\)\}\s*<\/div>/);
-  assert.match(detail, /<nav (ref=\{jumpNavRef\} )?className="order-jump-bar__links" aria-label=\{t\("Jump to a card"\)\}>/);
+  assert.match(detail, /<nav (ref=\{jumpNavRef\} )?className=\{jumpFadeEnd \? "order-jump-bar__links is-fading-end" : "order-jump-bar__links"\} aria-label=\{t\("Jump to a card"\)\}>/);
 });
 await check("D2 it is built from the cards the page draws (desktop columns / phone stack incl. the Etsy fold) and their own titles", () => {
   assert.match(detail, /: desktopColumns\.flatMap\(column => column\.cards\)/);
@@ -608,7 +608,12 @@ await check("V1 contrast (WCAG, light AND dark, real CSS values over their compo
   assert.deepEqual(low, [], `below 4.5:1: ${low.join("; ")}`);
 });
 await check("V2 the jump bar's 'More' menu: wide layouts only, when the links overflow; lists EVERY link in order; button with aria-haspopup/expanded/controls; Esc closes and returns focus; arrows move; same jump; no layout write", () => {
-  assert.match(detail, /const measure = \(\) => setJumpOverflow\(nav\.scrollWidth > nav\.clientWidth \+ 1\);/);
+  assert.match(detail, /const overflowing = nav\.scrollWidth > nav\.clientWidth \+ 1;\s*setJumpOverflow\(overflowing\);/);
+  // 31 Oct: while links are cut off at the right the strip fades there (no lone letter beside More); the fade
+  // follows the scroll and leaves once the last link is in view, and the listener goes with the effect.
+  assert.match(detail, /setJumpFadeEnd\(overflowing && nav\.scrollLeft \+ nav\.clientWidth < nav\.scrollWidth - 1\);/);
+  assert.match(detail, /nav\.addEventListener\("scroll", measure, \{ passive: true \}\);/);
+  assert.match(detail, /nav\.removeEventListener\("scroll", measure\);/);
   assert.match(detail, /const jumpMoreShown = jumpOverflow && !isNarrowLayout;/);
   assert.match(detail, /aria-haspopup="menu"\s+aria-expanded=\{jumpMoreOpen\}\s+aria-controls="order-jump-more-menu"/);
   assert.match(detail, /role="menu" aria-label=\{t\("Jump to a card"\)\} onKeyDown=\{handleJumpMoreKeyDown\}>\s*\{jumpTargets\.map\(target => \(/, "every jump target, same order");
