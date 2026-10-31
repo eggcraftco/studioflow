@@ -37661,10 +37661,12 @@ html[data-studio-theme="dark"] .order-status-segment i { background: rgba(255, 2
   --sec-result-bg: #f9fafc;
   --sec-accent: #4256d6;
   --sec-accent-solid: #4256d6;
+  --sec-accent-soft: #eef1fd;
   --sec-surface: #ffffff;
 }
 .order-stack-body[data-stack-card="financial"],
-.order-stack-body[data-stack-card="workTime"] { padding: 16px 20px 20px; }
+.order-stack-body[data-stack-card="workTime"],
+.order-stack-body[data-stack-card="schedule"] { padding: 16px 20px 20px; }
 html[data-studio-theme="dark"] .order-stack-body {
   --sec-label: rgba(255, 255, 255, 0.6);
   --sec-text: rgba(255, 255, 255, 0.92);
@@ -37681,6 +37683,7 @@ html[data-studio-theme="dark"] .order-stack-body {
   --sec-result-bg: rgba(255, 255, 255, 0.05);
   --sec-accent: #8aa0ff;
   --sec-accent-solid: #4a5ee0;
+  --sec-accent-soft: rgba(138, 160, 255, 0.14);
   --sec-surface: rgba(255, 255, 255, 0.12);
 }
 .order-stack-body[data-stack-card="financial"] > .order-detail-card > .app-card-panel {
@@ -37885,7 +37888,8 @@ html[data-studio-theme="dark"] .order-stack-body {
 
 @media (max-width: 640px) {
   .order-stack-body[data-stack-card="financial"],
-  .order-stack-body[data-stack-card="workTime"] { padding: 10px 12px 14px; }
+  .order-stack-body[data-stack-card="workTime"],
+  .order-stack-body[data-stack-card="schedule"] { padding: 10px 12px 14px; }
   .order-stack-title { font-size: 14px; }
 }
 
@@ -38057,4 +38061,153 @@ html[data-studio-theme="dark"] .order-stack-body {
   .order-stack-body[data-stack-card="workTime"] .app-work-day-date { flex: 1 1 100%; }
   .order-stack-body[data-stack-card="workTime"] .app-work-day-date input { width: 100%; }
   .order-stack-body[data-stack-card="workTime"] .app-work-empty { padding: 14px 16px; }
+}
+
+/* ==== Schedule & Alerts section: the owner's design (31 Oct) ====
+   "Quick Reminder" with its picker at the end; the reminder title, Date & Time, Priority and Notify on one line
+   (labels above, the title's field level with theirs); the note and "+ Add Reminder" on the next; a hairline;
+   "Upcoming" with its count beside the list or the empty box. Narrow sections stack the same pieces.
+   Sections view only (the panel is a size container; the card's own container rules are overridden here). */
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel { gap: 20px; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-quick-row { gap: 16px; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-quick-row > span,
+.order-stack-body[data-stack-card="schedule"] .app-schedule-heading-row > strong {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--sec-text);
+}
+
+/* Fields: one height, the section palette (":is(...)" outweighs the general section-input rule). */
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel :is(input, select, textarea).input {
+  min-height: 42px;
+  font-family: inherit;
+  padding: 0 14px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background-color: var(--sec-field-bg);
+  color: var(--sec-text);
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel textarea.app-schedule-note {
+  min-height: 58px;
+  padding: 12px 14px;
+  resize: vertical;
+}
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel select.input {
+  appearance: none;
+  padding-inline-end: 38px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23626b7c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 16px;
+}
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel select.app-schedule-quick-select {
+  width: 200px;
+  max-width: 60%;
+  border-color: transparent;
+  background-color: var(--sec-accent-soft);
+  color: var(--sec-accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234256d6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel select.input:dir(rtl) { background-position: left 13px center; }
+html[data-studio-theme="dark"] .order-stack-body[data-stack-card="schedule"] .app-schedule-panel select.input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3a9b5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+html[data-studio-theme="dark"] .order-stack-body[data-stack-card="schedule"] .app-schedule-panel select.app-schedule-quick-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238aa0ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* The form: title | Date & Time | Priority | Notify, then note | Add. */
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-form {
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(108px, auto) auto;
+  align-items: end;
+  gap: 16px 20px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--sec-rule);
+}
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-inline-controls { display: contents; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-form > .input { grid-column: 1; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-date-control { grid-column: 2; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-priority-control { grid-column: 3; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-notify { grid-column: 4; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-note { grid-column: 1 / 3; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-form > .app-schedule-add-button { grid-column: 3 / 5; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-note-copy { grid-column: 1 / -1; margin: 0; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-inline-controls label {
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-inline-controls label > span {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-notify {
+  flex-direction: column;
+  align-items: center;
+  justify-self: end;
+  gap: 10px;
+  padding-bottom: 7px;
+}
+.order-stack-body[data-stack-card="schedule"] .app-schedule-notify i { width: 46px; height: 28px; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-notify i::after { top: 3px; inset-inline-start: 3px; width: 22px; height: 22px; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-notify input:checked + i { background: var(--sec-green); }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-notify input:checked + i::after { transform: translateX(18px); }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-notify input:disabled + i { opacity: 0.5; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-form > .app-schedule-add-button {
+  justify-self: end;
+  align-self: center;
+  width: auto;
+  min-height: 44px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--sec-accent-solid);
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+/* Upcoming / Recently completed: heading and count beside the list or the empty box. */
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-list-block {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px 28px;
+}
+.order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-list-block > .app-schedule-list { grid-column: 1 / -1; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-heading-row { justify-content: flex-start; gap: 12px; }
+.order-stack-body[data-stack-card="schedule"] .app-schedule-heading-row > span {
+  min-width: 34px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--sec-field-bg);
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="schedule"] .app-schedule-empty {
+  padding: 18px 26px;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--sec-label);
+}
+
+/* A narrow section: title, then Date & Time, then Priority beside Notify, the note, Add. */
+@container (max-width: 559px) {
+  .order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-form { grid-template-columns: minmax(0, 1fr) auto; }
+  .order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-form > .input,
+  .order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-date-control,
+  .order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-note,
+  .order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-form > .app-schedule-add-button { grid-column: 1 / -1; }
+  .order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-priority-control { grid-column: 1; }
+  .order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-notify { grid-column: 2; }
+  .order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-form > .app-schedule-add-button { justify-self: start; }
+  .order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-list-block { grid-template-columns: minmax(0, 1fr); }
+  .order-stack-body[data-stack-card="schedule"] .app-schedule-empty { padding: 14px 16px; }
 }
