@@ -39078,3 +39078,316 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="todo"] .app-to
   .order-stack-body[data-stack-card="materials"] .order-stock-block > .app-inline-note { padding: 14px 16px; }
   .order-stack-body[data-stack-card="todo"] .app-todo-filters { overflow-x: auto; }
 }
+
+/* -- History / Log: "Recent important changes" with its count beside it, the changes as lines divided by
+      hairlines (no blue boxes): the title, its time, and old → new. -- */
+.order-stack-body[data-stack-card="historyLog"] > .order-detail-card > .app-card-panel { gap: 14px; }
+.order-stack-body[data-stack-card="historyLog"] .app-history-heading {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 12px;
+}
+.order-stack-body[data-stack-card="historyLog"] .app-history-heading > strong { font-size: 15px; font-weight: 650; color: var(--sec-text); }
+.order-stack-body[data-stack-card="historyLog"] .app-history-heading > span {
+  min-width: 34px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--sec-field-bg);
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="historyLog"] .app-history-list { gap: 0; padding: 0; border-top: 1px solid var(--sec-rule); }
+.order-stack-body[data-stack-card="historyLog"] .app-history-entry {
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--sec-rule);
+  border-radius: 0;
+  background: none;
+}
+.order-stack-body[data-stack-card="historyLog"] .app-history-clock {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--sec-accent-soft);
+  color: var(--sec-accent);
+  font-size: 13px;
+}
+.order-stack-body[data-stack-card="historyLog"] .app-history-entry strong { font-size: 14.5px; font-weight: 600; line-height: 1.3; color: var(--sec-text); }
+.order-stack-body[data-stack-card="historyLog"] .app-history-entry p { margin: 2px 0 0; font-size: 13px; font-weight: 400; color: var(--sec-label); }
+.order-stack-body[data-stack-card="historyLog"] .app-history-entry b {
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="historyLog"] .app-history-arrow { color: var(--sec-label); }
+.order-stack-body[data-stack-card="historyLog"] .app-history-empty {
+  padding: 18px 22px;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--sec-label);
+}
+
+/* -- Client Files: what the section holds as a sub-heading with Upload (solid) and Download all (tinted) at its
+      end; the upload rules in a tinted box; files as light rows with quiet icons; the Files library's links as a
+      list; the allowed types as a quiet line. -- */
+.order-stack-body[data-stack-card="clientFiles"] > .order-detail-card > .app-card-panel { gap: 18px; }
+/* One row that wraps (the phone rule's column turned the text's 220 px flex basis into a 220 px tall gap). */
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro { flex-direction: row; align-items: center; gap: 12px 16px; }
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro strong {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.3;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro p { margin: 4px 0 0; font-size: 13.5px; font-weight: 400; line-height: 1.4; color: var(--sec-label); }
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro > .app-upload-button {
+  min-height: 42px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--sec-accent-solid);
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 600;
+  box-shadow: none;
+}
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro > .app-upload-button.secondary { background: var(--sec-accent-soft); color: var(--sec-accent); }
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-intro > .app-upload-button:disabled { opacity: 0.5; }
+.order-stack-body[data-stack-card="clientFiles"] .upload-safety-panel {
+  gap: 10px 8px;
+  margin: 0 !important;
+  padding: 15px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+}
+.order-stack-body[data-stack-card="clientFiles"] .upload-safety-panel > .studio-pill {
+  min-height: 0;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--sec-field-bg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="clientFiles"] .upload-safety-panel > .upload-safety-policy-text { font-size: 13.5px; font-weight: 400; line-height: 1.45; color: var(--sec-label); }
+.order-stack-body[data-stack-card="clientFiles"] .upload-safety-check { gap: 10px; font-size: 14px; font-weight: 500; color: var(--sec-text); }
+.order-stack-body[data-stack-card="clientFiles"] .upload-safety-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--sec-accent-solid); }
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-list { gap: 8px; }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-list-row {
+  min-height: 0;
+  padding: 11px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--sec-result-bg);
+}
+.order-stack-body[data-stack-card="clientFiles"] .client-file-preview-trigger { grid-template-columns: 38px minmax(0, 1fr); gap: 12px; align-items: center; }
+.order-stack-body[data-stack-card="clientFiles"] .compact-file-preview { width: 38px; height: 38px; border-radius: 8px; }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-main strong { font-size: 14.5px; font-weight: 600; line-height: 1.3; color: var(--sec-text); }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-main .muted-copy { margin-top: 2px; font-size: 12.5px; font-weight: 400; line-height: 1.35; color: var(--sec-label); }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-icon-actions { gap: 4px; }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-icon-button { width: 32px; height: 32px; border-radius: 8px; color: var(--sec-label); }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-icon-button:hover { background: var(--sec-field-bg); color: var(--sec-text); }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-icon-button.is-primary { color: var(--sec-accent); }
+.order-stack-body[data-stack-card="clientFiles"] .client-file-icon-button.is-danger { color: var(--sec-red); }
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-content: center;
+  gap: 4px 10px;
+  min-height: 0;
+  padding: 18px 22px;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+}
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-empty > span { font-size: 19px; color: var(--sec-accent); }
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-empty > strong { font-size: 14px; font-weight: 650; color: var(--sec-text); }
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-empty > p { flex: 1 1 100%; max-width: none; margin: 0; font-size: 14px; font-weight: 400; color: var(--sec-label); }
+.order-stack-body:is([data-stack-card="clientFiles"], [data-stack-card="notes"]) .order-library-files {
+  gap: 10px;
+  margin: 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--sec-rule);
+}
+.order-stack-body:is([data-stack-card="clientFiles"], [data-stack-card="notes"]) .order-library-files-title {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  opacity: 1;
+  color: var(--sec-text);
+}
+.order-stack-body:is([data-stack-card="clientFiles"], [data-stack-card="notes"]) .order-library-files ul { gap: 8px; }
+.order-stack-body:is([data-stack-card="clientFiles"], [data-stack-card="notes"]) .order-library-files li { gap: 10px; }
+.order-stack-body:is([data-stack-card="clientFiles"], [data-stack-card="notes"]) .order-library-files li > button {
+  font-size: 14.5px;
+  font-weight: 600;
+  text-align: start;
+  color: var(--sec-link);
+}
+.order-stack-body:is([data-stack-card="clientFiles"], [data-stack-card="notes"]) .order-library-files li > .studio-pill {
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--sec-field-bg);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="clientFiles"] .order-library-files > a {
+  font-size: 13.5px;
+  font-weight: 650;
+  text-decoration: none;
+  opacity: 1;
+  color: var(--sec-link);
+}
+.order-stack-body[data-stack-card="clientFiles"] .order-library-files > a:hover { text-decoration: underline; }
+.order-stack-body[data-stack-card="clientFiles"] .app-client-files-note { margin: 0; font-size: 12.5px; font-weight: 400; line-height: 1.4; color: var(--sec-label); }
+.order-stack-body[data-stack-card="clientFiles"] .app-card-panel > p.muted-copy,
+.order-stack-body[data-stack-card="clientFiles"] .app-card-panel > :is(.file-action-status, .file-action-error) { margin: 0; font-size: 13.5px; }
+
+/* -- Invoice Items: "Invoice Items" with the running total at its end; each line as fields one height (item,
+      quantity, price) with its total and a quiet remove; "+ Add Item" tinted green like "+ Add Payment"; a
+      hairline; "+ Invoice Note" as a link and the note as a field; "Invoice PDF" as the solid button. -- */
+.order-stack-body[data-stack-card="invoiceItems"] > .order-detail-card > .app-card-panel { gap: 16px; }
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-items { display: grid; gap: 10px; }
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 2px;
+}
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-head > span:first-child { font-size: 15px; font-weight: 650; color: var(--sec-text); }
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-head > span + span {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-line > input.input,
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-note > textarea.input {
+  box-sizing: border-box;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background-color: var(--sec-field-bg);
+  color: var(--sec-text);
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-line > input.input:focus,
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-note > textarea.input:focus {
+  outline: none;
+  border-color: var(--sec-accent);
+  box-shadow: 0 0 0 3px var(--sec-accent-soft);
+}
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-line > input.invoice-stack-name { flex: 1 1 220px; min-width: 150px; }
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-line > input.invoice-stack-qty { flex: 0 0 76px; width: 76px; text-align: end; }
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-line > input.invoice-stack-price { flex: 0 0 120px; width: 120px; text-align: end; }
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-total {
+  flex: 0 0 auto;
+  min-width: 96px;
+  text-align: end;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-remove {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sec-label);
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+}
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-remove:hover { background: var(--sec-red-bg); color: var(--sec-red); }
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-add {
+  justify-self: start;
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--sec-green-bg);
+  color: var(--sec-green);
+  font-size: 13.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-note {
+  display: grid;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--sec-rule);
+}
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-note-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--sec-link);
+  cursor: pointer;
+}
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-note-toggle > span { font-size: 15px; line-height: 1; }
+.order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-note > textarea.input {
+  width: 100%;
+  min-height: 82px;
+  padding: 12px 14px;
+  line-height: 1.45;
+  resize: vertical;
+}
+.order-stack-body[data-stack-card="invoiceItems"] .app-card-panel > .invoice-stack-pdf {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  min-height: 44px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--sec-accent-solid);
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .order-stack-body:is([data-stack-card="historyLog"], [data-stack-card="clientFiles"]) :is(.app-history-empty, .app-client-files-empty) { padding: 14px 16px; }
+  .order-stack-body[data-stack-card="clientFiles"] .client-file-list-row { padding: 10px 12px; }
+  .order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-line > input.invoice-stack-name { flex-basis: 100%; }
+  .order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-line > input.invoice-stack-price { flex: 1 1 100px; }
+}

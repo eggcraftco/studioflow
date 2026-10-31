@@ -7717,11 +7717,13 @@ export function OrderDetailContent({
                    price, a line total or the running total here. */
                 showMoney={canSeeFinance}
                 onSave={items => saveDetailsPatch({ lineItems: items }, "Invoice items")}
+                stackView={isStackView}
               />
               <InvoiceFooterEditor
                 note={order.invoiceNote}
                 disabled={!canInlineEditFullDetails}
                 onSave={note => saveDetailsPatch({ invoiceNote: note }, "Invoice note")}
+                stackView={isStackView}
               />
               {/* The invoice prints every price, the VAT and the total, so it
                   follows Financial Info like the Actions menu's Invoice PDF —
@@ -7729,8 +7731,9 @@ export function OrderDetailContent({
               {canSeeFinance ? (
                 <button
                   type="button"
+                  className={isStackView ? "invoice-stack-pdf" : undefined}
                   onClick={() => void handleExportInvoice()}
-                  style={{ marginTop: 14, width: "100%", border: "none", background: "#2563eb", color: "#fff", borderRadius: 10, padding: "10px 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+                  style={isStackView ? undefined : { marginTop: 14, width: "100%", border: "none", background: "#2563eb", color: "#fff", borderRadius: 10, padding: "10px 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
                 >
                   {t("Invoice PDF")}
                 </button>
@@ -12258,11 +12261,14 @@ function CompanyNumbersEditor({
 function InvoiceFooterEditor({
   note,
   disabled,
-  onSave
+  onSave,
+  stackView = false
 }: {
   note: string;
   disabled: boolean;
   onSave: (note: string) => void;
+  /** Sections view: the same elements, styled by classes (the card keeps its inline styles). */
+  stackView?: boolean;
 }) {
   const t = useDetailT();
   const [expanded, setExpanded] = useState(note.trim().length > 0);
@@ -12276,19 +12282,20 @@ function InvoiceFooterEditor({
   }, [note]);
 
   return (
-    <div style={{ marginTop: 14, borderTop: "0.5px solid rgba(127,127,127,0.25)", paddingTop: 12 }}>
+    <div className={stackView ? "invoice-stack-note" : undefined} style={stackView ? undefined : { marginTop: 14, borderTop: "0.5px solid rgba(127,127,127,0.25)", paddingTop: 12 }}>
       <button
         type="button"
+        className={stackView ? "invoice-stack-note-toggle" : undefined}
         onClick={() => setExpanded(value => !value)}
-        style={{ display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 600, opacity: 0.8 }}
+        style={stackView ? undefined : { display: "flex", alignItems: "center", gap: 8, border: "none", background: "transparent", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 600, opacity: 0.8 }}
       >
-        <span style={{ fontSize: 16, lineHeight: 1 }}>{expanded ? "−" : "+"}</span>
+        <span style={stackView ? undefined : { fontSize: 16, lineHeight: 1 }}>{expanded ? "−" : "+"}</span>
         {t("Invoice Note")}
       </button>
       {expanded ? (
         <textarea
           className="input"
-          style={{ width: "100%", minHeight: 70, marginTop: 8, resize: "vertical" }}
+          style={stackView ? undefined : { width: "100%", minHeight: 70, marginTop: 8, resize: "vertical" }}
           placeholder={t("Bank details, payment terms, thank-you note…")}
           value={draft}
           disabled={disabled}
@@ -12307,7 +12314,8 @@ function LineItemsEditor({
   disabled,
   formatMoney,
   showMoney = true,
-  onSave
+  onSave,
+  stackView = false
 }: {
   items: LineItemDetail[];
   disabled: boolean;
@@ -12315,6 +12323,8 @@ function LineItemsEditor({
   /** False for a member without financial info: names and quantities only. */
   showMoney?: boolean;
   onSave: (items: LineItemDetail[]) => void;
+  /** Sections view: the same elements, styled by classes (the card keeps its inline styles). */
+  stackView?: boolean;
 }) {
   const t = useDetailT();
   const [draft, setDraft] = useState<LineItemDetail[]>(items);
@@ -12341,16 +12351,16 @@ function LineItemsEditor({
   const runningTotal = Math.round(draft.reduce((sum, it) => sum + lineTotalOf(it), 0) * 100) / 100;
 
   return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>{t("Invoice Items")}</span>
-        {draft.length > 0 && showMoney ? <span style={{ fontSize: 12, fontWeight: 600 }}>{formatMoney(runningTotal)}</span> : null}
+    <div className={stackView ? "invoice-stack-items" : undefined} style={stackView ? undefined : { marginTop: 10 }}>
+      <div className={stackView ? "invoice-stack-head" : undefined} style={stackView ? undefined : { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={stackView ? undefined : { fontSize: 12, fontWeight: 600, opacity: 0.7 }}>{t("Invoice Items")}</span>
+        {draft.length > 0 && showMoney ? <span style={stackView ? undefined : { fontSize: 12, fontWeight: 600 }}>{formatMoney(runningTotal)}</span> : null}
       </div>
       {draft.map((it, index) => (
-        <div key={it.id} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
+        <div key={it.id} className={stackView ? "invoice-stack-line" : undefined} style={stackView ? undefined : { display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
           <input
-            className="input"
-            style={{ flex: "1 1 130px", minWidth: 110 }}
+            className={stackView ? "input invoice-stack-name" : "input"}
+            style={stackView ? undefined : { flex: "1 1 130px", minWidth: 110 }}
             placeholder={t("Item")}
             value={it.name}
             disabled={disabled}
@@ -12358,8 +12368,8 @@ function LineItemsEditor({
             onBlur={() => commit(draftRef.current)}
           />
           <input
-            className="input"
-            style={{ width: 64 }}
+            className={stackView ? "input invoice-stack-qty" : "input"}
+            style={stackView ? undefined : { width: 64 }}
             type="number"
             min={0}
             value={it.quantity}
@@ -12369,8 +12379,8 @@ function LineItemsEditor({
           />
           {showMoney ? (
             <input
-              className="input"
-              style={{ width: 88 }}
+              className={stackView ? "input invoice-stack-price" : "input"}
+              style={stackView ? undefined : { width: 88 }}
               type="number"
               min={0}
               step="0.01"
@@ -12381,14 +12391,15 @@ function LineItemsEditor({
             />
           ) : null}
           {showMoney ? (
-            <span style={{ minWidth: 72, textAlign: "right", fontSize: 13, fontWeight: 600 }}>{formatMoney(lineTotalOf(it))}</span>
+            <span className={stackView ? "invoice-stack-total" : undefined} style={stackView ? undefined : { minWidth: 72, textAlign: "right", fontSize: 13, fontWeight: 600 }}>{formatMoney(lineTotalOf(it))}</span>
           ) : null}
           {!disabled ? (
             <button
               type="button"
               onClick={() => commit(draftRef.current.filter((_, i) => i !== index))}
               aria-label={t("Remove item")}
-              style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 18, lineHeight: 1, opacity: 0.6 }}
+              className={stackView ? "invoice-stack-remove" : undefined}
+              style={stackView ? undefined : { border: "none", background: "transparent", cursor: "pointer", fontSize: 18, lineHeight: 1, opacity: 0.6 }}
             >
               ×
             </button>
@@ -12399,8 +12410,9 @@ function LineItemsEditor({
         <button
           type="button"
           data-line-items-add="true"
+          className={stackView ? "invoice-stack-add" : undefined}
           onClick={() => commit([...draftRef.current, { id: crypto.randomUUID(), name: "", quantity: 1, unitPrice: 0, lineTotal: 0 }])}
-          style={{ border: "1px solid rgba(127,127,127,0.4)", background: "transparent", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+          style={stackView ? undefined : { border: "1px solid rgba(127,127,127,0.4)", background: "transparent", borderRadius: 8, padding: "6px 12px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
         >
           {t("+ Add Item")}
         </button>
