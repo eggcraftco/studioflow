@@ -37344,55 +37344,122 @@ body[data-studio-theme="dark"] .inv-categories .btn-danger { color: #f87171; bor
 .order-stack-section[data-card-color="Purple"] { background: rgba(158, 97, 255, 0.14); border-color: rgba(158, 97, 255, 0.48); }
 .order-stack-section[data-card-color="Pink"] { background: rgba(255, 61, 158, 0.14); border-color: rgba(255, 61, 158, 0.48); }
 
-/* Wide bodies: the cards were drawn for ~350 px columns. In a wide section the key/value cards flow
-   into two columns (headings, dividers, notes and sub-blocks keep the full width, so nothing pairs
-   with the wrong neighbour); lists, tables and timelines keep one column at a reading width. */
-@media (min-width: 900px) {
-  .order-stack-body > .order-detail-card > .app-card-panel { max-width: 960px; }
-  .order-stack-body[data-stack-card="summary"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="customerPortal"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="estimate"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="status"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="todo"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="schedule"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="workTime"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="notes"] > .order-detail-card > .app-card-panel { max-width: 800px; }
-  .order-stack-body[data-stack-card="preview"] > .order-detail-card > .app-preview-stage { max-width: 800px; }
-
-  .order-stack-body[data-stack-card="customer"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="financial"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="delivery"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="shipping"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="priority"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="materials"] > .order-detail-card > .app-card-panel,
-  .order-stack-body[data-stack-card="repairIntake"] > .order-detail-card > .app-card-panel {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    column-gap: 32px;
-    align-items: start;
-  }
-  .order-stack-body > .order-detail-card > .app-card-panel > .app-card-divider,
-  .order-stack-body > .order-detail-card > .app-card-panel > .app-subsection-title,
-  .order-stack-body > .order-detail-card > .app-card-panel > .app-notes-section,
-  .order-stack-body > .order-detail-card > .app-card-panel > .finance-heading-add,
-  .order-stack-body > .order-detail-card > .app-card-panel > .finance-payments-ledger,
-  .order-stack-body > .order-detail-card > .app-card-panel > .finance-inline-message,
-  .order-stack-body > .order-detail-card > .app-card-panel > .layout-status,
-  .order-stack-body > .order-detail-card > .app-card-panel > .app-delivery-grid,
-  .order-stack-body > .order-detail-card > .app-card-panel > .order-stock-block,
-  .order-stack-body > .order-detail-card > .app-card-panel > .repair-intake-block,
-  .order-stack-body > .order-detail-card > .app-card-panel > .repair-intake-footer,
-  .order-stack-body > .order-detail-card > .app-card-panel > .finance-total,
-  .order-stack-body > .order-detail-card > .app-card-panel > .finance-summary,
-  .order-stack-body > .order-detail-card > .app-card-panel > .finance-engine-block,
-  .order-stack-body > .order-detail-card > .app-card-panel > form,
-  .order-stack-body > .order-detail-card > .app-card-panel > p { grid-column: 1 / -1; }
-
-  /* History and files kept a fixed card height for their inner scroll; in a section they size to content
-     up to a comfortable height and scroll inside after that. */
-  .order-stack-body .app-history-list,
-  .order-stack-body .app-client-files-list { max-height: 520px; overflow: auto; }
+/* ==== Section bodies: their own design, not a stretched card (owner, 31 Oct) ====
+   In the grid a card is a ~350 px box holding a grey inner panel of label | field rows. Put in a 1000 px
+   section that read as a card pulled wide: a box in a box, fields running the whole width, buttons as wide
+   as the page. A section body is a sheet instead:
+   - no inner panel: the section itself is the surface;
+   - key/value cards become a property grid — label above, field below, in 240–340 px columns that wrap,
+     so a field is never wider than what it holds;
+   - headings, dividers, notes, ledgers, lists and blocks span the full width as they are;
+   - buttons and inputs keep their natural size (34 px controls), primary actions sit at the start. */
+.order-stack-body > .order-detail-card > .app-card-panel,
+.order-stack-body > .order-detail-card > .app-preview-stage {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
+.order-stack-body > .order-detail-card > .app-card-panel { gap: 12px; }
+
+.order-stack-body[data-stack-card="customer"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="financial"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="delivery"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="shipping"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="priority"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="materials"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="repairIntake"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="status"] > .order-detail-card > .app-card-panel {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 340px));
+  column-gap: 28px;
+  row-gap: 14px;
+  align-items: start;
+}
+/* A property: label above its field. */
+.order-stack-body .app-card-panel > .app-value-row,
+.order-stack-body .app-card-panel > .detail-row.finance-inline-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+  align-items: stretch;
+  padding: 0;
+  border: 0;
+}
+.order-stack-body .app-card-panel > .app-value-row > span:first-child,
+.order-stack-body .app-card-panel > .app-value-row > .app-inline-label,
+.order-stack-body .app-card-panel > .detail-row.finance-inline-row > span:first-child,
+.order-stack-body .app-card-panel > .detail-row.finance-inline-row > .app-inline-label {
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  color: var(--muted);
+  justify-self: start;
+}
+/* What spans the whole row. */
+.order-stack-body .app-card-panel > .app-card-divider,
+.order-stack-body .app-card-panel > .app-subsection-title,
+.order-stack-body .app-card-panel > .app-notes-section,
+.order-stack-body .app-card-panel > .finance-heading-add,
+.order-stack-body .app-card-panel > .finance-payments-ledger,
+.order-stack-body .app-card-panel > .layout-status,
+.order-stack-body .app-card-panel > .finance-inline-message,
+.order-stack-body .app-card-panel > .app-delivery-grid,
+.order-stack-body .app-card-panel > .order-stock-block,
+.order-stack-body .app-card-panel > .repair-intake-block,
+.order-stack-body .app-card-panel > .repair-intake-footer,
+.order-stack-body .app-card-panel > .order-production-stage,
+.order-stack-body .app-card-panel > .detail-row:not(.finance-inline-row),
+.order-stack-body .app-card-panel > p,
+.order-stack-body .app-card-panel > form { grid-column: 1 / -1; }
+.order-stack-body .app-card-panel > .app-card-divider { margin: 2px 0; background: rgba(23, 25, 35, 0.08); }
+.order-stack-body .app-card-panel > .app-subsection-title {
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.order-stack-body .app-card-panel > .finance-heading-add { justify-self: start; }
+/* The delivery tiles and the time-remaining box keep a tile's size, side by side. */
+.order-stack-body .app-delivery-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 260px)); }
+.order-stack-body[data-stack-card="delivery"] .app-card-panel > .app-time-remaining,
+.order-stack-body[data-stack-card="delivery"] .app-card-panel > .app-calendar-card { grid-column: span 1; }
+
+/* Controls keep their natural size. */
+.order-stack-body input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.order-stack-body select { min-height: 34px; font-size: 13px; }
+.order-stack-body textarea { min-height: 68px; font-size: 13px; }
+.order-stack-body .app-card-panel > button,
+.order-stack-body .app-schedule-form > button,
+.order-stack-body .app-schedule-form .button,
+.order-stack-body .app-card-panel > div > button.button {
+  justify-self: start;
+  width: auto;
+  min-height: 34px;
+  padding: 0 16px;
+  font-size: 13px;
+}
+.order-stack-body .app-notes-display { min-height: 56px; }
+
+/* Lists and long forms read at a comfortable width; the rest of the row stays empty on purpose. */
+.order-stack-body[data-stack-card="schedule"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="todo"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="workTime"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="notes"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="customerPortal"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="estimate"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="summary"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="clientFiles"] > .order-detail-card > .app-card-panel { max-width: 760px; }
+.order-stack-body[data-stack-card="preview"] > .order-detail-card > .app-preview-stage { max-width: 520px; }
+.order-stack-body[data-stack-card="invoiceItems"] > .order-detail-card > .app-card-panel,
+.order-stack-body[data-stack-card="historyLog"] > .order-detail-card > .app-card-panel { max-width: 900px; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-sees-row { max-width: 360px; }
+
+/* History and files kept a fixed card height for their inner scroll; in a section they size to content
+   up to a comfortable height and scroll inside after that. */
+.order-stack-body .app-history-list,
+.order-stack-body .app-client-files-list { max-height: 520px; overflow: auto; }
 
 @media (max-width: 640px) {
   .order-status-strip { padding: 0 12px 10px; gap: 8px; }
@@ -37447,4 +37514,124 @@ html[data-studio-theme="dark"] .order-status-bar { background: rgba(255, 255, 25
 }
 @media (prefers-reduced-motion: reduce) {
   .order-stack-section.is-notification-focus { animation: none; }
+}
+
+/* ==== The card "..." panel, compact (owner, 31 Oct) ====
+   One short panel instead of a tall list: the moves in one row of small buttons, width and size side by side,
+   the eight colours as one row of dots with a line that names the colour under the pointer and its meaning.
+   On a wide screen it opens above its button when there is more room there (OrderDetailContent measures it)
+   and never runs off screen, because scrolling the page closes it. Phones keep the bottom sheet. */
+.block-custom-panel.is-compact {
+  width: min(372px, calc(100vw - 24px));
+  padding: 10px 12px 12px;
+  gap: 9px;
+}
+.block-custom-panel.is-compact.opens-up {
+  top: auto;
+  bottom: 42px;
+}
+.block-custom-panel.is-compact .block-custom-header { padding-bottom: 5px; }
+.block-custom-panel.is-compact .block-custom-actions button { padding: 7px 4px; font-size: 13.5px; gap: 10px; }
+.block-custom-panel.is-compact .block-custom-actions button svg { width: 17px; height: 17px; flex: none; }
+.block-custom-panel.is-compact .order-card-menu-label { margin: 0; }
+.block-custom-row { display: grid; gap: 5px; min-width: 0; }
+.block-custom-move.is-compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.block-custom-move.is-compact button {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 5px 6px;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.block-custom-move.is-compact button i { font-style: normal; font-size: 14px; line-height: 1; }
+.block-custom-move.is-compact button span { overflow: hidden; text-overflow: ellipsis; }
+.block-custom-move.is-compact button:hover:not(:disabled) { background: rgba(37, 99, 235, 0.08); border-color: rgba(37, 99, 235, 0.35); }
+.block-custom-size-row { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 8px; }
+.block-custom-size-row .block-custom-segment button { padding: 6px 4px; font-size: 12px; white-space: nowrap; }
+.block-custom-dots { display: flex; justify-content: space-between; gap: 4px; }
+.block-custom-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+.block-custom-dot .block-custom-swatch { width: 24px; height: 24px; transition: transform 120ms ease; }
+.block-custom-dot:hover:not(:disabled) .block-custom-swatch,
+.block-custom-dot:focus-visible .block-custom-swatch { transform: scale(1.12); }
+.block-custom-dot.is-selected { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent, #2563eb); }
+.block-custom-dot:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 1px; }
+.block-custom-dot:disabled { cursor: default; opacity: 0.55; }
+.block-custom-swatch[data-card-color="Default"] {
+  background: linear-gradient(135deg, transparent calc(50% - 1px), rgba(120, 120, 140, 0.7) calc(50% - 1px), rgba(120, 120, 140, 0.7) calc(50% + 1px), transparent calc(50% + 1px)), #fff;
+}
+.block-custom-color-caption {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.block-custom-color-caption .block-custom-swatch { width: 12px; height: 12px; }
+.block-custom-color-caption b { color: var(--text); font-weight: 800; }
+.block-custom-color-caption .block-custom-link { margin-inline-start: auto; font-size: 12px; padding: 0; }
+.block-custom-panel.is-compact .block-custom-footer { padding-top: 6px; }
+body[data-studio-theme="dark"] .block-custom-swatch[data-card-color="Default"] {
+  background: linear-gradient(135deg, transparent calc(50% - 1px), rgba(220, 220, 230, 0.6) calc(50% - 1px), rgba(220, 220, 230, 0.6) calc(50% + 1px), transparent calc(50% + 1px)), #2a2b30;
+}
+
+/* Production tile (owner, 31 Oct): one segment per step — a bar in the step's colour, the step's name and
+   its own status under it — instead of a stepper with the current step's text wrapped beneath. */
+.order-status-tile__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.order-status-tile__count { font-size: 11.5px; font-weight: 800; color: var(--muted); }
+.order-status-segments { display: grid; gap: 8px; align-items: start; min-width: 0; }
+.order-status-segment { display: grid; gap: 3px; min-width: 0; }
+.order-status-segment i { display: block; height: 5px; border-radius: 99px; background: rgba(23, 25, 35, 0.1); margin-bottom: 3px; }
+.order-status-segment b { font-size: 12.5px; font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.order-status-segment small { font-size: 11.5px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.order-status-segment.is-done i { background: #22c55e; }
+.order-status-segment.is-done small { color: #15803d; }
+.order-status-segment.is-active i { background: #f59e0b; }
+.order-status-segment.is-active small { color: #c2410c; }
+.order-status-segments__more { align-self: end; font-size: 11.5px; font-weight: 800; color: var(--muted); padding-bottom: 2px; }
+html[data-studio-theme="dark"] .order-status-segment i { background: rgba(255, 255, 255, 0.12); }
+
+/* Section bodies, second pass: the two controls that still ran the full width. */
+.order-stack-body .app-card-panel > button[style] {
+  /* Invoice PDF is styled inline for the card (width: 100%); in a section it is an ordinary button. */
+  width: auto !important;
+  justify-self: start;
+  min-height: 34px;
+  margin-top: 2px !important;
+  padding: 0 18px !important;
+  font-size: 13px !important;
+}
+.order-stack-body .finance-binary-row {
+  display: inline-flex;
+  justify-self: start;
+  width: auto;
+  gap: 4px;
+}
+.order-stack-body .finance-binary-row > button {
+  flex: 0 0 auto;
+  min-width: 70px;
+  min-height: 30px;
+  padding: 0 14px;
 }

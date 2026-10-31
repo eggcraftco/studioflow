@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useCondensedHeader } from "@/lib/studioflow/useCondensedHeader";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import OrderPaymentLinks from "@/components/OrderPaymentLinks";
@@ -2408,6 +2408,14 @@ export function OrderDetailContent({
   const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
   const [openCardMenuId, setOpenCardMenuId] = useState<OrderDetailCardId | null>(null);
+  // The colour the pointer (or keyboard focus) is on in the open panel, so its name and meaning can be read
+  // before it is chosen; null shows the card's current colour.
+  const [cardMenuColorPreview, setCardMenuColorPreview] = useState<string | null>(null);
+  // Where the open "..." panel sits (wide layouts): below its button when it fits, above when there is more
+  // room there, and never taller than the room it has — the page closes the panel when it scrolls (below),
+  // so the whole panel must already be on screen when it opens.
+  const [cardMenuPlacement, setCardMenuPlacement] = useState<{ up: boolean; maxHeight: number | null }>({ up: false, maxHeight: null });
+  const cardMenuPanelRef = useRef<HTMLDivElement | null>(null);
   // N13 (15 Oct 2026, owner's decision): the card header "i" and its "What is
   // this card for?" text (popover on a desktop, blue box under the title on a
   // phone) are gone. Error, warning and required-action texts are untouched.
@@ -2444,6 +2452,30 @@ export function OrderDetailContent({
     }
     window.addEventListener("scroll", onScroll, true);
     return () => window.removeEventListener("scroll", onScroll, true);
+  }, [openCardMenuId]);
+
+  useLayoutEffect(() => {
+    setCardMenuColorPreview(null);
+    const panel = cardMenuPanelRef.current;
+    if (!openCardMenuId || !panel) {
+      setCardMenuPlacement({ up: false, maxHeight: null });
+      return;
+    }
+    // On a phone the panel is a bottom sheet (globals.css, max-width: 700px) and always fits.
+    if (window.matchMedia("(max-width: 700px)").matches) {
+      setCardMenuPlacement({ up: false, maxHeight: null });
+      return;
+    }
+    const trigger = panel.parentElement?.querySelector<HTMLElement>(".order-card-menu-button") ?? panel.parentElement;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const headBottom = Math.max(0, orderHeadRef.current?.getBoundingClientRect().bottom ?? 0);
+    const natural = panel.scrollHeight;
+    const below = window.innerHeight - rect.bottom - 12;
+    const above = rect.top - headBottom - 12;
+    if (natural <= below) setCardMenuPlacement({ up: false, maxHeight: null });
+    else if (above > below) setCardMenuPlacement({ up: true, maxHeight: Math.max(160, Math.min(natural, above)) });
+    else setCardMenuPlacement({ up: false, maxHeight: Math.max(160, below) });
   }, [openCardMenuId]);
   const [headingEditorCardId, setHeadingEditorCardId] = useState<OrderDetailCardId | null>(null);
   const [financeStatus, setFinanceStatus] = useState<string | null>(null);
@@ -6097,9 +6129,11 @@ export function OrderDetailContent({
           <>
             <div className="block-custom-backdrop" onClick={() => setOpenCardMenuId(null)} aria-hidden="true" />
             <div
-              className="block-custom-panel"
+              ref={cardMenuPanelRef}
+              className={cardMenuPlacement.up ? "block-custom-panel is-compact opens-up" : "block-custom-panel is-compact"}
               role="dialog"
               aria-label={`${cardLabel(cardId)} — ${t("Block customisation")}`}
+              style={cardMenuPlacement.maxHeight ? { maxHeight: cardMenuPlacement.maxHeight } : undefined}
             >
               <header className="block-custom-header">
                 <strong>{t("Block customisation")}</strong>
@@ -6159,77 +6193,100 @@ export function OrderDetailContent({
                 </button>
               </div>
 
-              <div className="order-card-menu-label">{t("Position")}</div>
-              <div className="block-custom-move">
-                <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} up`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, -1); }}>↑ {t("Up")}</button>
-                <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} down`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, 1); }}>↓ {t("Down")}</button>
-                {isStackView ? (
-                  <>
-                    <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the top`} onClick={() => { setOpenCardMenuId(null); moveMobileCardToEdge(cardId, "top"); }}>⤒ {t("Move to top")}</button>
-                    <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the bottom`} onClick={() => { setOpenCardMenuId(null); moveMobileCardToEdge(cardId, "bottom"); }}>⤓ {t("Move to bottom")}</button>
-                  </>
-                ) : null}
-                {!isNarrowLayout && !isStackView ? (
-                  <>
-                    <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the previous column`} onClick={() => moveCardColumnBy(cardId, -1)}>← {t("Left")}</button>
-                    <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the next column`} onClick={() => moveCardColumnBy(cardId, 1)}>→ {t("Right")}</button>
-                  </>
-                ) : null}
+              <div className="block-custom-row">
+                <span className="order-card-menu-label">{t("Position")}</span>
+                <div className="block-custom-move is-compact" role="group" aria-label={t("Position")}>
+                  <button type="button" disabled={locked || savingLayout} title={t("Up")} aria-label={`Move ${cardLabel(cardId)} up`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, -1); }}><i aria-hidden="true">↑</i><span>{t("Up")}</span></button>
+                  <button type="button" disabled={locked || savingLayout} title={t("Down")} aria-label={`Move ${cardLabel(cardId)} down`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, 1); }}><i aria-hidden="true">↓</i><span>{t("Down")}</span></button>
+                  {isStackView ? (
+                    <>
+                      <button type="button" disabled={locked || savingLayout} title={t("Move to top")} aria-label={`Move ${cardLabel(cardId)} to the top`} onClick={() => { setOpenCardMenuId(null); moveMobileCardToEdge(cardId, "top"); }}><i aria-hidden="true">⤒</i><span>{t("Top")}</span></button>
+                      <button type="button" disabled={locked || savingLayout} title={t("Move to bottom")} aria-label={`Move ${cardLabel(cardId)} to the bottom`} onClick={() => { setOpenCardMenuId(null); moveMobileCardToEdge(cardId, "bottom"); }}><i aria-hidden="true">⤓</i><span>{t("Bottom")}</span></button>
+                    </>
+                  ) : null}
+                  {!isNarrowLayout && !isStackView ? (
+                    <>
+                      <button type="button" disabled={locked || savingLayout} title={t("Left")} aria-label={`Move ${cardLabel(cardId)} to the previous column`} onClick={() => moveCardColumnBy(cardId, -1)}><i aria-hidden="true">←</i><span>{t("Left")}</span></button>
+                      <button type="button" disabled={locked || savingLayout} title={t("Right")} aria-label={`Move ${cardLabel(cardId)} to the next column`} onClick={() => moveCardColumnBy(cardId, 1)}><i aria-hidden="true">→</i><span>{t("Right")}</span></button>
+                    </>
+                  ) : null}
+                </div>
               </div>
-              <p className="block-custom-hint">{t("You can also drag the block.")}</p>
 
               {!isStackView ? (
-                <>
-              <div className="order-card-menu-label">{t("Width")}</div>
-              <div className="block-custom-segment">
-                <button
-                  type="button"
-                  className={sizeKey === "fit" ? "is-active" : ""}
-                  disabled={locked || savingLayout}
-                  onClick={() => applyCardSizePreset(cardId, "fit")}
-                >
-                  {t("Fit content")}
-                </button>
-                <button
-                  type="button"
-                  disabled={locked || savingLayout}
-                  onClick={() => applyCardSizePreset(cardId, "matchColumn")}
-                >
-                  {t("Match column")}
-                </button>
-              </div>
+                <div className="block-custom-size-row">
+                  <div className="block-custom-row">
+                    <span className="order-card-menu-label">{t("Width")}</span>
+                    <div className="block-custom-segment">
+                      <button
+                        type="button"
+                        className={sizeKey === "fit" ? "is-active" : ""}
+                        disabled={locked || savingLayout}
+                        onClick={() => applyCardSizePreset(cardId, "fit")}
+                      >
+                        {t("Fit content")}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={locked || savingLayout}
+                        onClick={() => applyCardSizePreset(cardId, "matchColumn")}
+                      >
+                        {t("Match column")}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="block-custom-row">
+                    <span className="order-card-menu-label">{t("Card size")}</span>
+                    <div className="block-custom-segment block-custom-sml">
+                      <button type="button" className={sizeKey === "S" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 220)}>S</button>
+                      <button type="button" className={sizeKey === "M" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 380)}>M</button>
+                      <button type="button" className={sizeKey === "L" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 560)}>L</button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
-              <div className="order-card-menu-label">{t("Card size")}</div>
-              <div className="block-custom-segment block-custom-sml">
-                <button type="button" className={sizeKey === "S" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 220)}>S</button>
-                <button type="button" className={sizeKey === "M" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 380)}>M</button>
-                <button type="button" className={sizeKey === "L" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 560)}>L</button>
+              {/* Colour: one row of dots (Default is the white one with a stroke through it); the line under them
+                  names the colour the pointer is on — or the card's own — and what it means in this workspace. */}
+              <div className="block-custom-row">
+                <span className="order-card-menu-label">{t("Colour")}</span>
+                <div className="block-custom-dots" role="radiogroup" aria-label={t("Colour")} onMouseLeave={() => setCardMenuColorPreview(null)}>
+                  {CARD_COLOR_OPTIONS.map(color => (
+                    <button
+                      key={color}
+                      type="button"
+                      role="radio"
+                      aria-checked={activeColor === color}
+                      className={`block-custom-dot${activeColor === color ? " is-selected" : ""}`}
+                      data-card-color={color}
+                      title={colorMeanings[color] ? `${t(color)} · ${t(colorMeanings[color])}` : t(color)}
+                      aria-label={colorMeanings[color] ? `${t(color)}, ${t(colorMeanings[color])}` : t(color)}
+                      disabled={locked || savingLayout}
+                      onMouseEnter={() => setCardMenuColorPreview(color)}
+                      onFocus={() => setCardMenuColorPreview(color)}
+                      onBlur={() => setCardMenuColorPreview(null)}
+                      onClick={() => setCardColor(cardId, color)}
+                    >
+                      <span className="block-custom-swatch" data-card-color={color} aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+                {(() => {
+                  const shown = cardMenuColorPreview ?? activeColor;
+                  return (
+                    <p className="block-custom-color-caption" aria-live="polite">
+                      <span className="block-custom-swatch" data-card-color={shown} aria-hidden="true" />
+                      <b>{t(shown)}</b>
+                      {colorMeanings[shown] ? <span>{t(colorMeanings[shown])}</span> : null}
+                      {!locked ? (
+                        <button type="button" className="block-custom-link" onClick={openColorLabelsEditor}>
+                          {t("Manage colour labels")}
+                        </button>
+                      ) : null}
+                    </p>
+                  );
+                })()}
               </div>
-                </>
-              ) : null}
-              <div className="order-card-menu-label">{t("Colour")}</div>
-              <div className="block-custom-color-grid">
-                {CARD_COLOR_OPTIONS.map(color => (
-                  <button
-                    key={color}
-                    className={`block-custom-color${activeColor === color ? " is-selected" : ""}`}
-                    type="button"
-                    disabled={locked || savingLayout}
-                    onClick={() => setCardColor(cardId, color)}
-                  >
-                    <span className="block-custom-swatch" data-card-color={color} aria-hidden="true" />
-                    <span className="block-custom-color-name">
-                      {t(color)}
-                      {colorMeanings[color] ? <small>{t(colorMeanings[color])}</small> : null}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              {!locked ? (
-                <button type="button" className="block-custom-link" onClick={openColorLabelsEditor}>
-                  {t("Manage colour labels")}
-                </button>
-              ) : null}
 
               <footer className="block-custom-footer">
                 <button type="button" className="block-custom-reset" disabled={locked || savingLayout} onClick={() => resetCard(cardId)}>
@@ -10018,7 +10075,6 @@ export function OrderDetailContent({
     const orderValue = order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order);
     const remaining = order.remainingAmount + orderCustomRemainingTotal(order);
     const paidShare = orderValue > 0 ? Math.max(0, Math.min(1, order.paidAmount / orderValue)) : 0;
-    const shownSteps = steps.slice(0, 5);
     const productionNote = resolved.delivered
       ? t("Delivered")
       : current
@@ -10028,22 +10084,42 @@ export function OrderDetailContent({
           : t("No steps yet");
     return (
       <div className="order-status-strip" data-order-status-strip="">
-        <div className="order-status-tile is-production" data-stage={resolved.stageId}>
-          <span className="order-status-tile__label">{t("Production")}</span>
-          <div className="order-status-steps" aria-label={`${resolved.doneCount}/${resolved.total}`}>
-            {shownSteps.map((step, index) => (
-              <Fragment key={step.id || step.title}>
-                {index > 0 ? <span className="order-status-steps__line" aria-hidden="true" /> : null}
-                <span className={`order-status-step is-${stripStepTone(step.value)}`} title={`${t(step.title)} · ${t(step.value)}`}>
-                  <i aria-hidden="true">{stripStepTone(step.value) === "done" ? "✓" : index + 1}</i>
-                  <b>{t(step.title)}</b>
-                </span>
-              </Fragment>
-            ))}
-            {steps.length > shownSteps.length ? <span className="order-status-steps__more">+{steps.length - shownSteps.length}</span> : null}
-          </div>
-          <span className={`order-status-tile__note${current ? ` is-${stripStepTone(current.value)}` : ""}`}>{productionNote}</span>
-        </div>
+        {(() => {
+          // Up to four steps, as a row of segments: a coloured bar (done / current / still to come), the step's
+          // name and its own status under it — so every step reads on its own, nothing wraps under the row.
+          // More than four: the window slides to keep the current step in view, and a "+N" says what is hidden.
+          const doneCount = steps.filter(step => stripStepTone(step.value) === "done").length;
+          const currentIndex = current ? steps.indexOf(current) : steps.length;
+          const windowSize = 4;
+          const start = steps.length <= windowSize ? 0 : Math.max(0, Math.min(currentIndex - 1, steps.length - windowSize));
+          const shown = steps.slice(start, start + windowSize);
+          const hiddenCount = steps.length - shown.length;
+          return (
+            <div className="order-status-tile is-production" data-stage={resolved.stageId}>
+              <div className="order-status-tile__head">
+                <span className="order-status-tile__label">{t("Production")}</span>
+                {steps.length > 0 ? <span className="order-status-tile__count">{resolved.delivered ? t("Delivered") : `${doneCount}/${steps.length}`}</span> : null}
+              </div>
+              {steps.length === 0 ? (
+                <span className="order-status-tile__note">{productionNote}</span>
+              ) : (
+                <div className="order-status-segments" style={{ gridTemplateColumns: `repeat(${shown.length}, minmax(0, 1fr))${hiddenCount > 0 ? " auto" : ""}` }}>
+                  {shown.map(step => {
+                    const tone = resolved.delivered ? "done" : stripStepTone(step.value);
+                    return (
+                      <div key={step.id || step.title} className={`order-status-segment is-${tone}`} title={`${t(step.title)} · ${t(step.value)}`}>
+                        <i aria-hidden="true" />
+                        <b>{t(step.title)}</b>
+                        <small>{resolved.blocker && step === current ? t("Blocked") : t(step.value)}</small>
+                      </div>
+                    );
+                  })}
+                  {hiddenCount > 0 ? <span className="order-status-segments__more">+{hiddenCount}</span> : null}
+                </div>
+              )}
+            </div>
+          );
+        })()}
         {headerShowDeliveryTime ? (
           <div className={`order-status-tile is-delivery tone-${deliveryTone}`}>
             <span className="order-status-tile__label">{t("Delivery")}</span>

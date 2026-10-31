@@ -128,6 +128,16 @@ export const ORDER_STACK_VIEW_TRANSLATIONS: Record<string, Partial<Record<Studio
     "Español (Spanish)": "Sin tiempo registrado", "Português": "Sem tempo registado", "Русский (Russian)": "Время не учтено",
     "日本語 (Japanese)": "作業時間の記録なし", "中文 (Chinese)": "未记录工时", "العربية (Arabic)": "لم يُسجَّل وقت", "हिन्दी (Hindi)": "कोई समय दर्ज नहीं"
   },
+  "Top": {
+    "Türkçe": "En üst", "Deutsch": "Ganz oben", "Français": "En haut", "Italiano": "In cima",
+    "Español (Spanish)": "Arriba del todo", "Português": "No topo", "Русский (Russian)": "Наверх",
+    "日本語 (Japanese)": "一番上", "中文 (Chinese)": "置顶", "العربية (Arabic)": "الأعلى", "हिन्दी (Hindi)": "सबसे ऊपर"
+  },
+  "Bottom": {
+    "Türkçe": "En alt", "Deutsch": "Ganz unten", "Français": "En bas", "Italiano": "In fondo",
+    "Español (Spanish)": "Abajo del todo", "Português": "No fim", "Русский (Russian)": "Вниз",
+    "日本語 (Japanese)": "一番下", "中文 (Chinese)": "置底", "العربية (Arabic)": "الأسفل", "हिन्दी (Hindi)": "सबसे नीचे"
+  },
   "Not dispatched": {
     "Türkçe": "Kargoya verilmedi", "Deutsch": "Nicht versandt", "Français": "Non expédiée", "Italiano": "Non spedito",
     "Español (Spanish)": "No despachado", "Português": "Não despachado", "Русский (Russian)": "Не отправлено",
