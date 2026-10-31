@@ -37663,10 +37663,13 @@ html[data-studio-theme="dark"] .order-status-segment i { background: rgba(255, 2
   --sec-accent-solid: #4256d6;
   --sec-accent-soft: #eef1fd;
   --sec-surface: #ffffff;
+  /* Amber: "in progress" and "due soon" (status steps, delivery), the one meaning the designs had no colour for. */
+  --sec-amber: #b25e09;
+  --sec-amber-bg: #fff4e5;
+  --sec-amber-border: #f1cf9f;
 }
-.order-stack-body[data-stack-card="financial"],
-.order-stack-body[data-stack-card="workTime"],
-.order-stack-body[data-stack-card="schedule"] { padding: 16px 20px 20px; }
+/* Every section body has the designs' margins (Financial, Work Time and Schedule first, the rest after them). */
+.order-stack-body { padding: 16px 20px 20px; }
 html[data-studio-theme="dark"] .order-stack-body {
   --sec-label: rgba(255, 255, 255, 0.6);
   --sec-text: rgba(255, 255, 255, 0.92);
@@ -37685,6 +37688,9 @@ html[data-studio-theme="dark"] .order-stack-body {
   --sec-accent-solid: #4a5ee0;
   --sec-accent-soft: rgba(138, 160, 255, 0.14);
   --sec-surface: rgba(255, 255, 255, 0.12);
+  --sec-amber: #fbbf6b;
+  --sec-amber-bg: rgba(251, 191, 107, 0.12);
+  --sec-amber-border: rgba(251, 191, 107, 0.32);
 }
 .order-stack-body[data-stack-card="financial"] > .order-detail-card > .app-card-panel {
   grid-template-columns: minmax(0, 1fr);
@@ -37887,9 +37893,7 @@ html[data-studio-theme="dark"] .order-stack-body {
 .order-stack-icon.is-symbol.is-long { font-size: 10.5px; letter-spacing: -0.02em; }
 
 @media (max-width: 640px) {
-  .order-stack-body[data-stack-card="financial"],
-  .order-stack-body[data-stack-card="workTime"],
-  .order-stack-body[data-stack-card="schedule"] { padding: 10px 12px 14px; }
+  .order-stack-body { padding: 10px 12px 14px; }
   .order-stack-title { font-size: 14px; }
 }
 
@@ -38210,4 +38214,403 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="schedule"] .ap
   .order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-form > .app-schedule-add-button { justify-self: start; }
   .order-stack-body[data-stack-card="schedule"] .app-schedule-panel .app-schedule-list-block { grid-template-columns: minmax(0, 1fr); }
   .order-stack-body[data-stack-card="schedule"] .app-schedule-empty { padding: 14px 16px; }
+}
+
+/* ==== The other sections, in the designs' language (31 Oct) ====
+   The owner asked for the remaining sections to match Financial, Work Time and Schedule & Alerts: the same palette
+   (--sec-*), labels above their fields (13.5 px, label colour, 8 px gap), fields one height (42 px, 10 px radius,
+   field background and border), selects with the same chevron, sub-headings at 15 px, hairlines between groups,
+   quiet tinted boxes for empty states and key results, a solid accent for the main action. Sections view only:
+   every rule is scoped to a section body, the card grid keeps its look. */
+
+/* The dark theme paints every order card #202020; a section body is the section's own surface (the heading and
+   the body read as one sheet, as they do in the light theme). */
+html[data-studio-theme="dark"] .order-stack-body > .order-detail-card { background: transparent; }
+
+/* -- Property sections: a label above its field, two to a row in a reading width. -- */
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="shipping"], [data-stack-card="priority"]) > .order-detail-card > .app-card-panel {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  column-gap: 24px;
+  row-gap: 18px;
+  align-items: end;
+  max-width: 640px;
+}
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel > .app-value-row {
+  gap: 8px;
+  min-width: 0;
+}
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel > .app-value-row > span:first-child,
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel > .app-value-row > .app-inline-label,
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel > .app-value-row > .app-inline-label-input {
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.3;
+  color: var(--sec-label);
+}
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-value-row > .app-inline-label > span {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+/* The field: a value to click, the input it turns into, a select. */
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > .app-value-pill,
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row input.app-value-input,
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > select.app-inline-select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 14px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background-color: var(--sec-field-bg);
+  color: var(--sec-text);
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  box-shadow: none;
+}
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-value-row > .app-value-button:not(:disabled):hover { border-color: rgba(66, 86, 214, 0.35); }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row input.app-value-input:focus,
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > select.app-inline-select:focus {
+  border-color: var(--sec-accent);
+  box-shadow: 0 0 0 3px var(--sec-accent-soft);
+}
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > select.app-inline-select {
+  appearance: none;
+  padding-block: 0;
+  padding-inline-end: 38px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23626b7c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 16px;
+  cursor: pointer;
+}
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > select.app-inline-select:dir(rtl) { background-position: left 13px center; }
+html[data-studio-theme="dark"] .order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > select.app-inline-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3a9b5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > select.app-inline-select:disabled { cursor: default; opacity: 0.78; }
+/* Value colours in the palette. */
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) :is(.tone-negative, .tone-negative-soft, .tone-red) { color: var(--sec-red) !important; }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) :is(.tone-positive, .tone-green) { color: var(--sec-green) !important; }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .tone-yellow { color: var(--sec-amber) !important; }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .tone-gray { color: var(--sec-label) !important; }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel > .app-card-divider { margin: 2px 0; background: var(--sec-rule); }
+
+/* -- Customer & Communication: name and design, a hairline, "Communication" with its fields, the channels as
+      chips one field high, the customer notes as a field. -- */
+.order-stack-body[data-stack-card="customer"] .app-card-panel > .app-subsection-title {
+  margin: 0 0 -4px;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="customer"] .app-card-panel > .app-subsection-title > span { display: none; }
+.order-stack-body[data-stack-card="customer"] .app-card-panel > .app-subsection-title > strong { font-weight: inherit; }
+.order-stack-body[data-stack-card="customer"] .app-channel-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.order-stack-body[data-stack-card="customer"] .app-channel-pills button {
+  width: auto;
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background: var(--sec-field-bg);
+  color: var(--sec-label);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+/* The chip's text span: the dark theme paints every ".app-channel-pills span" as a selected pill. */
+.order-stack-body[data-stack-card="customer"] .app-channel-pills button > .app-channel-pill-text {
+  min-height: 0;
+  padding: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+}
+.order-stack-body[data-stack-card="customer"] .app-channel-pills button.is-selected {
+  border-color: transparent;
+  background: var(--sec-accent-soft);
+  color: var(--sec-accent);
+}
+.order-stack-body[data-stack-card="customer"] .app-channel-pills button:disabled { opacity: 0.6; }
+.order-stack-body:is([data-stack-card="customer"]) .app-notes-section { gap: 8px; }
+.order-stack-body:is([data-stack-card="customer"]) .app-notes-heading {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--sec-label);
+}
+.order-stack-body:is([data-stack-card="customer"]) .app-notes-display {
+  min-height: 82px;
+  padding: 12px 14px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background: var(--sec-field-bg);
+  color: var(--sec-text);
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.order-stack-body:is([data-stack-card="customer"]) .app-notes-display:not(:disabled):hover { border-color: rgba(66, 86, 214, 0.35); }
+.order-stack-body:is([data-stack-card="customer"]) .app-notes-display.is-empty { color: var(--sec-label); font-weight: 400; }
+.order-stack-body:is([data-stack-card="customer"]) .app-notes-editor {
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--sec-accent);
+  border-radius: 10px;
+  background: var(--sec-field-bg);
+  box-shadow: 0 0 0 3px var(--sec-accent-soft);
+}
+.order-stack-body:is([data-stack-card="customer"]) .app-notes-editor > textarea.app-notes-textarea {
+  min-height: 92px;
+  padding: 12px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--sec-text);
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.order-stack-body:is([data-stack-card="customer"]) .app-notes-actions { gap: 8px; padding: 0 10px 10px; }
+.order-stack-body:is([data-stack-card="customer"]) .app-notes-actions button {
+  min-height: 38px;
+  padding: 0 18px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background: var(--sec-surface);
+  color: var(--sec-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+.order-stack-body:is([data-stack-card="customer"]) .app-notes-actions button:last-child {
+  border-color: transparent;
+  background: var(--sec-accent-solid);
+  color: #fff;
+}
+
+/* -- Timeline & Delivery: one line on top like Work Time — Created | Due | Time remaining as figures with
+      hairline separators and "Add to Calendar" at its end, the calendar note under it; a hairline; the three
+      editable dates as label-above fields on one line. -- */
+.order-stack-body[data-stack-card="delivery"] > .order-detail-card > .app-card-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 20px;
+  max-width: 760px;
+}
+.order-stack-body[data-stack-card="delivery"] .app-card-panel > .app-delivery-grid,
+.order-stack-body[data-stack-card="delivery"] .app-card-panel > .app-calendar-card { display: contents; }
+.order-stack-body[data-stack-card="delivery"] .app-soft-metric-card,
+.order-stack-body[data-stack-card="delivery"] .app-card-panel > .app-time-remaining {
+  flex: 0 0 auto;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.order-stack-body[data-stack-card="delivery"] .app-soft-metric-card + .app-soft-metric-card,
+.order-stack-body[data-stack-card="delivery"] .app-card-panel > .app-time-remaining {
+  padding-inline-start: 20px;
+  border-inline-start: 1px solid var(--sec-rule);
+}
+.order-stack-body[data-stack-card="delivery"] .app-soft-metric-card > span,
+.order-stack-body[data-stack-card="delivery"] .app-time-remaining > span { display: none; }
+.order-stack-body[data-stack-card="delivery"] .app-soft-metric-card > small,
+.order-stack-body[data-stack-card="delivery"] .app-time-remaining strong {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="delivery"] .app-soft-metric-card > strong,
+.order-stack-body[data-stack-card="delivery"] .app-time-remaining b {
+  display: block;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.order-stack-body[data-stack-card="delivery"] .app-soft-metric-card.tone-blue,
+.order-stack-body[data-stack-card="delivery"] .app-soft-metric-card.tone-gray { color: var(--sec-text) !important; }
+.order-stack-body[data-stack-card="delivery"] .app-soft-metric-card.tone-red { color: var(--sec-red) !important; }
+.order-stack-body[data-stack-card="delivery"] .app-soft-metric-card.tone-yellow { color: var(--sec-amber) !important; }
+.order-stack-body[data-stack-card="delivery"] .app-soft-metric-card.tone-green { color: var(--sec-green) !important; }
+.order-stack-body[data-stack-card="delivery"] .app-time-remaining { color: var(--sec-green); }
+.order-stack-body[data-stack-card="delivery"] .app-time-remaining:is(.is-red, .is-late) { color: var(--sec-red); }
+.order-stack-body[data-stack-card="delivery"] .app-time-remaining.is-yellow { color: var(--sec-amber); }
+.order-stack-body[data-stack-card="delivery"] .app-time-remaining.is-gray { color: var(--sec-label); }
+.order-stack-body[data-stack-card="delivery"] .app-card-panel .app-calendar-button {
+  justify-self: auto;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+  min-height: 42px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--sec-accent-soft);
+  color: var(--sec-accent);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.order-stack-body[data-stack-card="delivery"] .app-calendar-card > p {
+  flex: 1 1 100%;
+  margin: -6px 0 0;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="delivery"] .app-calendar-card > p.app-calendar-status { margin-top: -6px !important; font-size: 13px !important; }
+.order-stack-body[data-stack-card="delivery"] .app-card-panel > .app-card-divider { flex: 1 1 100%; }
+.order-stack-body[data-stack-card="delivery"] .app-card-panel > .app-value-row { flex: 1 1 180px; align-self: end; }
+
+/* -- Shipping & Tracking: Courier | Tracking, the empty state as a quiet line, Dispatched | Delivered. -- */
+.order-stack-body[data-stack-card="shipping"] .app-card-panel > .shipping-stack-empty {
+  margin: 0;
+  padding: 18px 22px;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="shipping"] .app-card-panel > .shipping-stack-empty > strong { font-weight: 650; color: var(--sec-text); }
+.order-stack-body[data-stack-card="shipping"] .app-card-panel > :is(.layout-status, .layout-error).finance-inline-message:not(.shipping-stack-empty) {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+/* -- Order Summary: the order value as the figure beside the step statuses, a hairline, the order type as a line
+      with its select at the end, a hairline, the two dates as plain values. -- */
+.order-stack-body[data-stack-card="summary"] > .order-detail-card > .app-card-panel { gap: 18px; }
+.order-stack-body[data-stack-card="summary"] .app-card-panel > .app-card-divider { margin: 0; background: var(--sec-rule); }
+.order-stack-body[data-stack-card="summary"] .app-summary-top,
+.order-stack-body[data-stack-card="summary"] .app-summary-bottom {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px 24px;
+  align-items: center;
+}
+.order-stack-body[data-stack-card="summary"] .app-summary-value,
+.order-stack-body[data-stack-card="summary"] .app-summary-date-block { gap: 6px; }
+.order-stack-body[data-stack-card="summary"] .app-summary-value span,
+.order-stack-body[data-stack-card="summary"] .app-summary-date-block > span,
+.order-stack-body[data-stack-card="summary"] .app-summary-status-row > span,
+.order-stack-body[data-stack-card="summary"] .app-summary-order-type > span {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="summary"] .app-summary-value strong {
+  font-size: 27px;
+  font-weight: 800;
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="summary"] .app-summary-status-list { gap: 10px; }
+.order-stack-body[data-stack-card="summary"] .app-summary-status-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+.order-stack-body[data-stack-card="summary"] .app-summary-status-badge {
+  justify-self: end;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.order-stack-body[data-stack-card="summary"] .app-summary-status-badge.green { background: var(--sec-green-bg); color: var(--sec-green); }
+.order-stack-body[data-stack-card="summary"] .app-summary-status-badge.red { background: var(--sec-red-bg); color: var(--sec-red); }
+.order-stack-body[data-stack-card="summary"] .app-summary-status-badge.orange { background: var(--sec-amber-bg); color: var(--sec-amber); }
+.order-stack-body[data-stack-card="summary"] .app-summary-status-badge.gray { background: var(--sec-field-bg); color: var(--sec-label); }
+.order-stack-body[data-stack-card="summary"] .app-summary-order-type { gap: 14px; font-size: 13.5px; }
+.order-stack-body[data-stack-card="summary"] .app-summary-order-type > select,
+.order-stack-body[data-stack-card="summary"] .app-summary-order-type > strong {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 220px;
+  max-width: 60%;
+  min-height: 42px;
+  padding-block: 0;
+  padding-inline: 14px 38px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background-color: var(--sec-field-bg);
+  color: var(--sec-text);
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.order-stack-body[data-stack-card="summary"] .app-summary-order-type > select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23626b7c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 16px;
+  cursor: pointer;
+}
+.order-stack-body[data-stack-card="summary"] .app-summary-order-type > select:dir(rtl) { background-position: left 13px center; }
+html[data-studio-theme="dark"] .order-stack-body[data-stack-card="summary"] .app-summary-order-type > select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3a9b5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+.order-stack-body[data-stack-card="summary"] .app-summary-order-type > select:focus { outline: none; border-color: var(--sec-accent); box-shadow: 0 0 0 3px var(--sec-accent-soft); }
+/* Read-only (no edit right): the type as a plain value, not a field. */
+.order-stack-body[data-stack-card="summary"] .app-summary-order-type > strong {
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 15px;
+  font-weight: 700;
+}
+.order-stack-body[data-stack-card="summary"] .app-summary-date-block strong {
+  gap: 7px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="summary"] .app-summary-date-block svg { width: 15px; height: 15px; color: var(--sec-label); }
+.order-stack-body[data-stack-card="summary"] .app-summary-delivery.green,
+.order-stack-body[data-stack-card="summary"] .app-summary-delivery.green svg { color: var(--sec-green); }
+.order-stack-body[data-stack-card="summary"] .app-summary-delivery.yellow,
+.order-stack-body[data-stack-card="summary"] .app-summary-delivery.yellow svg { color: var(--sec-amber); }
+.order-stack-body[data-stack-card="summary"] .app-summary-delivery.red,
+.order-stack-body[data-stack-card="summary"] .app-summary-delivery.red svg { color: var(--sec-red); }
+.order-stack-body[data-stack-card="summary"] .app-summary-delivery.gray,
+.order-stack-body[data-stack-card="summary"] .app-summary-delivery.gray svg { color: var(--sec-label); }
+
+@media (max-width: 640px) {
+  .order-stack-body[data-stack-card="delivery"] .app-soft-metric-card,
+  .order-stack-body[data-stack-card="delivery"] .app-card-panel > .app-time-remaining { flex: 1 1 40%; }
+  .order-stack-body[data-stack-card="delivery"] .app-card-panel > .app-time-remaining { flex-basis: 100%; padding-inline-start: 0; border-inline-start: 0; }
+  .order-stack-body[data-stack-card="delivery"] .app-card-panel .app-calendar-button { margin-inline-start: 0; }
+  .order-stack-body[data-stack-card="delivery"] .app-soft-metric-card > strong,
+  .order-stack-body[data-stack-card="delivery"] .app-time-remaining b { font-size: 18px; }
+  .order-stack-body[data-stack-card="shipping"] .app-card-panel > .shipping-stack-empty { padding: 14px 16px; }
+  .order-stack-body[data-stack-card="summary"] .app-summary-value strong { font-size: 24px; }
 }

@@ -8444,6 +8444,11 @@ export function OrderDetailContent({
                   onCheckAgain={() => void requestLiveTracking(order.trackingNumber, order.courier || "Auto Detect", true)}
                   workspace={workspace}
                 />
+              ) : isStackView ? (
+                // Sections view: the empty state as one quiet line in a tinted box, its lead sentence in bold.
+                <p className="layout-status finance-inline-message shipping-stack-empty">
+                  <strong>{t("No tracking number yet.")}</strong> {t("Add a courier and tracking number to enable live status.")}
+                </p>
               ) : (
                 <p className="layout-status finance-inline-message" style={{ marginTop: 8 }}>
                   {`${t("No tracking number yet.")} ${t("Add a courier and tracking number to enable live status.")}`}
