@@ -228,6 +228,15 @@ const TREE_EN: GuideNode[] = [
         "Your layout is saved to your own user as a card profile: your teammates keep their own layouts, while the order content stays shared.",
         "Some cards let you Edit headings to rename, add or remove their sections and fields (covered on each card below)."
       ] },
+      { kind: "sub", text: "Sections view and Cards view" },
+      { kind: "bullets", items: [
+        "An order now opens in the Sections view: one column of collapsible headings — Preview, Order Summary, Customer & Communication, Financial Info and the rest — each showing one line of summary (the balance, the current production step, the delivery countdown) before you open it. Tap a heading to open that section; tap it again to close it.",
+        "Switch views with the Sections | Cards control in the order header (on a phone, the small icon button in the same place). Cards is the draggable card grid you had before; nothing in it changed. The choice is yours alone and follows you to every device — web, Mac, iPhone, iPad and Android.",
+        "The status strip under the order's name is shown in both views: the production steps with the current one, the delivery countdown with the due date, the order's value with the final profit, and what is paid against what remains. It takes the place of the design-preview thumbnail; the Preview card still shows the image.",
+        "Reorder sections with the heading's ... menu (Up, Down, Move to top, Move to bottom) or by dragging the handle on a wide screen. The section order is the same order your phone's list uses, and it syncs with your other devices like the card layout.",
+        "Colours work the same way in both views: pick a colour in the heading's ... menu and the heading and its body take that tint with the colour's meaning label. Hidden cards stay hidden in both views (Customize cards).",
+        "Actions ▸ Expand all / Collapse all opens or closes every section at once. Which sections you left open is remembered on this device only."
+      ] },
       { kind: "sub", text: "Export & invoice" },
       { kind: "bullets", items: [
         "Export the order as a PDF: a clean summary built from your PDF Export Settings.",
@@ -1870,6 +1879,15 @@ const TREE_TR: GuideNode[] = [
         "Bir karta renk verin (8 seçenek) ki öne çıksın — her renk kartta görünen bir anlam etiketi taşır (Acil, Onaylandı, ...). Renk etiketlerini yönet ile bu anlamları tüm çalışma alanınız için, her platformda geçerli olacak şekilde yeniden adlandırabilirsiniz.",
         "Yerleşiminiz kendi kullanıcınıza bir kart profili olarak kaydedilir: ekip arkadaşlarınız kendi yerleşimlerini korur, sipariş içeriği ise ortak kalır.",
         "Bazı kartlarda Başlıkları Düzenle ile bölümleri ve alanları yeniden adlandırabilir, ekleyebilir veya kaldırabilirsiniz (aşağıda her kartta anlatılıyor)."
+      ] },
+      { kind: "sub", text: "Bölümler görünümü ve Kartlar görünümü" },
+      { kind: "bullets", items: [
+        "Bir sipariş artık Bölümler görünümünde açılır: Preview, Order Summary, Customer & Communication, Financial Info ve diğerleri için alt alta açılır başlıklar. Her başlık, açmadan önce tek satırlık bir özet gösterir (kalan bakiye, üretimdeki adım, teslime kalan süre). Başlığa dokununca bölüm açılır; tekrar dokununca kapanır.",
+        "Görünümü sipariş başlığındaki Sections | Cards (Bölümler | Kartlar) anahtarıyla değiştirin (telefonda aynı yerdeki küçük simge düğmesi). Kartlar, önceden kullandığınız sürüklenebilir kart ızgarasıdır; onda hiçbir şey değişmedi. Seçim yalnız size aittir ve her cihazınıza taşınır — web, Mac, iPhone, iPad ve Android.",
+        "Sipariş adının altındaki durum şeridi her iki görünümde de görünür: üretim adımları ve şu anki adım, teslime kalan süre ve teslim tarihi, sipariş değeri ve nihai kâr, ödenen ile kalan tutar. Tasarım önizleme küçük resminin yerini aldı; Preview kartı görseli göstermeye devam eder.",
+        "Bölümleri başlıktaki ... menüsüyle (Yukarı, Aşağı, En üste taşı, En alta taşı) ya da geniş ekranda tutamacı sürükleyerek sıralayın. Bölüm sırası telefon listesinin kullandığı sırayla aynıdır ve kart düzeni gibi diğer cihazlarınızla eşitlenir.",
+        "Renkler iki görünümde de aynı çalışır: başlığın ... menüsünden bir renk seçin; başlık ve gövdesi o tonu ve rengin anlam etiketini alır. Gizlenen kartlar iki görünümde de gizli kalır (Customize cards).",
+        "Actions ▸ Expand all / Collapse all tüm bölümleri tek seferde açar ya da kapatır. Açık bıraktığınız bölümler yalnız bu cihazda hatırlanır."
       ] },
       { kind: "sub", text: "Dışa aktarma & fatura" },
       { kind: "bullets", items: [
