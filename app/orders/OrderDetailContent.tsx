@@ -2387,11 +2387,16 @@ export function OrderDetailContent({
   const [stackDragCardId, setStackDragCardId] = useState<OrderDetailCardId | null>(null);
   const [stackDropCue, setStackDropCue] = useState<{ cardId: OrderDetailCardId; placement: "before" | "after" } | null>(null);
   const stackSectionRefs = useRef(new Map<OrderDetailCardId, HTMLDivElement>());
+  // When this device chose a view a moment ago, a cloud value that disagrees is an older save still
+  // landing (two quick taps, or another device's earlier choice): the local choice stands and its own
+  // save reconciles the cloud. After a few seconds the cloud is the truth again.
+  const orderDetailViewChosenAtRef = useRef(0);
   useEffect(() => {
     setOrderDetailView(readCachedOrderDetailView(workspace.id) ?? DEFAULT_ORDER_DETAIL_VIEW);
     setOpenStackSections(readOpenStackSections(workspace.id, ORDER_DETAIL_CARD_IDS));
     return subscribeOrderDetailView(workspace.id, view => {
       if (!view) return;
+      if (Date.now() - orderDetailViewChosenAtRef.current < 8000 && view !== readCachedOrderDetailView(workspace.id)) return;
       setOrderDetailView(view);
       cacheOrderDetailView(workspace.id, view);
     });
@@ -2714,6 +2719,7 @@ export function OrderDetailContent({
   // knows the key, the device-local copy carries the choice — it is applied at once either way.
   function chooseOrderDetailView(view: OrderDetailView) {
     if (view === orderDetailView) return;
+    orderDetailViewChosenAtRef.current = Date.now();
     setOrderDetailView(view);
     cacheOrderDetailView(workspace.id, view);
     setOpenCardMenuId(null);

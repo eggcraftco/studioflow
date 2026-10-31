@@ -37419,3 +37419,16 @@ html[data-studio-theme="dark"] .order-stack-icon { background: rgba(255, 255, 25
 html[data-studio-theme="dark"] .order-view-toggle { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.1); }
 html[data-studio-theme="dark"] .order-view-toggle button.is-active { background: rgba(255, 255, 255, 0.12); color: #fff; }
 html[data-studio-theme="dark"] .order-status-bar { background: rgba(255, 255, 255, 0.1); }
+
+/* The deep-link route (/orders/<id>) draws the order straight into the shell's content column, which the
+   Orders page keeps at overflow: hidden on wide screens so the list and the pane can scroll inside. With no
+   pane around it the order could not scroll at all there (both views). The shell itself scrolls now; its
+   sticky head stays put inside it, as it does inside the pane. */
+@media (min-width: 981px) {
+  .app-shell-scroll-area[data-shell-page="orders"] > .app-shell-content > .order-detail-shell {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+}
