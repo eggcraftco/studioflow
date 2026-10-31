@@ -15,8 +15,8 @@ import type { OrderDetailCardId } from "@/lib/studioflow/cardLayouts";
  * clients on purpose; see homeLayout.ts). A device-local copy makes the toggle
  * answer at once and keeps it offline; the cloud value wins when it arrives.
  *
- * Which sections are open is NOT synced: it is how this screen is being read
- * right now, not a layout anyone set up.
+ * Which sections are open is not stored at all: every order opens with every
+ * section closed, and the reader opens what they want.
  */
 export type OrderDetailView = "stack" | "cards";
 
@@ -84,30 +84,9 @@ export async function saveOrderDetailView(companyId: string, view: OrderDetailVi
   await callable({ companyId, settings: { [ORDER_DETAIL_VIEW_FIELD]: view } });
 }
 
-/** The sections this device last had open for the workspace (default: none). */
-export function readOpenStackSections(companyId: string, known: readonly OrderDetailCardId[]): OrderDetailCardId[] {
-  if (!companyId) return [];
-  try {
-    const raw = storage()?.getItem(`${OPEN_STORAGE_PREFIX}${companyId}`);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((id): id is OrderDetailCardId => typeof id === "string" && known.includes(id as OrderDetailCardId));
-  } catch {
-    return [];
-  }
-}
-
-export function writeOpenStackSections(companyId: string, open: readonly OrderDetailCardId[]) {
-  if (!companyId) return;
-  try {
-    storage()?.setItem(`${OPEN_STORAGE_PREFIX}${companyId}`, JSON.stringify(open));
-  } catch {
-    // Not worth an error: the sections simply start closed next time.
-  }
-}
-
-/** Both device-local keys, for sign-out (lib/studioflow/deviceLocalCache.ts). */
+/** Device-local keys, for sign-out (lib/studioflow/deviceLocalCache.ts). The open-sections key is no longer
+ * written (every order opens with every section closed) but is still swept, so a value an older build
+ * left behind goes too. */
 export function orderDetailViewStorageKeys(): string[] {
   const store = storage();
   if (!store) return [];

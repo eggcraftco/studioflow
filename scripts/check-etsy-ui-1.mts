@@ -304,7 +304,9 @@ await check("C5 the new code reaches no layout write: no persistLayout / save*Ca
 // ── D. page wiring ─────────────────────────────────────────────────────────
 const detail = read("app/orders/OrderDetailContent.tsx");
 await check("D1 the jump bar sits under the order header (inside the sticky head, after the tab bar) on every order", () => {
-  assert.match(detail, /\{renderOrderTabs\(\)\}\s*\{renderJumpBar\(\)\}\s*<\/div>/);
+  // The design-preview tab bar that stood before it was removed (owner, 31 Oct); the jump bar still closes the head.
+  assert.match(detail, /\{renderJumpBar\(\)\}\s*<\/div>/);
+  assert.doesNotMatch(detail, /renderOrderTabs\(\)/, "the design-preview tab bar is gone");
   assert.match(detail, /<nav (ref=\{jumpNavRef\} )?className=\{jumpFadeEnd \? "order-jump-bar__links is-fading-end" : "order-jump-bar__links"\} aria-label=\{t\("Jump to a card"\)\}>/);
 });
 await check("D2 it is built from the cards the page draws (desktop columns / phone stack incl. the Etsy fold) and their own titles", () => {

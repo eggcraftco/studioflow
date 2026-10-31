@@ -181,7 +181,7 @@ import { etsyListingLink, etsyPhotoIsShowable } from "@/lib/studioflow/etsyListi
 import { EtsyNotePhotoLinks } from "./EtsyText";
 import { etsyCardFold, etsyNoteDisplay } from "@/lib/studioflow/etsyFirstImport";
 import { ETSY_BLOCK_JUMP_ID, etsyAddTrackingLink, etsyBlockReplacesStrip, hiddenCardCount, orderJumpTargets } from "@/lib/studioflow/etsyOrderView";
-import { DEFAULT_ORDER_DETAIL_VIEW, cacheOrderDetailView, readCachedOrderDetailView, readOpenStackSections, saveOrderDetailView, subscribeOrderDetailView, writeOpenStackSections, type OrderDetailView } from "@/lib/studioflow/orderDetailView";
+import { DEFAULT_ORDER_DETAIL_VIEW, cacheOrderDetailView, readCachedOrderDetailView, saveOrderDetailView, subscribeOrderDetailView, type OrderDetailView } from "@/lib/studioflow/orderDetailView";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
@@ -2381,7 +2381,8 @@ export function OrderDetailContent({
   // Sections view (31 Oct 2026): which of the two views this member opens orders in — one column of
   // collapsible sections (the default) or the card grid. The device-local copy answers first; the
   // personalInterfaceSettings listener replaces it when the cloud value arrives. Which sections are open is
-  // this device's reading position, never synced.
+  // how this order is being read right now: every order opens with every section closed (owner, 31 Oct),
+  // nothing is stored.
   const [orderDetailView, setOrderDetailView] = useState<OrderDetailView>(DEFAULT_ORDER_DETAIL_VIEW);
   const [openStackSections, setOpenStackSections] = useState<OrderDetailCardId[]>([]);
   const [stackDragCardId, setStackDragCardId] = useState<OrderDetailCardId | null>(null);
@@ -2393,7 +2394,6 @@ export function OrderDetailContent({
   const orderDetailViewChosenAtRef = useRef(0);
   useEffect(() => {
     setOrderDetailView(readCachedOrderDetailView(workspace.id) ?? DEFAULT_ORDER_DETAIL_VIEW);
-    setOpenStackSections(readOpenStackSections(workspace.id, ORDER_DETAIL_CARD_IDS));
     return subscribeOrderDetailView(workspace.id, view => {
       if (!view) return;
       if (Date.now() - orderDetailViewChosenAtRef.current < 8000 && view !== readCachedOrderDetailView(workspace.id)) return;
@@ -2401,6 +2401,9 @@ export function OrderDetailContent({
       cacheOrderDetailView(workspace.id, view);
     });
   }, [workspace.id]);
+  useEffect(() => {
+    setOpenStackSections([]);
+  }, [order.id]);
   const [editOpen, setEditOpen] = useState(false);
   const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
@@ -2728,13 +2731,16 @@ export function OrderDetailContent({
     });
   }
 
+  // The first-project tour points at a card's contents (step 3: fill in the customer, step 6: Financial
+  // Info), so in the sections view the section it points at stays open while that step is on screen.
   function isStackSectionOpen(cardId: OrderDetailCardId) {
+    if (guideHighlightsCustomer && cardId === "customer") return true;
+    if (firstProjectGuideStep === 6 && cardId === "financial") return true;
     return openStackSections.includes(cardId);
   }
 
   function setStackSections(next: OrderDetailCardId[]) {
     setOpenStackSections(next);
-    writeOpenStackSections(workspace.id, next);
   }
 
   function toggleStackSection(cardId: OrderDetailCardId, open?: boolean) {
@@ -2801,7 +2807,8 @@ export function OrderDetailContent({
     let interval = 0;
     function updateCustomerGuidePosition() {
       const refs = isNarrowLayout ? mobileCardFrameRefs.current : desktopCardFrameRefs.current;
-      const node = refs.get("customer") ?? desktopCardFrameRefs.current.get("customer") ?? mobileCardFrameRefs.current.get("customer");
+      const node = (orderDetailView === "stack" ? stackSectionRefs.current.get("customer") : null)
+        ?? refs.get("customer") ?? desktopCardFrameRefs.current.get("customer") ?? mobileCardFrameRefs.current.get("customer");
       if (!node) return;
       node.scrollIntoView({ block: "nearest", inline: "nearest" });
       const rect = node.getBoundingClientRect();
@@ -2838,7 +2845,7 @@ export function OrderDetailContent({
       window.removeEventListener("resize", scheduleUpdate);
       window.removeEventListener("scroll", scheduleUpdate, true);
     };
-  }, [showCustomerGuideBubble, isNarrowLayout, order.id]);
+  }, [showCustomerGuideBubble, isNarrowLayout, order.id, orderDetailView]);
 
   function shouldStartWorkspacePan(target: EventTarget | null) {
     if (!(target instanceof HTMLElement)) return false;
@@ -9973,63 +9980,6 @@ export function OrderDetailContent({
     ? String(order.projectNumber)
     : order.invoiceNumber.trim();
 
-  // The tab bar under the header (spec §3). Overview is the card workspace
-  // below; the other five are DESIGN ONLY for now — they are disabled tabs
-  // with a "Design preview" caption, they never route or switch anything,
-  // and a click only says so. Their behaviour is a separate specification.
-  function renderOrderTabs() {
-    const tabs: Array<{ id: string; label: string; icon: CardIcon; live?: boolean }> = [
-      { id: "overview", label: "Overview", icon: "dashboard", live: true },
-      { id: "production", label: "Production", icon: "ordersProduction" },
-      { id: "timeline", label: "Timeline", icon: "historyClock" },
-      { id: "files", label: "Files", icon: "files" },
-      { id: "messages", label: "Messages", icon: "reply" },
-      { id: "notes", label: "Notes", icon: "notes" }
-    ];
-    const previewNote = t("This tab is a design preview. It is not functional yet.");
-    return (
-      <div className="order-detail-tabs" role="tablist" aria-label={t("Order tabs")}>
-        {tabs.map(tab => tab.live ? (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            id={`order-tab-${tab.id}`}
-            className="order-detail-tab is-active"
-            aria-selected="true"
-            aria-controls="order-tab-panel-overview"
-          >
-            <CardIconGlyph icon={tab.icon} />
-            <span>{t(tab.label)}</span>
-          </button>
-        ) : (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            id={`order-tab-${tab.id}`}
-            className="order-detail-tab is-design-preview"
-            aria-selected="false"
-            aria-disabled="true"
-            data-design-preview="true"
-            title={previewNote}
-            tabIndex={-1}
-            onClick={event => {
-              event.preventDefault();
-              dispatchStudioToast({ message: previewNote });
-            }}
-          >
-            <CardIconGlyph icon={tab.icon} />
-            <span>{t(tab.label)}</span>
-            <span className="order-detail-tab-soon" aria-hidden="true">{t("Coming soon")}</span>
-            <span className="visually-hidden">{previewNote}</span>
-          </button>
-        ))}
-        <span className="order-detail-tabs-note" aria-hidden="true">{t("Design preview")}</span>
-      </div>
-    );
-  }
-
   function renderHeaderMeta() {
     // Sections view (31 Oct 2026): delivery and value moved into the status strip's tiles; the upcoming
     // reminder stays a pill at the end of the strip, under its own header toggle.
@@ -10266,8 +10216,8 @@ export function OrderDetailContent({
     const refs = isStackView ? stackSectionRefs.current : isNarrowLayout ? mobileCardFrameRefs.current : desktopCardFrameRefs.current;
     const target = targetId === ETSY_BLOCK_JUMP_ID ? etsyBlockRef.current : refs.get(targetId as OrderDetailCardId) ?? null;
     if (!target) return;
-    // Sections view: a closed section opens before the scroll, as the Etsy fold does below.
-    if (isStackView && targetId !== ETSY_BLOCK_JUMP_ID) toggleStackSection(targetId as OrderDetailCardId, true);
+    // Sections view: the jump only brings the heading into view and marks it; the section stays as it was
+    // (owner, 31 Oct) — opening it is the reader's tap.
     const fold = target.closest("details");
     if (fold && !fold.open) fold.open = true;
     const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -10286,8 +10236,10 @@ export function OrderDetailContent({
     }
     if (!target.hasAttribute("tabindex")) target.setAttribute("tabindex", "-1");
     target.focus({ preventScroll: true });
+    target.classList.remove("is-notification-focus");
+    void target.offsetWidth;
     target.classList.add("is-notification-focus");
-    window.setTimeout(() => target.classList.remove("is-notification-focus"), 1600);
+    window.setTimeout(() => target.classList.remove("is-notification-focus"), 2200);
   }
 
   // Sections view (31 Oct 2026): the one line under a section heading that says what is inside without
@@ -10479,7 +10431,7 @@ export function OrderDetailContent({
     // The same tab panel id the card canvas carries (written as an expression so the source-order check in
     // scripts/check-etsy-ui-1.mts still finds the canvas, which follows the Etsy block, first).
     return (
-      <div id={"order-tab-panel-overview"} role="tabpanel" aria-labelledby="order-tab-overview" className="order-detail-stack" data-order-stack="">
+      <div id={"order-tab-panel-overview"} className="order-detail-stack" data-order-stack="">
         {fold.main.map(cardId => renderStackSection(cardId))}
         {fold.folded.length ? (
           <>
@@ -10849,7 +10801,8 @@ export function OrderDetailContent({
         </div>
       </section>
       {renderStatusStrip()}
-      {renderOrderTabs()}
+      {/* The Overview / Production / Timeline / Files / Messages / Notes tab bar was a design preview with
+          nothing behind it; removed from both views (owner, 31 Oct). */}
       {renderJumpBar()}
       </div>
       {headerDetailsMenuPosition ? (
@@ -11137,8 +11090,6 @@ export function OrderDetailContent({
         <>
           <div
             id="order-tab-panel-overview"
-            role="tabpanel"
-            aria-labelledby="order-tab-overview"
             className={`order-detail-workspace${workspacePanning ? " is-panning" : ""}`}
             onPointerDown={startWorkspacePan}
             onPointerMove={moveWorkspacePan}

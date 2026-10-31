@@ -37432,3 +37432,19 @@ html[data-studio-theme="dark"] .order-status-bar { background: rgba(255, 255, 25
     overscroll-behavior: contain;
   }
 }
+
+/* Sections view: a section reached through the jump bar (or a notification) is marked, not opened — a ring
+   in the accent colour that fades after two seconds, over whatever tint the section carries. */
+.order-stack-section.is-notification-focus {
+  outline: 2px solid var(--accent, #2563eb);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.16), 0 6px 18px rgba(15, 23, 42, 0.045);
+  animation: order-stack-section-mark 2.2s ease-out;
+}
+@keyframes order-stack-section-mark {
+  0%, 55% { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.22), 0 6px 18px rgba(15, 23, 42, 0.045); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0), 0 6px 18px rgba(15, 23, 42, 0.045); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .order-stack-section.is-notification-focus { animation: none; }
+}
