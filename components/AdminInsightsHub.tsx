@@ -12,6 +12,7 @@ import { CardTitle } from "@/components/CardTitle";
 import { isAnalyticsExcluded, setAnalyticsExclusion } from "@/lib/landingTracking";
 import { AdminFeedbackInbox } from "@/components/AdminFeedbackInbox";
 import { AdminLivePanel, useLiveAppNow } from "@/components/AdminLivePanel";
+import { AdminOnlineTimePanel } from "@/components/AdminOnlineTimePanel";
 import { AdminDropoffPanel } from "@/components/AdminDropoffPanel";
 import { AdminAssistantQuestionsPanel } from "@/components/AdminAssistantQuestionsPanel";
 import { PRESENCE_APPS, appBuckets, downloadCsv, toCsv } from "@/lib/studioflow/adminLivePresence";
@@ -3529,6 +3530,7 @@ function AdminActivationFunnelSection({ view }: { view: AdminView }) {
 type AdminHubPage =
   | "overview"
   | "live"
+  | "onlinetime"
   | "users"
   | "subscriptions"
   | "revenue"
@@ -3549,7 +3551,7 @@ type AdminHubPage =
    customers themselves, how the product is used, and the public website. Order inside a group is
    the order an admin usually reads them in. */
 const ADMIN_HUB_GROUPS: { label: string; pages: { id: AdminHubPage; label: string }[] }[] = [
-  { label: "Pulse", pages: [{ id: "overview", label: "Overview" }, { id: "live", label: "Live" }] },
+  { label: "Pulse", pages: [{ id: "overview", label: "Overview" }, { id: "live", label: "Live" }, { id: "onlinetime", label: "Online time" }] },
   { label: "Money", pages: [{ id: "subscriptions", label: "Subscriptions" }, { id: "revenue", label: "Revenue" }, { id: "plans", label: "Plans" }] },
   {
     label: "Customers",
@@ -3655,6 +3657,8 @@ export function AdminInsightsHub() {
         {viewPages.includes(page) ? <AdminViewToggle view={view} onChange={setView} /> : null}
         {page === "overview" ? <AdminOverviewPanel view={view} onOpen={setPage} /> : null}
         {page === "live" ? <AdminLivePanel view={view} /> : null}
+        {/* Online time has its own "Hide internal accounts" switch on the same view state, so no toggle above it. */}
+        {page === "onlinetime" ? <AdminOnlineTimePanel view={view} onViewChange={setView} /> : null}
         {page === "users" ? <AdminUsersWorkspacesDetail onBack={goOverview} view={view} /> : null}
         {page === "subscriptions" ? <AdminSubscriptionsDetail onBack={goOverview} view={view} /> : null}
         {page === "revenue" ? <AdminRevenueDetail onBack={goOverview} view={view} /> : null}

@@ -24498,6 +24498,225 @@ body[data-studio-theme="dark"] .admin-hub-link.active {
   }
 }
 
+/* Admin Insights ▸ Online time (31 Oct 2026): the top list. One row per person: rank, who, time with
+   the per-app bar, then active hours / last seen / devices. The four columns fold into two rows on a
+   tablet and into one column on a phone; nothing in a row can push the page wider than the screen. */
+.admin-online-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 12px;
+}
+
+.admin-segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--admin-chip-bg);
+}
+
+.admin-segmented button {
+  border: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-segmented button.is-active {
+  background: #0a84ff;
+  color: #fff;
+}
+
+.admin-segmented button:focus-visible,
+.admin-online-check input:focus-visible {
+  outline: 2px solid #0a84ff;
+  outline-offset: 2px;
+}
+
+.admin-online-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-online-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #0a84ff;
+}
+
+.admin-online-tiles {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 0;
+}
+
+.admin-online-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+}
+
+.admin-online-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1.25fr) minmax(0, 1.5fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 14px;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.admin-online-list > .admin-online-row:first-child {
+  border-top: 0;
+}
+
+.admin-online-row.is-unidentified {
+  margin-top: 6px;
+  padding: 11px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--admin-tile-bg);
+}
+
+.admin-online-rank {
+  font-size: 13px;
+  font-weight: 900;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.admin-online-who,
+.admin-online-time,
+.admin-online-meta {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.admin-online-name {
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-online-sub,
+.admin-online-apps,
+.admin-online-meta span {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.admin-online-meta b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-online-badge {
+  justify-self: start;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--warning-soft);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.admin-online-time strong {
+  font-size: 15px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-online-bar {
+  height: 8px;
+}
+
+/* `.admin-app-bar span` (Live) would make the fill a block and stack the app segments: these two rules
+   are written one level more specific so the segments sit side by side. */
+.admin-app-bar .admin-online-bar-fill {
+  display: flex;
+  height: 100%;
+  min-width: 2px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.admin-app-bar .admin-online-bar-fill > span {
+  display: block;
+  height: 100%;
+  flex-basis: 0;
+  border-radius: 0;
+}
+
+.admin-online-seen {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.admin-online-seen.is-now {
+  color: var(--admin-good-text);
+  font-weight: 800;
+}
+
+.admin-online-seen i {
+  width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  background: #34c759;
+}
+
+@media (max-width: 1100px) {
+  .admin-online-row {
+    grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1.2fr);
+  }
+
+  .admin-online-meta {
+    grid-column: 2 / -1;
+    grid-auto-flow: column;
+    justify-content: start;
+    gap: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-online-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-online-row {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 6px 10px;
+  }
+
+  .admin-online-time,
+  .admin-online-meta {
+    grid-column: 2 / -1;
+  }
+
+  .admin-online-meta {
+    grid-auto-flow: row;
+    gap: 2px;
+  }
+}
+
 /* Auth provider buttons (login + signup) */
 .auth-provider-stack {
   display: grid;

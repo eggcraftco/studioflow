@@ -91,6 +91,7 @@
     "test:n23-receipt-currency": "npx tsx scripts/check-n23-receipt-currency.mts",
     "test:admin-insights": "node scripts/check-admin-insights-metrics.mts",
     "test:admin-live-presence": "node scripts/check-admin-live-presence.mts",
+    "test:admin-online-time": "npx tsx scripts/check-admin-online-time.mts",
     "test:onboarding-events": "node scripts/check-onboarding-events.mts",
     "test:order-delete-buttons": "node scripts/check-order-delete-buttons.mjs",
     "test:getting-started": "npx tsx scripts/check-getting-started.mts",
