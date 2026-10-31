@@ -13,8 +13,10 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties, type Rea
 import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
+import { auth } from "@/lib/firebase/client";
+import { useNivaDeskAdmin } from "@/lib/security/adminGate";
 import {
-  accountingAttentionResolve, accountingMappingSuggestions, accountingOverview, accountingPlanMigration, accountingSaveMappings,
+  accountingAttentionResolve, accountingConnectRefusal, accountingMappingSuggestions, accountingOverview, accountingPlanMigration, accountingSaveMappings,
   accountingSetMode, accountingSyncActivity, getAccountingCatalog, quickbooksConnectStart, quickbooksDisconnect, quickbooksSyncNow,
   xeroConnectStart, xeroDisconnect, xeroListTenants, xeroSelectTenant, xeroSyncNow,
   ACCOUNT_MAPPING_KEYS, POSTING_MODES, SALES_SOURCES, TAX_MAPPING_KEYS,
@@ -55,7 +57,7 @@ const PROVIDER_UI: Record<AccountingProvider, ProviderUi> = {
     scopeNote: "",
     reconciliationIntro: "Webhooks bring changes quickly; a six-hourly change-data check catches anything missed. Documents NivaDesk posted that were edited in QuickBooks are surfaced under Needs attention, never overwritten.",
     bankNote: "QuickBooks' public API does not hand third parties the Banking screen's For Review rows. NivaDesk never fakes bank-feed rows: matching happens inside QuickBooks, and NivaDesk shows the document as awaiting match there.",
-    noWebhookYet: "No webhook has arrived yet. Configure the endpoint in the Intuit developer console; the first one can take a few minutes.",
+    noWebhookYet: "No change notice has come from {provider} yet. Sync now and the six-hourly check read changes too, so nothing is missed.",
     disconnectedNotice: "QuickBooks disconnected. Access was revoked at Intuit.",
     connectStart: (companyId, environment) => quickbooksConnectStart(companyId, environment),
     syncNow: quickbooksSyncNow,
@@ -69,13 +71,16 @@ const PROVIDER_UI: Record<AccountingProvider, ProviderUi> = {
     scopeNote: "Read-only access: settings, contacts, invoices, payments, bank transactions and attachments. Posting will ask for write permissions later, as a separate consent.",
     reconciliationIntro: "Webhooks bring contact, invoice and credit-note changes quickly; payments and bank transactions have no webhook, so a six-hourly If-Modified-Since check reads them. Documents NivaDesk posted that were edited in Xero are surfaced under Needs attention, never overwritten.",
     bankNote: "Xero's public API does not expose unreconciled bank statement lines to third parties, and its bank feeds API is closed. NivaDesk never fakes bank-feed rows: reconciliation happens inside Xero, and NivaDesk shows the document as awaiting reconciliation there.",
-    noWebhookYet: "No webhook has arrived yet. Add the endpoint in the Xero developer portal and pass its intent-to-receive check; the first one can take a few minutes.",
+    noWebhookYet: "No change notice has come from {provider} yet. Sync now and the six-hourly check read changes too, so nothing is missed.",
     disconnectedNotice: "Xero disconnected. The organisation was removed from the app at Xero.",
     connectStart: (companyId) => xeroConnectStart(companyId, "read"),
     syncNow: xeroSyncNow,
     disconnect: xeroDisconnect
   }
 };
+
+// Shown while Intuit's production access is not open to this workspace (QB-1).
+const QBO_NOT_OPEN = "QuickBooks Online is not open to real companies yet: Intuit is reviewing NivaDesk's production access. You can connect here as soon as it opens.";
 
 const CHECKLIST: { key: string; label: string }[] = [
   { key: "paypalAppActive", label: "The PayPal app inside {provider} is active" },
@@ -155,6 +160,15 @@ export function AccountingProviderSection({ workspace, language = "English", pro
     return rows.find((row) => row.status === "linked") || rows[0] || null;
   }, [overview, provider]);
   const pandle = useMemo(() => (overview?.connections || []).find((row) => row.provider === "pandle") || null, [overview]);
+  // QB-1 (31 Oct 2026): a real QuickBooks company needs Intuit's production keys and this
+  // workspace in appConfig/quickbooks, and the server says which (overview.availability). A
+  // server older than that says nothing — it held only the Development keys, so "Live company"
+  // ended on an Intuit error page — and is read as "not open yet". Sandbox is staff-only.
+  const isStaff = useNivaDeskAdmin(auth.currentUser?.email) === true;
+  const availability = overview?.availability?.[provider];
+  const productionOpen = !ui.hasEnvironment || availability?.production === true;
+  const sandboxOpen = ui.hasEnvironment && (availability ? availability.sandbox === true : isStaff);
+  useEffect(() => { if (ui.hasEnvironment) setEnvironment(productionOpen ? "production" : "sandbox"); }, [ui.hasEnvironment, productionOpen]);
   const mappings: AccountingMappings | null = connection ? overview?.mappings?.[connection.connectionId] || null : null;
   const openAttention = (overview?.attention || []).filter((row) => row.status === "open" && (!row.provider || row.provider === provider));
 
@@ -196,11 +210,13 @@ export function AccountingProviderSection({ workspace, language = "English", pro
     window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
     if (verdict === "connected") { setImporting(true); setNotice(pt("{provider} connected. Importing the chart of accounts, VAT codes, customers and items…")); setTab("setup"); }
     else if (verdict === "choose" && state) { setChooseState(state); setNotice(pt("Your {provider} sign-in covers more than one organisation. Choose the one this workspace keeps its books in.")); }
+    // Intuit's Disconnect URL: the owner removed NivaDesk from inside QuickBooks.
+    else if (verdict === "disconnected") setNotice(pt("{provider} was disconnected from inside {provider}. Your NivaDesk records stay; connect again here whenever you like."));
     else if (verdict === "cancelled") setError(pt("The {provider} connection was cancelled."));
     else if (reason === "state") setError(t("This connection link has expired. Start again from the Connect button."));
     else if (reason === "company") setError(pt("{provider} returned a different company than the one you authorised. Try again."));
     else if (reason === "no_organisation") setError(pt("{provider} did not return an organisation for this sign-in. Choose an organisation on {vendor}'s screen and try again."));
-    else if (reason === "token") setError(pt("{provider} did not accept the authorisation. Check the app's Client ID and Secret."));
+    else if (reason === "token") setError(pt("{provider} did not accept the authorisation. Connect again and approve access on {vendor}'s screen."));
     else setError(pt("{provider} could not be connected. Try again in a minute."));
   }, [t, pt, ui.verdictParam]);
 
@@ -256,8 +272,15 @@ export function AccountingProviderSection({ workspace, language = "English", pro
 
   async function connect() {
     await guard("connect", async () => {
-      const result = await ui.connectStart(companyId, environment);
-      window.location.assign(result.authorizeUrl);
+      try {
+        const result = await ui.connectStart(companyId, environment);
+        window.location.assign(result.authorizeUrl);
+      } catch (err) {
+        const reason = accountingConnectRefusal(err);
+        if (reason === "quickbooks_production_closed") throw new Error(t(QBO_NOT_OPEN));
+        if (reason === "quickbooks_production_keys") throw new Error(t("QuickBooks is being switched on for real companies. Try again a little later."));
+        throw err;
+      }
     });
   }
 
@@ -387,9 +410,11 @@ export function AccountingProviderSection({ workspace, language = "English", pro
           <p className="muted-copy">{t(ui.intro)}</p>
           {ui.scopeNote ? <p className="muted-copy">{t(ui.scopeNote)}</p> : null}
           {pandle && pandle.status === "linked" ? <p className="muted-copy">⚠ {pt("Pandle is connected. After connecting {provider} you will choose which one keeps the books, so nothing is ever written twice.")}</p> : null}
-          {isOwner ? (
+          {ui.hasEnvironment && !productionOpen ? <p className="muted-copy">{t(QBO_NOT_OPEN)}</p> : null}
+          {isOwner && (productionOpen || sandboxOpen) ? (
             <div className="settings-action-row" style={{ alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              {ui.hasEnvironment ? (
+              {ui.hasEnvironment && !productionOpen ? <span style={{ fontSize: 12.5 }}>{t("Intuit test companies only (NivaDesk staff).")}</span> : null}
+              {ui.hasEnvironment && productionOpen && sandboxOpen ? (
                 <>
                   <label style={{ fontSize: 12.5, display: "inline-flex", gap: 6, alignItems: "center" }}>
                     <input type="radio" name="qbo-env" checked={environment === "production"} onChange={() => setEnvironment("production")} /> {t("Live company")}
@@ -399,9 +424,9 @@ export function AccountingProviderSection({ workspace, language = "English", pro
                   </label>
                 </>
               ) : null}
-              <button type="button" className="button" disabled={busy === "connect"} onClick={() => void connect()}>{busy === "connect" ? t("Loading…") : pt("Connect {provider}")}</button>
+              <button type="button" className="button" disabled={busy === "connect"} onClick={() => void connect()}>{busy === "connect" ? t("Loading…") : productionOpen ? pt("Connect {provider}") : t("Connect a sandbox company")}</button>
             </div>
-          ) : <p className="muted-copy">{pt("Only the workspace owner can connect {provider}.")}</p>}
+          ) : isOwner ? null : <p className="muted-copy">{pt("Only the workspace owner can connect {provider}.")}</p>}
         </section>
       </>
     );
@@ -719,7 +744,7 @@ export function AccountingProviderSection({ workspace, language = "English", pro
                 <thead><tr><th style={th}>{t("Received")}</th><th style={th}>{t("Entity")}</th><th style={th}>{t("Operation")}</th><th style={th}>{t("Status")}</th></tr></thead>
                 <tbody>
                   {activity.inbox.map((row) => <tr key={row.id}><td style={td}>{new Date(row.receivedAtMs).toLocaleString()}</td><td style={td}>{row.entityType} #{row.externalId}</td><td style={td}>{row.operation}</td><td style={td}>{row.status}{row.outcome ? ` · ${row.outcome}` : ""}{row.error ? ` · ${row.error}` : ""}</td></tr>)}
-                  {activity.inbox.length === 0 ? <tr><td style={td} colSpan={4}>{t(ui.noWebhookYet)}</td></tr> : null}
+                  {activity.inbox.length === 0 ? <tr><td style={td} colSpan={4}>{pt(ui.noWebhookYet)}</td></tr> : null}
                 </tbody>
               </table>
             </>
@@ -738,7 +763,7 @@ export function AccountingProviderSection({ workspace, language = "English", pro
               <li style={fact}><span style={factLabel}>{t("Connected")}</span>{ago(connection.linkedAtMs, t)}</li>
               {connection.scopeLevel ? <li style={fact}><span style={factLabel}>{t("Permissions")}</span>{connection.scopeLevel === "write" ? t("Read and write") : t("Read-only")}</li> : null}
             </ul>
-            <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>{t(ui.webhookLabel)}: <code style={{ fontSize: 11.5 }}>{ui.webhookUrl}</code></p>
+            {isStaff ? <p style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>{t(ui.webhookLabel)}: <code style={{ fontSize: 11.5 }}>{ui.webhookUrl}</code></p> : null}
           </section>
           {isOwner ? (
             <section className="card app-card quick-reply-settings-card">

@@ -106,6 +106,10 @@ export type AccountingOverview = {
   mappings: Record<string, AccountingMappings | null>;
   audit: AccountingAuditRow[];
   postings: { readyToPost: number; awaitingReview: number; awaitingBankMatch: number; syncedToday: number; phase: string };
+  /** What this workspace may connect (QB-1, 31 Oct 2026): a real company needs Intuit's production
+   *  keys and the workspace in appConfig/quickbooks; sandbox is for NivaDesk staff and listed
+   *  workspaces. A server older than that leaves it out — it had the Development keys only. */
+  availability?: Partial<Record<AccountingProvider, { production: boolean; sandbox: boolean }>>;
 };
 
 export type MappingSuggestion = { externalId: string; name: string; reason: string; confidence: number; accountType?: string; rate?: number };
@@ -151,6 +155,12 @@ export async function getAccountingCatalog(companyId: string, connectionId: stri
 
 export async function quickbooksConnectStart(companyId: string, environment: QuickBooksEnvironment) {
   return (await call<{ companyId: string; environment: QuickBooksEnvironment }, { ok: boolean; state: string; environment: string; authorizeUrl: string }>("quickbooksConnectStart")({ companyId, environment })).data;
+}
+
+/** Why the server refused to start a connection (`details.reason` of the callable error), or "". */
+export function accountingConnectRefusal(error: unknown): string {
+  const details = (error as { details?: { reason?: unknown } } | null)?.details;
+  return typeof details?.reason === "string" ? details.reason : "";
 }
 
 export async function quickbooksSyncNow(companyId: string, connectionId: string) {
