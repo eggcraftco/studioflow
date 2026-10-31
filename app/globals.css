@@ -37635,3 +37635,5 @@ html[data-studio-theme="dark"] .order-status-segment i { background: rgba(255, 2
   min-height: 30px;
   padding: 0 14px;
 }
+.order-status-segment.is-blocked i { background: #ef4444; }
+.order-status-segment.is-blocked small { color: #c0352b; }

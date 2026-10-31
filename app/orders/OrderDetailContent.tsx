@@ -10055,10 +10055,17 @@ export function OrderDetailContent({
   // Sections view (31 Oct 2026): the status strip under the title row, in both views — the order's
   // production step, how long until delivery, what it is worth and what has been paid. Read-only; the
   // header toggles that governed the old delivery and value pills govern those two tiles.
-  function stripStepTone(value: string): "done" | "active" | "next" {
+  // A step's own status decides its colour: finished (green), not started ("Not Yet" or empty, grey), held up
+  // (blocked / overdue / urgent, red) or under way (anything else, orange). "Not Yet" is red in the generic
+  // badge palette (dynamicStatusTone), which made an untouched step look active here.
+  function stripStepTone(value: string): "done" | "active" | "next" | "blocked" {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized || normalized === "not yet") return "next";
     const tone = dynamicStatusTone(value);
     if (tone === "green") return "done";
-    return tone === "gray" ? "next" : "active";
+    if (tone === "gray") return "next";
+    if (tone === "red") return "blocked";
+    return "active";
   }
 
   function stripProduction() {
