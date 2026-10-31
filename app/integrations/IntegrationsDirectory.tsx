@@ -8,7 +8,14 @@ import { SHOPIFY_APP_STORE_URL } from "@/lib/studioflow/shopifyListing";
 import type { PublicSiteTranslationKey } from "@/lib/publicSite/translations";
 import styles from "./integrations.module.css";
 
-const categories = ["All integrations", "Commerce", "Accounting & banking", "Payments", "Shipping", "Communication", "AI"] as const;
+/**
+ * The app's own groups, in the app's words (owner, 31 October 2026: the site and the app must
+ * name the same integrations the same way). The first four are INTEGRATION_CATEGORIES in
+ * lib/studioflow/integrations.ts; "Shipping" and "Tracking" are the app's DHL Express and
+ * 17TRACK sections in Settings ▸ Integrations. scripts/check-site-integration-names.mts keeps
+ * every card's name and group equal to the app's tile.
+ */
+const categories = ["All integrations", "Commerce & orders", "Banking & accounting", "Payments, files & automation", "Customer messaging", "Shipping", "Tracking"] as const;
 type Category = typeof categories[number];
 
 /**
@@ -71,6 +78,25 @@ type Category = typeof categories[number];
  * out only after that switch has been read back in production (docs/integrations/
  * stripe-connect.md; scripts/check-stripe-card.mts keeps the card's claims to what the code does).
  * When a state changes, change it here and in that record on the same day.
+ *
+ * Parity pass, 31 October 2026 (owner: the app and the site must list the same integrations
+ * under the same names). Every Settings ▸ Integrations tile now has a card with the tile's name
+ * and group: TrueLayer is shown as "Open Banking", Instagram Direct as "Instagram", QuickBooks as
+ * "QuickBooks Online", and eight cards were added — Claude, Wix, Squarespace, Zapier, Make,
+ * Cloud storage, 17TRACK tracking (Live) and Pandle (Coming soon). Twilio stays: SMS is a
+ * Settings section of its own in the app, not a tile. Read that day:
+ *   Claude          claudeMcp ACTIVE; anyone adds it to Claude as a custom connector (the app's
+ *                   tile connects on every plan); only the listing in Claude's own directory is
+ *                   still in Anthropic's review, which the note says (claude-connector.md CL-1).
+ *   Wix, Squarespace, Zapier, Make
+ *                   one inbound order webhook (inboundOrderWebhook ACTIVE), the address and token
+ *                   self-served from the tile; no provider app (other-integrations.md A).
+ *   Cloud storage   the twelve own-cloud functions ACTIVE since 30 October 2026 23:38Z; Google
+ *                   Drive connected end to end with a real account on 31 October; OneDrive,
+ *                   Dropbox and Box not configured yet, which the note says (storage-providers.md).
+ *   17TRACK         registerTracking, track17Webhook and the hourly refresh ACTIVE (17track.md).
+ *   Pandle          functions deployed, no API credentials from Pandle: no one can connect.
+ * Live 17, Limited access 6, Coming soon 1 — 24 cards.
  */
 type AvailabilityState = "live" | "limited" | "comingSoon";
 
@@ -104,35 +130,53 @@ const STATE_LABEL: Record<AvailabilityState, PublicSiteTranslationKey> = {
 };
 
 const integrations: Integration[] = [
-  { name: "Shopify", category: "Commerce", summary: "Bring your online shop orders into your workshop.", detail: { key: "integrations.detail.shopify" }, state: "live", note: "integrations.note.shopify" },
-  { name: "Etsy", category: "Commerce", summary: "From handmade marketplace orders to work ready to organise.", detail: "Connect your Etsy shop yourself from Settings → Integrations (one shop per workspace), preview what an import would bring, then import. After that, new orders, changes and shipping updates arrive from Etsy as they happen, NivaDesk checks your shop about once an hour for anything missed, and Sync now is there when you would rather not wait. Etsy approved our commercial access on 24 October 2026. The connection only reads your shop: it does not send tracking numbers or stock back to Etsy and does not change your listings. Etsy fees are shown as an estimate unless the actual fees are known.", state: "live" },
-  { name: "WooCommerce", category: "Commerce", summary: "Connect your WordPress shop with the work behind each order.", detail: "Approve NivaDesk at your store once; orders, customers and status changes then sync on their own, with a preview before any import. You can connect more than one store. Publishing products and updating stock in your store are not part of this connection; linking your store's products to NivaDesk inventory is available on request.", state: "live" },
-  { name: "Xero", category: "Accounting & banking", summary: "Give your accounting workflow a connection to your daily work.", detail: "A read-only Xero connection: NivaDesk reads your organisation, chart of accounts, VAT rates, contacts and items, and never writes anything back. So far it has run against Xero's demo company only, so the first customer organisations are connected with us, on request. Xero also limits an app like ours to a small number of organisations.", state: "limited", note: "integrations.note.xero" },
-  { name: "QuickBooks", category: "Accounting & banking", summary: "Keep your workshop and accounting workflow connected.", detail: "A read-only QuickBooks connection is built: NivaDesk reads your chart of accounts, VAT codes, customers and items, and never posts anything back. Today it runs with Intuit's development keys, which only sandbox companies can use, so a real QuickBooks company cannot connect until production access is arranged.", state: "limited", note: "integrations.note.quickbooks" },
-  { name: "Square", category: "Payments", summary: "See Square orders and payouts in the context of your business.", detail: "Square orders, payments, refunds and payouts arrive in NivaDesk as they happen, with a reconciliation sweep behind the webhooks. Payout-to-bank matching is built but has not yet run on a real payout, so treat that part as new. This is not an in-app payment terminal.", state: "live" },
-  { name: "PayPal", category: "Payments", summary: "Make sense of payout activity alongside your bank records.", detail: "A PayPal money feed on the Pro and Team plans. You create a PayPal app of your own and switch on Transaction Search, so it is a guided setup rather than one click. A payout stays separate from the sale, so it is never counted as new revenue; payout-to-bank matching has not processed a real payout yet.", state: "live" },
-  { name: "TrueLayer", category: "Accounting & banking", summary: "Bring supported bank transactions into your financial overview.", detail: "Read-only Open Banking through TrueLayer, on the Pro and Team plans: transactions from your business bank arrive alongside your orders, ready to categorise and match. Bank and regional coverage depend on the provider, and your consent is renewed about every 90 days.", state: "live" },
-  { name: "Twilio", category: "Communication", summary: "Keep customers informed as their work moves forward.", detail: "Customer SMS notifications on the Pro and Team plans: your workspace settings decide which order updates go out. Messages are sent through Twilio from the NivaDesk sender name. Today SMS runs as a pilot for one business; it is not yet open to other businesses. Messaging charges apply.", state: "limited", note: "integrations.note.twilio" },
-  { name: "ChatGPT", category: "AI", summary: "A conversational way to work with your NivaDesk information.", detail: "The NivaDesk app is published in the ChatGPT app directory: connect your workspace once and read orders, notes and finances, or make supported updates, from a conversation.", state: "live" },
-  { name: "WhatsApp", category: "Communication", summary: "Customer conversations connected to the work they belong to.", detail: "A customer inbox for WhatsApp on the Team plan: messages from your customers arrive in NivaDesk, your team replies, and each conversation can be linked to the order it belongs to. It runs for one business today, on a Meta test number; connecting other businesses waits on Meta's approval. No automated messaging and no outbound campaigns.", state: "limited", note: "integrations.note.whatsapp" },
+  { name: "Shopify", category: "Commerce & orders", summary: "Bring your online shop orders into your workshop.", detail: { key: "integrations.detail.shopify" }, state: "live", note: "integrations.note.shopify" },
+  { name: "Etsy", category: "Commerce & orders", summary: "From handmade marketplace orders to work ready to organise.", detail: "Connect your Etsy shop yourself from Settings → Integrations (one shop per workspace), preview what an import would bring, then import. After that, new orders, changes and shipping updates arrive from Etsy as they happen, NivaDesk checks your shop about once an hour for anything missed, and Sync now is there when you would rather not wait. Etsy approved our commercial access on 24 October 2026. The connection only reads your shop: it does not send tracking numbers or stock back to Etsy and does not change your listings. Etsy fees are shown as an estimate unless the actual fees are known.", state: "live" },
+  { name: "WooCommerce", category: "Commerce & orders", summary: "Connect your WordPress shop with the work behind each order.", detail: "Approve NivaDesk at your store once; orders, customers and status changes then sync on their own, with a preview before any import. You can connect more than one store. Publishing products and updating stock in your store are not part of this connection; linking your store's products to NivaDesk inventory is available on request.", state: "live" },
+  // Wix and Squarespace, 31 October 2026 (parity with the app): the app's tiles open the one
+  // inbound order webhook, which every workspace self-serves; there is no Wix or Squarespace app.
+  { name: "Wix", category: "Commerce & orders", summary: { key: "integrations.summary.wix" }, detail: { key: "integrations.detail.webhook" }, state: "live", note: "integrations.note.webhook" },
+  { name: "Squarespace", category: "Commerce & orders", summary: { key: "integrations.summary.squarespace" }, detail: { key: "integrations.detail.webhook" }, state: "live", note: "integrations.note.webhook" },
+  { name: "Xero", category: "Banking & accounting", summary: "Give your accounting workflow a connection to your daily work.", detail: "A read-only Xero connection: NivaDesk reads your organisation, chart of accounts, VAT rates, contacts and items, and never writes anything back. So far it has run against Xero's demo company only, so the first customer organisations are connected with us, on request. Xero also limits an app like ours to a small number of organisations.", state: "limited", note: "integrations.note.xero" },
+  { name: "QuickBooks Online", category: "Banking & accounting", summary: "Keep your workshop and accounting workflow connected.", detail: "A read-only QuickBooks connection is built: NivaDesk reads your chart of accounts, VAT codes, customers and items, and never posts anything back. Today it runs with Intuit's development keys, which only sandbox companies can use, so a real QuickBooks company cannot connect until production access is arranged.", state: "limited", note: "integrations.note.quickbooks" },
+  { name: "Square", category: "Commerce & orders", summary: "See Square orders and payouts in the context of your business.", detail: "Square orders, payments, refunds and payouts arrive in NivaDesk as they happen, with a reconciliation sweep behind the webhooks. Payout-to-bank matching is built but has not yet run on a real payout, so treat that part as new. This is not an in-app payment terminal.", state: "live" },
+  { name: "PayPal", category: "Banking & accounting", summary: "Make sense of payout activity alongside your bank records.", detail: "A PayPal money feed on the Pro and Team plans. You create a PayPal app of your own and switch on Transaction Search, so it is a guided setup rather than one click. A payout stays separate from the sale, so it is never counted as new revenue; payout-to-bank matching has not processed a real payout yet.", state: "live" },
+  { name: "Open Banking", category: "Banking & accounting", summary: "Bring supported bank transactions into your financial overview.", detail: "Read-only Open Banking through TrueLayer, on the Pro and Team plans: transactions from your business bank arrive alongside your orders, ready to categorise and match. Bank and regional coverage depend on the provider, and your consent is renewed about every 90 days.", state: "live" },
+  // Pandle, 31 October 2026: the app's tile is "planned" — built, but no API credentials from Pandle.
+  { name: "Pandle", category: "Banking & accounting", summary: { key: "integrations.summary.pandle" }, detail: { key: "integrations.detail.pandle" }, state: "comingSoon", note: "integrations.note.pandle" },
+  { name: "Twilio", category: "Customer messaging", summary: "Keep customers informed as their work moves forward.", detail: "Customer SMS notifications on the Pro and Team plans: your workspace settings decide which order updates go out. Messages are sent through Twilio from the NivaDesk sender name. Today SMS runs as a pilot for one business; it is not yet open to other businesses. Messaging charges apply.", state: "limited", note: "integrations.note.twilio" },
+  { name: "ChatGPT", category: "Payments, files & automation", summary: "A conversational way to work with your NivaDesk information.", detail: "The NivaDesk app is published in the ChatGPT app directory: connect your workspace once and read orders, notes and finances, or make supported updates, from a conversation.", state: "live" },
+  // Claude, 31 October 2026: live as a custom connector for anyone (the app's tile connects on
+  // every plan); the listing in Claude's own directory is the part still in review.
+  { name: "Claude", category: "Payments, files & automation", summary: { key: "integrations.summary.claude" }, detail: { key: "integrations.detail.claude" }, state: "live", note: "integrations.note.claude" },
+  { name: "WhatsApp", category: "Customer messaging", summary: "Customer conversations connected to the work they belong to.", detail: "A customer inbox for WhatsApp on the Team plan: messages from your customers arrive in NivaDesk, your team replies, and each conversation can be linked to the order it belongs to. It runs for one business today, on a Meta test number; connecting other businesses waits on Meta's approval. No automated messaging and no outbound campaigns.", state: "limited", note: "integrations.note.whatsapp" },
   // Instagram Direct and DHL Express, added 28 September 2026 (second pass). Instagram
   // is open to one workspace only (appConfig/instagram); DHL to every workspace
-  // since 28 October 2026 (appConfig/shipping).
-  { name: "Instagram Direct", category: "Communication", summary: { key: "integrations.summary.instagram" }, detail: { key: "integrations.detail.instagram" }, state: "limited", note: "integrations.note.instagram" },
+  // since 28 October 2026 (appConfig/shipping). Shown as "Instagram", the app tile's
+  // name, since 31 October 2026.
+  { name: "Instagram", category: "Customer messaging", summary: { key: "integrations.summary.instagram" }, detail: { key: "integrations.detail.instagram" }, state: "limited", note: "integrations.note.instagram" },
   // eBay, 1 October 2026: a production, read-only connection accepted by eBay on a
   // real seller account; open to every workspace once "ebay:*" is true in
   // appConfig/commerce.connectors.workspaces (the owner's switch, 29 October 2026 package).
-  { name: "eBay", category: "Commerce", summary: { key: "integrations.summary.ebay" }, detail: { key: "integrations.detail.ebay" }, state: "live", note: "integrations.note.ebay" },
+  { name: "eBay", category: "Commerce & orders", summary: { key: "integrations.summary.ebay" }, detail: { key: "integrations.detail.ebay" }, state: "live", note: "integrations.note.ebay" },
   // Amazon, 30 October 2026: no logo file. Amazon's Website Guidelines for solution providers
   // and its Trademark Usage Guidelines allow its marks only with Amazon's written approval, and
   // a logo on this page was a listed reason to refuse the Appstore listing. The detail states
   // facts only — nothing that reads as Amazon's endorsement of NivaDesk.
-  { name: "Amazon", category: "Commerce", summary: "Marketplace order visibility, with a careful approach to customer data.", detail: "The Amazon connection is complete on our side, with Amazon data kept in a separate, hardened environment. The app is still in Amazon's review, so a seller cannot authorise it yet. It reads orders only: NivaDesk makes no listing, price or stock changes on Amazon.", state: "limited", note: "integrations.note.amazon" },
+  { name: "Amazon", category: "Commerce & orders", summary: "Marketplace order visibility, with a careful approach to customer data.", detail: "The Amazon connection is complete on our side, with Amazon data kept in a separate, hardened environment. The app is still in Amazon's review, so a seller cannot authorise it yet. It reads orders only: NivaDesk makes no listing, price or stock changes on Amazon.", state: "limited", note: "integrations.note.amazon" },
   { name: "DHL Express", category: "Shipping", summary: { key: "integrations.summary.dhl" }, detail: { key: "integrations.detail.dhl" }, state: "live", note: "integrations.note.dhl" },
+  // 17TRACK, 31 October 2026: the app's "17TRACK tracking" tile, in its Tracking section.
+  { name: "17TRACK tracking", category: "Tracking", summary: { key: "integrations.summary.tracking" }, detail: { key: "integrations.detail.tracking" }, state: "live" },
   // Stripe (card payment links), STRIPE-LINKS 29–30 October 2026: payment links paid into each
   // business's own Stripe account (Connect, direct charges), live Stripe mode, open to every
   // workspace (STRIPE_CONNECT_OPEN_TO_ALL).
-  { name: "Stripe", category: "Payments", summary: { key: "integrations.summary.stripe" }, detail: { key: "integrations.detail.stripe" }, state: "live", note: "integrations.note.stripe" },
+  { name: "Stripe", category: "Payments, files & automation", summary: { key: "integrations.summary.stripe" }, detail: { key: "integrations.detail.stripe" }, state: "live", note: "integrations.note.stripe" },
+  // Zapier, Make and Cloud storage, 31 October 2026 (parity with the app). Cloud storage: Google
+  // Drive open to every workspace owner since 30 October 2026; OneDrive, Dropbox and Box are not
+  // configured yet, and the note says so.
+  { name: "Zapier", category: "Payments, files & automation", summary: { key: "integrations.summary.zapier" }, detail: { key: "integrations.detail.webhook" }, state: "live", note: "integrations.note.webhook" },
+  { name: "Make", category: "Payments, files & automation", summary: { key: "integrations.summary.make" }, detail: { key: "integrations.detail.webhook" }, state: "live", note: "integrations.note.webhook" },
+  { name: "Cloud storage", category: "Payments, files & automation", summary: { key: "integrations.summary.cloudstorage" }, detail: { key: "integrations.detail.cloudstorage" }, state: "live", note: "integrations.note.cloudstorage" },
 ];
 
 function IntegrationsDirectoryContent() {
@@ -160,7 +204,7 @@ function IntegrationsDirectoryContent() {
           <div className={`${styles.serviceNode} ${styles.nodeShopify}`}>Shopify</div>
           <div className={`${styles.serviceNode} ${styles.nodeEtsy}`}>Etsy</div>
           <div className={`${styles.serviceNode} ${styles.nodeSquare}`}>Square</div>
-          <div className={`${styles.serviceNode} ${styles.nodeQuickBooks}`}>QuickBooks</div>
+          <div className={`${styles.serviceNode} ${styles.nodeWooCommerce}`}>WooCommerce</div>
           <div className={`${styles.serviceNode} ${styles.nodePayPal}`}>PayPal</div>
           <div className={`${styles.serviceNode} ${styles.nodeChatGpt}`}>ChatGPT</div>
           <div className={styles.hub}><img src="/brand/nivadesk-logo-dark.png" alt="NivaDesk" width={178} height={45} /><span>Your business, connected.</span></div>
@@ -181,8 +225,10 @@ function IntegrationsDirectoryContent() {
         <p className={styles.legendChecked}>{t("integrations.legend.checked")}</p>
       </div>
       <div className={styles.layout}><aside className={styles.filters}><label htmlFor="integration-search">Find an integration</label><div className={styles.search}><span aria-hidden="true">⌕</span><input id="integration-search" type="search" placeholder="Search tools…" value={query} onChange={e => setQuery(e.target.value)} /></div><div className={styles.categoryList} role="group" aria-label="Integration category">{categories.map(c => <button key={c} aria-pressed={category === c} onClick={() => setCategory(c)}>{c}<span>{c === "All integrations" ? integrations.length : integrations.filter(i => i.category === c).length}</span></button>)}</div><p className={styles.filterNote}>Looking for something else?<br /><Link href="/contact">Tell us what you use ↗</Link></p></aside>
-      <div><p className={styles.results} role="status">{filtered.length} {filtered.length === 1 ? "integration" : "integrations"}{query && ` matching “${query}”`}</p><div className={styles.grid}>{filtered.map(item => <article key={item.name} className={styles.card}><p className={styles.category}>{item.category}</p><h3>{item.name}</h3><p className={styles.summary} {...cardLang(item.summary)}>{cardText(item.summary)}</p><span className={`${styles.status} ${stateClass[item.state]}`} lang={locale} dir="auto">{t(STATE_LABEL[item.state])}</span>{item.note && <p className={styles.note} lang={locale} dir="auto">{t(item.note)}</p>}{item.name === "Amazon" && <Link className={styles.cardLink} href="/integrations/amazon" lang={locale} dir="auto">{t("integrations.action.amazonPage")} →</Link>}{item.name === "Shopify" && <Link className={styles.cardLink} href="/integrations/shopify" lang={locale} dir="auto">{t("integrations.action.shopifyPage")} →</Link>}<details className={styles.detail}><summary>What to expect <span aria-hidden="true">+</span></summary><p {...cardLang(item.detail)}>{cardText(item.detail)}</p>{item.name === "ChatGPT"
+      <div><p className={styles.results} role="status">{filtered.length} {filtered.length === 1 ? "integration" : "integrations"}{query && ` matching “${query}”`}</p><div className={styles.grid}>{filtered.map(item => <article key={item.name} className={styles.card}><p className={styles.category}>{item.category}</p><h3>{item.name}</h3><p className={styles.summary} {...cardLang(item.summary)}>{cardText(item.summary)}</p><span className={`${styles.status} ${stateClass[item.state]}`} lang={locale} dir="auto">{t(STATE_LABEL[item.state])}</span>{item.note && <p className={styles.note} lang={locale} dir="auto">{t(item.note)}</p>}{item.name === "Amazon" && <Link className={styles.cardLink} href="/integrations/amazon" lang={locale} dir="auto">{t("integrations.action.amazonPage")} →</Link>}{item.name === "Shopify" && <Link className={styles.cardLink} href="/integrations/shopify" lang={locale} dir="auto">{t("integrations.action.shopifyPage")} →</Link>}{item.name === "Claude" && <Link className={styles.cardLink} href="/integrations/claude" lang={locale} dir="auto">{t("integrations.action.claudePage")} →</Link>}<details className={styles.detail}><summary>What to expect <span aria-hidden="true">+</span></summary><p {...cardLang(item.detail)}>{cardText(item.detail)}</p>{item.name === "ChatGPT"
         ? <Link href="/chatgpt" lang={locale} dir="auto">{t("integrations.action.chatgpt")} ↗</Link>
+        : item.name === "Claude"
+          ? <Link href="/integrations/claude#connect" lang={locale} dir="auto">{t("integrations.action.claudePage")} ↗</Link>
         : item.name === "Shopify"
           ? <a href={SHOPIFY_APP_STORE_URL} target="_blank" rel="noopener noreferrer" lang={locale} dir="auto">{t("integrations.action.shopifyAppStore")} ↗</a>
         : item.state === "live"

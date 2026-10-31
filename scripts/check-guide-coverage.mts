@@ -173,6 +173,11 @@ const INTEGRATION_CHAPTERS: Record<string, string> = {
   whatsapp: "messages",
   openbanking: "banking",
   truelayer: "banking",
+  // The /integrations cards carry the app tiles' names since 31 Oct 2026 (parity pass):
+  "open-banking": "banking",
+  "quickbooks-online": "banking",
+  "17track-tracking": "card-shipping",
+  "cloud-storage": "set-cloud-storage",
   paypal: "banking",
   quickbooks: "banking",
   xero: "banking",
@@ -189,6 +194,7 @@ const INTEGRATION_NAMES: Record<string, string> = {
   openbanking: "Open Banking", quickbooks: "QuickBooks", "dhl-express": "DHL Express", dhl: "DHL Express",
   tracking: "17TRACK", inbound: "webhook", truelayer: "Open Banking", chatgpt: "ChatGPT", twilio: "SMS",
   cloudstorage: "Cloud storage",
+  "open-banking": "Open Banking", "quickbooks-online": "QuickBooks", "17track-tracking": "17TRACK", "cloud-storage": "Cloud storage",
 };
 
 const EN = getGuideTree("English");

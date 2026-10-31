@@ -543,7 +543,7 @@ const TREE_EN: GuideNode[] = [
         id: "card-shipping",
         title: "Shipping & Tracking card",
         blocks: [
-          { kind: "para", text: "Manage delivery for the order: the courier, the tracking number, and live status updates, all without leaving the app." },
+          { kind: "para", text: "Manage delivery for the order: the courier, the tracking number, and live status updates through 17TRACK, all without leaving the app." },
           { kind: "sub", text: "What you can do" },
           { kind: "bullets", items: [
             "Set the Courier (Auto Detect, Royal Mail, DHL, FedEx or UPS) and enter the Tracking number.",
@@ -1112,7 +1112,7 @@ const TREE_EN: GuideNode[] = [
         title: "Store & website integrations",
         blocks: [
           { kind: "sub", text: "Connected apps: the Integrations screen" },
-          { kind: "para", text: "Everything NivaDesk connects to lives on one screen: Settings → Integrations. Providers are cards, grouped into Commerce & orders, Banking & accounting, and Payments, files & automation, and each card says what it is doing right now — Connected, Available, Via webhook or Coming soon. A card's status is read from your workspace, so Connected means something has actually arrived. Manage opens that provider's setup, sync, webhook and security detail, including your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow." },
+          { kind: "para", text: "Everything NivaDesk connects to lives on one screen: Settings → Integrations. Providers are cards, each labelled with its group — Commerce & orders, Banking & accounting, Payments, files & automation or Customer messaging — and the courier tiles have sections of their own, Shipping and Tracking. Each card says what it is doing right now — Connected, Available, Via webhook or Coming soon. A card's status is read from your workspace, so Connected means something has actually arrived. Manage opens that provider's setup, sync, webhook and security detail, including your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow. The public page nivadesk.app/integrations lists the same integrations under the same names, each marked Live, Limited access or Coming soon." },
           { kind: "para", text: "Shopify connects through the official NivaDesk app on the Shopify App Store, and WooCommerce with one approval at your own store: orders, customers, payment status, fulfilment and refunds then sync on their own, and every fifteen minutes NivaDesk checks the store for anything a webhook missed." },
           { kind: "para", text: "Square connects with one sign-in: NivaDesk gets read-only access to your Square account, and sales from Square Point of Sale, Square Online and Square Invoices arrive with their payments and refunds. You choose which locations to import and which sales become orders — by default only sales with a shipment, pickup or delivery, so a quick counter sale stays in finance without filling the production board. Payments and refunds are recorded beside the order they belong to and never turned into orders of their own; one you cannot match appears under Unmatched Square payments." },
           { kind: "para", text: "Payouts and your bank: when Square pays out to your bank, the money reaches the Banking page as one incoming row that already covers sales NivaDesk counted when they happened. NivaDesk matches that row to the payout by amount, currency and arrival date, marks it as a processor payout so it is not counted as revenue again, and shows the payout's gross, fees and net on the row. If two rows could be the payout, the Square payouts card offers Find bank row so the owner picks one; Unlink undoes a match." },
@@ -1133,6 +1133,13 @@ const TREE_EN: GuideNode[] = [
             "Other platforms: Wix, Squarespace, Zapier and Make have their own cards and all open the same generic order webhook — connect a custom site the same way.",
             "Etsy and eBay are not among those: each has a connection of its own, described in the sections that follow.",
             "Coming soon cards carry no setup because that integration does not exist yet; Request an integration opens a support ticket if you need one."
+          ] },
+          { kind: "sub", text: "Wix, Squarespace, Zapier and Make: the order webhook" },
+          { kind: "steps", items: [
+            "Settings → Integrations → Wix, Squarespace, Zapier or Make → Manage: all four open the same screen, Connect any store with one webhook.",
+            "Copy the Delivery URL — it carries your workspace's secret token, so treat it like a password — and press Send test webhook to check the address without creating an order. Check this payload tells you whether a sample order reads cleanly.",
+            "In Zapier or Make add a Webhooks → POST step (or POST from your own site) that sends each new order to the Delivery URL as JSON, with at least orderId; orderNumber, customerName, email, phone, total, currency, products, note and source are read too.",
+            "The order appears in Orders and Schedule, tagged with the source you send. Sending the same orderId again updates it and never overwrites its production status or tracking. If the URL leaks, Replace URL gives you a new one and the old one stops at once."
           ] },
           { kind: "sub", text: "Amazon" },
           { kind: "bullets", items: [
@@ -1327,7 +1334,7 @@ const TREE_EN: GuideNode[] = [
         id: "set-cloud-storage",
         title: "Cloud storage (Google Drive, OneDrive, Dropbox, Box)",
         blocks: [
-          { kind: "para", text: "Keep your order files in your own cloud. The workspace owner can connect Google Drive, OneDrive, Dropbox or Box; from then on the files you attach to orders are saved there instead of in NivaDesk Cloud, and you open them from the order as before. Files already in NivaDesk Cloud stay where they are." },
+          { kind: "para", text: "Keep your order files in your own cloud. The workspace owner connects one from Settings → Integrations → Cloud storage — Google Drive today, while OneDrive, Dropbox and Box show Not available yet until they open. From then on the files you attach to orders are saved there instead of in NivaDesk Cloud, and you open them from the order as before. Files already in NivaDesk Cloud stay where they are." },
           { kind: "sub", text: "Connecting Google Drive, OneDrive, Dropbox or Box (owner)" },
           { kind: "steps", items: [
             "Settings ▸ Integrations ▸ Cloud storage.",
@@ -1507,6 +1514,7 @@ const TREE_EN: GuideNode[] = [
         blocks: [
           { kind: "para", text: "NivaDesk has an app inside ChatGPT. Once you connect your workspace you can ask about it in plain language — what is overdue, what a customer ordered before, how a month went — and ChatGPT answers from your own records, in the role you have in NivaDesk." },
           { kind: "para", text: "It works on the same orders, notes, finance and banking data you see in the app. It cannot see another workspace, and it never talks to your shops or your bank directly: everything comes through NivaDesk." },
+          { kind: "para", text: "Claude works the same way through the NivaDesk connector, on every plan: in Claude add a custom connector with the address https://nivadesk.app/claudeMcp and sign in with your NivaDesk account. NivaDesk's listing in Claude's own connector directory is still in Anthropic's review; the address works today." },
           { kind: "sub", text: "Connecting" },
           { kind: "bullets", items: [
             "In ChatGPT open the apps list, choose NivaDesk and sign in with the NivaDesk account you already use. You pick the workspace on the NivaDesk consent page; ChatGPT never sees your password.",
@@ -2146,7 +2154,7 @@ const TREE_TR: GuideNode[] = [
         id: "card-shipping",
         title: "Shipping & Tracking kartı",
         blocks: [
-          { kind: "para", text: "Siparişin teslimatını yönetin: kurye, takip numarası ve canlı durum güncellemeleri; hepsi uygulamadan çıkmadan." },
+          { kind: "para", text: "Siparişin teslimatını yönetin: kurye, takip numarası ve 17TRACK üzerinden canlı durum güncellemeleri; hepsi uygulamadan çıkmadan." },
           { kind: "sub", text: "Neler yapabilirsiniz" },
           { kind: "bullets", items: [
             "Courier'i ayarlayın (Auto Detect, Royal Mail, DHL, FedEx veya UPS) ve Tracking numarasını girin.",
@@ -2702,7 +2710,7 @@ const TREE_TR: GuideNode[] = [
         title: "Mağaza ve web sitesi entegrasyonları",
         blocks: [
           { kind: "sub", text: "Bağlı uygulamalar: Integrations ekranı" },
-          { kind: "para", text: "NivaDesk'in bağlandığı her şey tek ekranda: Settings → Integrations. Sağlayıcılar kart halinde ve üç başlık altında toplanır — Commerce & orders, Banking & accounting, Payments, files & automation. Her kart şu an ne durumda olduğunu söyler: Connected, Available, Via webhook veya Coming soon. Durum çalışma alanından okunur, yani Connected gerçekten bir şeyin geldiği anlamına gelir. Manage o sağlayıcının kurulum, senkronizasyon, webhook ve güvenlik ayrıntısını açar; platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'i de oradadır. Yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür." },
+          { kind: "para", text: "NivaDesk'in bağlandığı her şey tek ekranda: Settings → Integrations. Sağlayıcılar kart halindedir ve her kartın üstünde grubu yazar — Commerce & orders, Banking & accounting, Payments, files & automation ya da Customer messaging; kargo kartlarının kendi bölümleri vardır: Shipping ve Tracking. Her kart şu an ne durumda olduğunu söyler: Connected, Available, Via webhook veya Coming soon. Durum çalışma alanından okunur, yani Connected gerçekten bir şeyin geldiği anlamına gelir. Manage o sağlayıcının kurulum, senkronizasyon, webhook ve güvenlik ayrıntısını açar; platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'i de oradadır. Yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür. Herkese açık nivadesk.app/integrations sayfası aynı entegrasyonları aynı adlarla listeler; her biri Live, Limited access ya da Coming soon olarak işaretlidir." },
           { kind: "para", text: "Shopify, Shopify App Store'daki resmi NivaDesk uygulamasıyla; WooCommerce ise kendi mağazanda tek onayla bağlanır: siparişler, müşteriler, ödeme durumu, kargo ve iadeler kendiliğinden senkron olur; NivaDesk on beş dakikada bir, bir webhook'un kaçırdığı bir şey var mı diye mağazaya bakar." },
           { kind: "para", text: "Square tek girişle bağlanır: NivaDesk, Square hesabına salt okunur erişim alır; Square Point of Sale, Square Online ve Square Invoices satışları ödemeleri ve iadeleriyle birlikte gelir. Hangi konumların içe aktarılacağını ve hangi satışların sipariş olacağını sen seçersin — varsayılan olarak yalnızca kargo, teslim alma veya teslimat içeren satışlar sipariş olur; hızlı bir tezgâh satışı üretim panosunu doldurmadan finansta kalır. Ödemeler ve iadeler ait oldukları siparişin yanına kaydedilir, kendi başlarına asla siparişe dönüşmez; eşleştirilemeyen bir ödeme Eşleşmemiş Square ödemeleri altında görünür." },
           { kind: "para", text: "Ödeme aktarımları ve bankan: Square bankana ödeme yaptığında para, Banking sayfasına NivaDesk'in zaten saydığı satışları kapsayan tek bir gelen satır olarak düşer. NivaDesk o satırı tutar, para birimi ve varış tarihine göre aktarımla eşleştirir, ciro olarak yeniden sayılmasın diye işlemci ödemesi olarak işaretler ve aktarımın brüt, ücret ve net tutarını satırda gösterir. İki satır da aktarım olabiliyorsa Square payouts kartındaki Find bank row ile sahibi birini seçer; Unlink eşleşmeyi geri alır." },
@@ -2723,6 +2731,13 @@ const TREE_TR: GuideNode[] = [
             "Diğer platformlar: Wix, Squarespace, Zapier ve Make'in kendi kartları var ve hepsi aynı generic sipariş webhook'unu açar — özel bir siteyi de aynı yoldan bağlarsın.",
             "Etsy ve eBay bunlardan değil: her birinin kendi bağlantısı var, sonraki bölümlerde anlatılıyor.",
             "Coming soon kartlarında kurulum yoktur, çünkü o entegrasyon henüz yok; ihtiyacın varsa Request an integration bir destek talebi açar."
+          ] },
+          { kind: "sub", text: "Wix, Squarespace, Zapier ve Make: sipariş webhook'u" },
+          { kind: "steps", items: [
+            "Settings → Integrations → Wix, Squarespace, Zapier ya da Make → Manage: dördü de aynı ekranı açar, Connect any store with one webhook.",
+            "Delivery URL'i kopyala — çalışma alanının gizli anahtarını taşır, parola gibi sakla — ve Send test webhook'a basarak sipariş oluşturmadan adresi dene. Check this payload örnek bir siparişin düzgün okunup okunmadığını söyler.",
+            "Zapier ya da Make'te bir Webhooks → POST adımı ekle (ya da kendi sitenden POST et); her yeni siparişi Delivery URL'e JSON olarak göndersin, en az orderId ile; orderNumber, customerName, email, phone, total, currency, products, note ve source da okunur.",
+            "Sipariş, gönderdiğin source etiketiyle Orders ve Schedule'da görünür. Aynı orderId'yi yeniden göndermek siparişi günceller, üretim durumunu ya da kargo takibini asla ezmez. URL sızarsa Replace URL yenisini verir, eskisi hemen durur."
           ] },
           { kind: "sub", text: "Amazon" },
           { kind: "bullets", items: [
@@ -2917,7 +2932,7 @@ const TREE_TR: GuideNode[] = [
         id: "set-cloud-storage",
         title: "Bulut depolama (Google Drive, OneDrive, Dropbox, Box)",
         blocks: [
-          { kind: "para", text: "Sipariş dosyalarınızı kendi bulutunuzda tutun. Çalışma alanı sahibi Google Drive, OneDrive, Dropbox ya da Box bağlayabilir; bundan sonra siparişlere eklediğiniz dosyalar NivaDesk Cloud yerine oraya kaydedilir ve onları yine siparişten açarsınız. NivaDesk Cloud'daki mevcut dosyalar olduğu yerde kalır." },
+          { kind: "para", text: "Sipariş dosyalarınızı kendi bulutunuzda tutun. Çalışma alanı sahibi bulutu Settings → Integrations → Cloud storage'dan bağlar — bugün Google Drive; OneDrive, Dropbox ve Box açılana kadar Not available yet olarak görünür. Bundan sonra siparişlere eklediğiniz dosyalar NivaDesk Cloud yerine oraya kaydedilir ve onları yine siparişten açarsınız. NivaDesk Cloud'daki mevcut dosyalar olduğu yerde kalır." },
           { kind: "sub", text: "Google Drive, OneDrive, Dropbox ya da Box bağlamak (sahip)" },
           { kind: "steps", items: [
             "Ayarlar ▸ Entegrasyonlar ▸ Cloud storage.",
@@ -3097,6 +3112,7 @@ const TREE_TR: GuideNode[] = [
         blocks: [
           { kind: "para", text: "NivaDesk'in ChatGPT içinde bir uygulaması var. Çalışma alanınızı bağladıktan sonra onu gündelik dille sorabilirsiniz — ne gecikmiş, bir müşteri daha önce ne sipariş etmiş, bir ay nasıl geçmiş — ve ChatGPT NivaDesk'teki rolünüzle kendi kayıtlarınızdan yanıtlar." },
           { kind: "para", text: "Uygulamada gördüğünüz sipariş, not, finans ve banka verisinin aynısı üzerinde çalışır. Başka bir çalışma alanını göremez; mağazalarınızla ya da bankanızla doğrudan konuşmaz, her şey NivaDesk üzerinden gelir." },
+          { kind: "para", text: "Claude da NivaDesk bağlayıcısıyla aynı şekilde, her planda çalışır: Claude'da https://nivadesk.app/claudeMcp adresiyle özel bağlayıcı (custom connector) ekleyin ve NivaDesk hesabınızla giriş yapın. NivaDesk'in Claude'un kendi bağlayıcı dizinindeki listelemesi hâlâ Anthropic'in incelemesinde; adres bugün çalışıyor." },
           { kind: "sub", text: "Bağlama" },
           { kind: "bullets", items: [
             "ChatGPT'de uygulama listesini açın, NivaDesk'i seçin ve zaten kullandığınız NivaDesk hesabıyla giriş yapın. Çalışma alanını NivaDesk onay sayfasında siz seçersiniz; ChatGPT parolanızı asla görmez.",

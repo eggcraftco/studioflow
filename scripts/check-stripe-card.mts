@@ -24,7 +24,9 @@ type Card = { line: string; summary: string; detail: string; note: string };
 function cardProblems(card: Card): string[] {
   const out: string[] = [];
   if (!/state: "live"/.test(card.line)) out.push("state is not live");
-  if (!/category: "Payments"/.test(card.line)) out.push("not in Payments");
+  // The app's own group for the Stripe tile (lib/studioflow/integrations.ts, category "automation");
+  // the site uses the app's group names since the 31 Oct 2026 parity pass (it said "Payments" before).
+  if (!/category: "Payments, files & automation"/.test(card.line)) out.push("not in the app's group, Payments, files & automation");
   if (!/note: "integrations\.note\.stripe"/.test(card.line)) out.push("no note");
   if (/logo:/.test(card.line)) out.push("draws a logo file");
   const all = `${card.summary} ${card.detail} ${card.note}`;
