@@ -39045,7 +39045,8 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="todo"] .app-to
 .order-stack-body[data-stack-card="notes"] > .order-detail-card > .app-card-panel { gap: 18px; }
 .order-stack-body[data-stack-card="notes"] .order-notes-section { gap: 8px; }
 .order-stack-body[data-stack-card="notes"] .app-notes-heading:empty { display: none; }
-.order-stack-body[data-stack-card="notes"] .order-notes-extra-title {
+.order-stack-body[data-stack-card="notes"] .order-notes-extra-header > input.order-notes-extra-title {
+  min-height: 30px;
   padding: 2px 6px;
   margin-inline-start: -6px;
   font-size: 13.5px;
@@ -39390,4 +39391,235 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="todo"] .app-to
   .order-stack-body[data-stack-card="clientFiles"] .client-file-list-row { padding: 10px 12px; }
   .order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-line > input.invoice-stack-name { flex-basis: 100%; }
   .order-stack-body[data-stack-card="invoiceItems"] .invoice-stack-line > input.invoice-stack-price { flex: 1 1 100px; }
+}
+
+/* -- Estimate & Approval: the intro as a quiet line; "Needs an invoice item first" as the empty-state box
+      with "Go to Invoice Items" as the solid button; an estimate as its number with a status pill, the lines
+      and totals as plain lines with the total in the tinted result box, the approval details and the
+      customer link in their own groups, the actions as buttons one height. -- */
+.order-stack-body[data-stack-card="estimate"] > .order-detail-card > .app-card-panel { gap: 16px; }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-note {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="estimate"] .estimate-card-note > strong { font-weight: 650; color: var(--sec-text); }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-prereq {
+  gap: 14px;
+  padding: 18px 22px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+}
+.order-stack-body[data-stack-card="estimate"] .estimate-card-actions { gap: 10px; }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-actions button,
+.order-stack-body[data-stack-card="estimate"] .app-card-panel > .estimate-card-primary,
+.order-stack-body[data-stack-card="estimate"] .estimate-card-link-row button {
+  min-height: 42px;
+  padding: 0 20px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background: var(--sec-surface);
+  color: var(--sec-text);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.order-stack-body[data-stack-card="estimate"] .estimate-card-actions .estimate-card-primary,
+.order-stack-body[data-stack-card="estimate"] .app-card-panel > .estimate-card-primary {
+  border-color: transparent;
+  background: var(--sec-accent-solid);
+  color: #fff;
+}
+.order-stack-body[data-stack-card="estimate"] .estimate-card-link-row button {
+  border-color: transparent;
+  background: var(--sec-accent-soft);
+  color: var(--sec-accent);
+}
+.order-stack-body[data-stack-card="estimate"] .estimate-card-actions button:disabled,
+.order-stack-body[data-stack-card="estimate"] .app-card-panel > .estimate-card-primary:disabled { opacity: 0.5; }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-head strong { font-size: 15px; font-weight: 650; color: var(--sec-text); }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-chip { padding: 6px 10px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-chip.is-approved { background: var(--sec-green-bg); color: var(--sec-green); }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-chip.is-declined { background: var(--sec-red-bg); color: var(--sec-red); }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-chip.is-superseded { background: var(--sec-field-bg); color: var(--sec-label); }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-chip.is-pending { background: var(--sec-accent-soft); color: var(--sec-accent); }
+.order-stack-body[data-stack-card="estimate"] :is(.estimate-card-lines, .estimate-card-totals, .estimate-card-history) { gap: 10px; }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-line { gap: 14px; font-size: 14.5px; color: var(--sec-text); }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-line > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-line > span:last-child,
+.order-stack-body[data-stack-card="estimate"] .estimate-card-line > strong { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-line.is-head { font-size: 13.5px; font-weight: 500; color: var(--sec-label); }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-line.is-head > span:last-child { font-size: 13.5px; font-weight: 500; }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-totals,
+.order-stack-body[data-stack-card="estimate"] .estimate-card-history { padding-top: 16px; border-top: 1px solid var(--sec-rule); }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-totals > .estimate-card-line:not(.is-total) > span:first-child { font-size: 13.5px; font-weight: 500; color: var(--sec-label); }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-line.is-total {
+  align-items: center;
+  margin-top: 4px;
+  padding: 15px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+  font-size: 14.5px;
+  font-weight: 700;
+}
+.order-stack-body[data-stack-card="estimate"] .estimate-card-line.is-total > span:last-child { font-size: 21px; font-weight: 800; letter-spacing: -0.01em; }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-approval {
+  gap: 10px;
+  padding: 15px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+}
+.order-stack-body[data-stack-card="estimate"] .estimate-card-approval .estimate-card-line > span:first-child { font-size: 13.5px; font-weight: 500; color: var(--sec-label); }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-approval-title { font-size: 15px; font-weight: 650; color: var(--sec-text); }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-signature { gap: 8px; font-size: 13.5px; color: var(--sec-label); }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-signature img { border-color: var(--sec-field-border); border-radius: 10px; }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-link { gap: 10px; margin-top: 0; }
+.order-stack-body[data-stack-card="estimate"] .estimate-card-link-row { gap: 10px; }
+.order-stack-body[data-stack-card="estimate"] .app-card-panel .estimate-card-link-row > input[type="text"] {
+  box-sizing: border-box;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background: var(--sec-field-bg);
+  color: var(--sec-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.order-stack-body[data-stack-card="estimate"] .estimate-card-history > .estimate-card-line > span:first-child { font-weight: 600; }
+
+/* -- Preview: the image (or the empty state) in a quiet tinted box at its reading width, the "..." actions as a
+      quiet button over it. -- */
+.order-stack-body[data-stack-card="preview"] > .order-detail-card > .app-preview-stage {
+  min-height: 150px;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+}
+.order-stack-body[data-stack-card="preview"] .app-preview-empty {
+  min-height: 150px;
+  gap: 10px;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="preview"] .app-preview-icon { color: var(--sec-label); }
+.order-stack-body[data-stack-card="preview"] .app-preview-icon.image-placeholder-icon svg { width: 30px; height: 30px; stroke-width: 1.8; }
+.order-stack-body[data-stack-card="preview"] .app-preview-empty strong { font-size: 14px; font-weight: 500; color: var(--sec-label); }
+.order-stack-body[data-stack-card="preview"] .app-preview-actions { left: auto; inset-inline-start: 12px; bottom: 12px; }
+.order-stack-body[data-stack-card="preview"] .app-preview-float {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background: var(--sec-surface);
+  color: var(--sec-label);
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow: 0 1px 2px rgba(23, 25, 35, 0.06);
+  backdrop-filter: none;
+}
+.order-stack-body[data-stack-card="preview"] .app-preview-float:hover { color: var(--sec-text); }
+.order-stack-body[data-stack-card="preview"] .app-preview-action-menu { bottom: 44px; border-radius: 12px; }
+.order-stack-body[data-stack-card="preview"] .app-preview-action-menu :is(button, a) { min-height: 34px; padding: 0 10px; font-size: 14px; font-weight: 500; }
+
+/* -- Customer Portal: three groups divided by hairlines — "Portal Access" with its state pill, the link field
+      with Copy (tinted) and Open (link), "Create portal link" as the solid button; "Customer Sees" as ticked
+      lines two to a row; "Automatic Updates" with the designs' switch at its end and Email / SMS as small
+      two-state pills. -- */
+.order-stack-body[data-stack-card="customerPortal"] .portal-card { gap: 18px; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-section { gap: 10px; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-section + .portal-section { padding-top: 18px; border-top: 1px solid var(--sec-rule); }
+.order-stack-body[data-stack-card="customerPortal"] .portal-section-head { gap: 12px; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-section-title {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0;
+  opacity: 1;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="customerPortal"] .portal-chip { padding: 6px 10px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-chip.is-active { background: var(--sec-green-bg); color: var(--sec-green); }
+.order-stack-body[data-stack-card="customerPortal"] .portal-chip.is-off { background: var(--sec-field-bg); color: var(--sec-label); }
+.order-stack-body[data-stack-card="customerPortal"] :is(.portal-empty, .portal-hint, .portal-notice) {
+  font-size: 14px;
+  line-height: 1.45;
+  opacity: 1;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="customerPortal"] .portal-hint { font-size: 13.5px; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-hint a { font-weight: 650; text-decoration: none; color: var(--sec-link); }
+.order-stack-body[data-stack-card="customerPortal"] .portal-hint a:hover { text-decoration: underline; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-actions { gap: 10px; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-actions button,
+.order-stack-body[data-stack-card="customerPortal"] .portal-link-row button {
+  min-height: 42px;
+  padding: 0 20px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background: var(--sec-surface);
+  color: var(--sec-text);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.order-stack-body[data-stack-card="customerPortal"] .portal-actions button:first-child {
+  border-color: transparent;
+  background: var(--sec-accent-solid);
+  color: #fff;
+}
+.order-stack-body[data-stack-card="customerPortal"] .portal-link-row button { border-color: transparent; background: var(--sec-accent-soft); color: var(--sec-accent); }
+.order-stack-body[data-stack-card="customerPortal"] :is(.portal-actions, .portal-link-row) button:disabled { opacity: 0.5; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-link-row { gap: 10px 14px; }
+.order-stack-body[data-stack-card="customerPortal"] .app-card-panel .portal-link-row > input[type="text"] {
+  box-sizing: border-box;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background: var(--sec-field-bg);
+  color: var(--sec-text);
+  font-size: 14px;
+  font-weight: 500;
+}
+.order-stack-body[data-stack-card="customerPortal"] .portal-link-row .portal-open {
+  padding: 0;
+  border: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--sec-link);
+}
+.order-stack-body[data-stack-card="customerPortal"] .portal-sees {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 4px 24px;
+  max-width: 640px;
+}
+.order-stack-body[data-stack-card="customerPortal"] .portal-sees-row {
+  max-width: none;
+  min-height: 38px;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="customerPortal"] .portal-sees-row .portal-tick { width: 22px; height: 22px; border-radius: 7px; font-size: 13px; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-sees-row.is-on .portal-tick { background: var(--sec-green-bg); color: var(--sec-green); }
+.order-stack-body[data-stack-card="customerPortal"] .portal-sees-row.is-off .portal-tick { background: var(--sec-field-bg); color: var(--sec-label); }
+.order-stack-body[data-stack-card="customerPortal"] .portal-sees-row.is-off { opacity: 1; color: var(--sec-label); }
+.order-stack-body[data-stack-card="customerPortal"] .portal-switch { flex: 0 0 auto; width: 46px; height: 28px; background: var(--sec-field-border); }
+.order-stack-body[data-stack-card="customerPortal"] .portal-switch.is-on { background: var(--sec-green); }
+.order-stack-body[data-stack-card="customerPortal"] .portal-switch span { top: 3px; width: 22px; height: 22px; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18); }
+.order-stack-body[data-stack-card="customerPortal"] .portal-switch:disabled { cursor: default; opacity: 0.5; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-channels { gap: 10px; font-size: 13.5px; color: var(--sec-label); }
+.order-stack-body[data-stack-card="customerPortal"] .portal-channels > span + button { margin-inline-end: 12px; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-pill { min-height: 30px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 600; }
+.order-stack-body[data-stack-card="customerPortal"] .portal-pill.is-on { background: var(--sec-green-bg); color: var(--sec-green); }
+.order-stack-body[data-stack-card="customerPortal"] .portal-pill.is-off { background: var(--sec-field-bg); color: var(--sec-label); }
+.order-stack-body[data-stack-card="customerPortal"] .portal-pill:disabled { opacity: 0.6; }
+
+@media (max-width: 640px) {
+  .order-stack-body[data-stack-card="estimate"] .estimate-card-prereq { padding: 14px 16px; }
 }
