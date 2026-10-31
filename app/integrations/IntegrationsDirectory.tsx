@@ -97,6 +97,12 @@ type Category = typeof categories[number];
  *   17TRACK         registerTracking, track17Webhook and the hourly refresh ACTIVE (17track.md).
  *   Pandle          functions deployed, no API credentials from Pandle: no one can connect.
  * Live 17, Limited access 6, Coming soon 1 — 24 cards.
+ *
+ * QuickBooks Online became live on 31 October 2026: Intuit moved NivaDesk to production, the QB-1
+ * server package (both Intuit key sets) was read back in production, a real QuickBooks company
+ * connected end to end on EGGcraft's pilot, and appConfig/quickbooks.production opens it to every
+ * workspace ("*": true). Each owner connects their own company, read only; Xero stays on request
+ * (docs/integrations/quickbooks.md). Live 18, Limited access 5, Coming soon 1 — 24 cards.
  */
 type AvailabilityState = "live" | "limited" | "comingSoon";
 
@@ -138,7 +144,7 @@ const integrations: Integration[] = [
   { name: "Wix", category: "Commerce & orders", summary: { key: "integrations.summary.wix" }, detail: { key: "integrations.detail.webhook" }, state: "live", note: "integrations.note.webhook" },
   { name: "Squarespace", category: "Commerce & orders", summary: { key: "integrations.summary.squarespace" }, detail: { key: "integrations.detail.webhook" }, state: "live", note: "integrations.note.webhook" },
   { name: "Xero", category: "Banking & accounting", summary: "Give your accounting workflow a connection to your daily work.", detail: "A read-only Xero connection: NivaDesk reads your organisation, chart of accounts, VAT rates, contacts and items, and never writes anything back. So far it has run against Xero's demo company only, so the first customer organisations are connected with us, on request. Xero also limits an app like ours to a small number of organisations.", state: "limited", note: "integrations.note.xero" },
-  { name: "QuickBooks Online", category: "Banking & accounting", summary: "Keep your workshop and accounting workflow connected.", detail: "A read-only QuickBooks connection is built: NivaDesk reads your chart of accounts, VAT codes, customers and items, and never posts anything back. Today it runs with Intuit's development keys, which only sandbox companies can use, so a real QuickBooks company cannot connect until production access is arranged.", state: "limited", note: "integrations.note.quickbooks" },
+  { name: "QuickBooks Online", category: "Banking & accounting", summary: "Keep your workshop and accounting workflow connected.", detail: "Connect your own QuickBooks Online company from Settings ▸ Integrations, read only: NivaDesk reads your chart of accounts, VAT codes, customers, suppliers and items, proposes the mappings your accountant confirms, and never posts anything back.", state: "live" },
   { name: "Square", category: "Commerce & orders", summary: "See Square orders and payouts in the context of your business.", detail: "Square orders, payments, refunds and payouts arrive in NivaDesk as they happen, with a reconciliation sweep behind the webhooks. Payout-to-bank matching is built but has not yet run on a real payout, so treat that part as new. This is not an in-app payment terminal.", state: "live" },
   { name: "PayPal", category: "Banking & accounting", summary: "Make sense of payout activity alongside your bank records.", detail: "A PayPal money feed on the Pro and Team plans. You create a PayPal app of your own and switch on Transaction Search, so it is a guided setup rather than one click. A payout stays separate from the sale, so it is never counted as new revenue; payout-to-bank matching has not processed a real payout yet.", state: "live" },
   { name: "Open Banking", category: "Banking & accounting", summary: "Bring supported bank transactions into your financial overview.", detail: "Read-only Open Banking through TrueLayer, on the Pro and Team plans: transactions from your business bank arrive alongside your orders, ready to categorise and match. Bank and regional coverage depend on the provider, and your consent is renewed about every 90 days.", state: "live" },
