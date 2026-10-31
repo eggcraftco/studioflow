@@ -5,7 +5,8 @@
 // endorsement, unverified superlatives, and placeholder or "under construction" text on the reviewed pages.
 //
 // 1. No Amazon logo file is shipped, and no page source points at one.
-// 2. The integrations directory shows Amazon as an initial (like Meta, DHL and Stripe), not a logo.
+// 2. The integrations directory shows Amazon by its name only, not a logo (every card is name-only since
+//    31 Oct 2026; scripts/check-site-integration-names.mts holds that for the whole page).
 // 3. No public page says Amazon approved, certified, endorsed or partnered with NivaDesk.
 // 4. The public Amazon page and the directory carry no superlative claims.
 //
@@ -34,7 +35,9 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 // 1. logo files and references
-const logoFiles = fs.readdirSync(path.join(root, "public/integration-logos")).filter((f) => /amazon/i.test(f));
+// The folder itself went on 31 Oct 2026 with the other provider logos; an absent folder ships no Amazon file.
+const logoDir = path.join(root, "public/integration-logos");
+const logoFiles = (fs.existsSync(logoDir) ? fs.readdirSync(logoDir) : []).filter((f) => /amazon/i.test(f));
 ok(`no Amazon logo file in public/integration-logos (found: ${logoFiles.join(", ")})`, logoFiles.length === 0);
 const sources = [...walk("app"), ...walk("components"), ...walk("lib")];
 const logoRefs = sources.filter((f) => /integration-logos\/amazon|amazon[-_]?logo\.(png|svg|jpe?g|webp)/i.test(read(f)));
@@ -44,7 +47,7 @@ ok(`no source points at an Amazon logo (${logoRefs.join(", ")})`, logoRefs.lengt
 const directory = read("app/integrations/IntegrationsDirectory.tsx");
 const amazonRow = directory.split("\n").find((line) => /^\s*\{ name: "Amazon",/.test(line)) || "";
 ok("directory: the Amazon row exists", amazonRow.length > 0);
-ok("directory: the Amazon tile is an initial, not a logo", /mark: "A"/.test(amazonRow) && !/logo:/.test(amazonRow));
+ok("directory: the Amazon card is its name only — no logo file, no initial tile", !/logo:|mark:/.test(amazonRow));
 ok("directory: no Amazon brand variant styling a logo", !/Amazon: styles\.amazonBrand/.test(directory));
 
 // 3. endorsement wording on public pages
