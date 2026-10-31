@@ -29,7 +29,7 @@ import { minorToInputText, parseRequestAmount, requestAmountMessage } from "@/li
 import { ETSY_COPY_LINK_NOTE, isEtsyOrderId } from "@/lib/studioflow/etsyOrder";
 import {
   createStandalonePaymentRequest, isStandaloneRow, newClientRequestId, orderLinkRefusalText, orderReferenceOfRow,
-  paymentLinkRefusal, standaloneFormProblem, STANDALONE_TITLE_MAX, type PaymentRequestRefundFields,
+  orderLabelProblem, ORDER_LABEL_MAX, paymentLinkRefusal, standaloneFormProblem, STANDALONE_TITLE_MAX, type PaymentRequestRefundFields,
 } from "@/lib/studioflow/stripeConnect";
 import RefundPaymentDialog, { type RefundAttempt, type RefundNotice } from "@/components/RefundPaymentDialog";
 import { usePaymentLinksPlan } from "@/lib/studioflow/usePaymentLinksAvailable";
@@ -181,6 +181,8 @@ export default function PaymentLinksPanel({
   const [createOrderId, setCreateOrderId] = useState("");
   const [createAmount, setCreateAmount] = useState("");
   const [createPurpose, setCreatePurpose] = useState("remaining_balance");
+  // SL-27: what the customer is buying, typed by hand; empty = Stripe's page says "Order #N".
+  const [createLabel, setCreateLabel] = useState("");
   const [createError, setCreateError] = useState("");
   const [copiedId, setCopiedId] = useState("");
   const [shownId, setShownId] = useState("");
@@ -281,6 +283,8 @@ export default function PaymentLinksPanel({
    */
   const create = async () => {
     if (!createOrderId) { setCreateError(t("Choose an order.")); return; }
+    const labelProblem = orderLabelProblem(createLabel);
+    if (labelProblem) { setCreateError(t(labelProblem)); return; }
     setCreating(true);
     setCreateError("");
     // The minor unit depends on the currency the server will charge in (a yen
@@ -302,17 +306,20 @@ export default function PaymentLinksPanel({
     const amountMinor = parsed.amountMinor;
     try {
       const call = httpsCallable<
-        { companyId: string; orderId: string; amountMinor: number; purpose: string; clientRequestId: string },
+        { companyId: string; orderId: string; amountMinor: number; purpose: string; clientRequestId: string; label?: string },
         unknown
       >(functions, "createOrderPaymentRequest");
       await call({
         companyId, orderId: createOrderId, amountMinor, purpose: createPurpose,
+        // SL-27: only when something was typed; an older server ignores it and the page says "Order #N".
+        ...(createLabel.trim() ? { label: createLabel.trim() } : {}),
         // Sent so a retry after a failed WRITE cannot open a second link for
         // the same money — the server resumes the same request.
         clientRequestId: `${createOrderId}:${amountMinor}:${createPurpose}:${Date.now()}`,
       });
       setCreateOpen(false);
       setCreateAmount("");
+      setCreateLabel("");
       await load();
     } catch (e) {
       // The server's own sentence, which names which fix applies — reduce this
@@ -627,6 +634,14 @@ export default function PaymentLinksPanel({
             <input
               value={createAmount} onChange={(e) => setCreateAmount(e.target.value)}
               inputMode="decimal" placeholder={minorToInputText(0, "", locale)} style={{ ...field, width: 110 }}
+            />
+          </label>
+          <label style={{ display: "grid", gap: 4, fontSize: 11.5, opacity: 0.75, flex: "1 1 260px" }}>
+            {t("What the customer is buying (optional)")}
+            <input
+              value={createLabel} onChange={(e) => setCreateLabel(e.target.value)}
+              maxLength={ORDER_LABEL_MAX} disabled={creating} autoComplete="off" data-order-link-label
+              placeholder={t("Shown on the payment page. Left empty, it shows the order number.")} style={field}
             />
           </label>
           <button

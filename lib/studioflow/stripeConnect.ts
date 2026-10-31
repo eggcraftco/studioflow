@@ -293,6 +293,18 @@ export function orderLinkRefusalText(error: unknown): string {
   return String((error as { message?: string } | null)?.message || "") || "That payment link cannot be created.";
 }
 
+/**
+ * SL-27 (31 Oct 2026): the most a person may type for what the customer is buying on an ORDER link — the
+ * server's limit too (`createOrderPaymentRequest` answers `label_invalid` past it). Optional: empty keeps
+ * Stripe's page on "Order #N".
+ */
+export const ORDER_LABEL_MAX = 120;
+
+/** "" = fine; otherwise a sentence that is a key in the translation table. */
+export function orderLabelProblem(label: string): string {
+  return label.trim().length > ORDER_LABEL_MAX ? "Keep what the customer is buying to 120 characters or fewer." : "";
+}
+
 /** What the form checks before anything is sent ("" = nothing); each sentence is a key in the translation table. */
 export function standaloneFormProblem(fields: { title: string; customerEmail: string }): string {
   const title = fields.title.trim();

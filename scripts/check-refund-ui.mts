@@ -300,7 +300,7 @@ function cardProblems(card: string): string[] {
 const cardMutants: Array<[string, string]> = [
   ["refund button back on the order card", cardSource.replace("              {etsyOrder && copiedId === row.paymentRequestId ? (", '              <button type="button" className="finance-payments-add" onClick={() => undefined}>{t("Refund payment")}</button>\n              {etsyOrder && copiedId === row.paymentRequestId ? (')],
   ["a refund form back on the card", cardSource.replace("              {etsyOrder && copiedId === row.paymentRequestId ? (", '              <div role="dialog">{t("Refund this payment")}</div>\n              {etsyOrder && copiedId === row.paymentRequestId ? (')],
-  ["the refund call back on the card", cardSource.replace('import { orderLinkRefusalText, type PaymentRequestRefundFields } from "@/lib/studioflow/stripeConnect";', 'import { orderLinkRefusalText, refundOrderPayment, type PaymentRequestRefundFields } from "@/lib/studioflow/stripeConnect";')],
+  ["the refund call back on the card", cardSource.replace('import { orderLabelProblem, ORDER_LABEL_MAX, orderLinkRefusalText, type PaymentRequestRefundFields } from "@/lib/studioflow/stripeConnect";', 'import { orderLabelProblem, ORDER_LABEL_MAX, orderLinkRefusalText, refundOrderPayment, type PaymentRequestRefundFields } from "@/lib/studioflow/stripeConnect";')],
   ["the line on a truthy canRefund", cardSource.replace("row.canRefund === true &&", "row.canRefund &&")],
   ["the line on open rows too", cardSource.replace('{tabForStatus(row.publicStatus) !== "open" && row.canRefund', "{row.canRefund")],
   ["the line links somewhere else", cardSource.replace(`const REFUND_PLACE_HREF = ${JSON.stringify(REFUND_PLACE)};`, 'const REFUND_PLACE_HREF = "/bank";')],

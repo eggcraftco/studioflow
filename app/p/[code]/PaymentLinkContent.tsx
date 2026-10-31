@@ -185,10 +185,11 @@ export function PaymentLinkContent({
           <>
             <h1>{copy.title}</h1>
             {/* An order's link names the order; an order-less one (SL-24) says what it is for, as the business wrote it. */}
+            {typeof view.title === "string" && view.title.trim() ? (
+              <p className={styles.muted} data-pay-title>{view.title.trim()}</p>
+            ) : null}
             {view.reference ? (
               <p className={styles.muted}>{copy.forOrder.replace("{reference}", view.reference)}</p>
-            ) : typeof view.title === "string" && view.title.trim() ? (
-              <p className={styles.muted} data-pay-title>{view.title.trim()}</p>
             ) : null}
             <div className={styles.amountBox}>
               <span className={styles.amountLabel}>{copy.amount}</span>

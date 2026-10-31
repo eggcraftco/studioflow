@@ -16,7 +16,7 @@
 //      read like the order link form; one id per submit, kept for a retry, new after a definite refusal; the
 //      row's title and its order once paid
 //   3. the order card hides New payment link on Free; Settings ▸ Stripe shows the paid-plan block and a plan
-//      link instead of Connect; /p/<code> shows the title when there is no order reference (one render path
+//      link instead of Connect; /p/<code> shows the link's title and, under it, the order reference (one render path
 //      for the neutral and the themed page); the public /integrations note names the paid plans
 //   4. every new sentence in twelve languages, placeholders kept, in one block right after the refund block —
 //      never at the end of language.ts (the tail is the 2FA table and, last, the calendar one)
@@ -379,7 +379,9 @@ expect("the plan page the links point at exists in Settings", /id: "plan-access"
 function payPageProblems(content: string): string[] {
   const out: string[] = [];
   const open = region(content, 'status === "open" && view ? (', "<div className={styles.amountBox}>");
-  if (!/\{view\.reference \? \(\s*<p className=\{styles\.muted\}>\{copy\.forOrder\.replace\("\{reference\}", view\.reference\)\}<\/p>\s*\) : typeof view\.title === "string" && view\.title\.trim\(\) \? \(\s*<p className=\{styles\.muted\} data-pay-title>\{view\.title\.trim\(\)\}<\/p>\s*\) : null\}/.test(open)) out.push("the title is not shown exactly when there is no order reference");
+  // SL-27 (31 Oct 2026): the link's own words first (an order-less link's title, or the name typed on an order link), then
+  // the order it belongs to — both when both exist. Before, the title showed only when there was no order reference.
+  if (!/\{typeof view\.title === "string" && view\.title\.trim\(\) \? \(\s*<p className=\{styles\.muted\} data-pay-title>\{view\.title\.trim\(\)\}<\/p>\s*\) : null\}\s*\{view\.reference \? \(\s*<p className=\{styles\.muted\}>\{copy\.forOrder\.replace\("\{reference\}", view\.reference\)\}<\/p>\s*\) : null\}/.test(open)) out.push("the link's title is not shown above the order reference");
   // One render path: the neutral card and the themed (product) page draw the same section, so the title is in both.
   if ((content.match(/copy\.forOrder/g) || []).length !== 1 || (content.match(/view\.title/g) || []).length !== 3) out.push("the open state is drawn in more than one place");
   if (!/<section className=\{productLayout \? styles\.details : styles\.card\}>/.test(content)) out.push("the themed and neutral layouts no longer share the section");
@@ -396,7 +398,7 @@ for (const [name, mutant] of payMutants) {
   verbose(problems);
 }
 const payReal = payPageProblems(payPageSource);
-expect("/p/<code> shows the title when the link has no order reference", payReal.length === 0, payReal.join("; "));
+expect("/p/<code> shows the link's title, and the order reference under it when there is one", payReal.length === 0, payReal.join("; "));
 
 // The public /integrations card: one short clause naming the paid plans, in every language.
 const { PUBLIC_SITE_TRANSLATIONS } = await import(pathToFileURL(path.join(webRoot, "lib/publicSite/translations.ts")).href) as { PUBLIC_SITE_TRANSLATIONS: Record<string, Record<string, string>> };
@@ -420,7 +422,11 @@ const panelText = region(panelSource, "// ---- Order-less links (SL-24", "const 
   + region(panelSource, "{isStandaloneRow(row) ? (", ") : onOpenOrder ? (");
 const settingsText = region(settingsSource, "{planAllowed === false ? (", "<div style={{ display: \"flex\", gap: 8, flexWrap: \"wrap\", marginTop: 8 }}>");
 const screenKeys = [...(panelText + settingsText).matchAll(/\bt\("([^"]+)"\)/g)].map((m) => m[1]);
-const keys = [...new Set([...libKeys, ...screenKeys])];
+// SL-27: the order link form's three sentences live in the order components, not in the regions read above
+// (they sit in the same block of language.ts, right after the order-less ones); check-order-link-label.mjs pins their use.
+const ORDER_LABEL_KEYS = ["What the customer is buying (optional)", "Shown on the payment page. Left empty, it shows the order number.",
+  "Keep what the customer is buying to 120 characters or fewer."];
+const keys = [...new Set([...libKeys, ...screenKeys, ...ORDER_LABEL_KEYS])];
 expect("the new sentences were found (lib + panel + Settings)", libKeys.length >= 8 && screenKeys.length >= 20, `${libKeys.length} + ${screenKeys.length}`);
 const REUSED = new Set(["New payment link", "Amount", "Create link", "Creating…", "Close", "Open order", "See plans", "Payment",
   "Sign in again to see payment links.", "That payment link cannot be created."]);

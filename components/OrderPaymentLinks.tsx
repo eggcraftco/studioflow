@@ -32,7 +32,7 @@ import { formatMinor, tabForStatus, type PaymentLinkRow } from "@/components/Pay
 import { minorToInputText, parseRequestAmount, requestAmountMessage } from "@/lib/studioflow/money";
 import { usePaymentLinksAvailable, usePaymentLinksPlan } from "@/lib/studioflow/usePaymentLinksAvailable";
 import { ETSY_COPY_LINK_NOTE } from "@/lib/studioflow/etsyOrder";
-import { orderLinkRefusalText, type PaymentRequestRefundFields } from "@/lib/studioflow/stripeConnect";
+import { orderLabelProblem, ORDER_LABEL_MAX, orderLinkRefusalText, type PaymentRequestRefundFields } from "@/lib/studioflow/stripeConnect";
 
 /** A row as this card reads it: the shared fields, plus what the server says about refunding it (SL-22). */
 type OrderLinkRow = PaymentLinkRow & PaymentRequestRefundFields;
@@ -107,6 +107,8 @@ export default function OrderPaymentLinks({
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
   const [purpose, setPurpose] = useState("remaining_balance");
+  // SL-27: what the customer is buying, typed by hand; empty = Stripe's page says "Order #N".
+  const [label, setLabel] = useState("");
   const [createError, setCreateError] = useState("");
   const [busy, setBusy] = useState("");
   const [copiedId, setCopiedId] = useState("");
@@ -205,19 +207,24 @@ export default function OrderPaymentLinks({
     const parsed = parseRequestAmount(amount, state?.currency ?? "", locale);
     if (!parsed.ok) { setCreateError(t(requestAmountMessage(parsed.reason))); return; }
     const amountMinor = parsed.amountMinor;
+    const labelProblem = orderLabelProblem(label);
+    if (labelProblem) { setCreateError(t(labelProblem)); return; }
     setBusy("create");
     setCreateError("");
     try {
-      const call = httpsCallable<{ companyId: string; orderId: string; amountMinor: number; purpose: string; clientRequestId: string }, unknown>(
+      const call = httpsCallable<{ companyId: string; orderId: string; amountMinor: number; purpose: string; clientRequestId: string; label?: string }, unknown>(
         functions, "createOrderPaymentRequest");
       await call({
         companyId, orderId, amountMinor, purpose,
+        // SL-27: only when something was typed; an older server ignores it and the page says "Order #N".
+        ...(label.trim() ? { label: label.trim() } : {}),
         // So a retry after a failed write resumes the same request instead of
         // opening a second link for the same money.
         clientRequestId: `${orderId}:${amountMinor}:${purpose}:${Date.now()}`,
       });
       setOpen(false);
       setAmount("");
+      setLabel("");
       await load();
     } catch (e) {
       // The server's own sentence, which names which fix applies; the plan refusal (SL-23) has its own.
@@ -306,6 +313,14 @@ export default function OrderPaymentLinks({
           <label style={{ display: "grid", gap: 3, fontSize: 11, opacity: 0.75 }}>
             {t("Amount")}
             <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder={minorToInputText(0, currency, locale)} style={{ width: 110 }} />
+          </label>
+          <label style={{ display: "grid", gap: 3, fontSize: 11, opacity: 0.75, flex: "1 1 240px" }}>
+            {t("What the customer is buying (optional)")}
+            <input
+              value={label} onChange={(e) => setLabel(e.target.value)}
+              maxLength={ORDER_LABEL_MAX} disabled={busy === "create"} autoComplete="off" data-order-link-label
+              placeholder={t("Shown on the payment page. Left empty, it shows the order number.")}
+            />
           </label>
           <button type="button" className="finance-payments-add" disabled={busy === "create"} onClick={() => void create()}>
             {busy === "create" ? t("Creating…") : t("Create link")}

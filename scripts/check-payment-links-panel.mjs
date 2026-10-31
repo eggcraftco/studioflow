@@ -75,6 +75,9 @@ try {
     "export const isStandaloneRow = refuse('isStandaloneRow');",
     "export const orderReferenceOfRow = refuse('orderReferenceOfRow');",
     "export const STANDALONE_TITLE_MAX = 120;",
+    // SL-27: what the customer is buying on an order link (checked by check-order-link-label.mjs); create() is not reached here.
+    "export const ORDER_LABEL_MAX = 120;",
+    "export const orderLabelProblem = refuse('orderLabelProblem');",
     "export const usePaymentLinksPlan = () => null;",
     "export const loadWorkspaceSettingsOverview = refuse('loadWorkspaceSettingsOverview');",
     "export const workspaceCurrencyCodes = refuse('workspaceCurrencyCodes');",
