@@ -8730,63 +8730,85 @@ export function OrderDetailContent({
         };
         const workDayKindLabel = (kind: string) => t(kind === "half_day" ? "Half day" : "Full day");
         const historyActionLabel: Record<WorkDayHistoryDetail["action"], string> = { logged: "Day logged", changed: "Day changed", deleted: "Day deleted" };
+        // Sections view (owner's design, 31 Oct 2026): the two measures and the timer's title + Start share one line,
+        // a hairline, then the day entry on one line. The card grid keeps its stacked order.
+        const workMeasures = (
+          <div className="app-work-total app-work-measures" data-testid="work-measures">
+            <div className="app-work-measure" data-measure="timer">
+              <span>{t("Timer total")}</span>
+              <strong data-testid="work-timer-total">{formatWorkDuration(totalSeconds)}</strong>
+            </div>
+            <div className="app-work-measure is-days" data-measure="days">
+              <span>{t("Days worked")}</span>
+              <strong data-testid="work-days-total">{formatWorkDays(daysWorked, detailLocale)}</strong>
+            </div>
+            {workDays.length > 0 ? (
+              <small className="app-work-measures-note">{t("Timer hours and day entries are counted separately and never added together.")}</small>
+            ) : null}
+          </div>
+        );
+        const workRunningNow = runningSession ? (
+          <div className="app-work-active">
+            <div>
+              <span>{t("Running now")}</span>
+              <strong>{runningSession.title}</strong>
+              <small>{t("{time} started").replace("{time}", formatTime(runningSession.startedAt, detailLocale))}</small>
+            </div>
+            <b>{formatWorkDuration(workSessionDurationSeconds(runningSession, workTimeNow))}</b>
+            {canCorrectWorkTime ? (
+              <button type="button" className="secondary app-work-correct-button" data-testid="work-active-correct" disabled={Boolean(savingWorkTimeAction)} onClick={() => beginWorkSessionCorrection(runningSession)}>
+                {t("Correct time")}
+              </button>
+            ) : null}
+          </div>
+        ) : null;
+        const workRunningCorrection = correctingWorkSession && runningSession && correctingWorkSession.id === runningSession.id ? correctionForm(correctingWorkSession) : null;
+        const workTimerControls = canEditWorkTime ? (
+          <div className="app-work-controls">
+            <input
+              type="text"
+              value={newWorkSessionTitle}
+              onChange={event => setNewWorkSessionTitle(event.target.value)}
+              onKeyDown={event => {
+                if ((event.key === "Enter" || event.code === "NumpadEnter") && !runningSession && !savingWorkTimeAction) startWorkTimer();
+              }}
+              placeholder={t("Work title...")}
+              disabled={Boolean(runningSession || savingWorkTimeAction)}
+            />
+            {runningSession ? (
+              <button type="button" className="danger" disabled={Boolean(savingWorkTimeAction)} onClick={() => stopWorkTimer(runningSession)}>
+                {t("Stop")}
+              </button>
+            ) : (
+              <button type="button" disabled={Boolean(savingWorkTimeAction)} onClick={startWorkTimer}>
+                {t("Start")}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="app-work-locked">{t("Your workspace role can view Work Time but cannot edit it.")}</div>
+        );
         return (
           <section key={cardId} className="card order-detail-card is-work-time-card">
             {renderCardTitle(cardId)}
             <div className="app-card-panel app-work-time-panel">
-              <div className="app-work-total app-work-measures" data-testid="work-measures">
-                <div className="app-work-measure" data-measure="timer">
-                  <span>{t("Timer total")}</span>
-                  <strong data-testid="work-timer-total">{formatWorkDuration(totalSeconds)}</strong>
-                </div>
-                <div className="app-work-measure is-days" data-measure="days">
-                  <span>{t("Days worked")}</span>
-                  <strong data-testid="work-days-total">{formatWorkDays(daysWorked, detailLocale)}</strong>
-                </div>
-                {workDays.length > 0 ? (
-                  <small className="app-work-measures-note">{t("Timer hours and day entries are counted separately and never added together.")}</small>
-                ) : null}
-              </div>
-              {runningSession ? (
-                <div className="app-work-active">
-                  <div>
-                    <span>{t("Running now")}</span>
-                    <strong>{runningSession.title}</strong>
-                    <small>{t("{time} started").replace("{time}", formatTime(runningSession.startedAt, detailLocale))}</small>
+              {isStackView ? (
+                <>
+                  <div className="work-stack-top">
+                    {workMeasures}
+                    {workTimerControls}
                   </div>
-                  <b>{formatWorkDuration(workSessionDurationSeconds(runningSession, workTimeNow))}</b>
-                  {canCorrectWorkTime ? (
-                    <button type="button" className="secondary app-work-correct-button" data-testid="work-active-correct" disabled={Boolean(savingWorkTimeAction)} onClick={() => beginWorkSessionCorrection(runningSession)}>
-                      {t("Correct time")}
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-              {correctingWorkSession && runningSession && correctingWorkSession.id === runningSession.id ? correctionForm(correctingWorkSession) : null}
-              {canEditWorkTime ? (
-                <div className="app-work-controls">
-                  <input
-                    type="text"
-                    value={newWorkSessionTitle}
-                    onChange={event => setNewWorkSessionTitle(event.target.value)}
-                    onKeyDown={event => {
-                      if ((event.key === "Enter" || event.code === "NumpadEnter") && !runningSession && !savingWorkTimeAction) startWorkTimer();
-                    }}
-                    placeholder={t("Work title...")}
-                    disabled={Boolean(runningSession || savingWorkTimeAction)}
-                  />
-                  {runningSession ? (
-                    <button type="button" className="danger" disabled={Boolean(savingWorkTimeAction)} onClick={() => stopWorkTimer(runningSession)}>
-                      {t("Stop")}
-                    </button>
-                  ) : (
-                    <button type="button" disabled={Boolean(savingWorkTimeAction)} onClick={startWorkTimer}>
-                      {t("Start")}
-                    </button>
-                  )}
-                </div>
+                  {workRunningNow}
+                  {workRunningCorrection}
+                  {canEditWorkTime ? <div className="app-card-divider" /> : null}
+                </>
               ) : (
-                <div className="app-work-locked">{t("Your workspace role can view Work Time but cannot edit it.")}</div>
+                <>
+                  {workMeasures}
+                  {workRunningNow}
+                  {workRunningCorrection}
+                  {workTimerControls}
+                </>
               )}
               {canEditWorkTime ? (
                 <div className={`app-work-day-entry${editingWorkDay ? " is-editing" : ""}`} data-testid="work-day-entry">
