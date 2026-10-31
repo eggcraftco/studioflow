@@ -37482,7 +37482,10 @@ body[data-studio-theme="dark"] .inv-categories .btn-danger { color: #f87171; bor
 
 html[data-studio-theme="dark"] .order-status-tile { background: rgba(255, 255, 255, 0.05); }
 html[data-studio-theme="dark"] .order-stack-section { background: rgba(255, 255, 255, 0.04); }
-html[data-studio-theme="dark"] .order-stack-icon { background: rgba(255, 255, 255, 0.08); }
+/* Filled glyphs (£, materials, repair) knock their mark out in --card-title-icon-cutout, which defaults to
+   white: on the light chip of dark mode that drew a plain white disc. The cutout is the chip's own colour
+   (#141414 page + 4% section + 8% chip). */
+html[data-studio-theme="dark"] .order-stack-icon { background: rgba(255, 255, 255, 0.08); --card-title-icon-cutout: #2f2f2f; }
 html[data-studio-theme="dark"] .order-view-toggle { background: rgba(255, 255, 255, 0.06); border-color: rgba(255, 255, 255, 0.1); }
 html[data-studio-theme="dark"] .order-view-toggle button.is-active { background: rgba(255, 255, 255, 0.12); color: #fff; }
 html[data-studio-theme="dark"] .order-status-bar { background: rgba(255, 255, 255, 0.1); }
@@ -37611,7 +37614,8 @@ body[data-studio-theme="dark"] .block-custom-swatch[data-card-color="Default"] {
 .order-status-segment.is-active i { background: #f59e0b; }
 .order-status-segment.is-active small { color: #c2410c; }
 .order-status-segments__more { align-self: end; font-size: 11.5px; font-weight: 800; color: var(--muted); padding-bottom: 2px; }
-html[data-studio-theme="dark"] .order-status-segment i { background: rgba(255, 255, 255, 0.12); }
+/* Only the not-started track goes dim in dark mode; done / active / blocked keep their colour. */
+html[data-studio-theme="dark"] .order-status-segment:not(.is-done):not(.is-active):not(.is-blocked) i { background: rgba(255, 255, 255, 0.12); }
 
 /* Section bodies, second pass: the two controls that still ran the full width. */
 .order-stack-body .app-card-panel > button[style] {
