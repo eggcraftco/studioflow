@@ -199,26 +199,37 @@ export function AccountingProviderSection({ workspace, language = "English", pro
     setChecklistDraft(Object.fromEntries(CHECKLIST.map(({ key }) => [key, mappings.checklist?.[key] === true])));
   }, [mappings]);
 
-  // Back from the provider: the callback put its verdict in the URL.
+  // Back from the provider: the callback put its verdict in the URL. It is read once, here,
+  // with its side effects; the words are chosen in the effect below, which runs again when
+  // the person's language arrives — the URL is read before it has loaded, and a notice
+  // translated here stayed in English for everyone else.
+  const [verdict, setVerdict] = useState<{ verdict: string; reason: string; state: string } | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const verdict = params.get(ui.verdictParam);
-    if (!verdict) return;
+    const value = params.get(ui.verdictParam);
+    if (!value) return;
     const reason = params.get("reason") || "";
     const state = params.get("state") || "";
     params.delete(ui.verdictParam); params.delete("reason"); params.delete("connection"); params.delete("state");
     window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params}` : ""}`);
-    if (verdict === "connected") { setImporting(true); setNotice(pt("{provider} connected. Importing the chart of accounts, VAT codes, customers and items…")); setTab("setup"); }
-    else if (verdict === "choose" && state) { setChooseState(state); setNotice(pt("Your {provider} sign-in covers more than one organisation. Choose the one this workspace keeps its books in.")); }
+    if (value === "connected") { setImporting(true); setTab("setup"); }
+    else if (value === "choose" && state) setChooseState(state);
+    setVerdict({ verdict: value, reason, state });
+  }, [ui.verdictParam]);
+  useEffect(() => {
+    if (!verdict) return;
+    const { verdict: value, reason, state } = verdict;
+    if (value === "connected") setNotice(pt("{provider} connected. Importing the chart of accounts, VAT codes, customers and items…"));
+    else if (value === "choose" && state) setNotice(pt("Your {provider} sign-in covers more than one organisation. Choose the one this workspace keeps its books in."));
     // Intuit's Disconnect URL: the owner removed NivaDesk from inside QuickBooks.
-    else if (verdict === "disconnected") setNotice(pt("{provider} was disconnected from inside {provider}. Your NivaDesk records stay; connect again here whenever you like."));
-    else if (verdict === "cancelled") setError(pt("The {provider} connection was cancelled."));
+    else if (value === "disconnected") setNotice(pt("{provider} was disconnected from inside {provider}. Your NivaDesk records stay; connect again here whenever you like."));
+    else if (value === "cancelled") setError(pt("The {provider} connection was cancelled."));
     else if (reason === "state") setError(t("This connection link has expired. Start again from the Connect button."));
     else if (reason === "company") setError(pt("{provider} returned a different company than the one you authorised. Try again."));
     else if (reason === "no_organisation") setError(pt("{provider} did not return an organisation for this sign-in. Choose an organisation on {vendor}'s screen and try again."));
     else if (reason === "token") setError(pt("{provider} did not accept the authorisation. Connect again and approve access on {vendor}'s screen."));
     else setError(pt("{provider} could not be connected. Try again in a minute."));
-  }, [t, pt, ui.verdictParam]);
+  }, [verdict, t, pt]);
 
   // The organisation chooser reads names only; the tokens never leave the server.
   useEffect(() => {
@@ -231,7 +242,7 @@ export function AccountingProviderSection({ workspace, language = "English", pro
   }, [chooseState, companyId, t]);
 
   async function guard(key: string, fn: () => Promise<void>) {
-    setBusy(key); setError(""); setNotice("");
+    setBusy(key); setError(""); setNotice(""); setVerdict(null);
     try { await fn(); } catch (err) { setError(err instanceof Error ? err.message : t("Could not load.")); } finally { setBusy(""); }
   }
 
@@ -252,7 +263,7 @@ export function AccountingProviderSection({ workspace, language = "English", pro
     // The connection settled without this screen running the import (another
     // device did it, or the reader is not the owner) — stop promising progress.
     if (connection.setupState !== "importing") {
-      if (importing) { setImporting(false); setNotice(""); }
+      if (importing) { setImporting(false); setNotice(""); setVerdict(null); }
       return;
     }
     if (busy || !isOwner) return;
@@ -277,6 +288,8 @@ export function AccountingProviderSection({ workspace, language = "English", pro
         window.location.assign(result.authorizeUrl);
       } catch (err) {
         const reason = accountingConnectRefusal(err);
+        // The card was drawn from an older answer: read availability again so it stops offering the button.
+        if (reason) void refresh(true);
         if (reason === "quickbooks_production_closed") throw new Error(t(QBO_NOT_OPEN));
         if (reason === "quickbooks_production_keys") throw new Error(t("QuickBooks is being switched on for real companies. Try again a little later."));
         throw err;
