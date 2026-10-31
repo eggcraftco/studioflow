@@ -19,6 +19,7 @@ import { PLATFORM_BAR_TRANSLATIONS } from "./platformBarTranslations";
 import { ETSY_SHIPPING_COST_TRANSLATIONS } from "./etsyShippingCost";
 import { CHANNEL_SHIPPING_COST_TRANSLATIONS } from "./channelShippingCost";
 import { ETSY_ORDER_VIEW_TRANSLATIONS } from "./etsyOrderViewTranslations";
+import { ORDER_STACK_VIEW_TRANSLATIONS } from "./orderStackViewTranslations";
 import { SECURITY_FIX_TRANSLATIONS } from "./securityFixTranslations";
 import { CALENDAR_TRANSLATIONS } from "./calendarTranslations";
 import { STORAGE_TRANSLATIONS } from "./storageTranslations";
@@ -9492,6 +9493,10 @@ mergeIntoTranslations(CHANNEL_SHIPPING_COST_TRANSLATIONS);
 // ETSY-UI-1 (27 Oct 2026): the Etsy order block, the jump bar and the Etsy tracking note (order detail). New keys only;
 // last, after K5, so a later table cannot hide them and they redefine nothing earlier.
 mergeIntoTranslations(ETSY_ORDER_VIEW_TRANSLATIONS);
+
+// Sections view (31 Oct 2026): the order header's status strip, the Sections / Cards toggle and the section headings.
+// New keys only; after ETSY-UI-1 so nothing earlier is redefined.
+mergeIntoTranslations(ORDER_STACK_VIEW_TRANSLATIONS);
 
 // Security fixes (28 Oct 2026): the sign-out question about undelivered writes, the re-authentication prompt.
 mergeIntoTranslations(SECURITY_FIX_TRANSLATIONS);

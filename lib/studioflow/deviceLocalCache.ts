@@ -1,3 +1,5 @@
+import { orderDetailViewStorageKeys } from "@/lib/studioflow/orderDetailView";
+
 // Device-local (localStorage) workspace UI state that must not leak from one
 // signed-in account to the next on the same browser — mirrors the iOS/Mac
 // clearDeviceLocalWorkspaceCardCache(). Call BEFORE signOut().
@@ -17,7 +19,9 @@ const DEVICE_LOCAL_WORKSPACE_KEYS = [
 
 export function clearDeviceLocalWorkspaceCache() {
   if (typeof window === "undefined") return;
-  for (const key of DEVICE_LOCAL_WORKSPACE_KEYS) {
+  // The Sections / Cards choice and the open sections are per workspace (one
+  // key each), so they are found by prefix rather than listed.
+  for (const key of [...DEVICE_LOCAL_WORKSPACE_KEYS, ...orderDetailViewStorageKeys()]) {
     try { window.localStorage.removeItem(key); } catch { /* storage unavailable */ }
   }
 }

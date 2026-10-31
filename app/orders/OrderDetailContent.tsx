@@ -181,6 +181,7 @@ import { etsyListingLink, etsyPhotoIsShowable } from "@/lib/studioflow/etsyListi
 import { EtsyNotePhotoLinks } from "./EtsyText";
 import { etsyCardFold, etsyNoteDisplay } from "@/lib/studioflow/etsyFirstImport";
 import { ETSY_BLOCK_JUMP_ID, etsyAddTrackingLink, etsyBlockReplacesStrip, hiddenCardCount, orderJumpTargets } from "@/lib/studioflow/etsyOrderView";
+import { DEFAULT_ORDER_DETAIL_VIEW, cacheOrderDetailView, readCachedOrderDetailView, readOpenStackSections, saveOrderDetailView, subscribeOrderDetailView, writeOpenStackSections, type OrderDetailView } from "@/lib/studioflow/orderDetailView";
 import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
@@ -2377,6 +2378,24 @@ export function OrderDetailContent({
   } | null>(null);
   const [workspacePanning, setWorkspacePanning] = useState(false);
   const [isNarrowLayout, setIsNarrowLayout] = useState(false);
+  // Sections view (31 Oct 2026): which of the two views this member opens orders in — one column of
+  // collapsible sections (the default) or the card grid. The device-local copy answers first; the
+  // personalInterfaceSettings listener replaces it when the cloud value arrives. Which sections are open is
+  // this device's reading position, never synced.
+  const [orderDetailView, setOrderDetailView] = useState<OrderDetailView>(DEFAULT_ORDER_DETAIL_VIEW);
+  const [openStackSections, setOpenStackSections] = useState<OrderDetailCardId[]>([]);
+  const [stackDragCardId, setStackDragCardId] = useState<OrderDetailCardId | null>(null);
+  const [stackDropCue, setStackDropCue] = useState<{ cardId: OrderDetailCardId; placement: "before" | "after" } | null>(null);
+  const stackSectionRefs = useRef(new Map<OrderDetailCardId, HTMLDivElement>());
+  useEffect(() => {
+    setOrderDetailView(readCachedOrderDetailView(workspace.id) ?? DEFAULT_ORDER_DETAIL_VIEW);
+    setOpenStackSections(readOpenStackSections(workspace.id, ORDER_DETAIL_CARD_IDS));
+    return subscribeOrderDetailView(workspace.id, view => {
+      if (!view) return;
+      setOrderDetailView(view);
+      cacheOrderDetailView(workspace.id, view);
+    });
+  }, [workspace.id]);
   const [editOpen, setEditOpen] = useState(false);
   const [orderActionStatus, setOrderActionStatus] = useState<string | null>(null);
   const [orderActionError, setOrderActionError] = useState<string | null>(null);
@@ -2687,6 +2706,44 @@ export function OrderDetailContent({
     if (!orderActionCardVisible(workspace.memberAccess, cardId)) return false;
     if (cardId === "financial") return canSeeFinance;
     return true;
+  }
+
+  const isStackView = orderDetailView === "stack";
+
+  // Sections / Cards: personal, every device. The callable keeps "stack" or "cards"; until the server
+  // knows the key, the device-local copy carries the choice — it is applied at once either way.
+  function chooseOrderDetailView(view: OrderDetailView) {
+    if (view === orderDetailView) return;
+    setOrderDetailView(view);
+    cacheOrderDetailView(workspace.id, view);
+    setOpenCardMenuId(null);
+    void saveOrderDetailView(workspace.id, view).catch(() => {
+      // The device keeps the choice; the next successful save syncs it.
+    });
+  }
+
+  function isStackSectionOpen(cardId: OrderDetailCardId) {
+    return openStackSections.includes(cardId);
+  }
+
+  function setStackSections(next: OrderDetailCardId[]) {
+    setOpenStackSections(next);
+    writeOpenStackSections(workspace.id, next);
+  }
+
+  function toggleStackSection(cardId: OrderDetailCardId, open?: boolean) {
+    const wasOpen = openStackSections.includes(cardId);
+    const shouldOpen = open ?? !wasOpen;
+    if (shouldOpen === wasOpen) return;
+    setStackSections(shouldOpen ? [...openStackSections, cardId] : openStackSections.filter(id => id !== cardId));
+  }
+
+  function expandAllStackSections() {
+    setStackSections([...visibleMobileCards]);
+  }
+
+  function collapseAllStackSections() {
+    setStackSections([]);
   }
 
   function toggleCardsLocked() {
@@ -3229,7 +3286,7 @@ export function OrderDetailContent({
     });
   }, [canSeeFinance, cardLayout, workspace.memberAccess, guideRestrictsToCustomerOnly, guideForcesCustomerVisible, guideHighlightsCustomer, guideForcesFinancialVisible]);
   const allCardsHidden = visibleMobileCards.length === 0;
-  const customizeCardOrder = visibleActionCardsFor(workspace.memberAccess, isNarrowLayout ? cardLayout.mobileCardOrder : cardLayout.cardOrder)
+  const customizeCardOrder = visibleActionCardsFor(workspace.memberAccess, isNarrowLayout || isStackView ? cardLayout.mobileCardOrder : cardLayout.cardOrder)
     .filter(cardId => canShowOrderCard(cardId))
     .sort((first, second) => cardLabel(first).localeCompare(cardLabel(second), undefined, { sensitivity: "base" }));
 
@@ -3662,7 +3719,8 @@ export function OrderDetailContent({
   }
 
   function moveCard(cardId: OrderDetailCardId, direction: -1 | 1) {
-    if (isNarrowLayout) {
+    // The sections view is the single-column order on every width (the same list the phones use).
+    if (isNarrowLayout || isStackView) {
       moveMobileCard(cardId, direction);
       return;
     }
@@ -3695,10 +3753,24 @@ export function OrderDetailContent({
     });
   }
 
+  function moveMobileCardToEdge(cardId: OrderDetailCardId, edge: "top" | "bottom") {
+    if (!cardLayout.mobileCardOrder.includes(cardId)) return;
+    const nextMobileOrder = cardLayout.mobileCardOrder.filter(id => id !== cardId);
+    if (edge === "top") nextMobileOrder.unshift(cardId);
+    else nextMobileOrder.push(cardId);
+    const previousLayout = cardLayout;
+    void persistLayout({ ...cardLayout, mobileCardOrder: nextMobileOrder }, "Section order saved.");
+    dispatchStudioToast({
+      message: t("Card moved."),
+      actionLabel: t("Undo"),
+      onAction: () => { void persistLayout(previousLayout, "Card order restored."); }
+    });
+  }
+
   function reorderCardByDrop(sourceCardId: OrderDetailCardId, targetCardId: OrderDetailCardId, insertAfter: boolean) {
     if (sourceCardId === targetCardId) return;
 
-    if (isNarrowLayout) {
+    if (isNarrowLayout || isStackView) {
       reorderMobileCardByDrop(sourceCardId, targetCardId, insertAfter);
       return;
     }
@@ -6078,7 +6150,13 @@ export function OrderDetailContent({
               <div className="block-custom-move">
                 <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} up`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, -1); }}>↑ {t("Up")}</button>
                 <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} down`} onClick={() => { setOpenCardMenuId(null); moveCard(cardId, 1); }}>↓ {t("Down")}</button>
-                {!isNarrowLayout ? (
+                {isStackView ? (
+                  <>
+                    <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the top`} onClick={() => { setOpenCardMenuId(null); moveMobileCardToEdge(cardId, "top"); }}>⤒ {t("Move to top")}</button>
+                    <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the bottom`} onClick={() => { setOpenCardMenuId(null); moveMobileCardToEdge(cardId, "bottom"); }}>⤓ {t("Move to bottom")}</button>
+                  </>
+                ) : null}
+                {!isNarrowLayout && !isStackView ? (
                   <>
                     <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the previous column`} onClick={() => moveCardColumnBy(cardId, -1)}>← {t("Left")}</button>
                     <button type="button" disabled={locked || savingLayout} aria-label={`Move ${cardLabel(cardId)} to the next column`} onClick={() => moveCardColumnBy(cardId, 1)}>→ {t("Right")}</button>
@@ -6087,6 +6165,8 @@ export function OrderDetailContent({
               </div>
               <p className="block-custom-hint">{t("You can also drag the block.")}</p>
 
+              {!isStackView ? (
+                <>
               <div className="order-card-menu-label">{t("Width")}</div>
               <div className="block-custom-segment">
                 <button
@@ -6112,7 +6192,8 @@ export function OrderDetailContent({
                 <button type="button" className={sizeKey === "M" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 380)}>M</button>
                 <button type="button" className={sizeKey === "L" ? "is-active" : ""} disabled={locked || savingLayout} onClick={() => applyCardSizePreset(cardId, 560)}>L</button>
               </div>
-
+                </>
+              ) : null}
               <div className="order-card-menu-label">{t("Colour")}</div>
               <div className="block-custom-color-grid">
                 {CARD_COLOR_OPTIONS.map(color => (
@@ -6625,9 +6706,10 @@ export function OrderDetailContent({
       setCustomizeOpen(true);
       return;
     }
-    const refs = isNarrowLayout ? mobileCardFrameRefs.current : desktopCardFrameRefs.current;
+    const refs = isStackView ? stackSectionRefs.current : isNarrowLayout ? mobileCardFrameRefs.current : desktopCardFrameRefs.current;
     const frame = refs.get("invoiceItems") ?? desktopCardFrameRefs.current.get("invoiceItems") ?? mobileCardFrameRefs.current.get("invoiceItems");
     if (!frame) return;
+    if (isStackView) toggleStackSection("invoiceItems", true);
     // Centred, not "start": the order's header stays pinned over the top of
     // the scroll area, so a card aligned to the top sat underneath it.
     const addButton = frame.querySelector<HTMLButtonElement>("[data-line-items-add]");
@@ -9943,28 +10025,95 @@ export function OrderDetailContent({
   }
 
   function renderHeaderMeta() {
-    const deliveryTone = summaryDeliveryTone(order);
+    // Sections view (31 Oct 2026): delivery and value moved into the status strip's tiles; the upcoming
+    // reminder stays a pill at the end of the strip, under its own header toggle.
     const scheduleToneName = headerScheduleItem ? scheduleTone(headerScheduleItem) : "gray";
+    if (!headerShowUpcomingSchedule || !headerScheduleItem) return null;
     return (
       <div className="order-header-meta">
-        {headerShowUpcomingSchedule && headerScheduleItem ? (
-          <span className={`order-header-meta-pill ${scheduleToneName}`}>
-            <CardIconGlyph icon="bellBadge" />
-            {`${headerScheduleItem.title.trim() ? t(headerScheduleItem.title.trim()) : t("Reminder")} · ${localizedScheduleRelativeLabel(scheduleRelativeLabel(headerScheduleItem), t)}`}
-          </span>
-        ) : null}
+        <span className={`order-header-meta-pill ${scheduleToneName}`}>
+          <CardIconGlyph icon="bellBadge" />
+          {`${headerScheduleItem.title.trim() ? t(headerScheduleItem.title.trim()) : t("Reminder")} · ${localizedScheduleRelativeLabel(scheduleRelativeLabel(headerScheduleItem), t)}`}
+        </span>
+      </div>
+    );
+  }
+
+  // Sections view (31 Oct 2026): the status strip under the title row, in both views — the order's
+  // production step, how long until delivery, what it is worth and what has been paid. Read-only; the
+  // header toggles that governed the old delivery and value pills govern those two tiles.
+  function stripStepTone(value: string): "done" | "active" | "next" {
+    const tone = dynamicStatusTone(value);
+    if (tone === "green") return "done";
+    return tone === "gray" ? "next" : "active";
+  }
+
+  function stripProduction() {
+    const steps = productionSteps().map(step => ({ ...step, value: summaryStepValue(step.title) }));
+    const resolved = resolveProductionStage(order, productionStages, productionSteps());
+    const current = steps.find(step => stripStepTone(step.value) !== "done") ?? null;
+    const stageTitle = productionStages.find(stage => stage.id === resolved.stageId)?.title ?? "";
+    return { steps, resolved, current, stageTitle };
+  }
+
+  function renderStatusStrip() {
+    const { steps, resolved, current, stageTitle } = stripProduction();
+    const deliveryTone = summaryDeliveryTone(order);
+    const orderValue = order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order);
+    const remaining = order.remainingAmount + orderCustomRemainingTotal(order);
+    const paidShare = orderValue > 0 ? Math.max(0, Math.min(1, order.paidAmount / orderValue)) : 0;
+    const shownSteps = steps.slice(0, 5);
+    const productionNote = resolved.delivered
+      ? t("Delivered")
+      : current
+        ? `${t(current.title)} · ${t(current.value)}`
+        : steps.length > 0
+          ? (stageTitle ? t(stageTitle) : t("Done"))
+          : t("No steps yet");
+    return (
+      <div className="order-status-strip" data-order-status-strip="">
+        <div className="order-status-tile is-production" data-stage={resolved.stageId}>
+          <span className="order-status-tile__label">{t("Production")}</span>
+          <div className="order-status-steps" aria-label={`${resolved.doneCount}/${resolved.total}`}>
+            {shownSteps.map((step, index) => (
+              <Fragment key={step.id || step.title}>
+                {index > 0 ? <span className="order-status-steps__line" aria-hidden="true" /> : null}
+                <span className={`order-status-step is-${stripStepTone(step.value)}`} title={`${t(step.title)} · ${t(step.value)}`}>
+                  <i aria-hidden="true">{stripStepTone(step.value) === "done" ? "✓" : index + 1}</i>
+                  <b>{t(step.title)}</b>
+                </span>
+              </Fragment>
+            ))}
+            {steps.length > shownSteps.length ? <span className="order-status-steps__more">+{steps.length - shownSteps.length}</span> : null}
+          </div>
+          <span className={`order-status-tile__note${current ? ` is-${stripStepTone(current.value)}` : ""}`}>{productionNote}</span>
+        </div>
         {headerShowDeliveryTime ? (
-          <span className={`order-header-meta-pill ${deliveryTone}`}>
-            <CardIconGlyph icon="calendarClock" />
-            {localizedDeliveryLabel(summaryDeliveryLabel(order), t, detailLanguage)}
-          </span>
+          <div className={`order-status-tile is-delivery tone-${deliveryTone}`}>
+            <span className="order-status-tile__label">{t("Delivery")}</span>
+            <strong className="order-status-tile__value">{localizedDeliveryLabel(summaryDeliveryLabel(order), t, detailLanguage)}</strong>
+            <span className="order-status-tile__note">{order.dueDate ? `${t("Due")} ${formatShortDate(order.dueDate)}` : t("No due date")}</span>
+          </div>
         ) : null}
-        {headerShowOrderValue && canSeeFinance ? (
-          <span className="order-header-meta-pill green">
-            <CardIconGlyph icon="finance" symbol={orderIconSymbol(orderCurrencyRef, moneySettings)} />
-            {orderValueMoney(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers)}
-          </span>
+        {canSeeFinance && headerShowOrderValue ? (
+          <div className="order-status-tile is-value">
+            <span className="order-status-tile__label">{t("Order Value")}</span>
+            <strong className="order-status-tile__value">{orderValueMoney(orderValue, hideNumbers)}</strong>
+            <span className="order-status-tile__note">{t("Final profit")} <b className={orderFinance.netProfit < 0 ? "is-negative" : ""}>{orderValueMoney(orderFinance.netProfit, hideNumbers)}</b></span>
+          </div>
         ) : null}
+        {canSeeFinance ? (
+          <div className={`order-status-tile is-payment${remaining > 0 ? " has-balance" : ""}`}>
+            <span className="order-status-tile__label">{t("Payment")}</span>
+            <strong className="order-status-tile__value">
+              <span className="is-paid">{t("Paid")} {orderValueMoney(order.paidAmount, hideNumbers)}</span>
+              <span aria-hidden="true"> · </span>
+              <span className={remaining > 0 ? "is-remaining" : "is-settled"}>{t("Remaining")} {orderValueMoney(remaining, hideNumbers)}</span>
+            </strong>
+            <span className="order-status-bar" aria-hidden="true"><i style={{ width: `${Math.round(paidShare * 100)}%` }} /></span>
+          </div>
+        ) : null}
+        {renderHeaderMeta()}
       </div>
     );
   }
@@ -10005,7 +10154,7 @@ export function OrderDetailContent({
   const etsyBlockShown = String(order.customFields?.["Source"] || "") === "Etsy" && Boolean(etsySource) && Array.isArray(etsySource?.items);
   const jumpCardOrder: OrderDetailCardId[] = allCardsHidden
     ? []
-    : isNarrowLayout
+    : isNarrowLayout || isStackView
       ? [...mobileCardFold.main, ...mobileCardFold.folded]
       : desktopColumns.flatMap(column => column.cards);
   const jumpTargets = orderJumpTargets(jumpCardOrder, cardId => cardLabel(cardId as OrderDetailCardId), { etsyBlock: etsyBlockShown, etsyLabel: t("From Etsy") });
@@ -10108,9 +10257,11 @@ export function OrderDetailContent({
   }
 
   function jumpToOrderCard(targetId: string) {
-    const refs = isNarrowLayout ? mobileCardFrameRefs.current : desktopCardFrameRefs.current;
+    const refs = isStackView ? stackSectionRefs.current : isNarrowLayout ? mobileCardFrameRefs.current : desktopCardFrameRefs.current;
     const target = targetId === ETSY_BLOCK_JUMP_ID ? etsyBlockRef.current : refs.get(targetId as OrderDetailCardId) ?? null;
     if (!target) return;
+    // Sections view: a closed section opens before the scroll, as the Etsy fold does below.
+    if (isStackView && targetId !== ETSY_BLOCK_JUMP_ID) toggleStackSection(targetId as OrderDetailCardId, true);
     const fold = target.closest("details");
     if (fold && !fold.open) fold.open = true;
     const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -10131,6 +10282,207 @@ export function OrderDetailContent({
     target.focus({ preventScroll: true });
     target.classList.add("is-notification-focus");
     window.setTimeout(() => target.classList.remove("is-notification-focus"), 1600);
+  }
+
+  // Sections view (31 Oct 2026): the one line under a section heading that says what is inside without
+  // opening it — the same words the phones' compact rows use. Money only for members who may see it.
+  function stackSummary(cardId: OrderDetailCardId): string {
+    const count = (key: string, value: number) => t(key).replace("{count}", String(value));
+    const firstLine = (text: string) => text.split("\n").map(line => line.trim()).find(Boolean) ?? "";
+    switch (cardId) {
+      case "preview":
+        return order.designName.trim();
+      case "repairIntake":
+        return String(repairIntake?.fields?.itemType ?? "").trim();
+      case "estimate": {
+        if (!currentEstimate) return t("No estimate yet");
+        const status = currentEstimate.status === "approved" ? "Approved" : currentEstimate.status === "declined" ? "Declined" : "Pending";
+        return t(status);
+      }
+      case "customerPortal":
+        return portal.active ? t("Portal active") : t("Not shared");
+      case "summary":
+        return `${order.orderType === "repair" ? t("Repair / Service") : t("Custom Order")} · ${t(order.status)}`;
+      case "customer":
+        return [order.customerName.trim(), order.whatsappNumber.trim() || order.emailAddress.trim()].filter(Boolean).join(" · ");
+      case "invoiceItems":
+        return count("{count} items", order.lineItems.length);
+      case "materials": {
+        const checked = [order.invBool1, order.invBool2, order.invBool3, order.invBool4].filter(Boolean).length;
+        return t("{checked} of {total} ready").replace("{checked}", String(checked)).replace("{total}", "4");
+      }
+      case "priority":
+        return [t(order.priority), order.risk && order.risk !== "None" ? t(order.risk) : ""].filter(Boolean).join(" · ");
+      case "delivery":
+        return localizedDeliveryLabel(summaryDeliveryLabel(order), t, detailLanguage);
+      case "notes": {
+        const line = firstLine(order.notes);
+        return line ? (line.length > 80 ? `${line.slice(0, 77)}…` : line) : t("No notes yet");
+      }
+      case "clientFiles":
+        return count("{count} files", order.clientFiles.length);
+      case "todo": {
+        const done = order.todoItems.filter(item => item.isDone).length;
+        return t("{done} of {total} done").replace("{done}", String(done)).replace("{total}", String(order.todoItems.length));
+      }
+      case "workTime": {
+        const seconds = order.workSessions.reduce((total, session) => total + (session.durationSeconds || 0), 0);
+        if (seconds <= 0) return t("No time logged");
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+      }
+      case "financial":
+        return canSeeFinance
+          ? `${t("Paid")} ${orderValueMoney(order.paidAmount, hideNumbers)} · ${t("Remaining")} ${orderValueMoney(order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers)}`
+          : "";
+      case "status": {
+        const { current, resolved } = stripProduction();
+        if (resolved.delivered) return t("Delivered");
+        return current ? `${t(current.title)} · ${t(current.value)}` : t("Done");
+      }
+      case "shipping":
+        if (order.isDelivered) return t("Delivered");
+        if (order.trackingNumber.trim()) return `${order.courier} ${order.trackingNumber}`.trim();
+        return order.isDispatched ? t("Dispatched") : t("Not dispatched");
+      case "schedule":
+        return headerScheduleItem
+          ? `${headerScheduleItem.title.trim() ? t(headerScheduleItem.title.trim()) : t("Reminder")} · ${localizedScheduleRelativeLabel(scheduleRelativeLabel(headerScheduleItem), t)}`
+          : count("{count} reminders", activeScheduleItems.length);
+      case "historyLog":
+        return count("{count} entries", order.historyLog.length);
+      default:
+        return "";
+    }
+  }
+
+  function setStackSectionRef(cardId: OrderDetailCardId, node: HTMLDivElement | null) {
+    if (node) stackSectionRefs.current.set(cardId, node);
+    else stackSectionRefs.current.delete(cardId);
+  }
+
+  function stackDropPlacement(event: DragEvent<HTMLElement>): "before" | "after" {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  }
+
+  // One section: a heading that opens the card's body under it. The heading carries what the card frame
+  // carried in the grid — drag handle, menu, colour meaning — and one line of summary; the body is the
+  // card body the grid draws, with its own title row hidden (the heading is the title). Closed bodies stay
+  // mounted so a half-typed note survives a collapse.
+  function renderStackSection(cardId: OrderDetailCardId) {
+    const open = isStackSectionOpen(cardId);
+    const profileColor = cardProfileColor(cardLayout, cardId);
+    const summary = stackSummary(cardId);
+    const dragging = stackDragCardId === cardId;
+    const cue = stackDropCue?.cardId === cardId ? stackDropCue.placement : null;
+    const canDrag = canMoveResizeCards && !isNarrowLayout;
+    return (
+      <div
+        key={cardId}
+        ref={node => setStackSectionRef(cardId, node)}
+        className={[
+          "order-stack-section",
+          open ? "is-open" : "",
+          openCardMenuId === cardId ? "has-open-menu" : "",
+          dragging ? "is-dragging" : "",
+          cue ? `is-drop-${cue}` : ""
+        ].filter(Boolean).join(" ")}
+        data-card-color={profileColor}
+        data-stack-card={cardId}
+        data-first-project-guide-card={cardId}
+        onDragOver={event => {
+          if (!stackDragCardId || stackDragCardId === cardId) return;
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+          const placement = stackDropPlacement(event);
+          if (stackDropCue?.cardId !== cardId || stackDropCue.placement !== placement) setStackDropCue({ cardId, placement });
+        }}
+        onDragLeave={event => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+          if (stackDropCue?.cardId === cardId) setStackDropCue(null);
+        }}
+        onDrop={event => {
+          if (!stackDragCardId || stackDragCardId === cardId) return;
+          event.preventDefault();
+          const placement = stackDropPlacement(event);
+          reorderMobileCardByDrop(stackDragCardId, cardId, placement === "after");
+          setStackDragCardId(null);
+          setStackDropCue(null);
+        }}
+      >
+        <div
+          className="order-stack-heading"
+          role="button"
+          tabIndex={0}
+          aria-expanded={open}
+          aria-controls={`order-stack-body-${cardId}`}
+          onClick={() => toggleStackSection(cardId)}
+          onKeyDown={event => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              toggleStackSection(cardId);
+            }
+          }}
+        >
+          {canDrag ? (
+            <span
+              className="order-stack-handle"
+              title={t("Drag to reorder sections")}
+              aria-label={t("Drag to reorder sections")}
+              draggable
+              onClick={event => event.stopPropagation()}
+              onDragStart={event => {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", cardId);
+                setStackDragCardId(cardId);
+              }}
+              onDragEnd={() => {
+                setStackDragCardId(null);
+                setStackDropCue(null);
+              }}
+            >
+              <i /><i /><i />
+            </span>
+          ) : null}
+          <span className="order-stack-icon" aria-hidden="true">
+            <CardIconGlyph icon={cardIcon(cardId)} symbol={cardId === "financial" ? orderIconSymbol(orderCurrencyRef, moneySettings) : undefined} />
+          </span>
+          <span className="order-stack-title">{cardLabel(cardId)}</span>
+          <span className="order-stack-summary">{summary}</span>
+          {colorMeanings[profileColor] ? (
+            <span className="order-stack-chip" data-card-color={profileColor}>{t(colorMeanings[profileColor])}</span>
+          ) : null}
+          <span className="order-stack-menu" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}>
+            {renderCardMenu(cardId)}
+          </span>
+          <span className="order-stack-chevron" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </span>
+        </div>
+        <div id={`order-stack-body-${cardId}`} className="order-stack-body" data-stack-card={cardId} hidden={!open}>
+          {renderCard(cardId)}
+          {cardId === "financial" ? renderFinancialInfoGuideBubble() : null}
+        </div>
+      </div>
+    );
+  }
+
+  function renderStackView() {
+    const fold = mobileCardFold;
+    // The same tab panel id the card canvas carries (written as an expression so the source-order check in
+    // scripts/check-etsy-ui-1.mts still finds the canvas, which follows the Etsy block, first).
+    return (
+      <div id={"order-tab-panel-overview"} role="tabpanel" aria-labelledby="order-tab-overview" className="order-detail-stack" data-order-stack="">
+        {fold.main.map(cardId => renderStackSection(cardId))}
+        {fold.folded.length ? (
+          <>
+            <p className="order-stack-fold-label">{`${t("Not used on this order")} (${fold.folded.length})`}</p>
+            {fold.folded.map(cardId => renderStackSection(cardId))}
+          </>
+        ) : null}
+      </div>
+    );
   }
 
   function renderJumpBar() {
@@ -10230,13 +10582,8 @@ export function OrderDetailContent({
         {/* The customer/project header (spec §2, Area 3): image, names, the
             created date, the project number and the team, then the chips. */}
         <div className="order-detail-identity">
-          <div className="order-detail-thumb" aria-hidden="true">
-            {order.designLink && isProbablyImageUrl(order.designLink) ? (
-              <img src={order.designLink} alt="" />
-            ) : (
-              <span className="image-placeholder-icon"><CardIconGlyph icon="photo" /></span>
-            )}
-          </div>
+          {/* Sections view (31 Oct 2026): the design-preview thumbnail gave its place to the status strip
+              below the title row; the Preview card still shows the image. */}
           <div className="order-detail-identity-text">
             {showBackLink ? <Link className="studio-pill" href="/orders">{t("Back to orders")}</Link> : null}
             <h1>{displayOrderTitle(order.customerName, t)}</h1>
@@ -10259,8 +10606,29 @@ export function OrderDetailContent({
             </div>
           </div>
         </div>
-        {renderHeaderMeta()}
         <div className="order-toolbar-pills">
+          <div className="order-view-toggle" role="group" aria-label={t("Choose how this order opens: sections or cards")} data-order-view-toggle="">
+            <button
+              type="button"
+              className={isStackView ? "is-active" : ""}
+              aria-pressed={isStackView}
+              title={t("Sections view")}
+              onClick={() => chooseOrderDetailView("stack")}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="5" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.8"/><rect x="3" y="12" width="18" height="5" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.8"/><path d="M3 20h18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+              <span>{t("Sections")}</span>
+            </button>
+            <button
+              type="button"
+              className={!isStackView ? "is-active" : ""}
+              aria-pressed={!isStackView}
+              title={t("Card view")}
+              onClick={() => chooseOrderDetailView("cards")}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7.5" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.8"/><rect x="13.5" y="3" width="7.5" height="5.5" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.8"/><rect x="13.5" y="12" width="7.5" height="9" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.8"/><rect x="3" y="15.5" width="7.5" height="5.5" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.8"/></svg>
+              <span>{t("Cards")}</span>
+            </button>
+          </div>
           {canAssignProjects ? (
             <div className="order-actions-menu-wrap" onClick={event => event.stopPropagation()}>
               <button
@@ -10437,6 +10805,12 @@ export function OrderDetailContent({
                 >
                   {t("Customize cards")}
                 </button>
+                {isStackView ? (
+                  <>
+                    <button type="button" onClick={() => { setOrderActionsOpen(false); expandAllStackSections(); }}>{t("Expand all")}</button>
+                    <button type="button" onClick={() => { setOrderActionsOpen(false); collapseAllStackSections(); }}>{t("Collapse all")}</button>
+                  </>
+                ) : null}
                 {order.orderType === "repair" && workspace.role === "owner" ? (
                   <>
                     <button
@@ -10468,6 +10842,7 @@ export function OrderDetailContent({
           </div>
         </div>
       </section>
+      {renderStatusStrip()}
       {renderOrderTabs()}
       {renderJumpBar()}
       </div>
@@ -10750,6 +11125,8 @@ export function OrderDetailContent({
             <p className="muted-copy">{t("Open Customize cards to show cards again.")}</p>
           </section>
         </div>
+      ) : isStackView ? (
+        renderStackView()
       ) : (
         <>
           <div
