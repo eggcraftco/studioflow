@@ -9626,6 +9626,9 @@ export function OrderDetailContent({
       case "notes":
         return (
           <section key={cardId} className="card order-detail-card">
+            {/* Sections view: the section heading already names the notes, and the round "+" sat on the
+                heading's own "..." button; there the action is a "+ Add note field" line under the notes. */}
+            {isStackView ? null : (
             <div className="order-notes-card-head">
               {renderCardTitle(cardId)}
               {canInlineEditFullDetails && (
@@ -9640,6 +9643,7 @@ export function OrderDetailContent({
                 </button>
               )}
             </div>
+            )}
             <div className="app-card-panel app-notes-panel">
               {specialNoteSections.map(section => {
                 const isPrimary = section.id === PRIMARY_SPECIAL_NOTE_ID;
@@ -9705,6 +9709,16 @@ export function OrderDetailContent({
                     ))}
                   </ul>
                 </div>
+              ) : null}
+              {isStackView && canInlineEditFullDetails ? (
+                <button
+                  type="button"
+                  className="order-notes-stack-add"
+                  onClick={addPerOrderNoteSection}
+                  title={t("Add note field to this order only")}
+                >
+                  + {t("Add note field")}
+                </button>
               ) : null}
             </div>
           </section>

@@ -38228,35 +38228,35 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="schedule"] .ap
 html[data-studio-theme="dark"] .order-stack-body > .order-detail-card { background: transparent; }
 
 /* -- Property sections: a label above its field, two to a row in a reading width. -- */
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="shipping"], [data-stack-card="priority"]) > .order-detail-card > .app-card-panel {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) > .order-detail-card > .app-card-panel {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   column-gap: 24px;
   row-gap: 18px;
   align-items: end;
   max-width: 640px;
 }
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel > .app-value-row {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel > .app-value-row {
   gap: 8px;
   min-width: 0;
 }
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel > .app-value-row > span:first-child,
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel > .app-value-row > .app-inline-label,
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel > .app-value-row > .app-inline-label-input {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel > .app-value-row > span:first-child,
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel > .app-value-row > .app-inline-label,
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel > .app-value-row > .app-inline-label-input {
   font-size: 13.5px;
   font-weight: 500;
   letter-spacing: 0;
   line-height: 1.3;
   color: var(--sec-label);
 }
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-value-row > .app-inline-label > span {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-value-row > .app-inline-label > span {
   font: inherit;
   letter-spacing: inherit;
   color: inherit;
 }
 /* The field: a value to click, the input it turns into, a select. */
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > .app-value-pill,
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row input.app-value-input,
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > select.app-inline-select {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel .app-value-row > .app-value-pill,
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel .app-value-row input.app-value-input,
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel .app-value-row > select.app-inline-select {
   box-sizing: border-box;
   width: 100%;
   min-height: 42px;
@@ -38271,13 +38271,13 @@ html[data-studio-theme="dark"] .order-stack-body > .order-detail-card { backgrou
   line-height: 1.3;
   box-shadow: none;
 }
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-value-row > .app-value-button:not(:disabled):hover { border-color: rgba(66, 86, 214, 0.35); }
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row input.app-value-input:focus,
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > select.app-inline-select:focus {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-value-row > .app-value-button:not(:disabled):hover { border-color: rgba(66, 86, 214, 0.35); }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel .app-value-row input.app-value-input:focus,
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel .app-value-row > select.app-inline-select:focus {
   border-color: var(--sec-accent);
   box-shadow: 0 0 0 3px var(--sec-accent-soft);
 }
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > select.app-inline-select {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel .app-value-row > select.app-inline-select {
   appearance: none;
   padding-block: 0;
   padding-inline-end: 38px;
@@ -38287,17 +38287,17 @@ html[data-studio-theme="dark"] .order-stack-body > .order-detail-card { backgrou
   background-size: 16px;
   cursor: pointer;
 }
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > select.app-inline-select:dir(rtl) { background-position: left 13px center; }
-html[data-studio-theme="dark"] .order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > select.app-inline-select {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel .app-value-row > select.app-inline-select:dir(rtl) { background-position: left 13px center; }
+html[data-studio-theme="dark"] .order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel .app-value-row > select.app-inline-select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3a9b5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel .app-value-row > select.app-inline-select:disabled { cursor: default; opacity: 0.78; }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel .app-value-row > select.app-inline-select:disabled { cursor: default; opacity: 0.78; }
 /* Value colours in the palette. */
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) :is(.tone-negative, .tone-negative-soft, .tone-red) { color: var(--sec-red) !important; }
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) :is(.tone-positive, .tone-green) { color: var(--sec-green) !important; }
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .tone-yellow { color: var(--sec-amber) !important; }
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .tone-gray { color: var(--sec-label) !important; }
-.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"]) .app-card-panel > .app-card-divider { margin: 2px 0; background: var(--sec-rule); }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) :is(.tone-negative, .tone-negative-soft, .tone-red) { color: var(--sec-red) !important; }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) :is(.tone-positive, .tone-green) { color: var(--sec-green) !important; }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .tone-yellow { color: var(--sec-amber) !important; }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .tone-gray { color: var(--sec-label) !important; }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="delivery"], [data-stack-card="shipping"], [data-stack-card="priority"], [data-stack-card="status"], [data-stack-card="repairIntake"], [data-stack-card="materials"]) .app-card-panel > .app-card-divider { margin: 2px 0; background: var(--sec-rule); }
 
 /* -- Customer & Communication: name and design, a hairline, "Communication" with its fields, the channels as
       chips one field high, the customer notes as a field. -- */
@@ -38344,13 +38344,13 @@ html[data-studio-theme="dark"] .order-stack-body:is([data-stack-card="customer"]
   color: var(--sec-accent);
 }
 .order-stack-body[data-stack-card="customer"] .app-channel-pills button:disabled { opacity: 0.6; }
-.order-stack-body:is([data-stack-card="customer"]) .app-notes-section { gap: 8px; }
-.order-stack-body:is([data-stack-card="customer"]) .app-notes-heading {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="notes"]) .app-notes-section { gap: 8px; }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="notes"]) .app-notes-heading {
   font-size: 13.5px;
   font-weight: 500;
   color: var(--sec-label);
 }
-.order-stack-body:is([data-stack-card="customer"]) .app-notes-display {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="notes"]) .app-notes-display {
   min-height: 82px;
   padding: 12px 14px;
   border: 1px solid var(--sec-field-border);
@@ -38361,9 +38361,9 @@ html[data-studio-theme="dark"] .order-stack-body:is([data-stack-card="customer"]
   font-weight: 500;
   line-height: 1.45;
 }
-.order-stack-body:is([data-stack-card="customer"]) .app-notes-display:not(:disabled):hover { border-color: rgba(66, 86, 214, 0.35); }
-.order-stack-body:is([data-stack-card="customer"]) .app-notes-display.is-empty { color: var(--sec-label); font-weight: 400; }
-.order-stack-body:is([data-stack-card="customer"]) .app-notes-editor {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="notes"]) .app-notes-display:not(:disabled):hover { border-color: rgba(66, 86, 214, 0.35); }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="notes"]) .app-notes-display.is-empty { color: var(--sec-label); font-weight: 400; }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="notes"]) .app-notes-editor {
   gap: 0;
   min-height: 0;
   padding: 0;
@@ -38372,7 +38372,7 @@ html[data-studio-theme="dark"] .order-stack-body:is([data-stack-card="customer"]
   background: var(--sec-field-bg);
   box-shadow: 0 0 0 3px var(--sec-accent-soft);
 }
-.order-stack-body:is([data-stack-card="customer"]) .app-notes-editor > textarea.app-notes-textarea {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="notes"]) .app-notes-editor > textarea.app-notes-textarea {
   min-height: 92px;
   padding: 12px 14px;
   border: 0;
@@ -38382,8 +38382,8 @@ html[data-studio-theme="dark"] .order-stack-body:is([data-stack-card="customer"]
   font-weight: 500;
   line-height: 1.45;
 }
-.order-stack-body:is([data-stack-card="customer"]) .app-notes-actions { gap: 8px; padding: 0 10px 10px; }
-.order-stack-body:is([data-stack-card="customer"]) .app-notes-actions button {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="notes"]) .app-notes-actions { gap: 8px; padding: 0 10px 10px; }
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="notes"]) .app-notes-actions button {
   min-height: 38px;
   padding: 0 18px;
   border: 1px solid var(--sec-field-border);
@@ -38393,7 +38393,7 @@ html[data-studio-theme="dark"] .order-stack-body:is([data-stack-card="customer"]
   font-size: 14px;
   font-weight: 600;
 }
-.order-stack-body:is([data-stack-card="customer"]) .app-notes-actions button:last-child {
+.order-stack-body:is([data-stack-card="customer"], [data-stack-card="notes"]) .app-notes-actions button:last-child {
   border-color: transparent;
   background: var(--sec-accent-solid);
   color: #fff;
@@ -38613,4 +38613,468 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="summary"] .app
   .order-stack-body[data-stack-card="delivery"] .app-time-remaining b { font-size: 18px; }
   .order-stack-body[data-stack-card="shipping"] .app-card-panel > .shipping-stack-empty { padding: 14px 16px; }
   .order-stack-body[data-stack-card="summary"] .app-summary-value strong { font-size: 24px; }
+}
+
+/* -- Yes / No lines (Materials checks, Production Status toggles): the label at the start, the two-way switch
+      of "Full payment received?" at the end; two lines to a row. -- */
+.order-stack-body:is([data-stack-card="status"], [data-stack-card="materials"]) .app-card-panel > .app-value-row:has(> .finance-binary-row) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  align-self: center;
+}
+.order-stack-body:is([data-stack-card="status"], [data-stack-card="materials"]) .app-value-row > .finance-binary-row {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: auto;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--sec-field-bg);
+}
+.order-stack-body:is([data-stack-card="status"], [data-stack-card="materials"]) .app-value-row > .finance-binary-row > button {
+  width: auto;
+  min-width: 56px;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sec-label);
+  font-size: 13.5px;
+  font-weight: 600;
+  opacity: 1;
+}
+.order-stack-body:is([data-stack-card="status"], [data-stack-card="materials"]) .app-value-row > .finance-binary-row > button:disabled { cursor: default; }
+.order-stack-body:is([data-stack-card="status"], [data-stack-card="materials"]) .app-value-row > .finance-binary-row > button.is-selected {
+  border-color: var(--sec-green-border);
+  background: var(--sec-green-bg);
+  color: var(--sec-green);
+}
+.order-stack-body:is([data-stack-card="status"], [data-stack-card="materials"]) .app-value-row > .finance-binary-row > button.is-no {
+  border-color: var(--sec-red-border);
+  background: var(--sec-red-bg);
+  color: var(--sec-red);
+}
+
+/* -- Production Status: the stage as the tinted result box (a link to the board), the steps as label-above
+      selects coloured by their status. -- */
+.order-stack-body[data-stack-card="status"] .app-card-panel > .order-production-stage {
+  gap: 4px;
+  margin: 0;
+  padding: 15px 18px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="status"] .app-card-panel > .order-production-stage:hover { border-color: var(--sec-field-border); }
+.order-stack-body[data-stack-card="status"] .app-card-panel > .order-production-stage.is-blocked { border-color: var(--sec-red-border); background: var(--sec-red-bg); }
+.order-stack-body[data-stack-card="status"] .order-production-stage-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="status"] .order-production-stage-value {
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="status"] .order-production-stage-value em {
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: var(--sec-field-bg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="status"] .order-production-stage-blocker { font-size: 13.5px; font-weight: 600; color: var(--sec-red); }
+.order-stack-body[data-stack-card="status"] .app-card-panel .app-value-row > select.app-inline-select-status { font-weight: 600; }
+.order-stack-body[data-stack-card="status"] .app-card-panel .app-value-row > select.app-inline-select-status.status-green { border-color: var(--sec-green-border); background-color: var(--sec-green-bg); color: var(--sec-green); }
+.order-stack-body[data-stack-card="status"] .app-card-panel .app-value-row > select.app-inline-select-status.status-red { border-color: var(--sec-red-border); background-color: var(--sec-red-bg); color: var(--sec-red); }
+.order-stack-body[data-stack-card="status"] .app-card-panel .app-value-row > select.app-inline-select-status.status-orange { border-color: var(--sec-amber-border); background-color: var(--sec-amber-bg); color: var(--sec-amber); }
+.order-stack-body[data-stack-card="status"] .app-card-panel .app-value-row > select.app-inline-select-status.status-gray { color: var(--sec-label); }
+
+/* -- Repair Intake & Item: the item's fields two to a row; a hairline; condition, requested work and the
+      customer's instructions as label-above fields that open into a text box; a hairline; "Intake Photos" with
+      "Add photos" at its end; a hairline; received and by whom as plain lines. -- */
+.order-stack-body[data-stack-card="repairIntake"] .app-card-panel > .repair-intake-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.order-stack-body[data-stack-card="repairIntake"] .app-card-panel > .app-value-row + .repair-intake-block,
+.order-stack-body[data-stack-card="repairIntake"] .app-card-panel > .repair-intake-block:has(> .repair-intake-photos-head),
+.order-stack-body[data-stack-card="repairIntake"] .app-card-panel > .repair-intake-footer {
+  padding-top: 18px;
+  border-top: 1px solid var(--sec-rule);
+}
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-block-title {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-photos-head > .repair-intake-block-title {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-inline-display,
+.order-stack-body[data-stack-card="repairIntake"] textarea.repair-intake-inline-editor {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 42px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background: var(--sec-field-bg);
+  color: var(--sec-text);
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-inline-display { justify-content: center; }
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-inline-display:hover:not(:disabled) { border-color: rgba(66, 86, 214, 0.35); background: var(--sec-field-bg); }
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-inline-empty { opacity: 1; color: var(--sec-label); }
+.order-stack-body[data-stack-card="repairIntake"] textarea.repair-intake-inline-editor {
+  min-height: 92px;
+  border-color: var(--sec-accent);
+  box-shadow: 0 0 0 3px var(--sec-accent-soft);
+  outline: none;
+}
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-photo-add {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--sec-link);
+}
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-photos { gap: 10px; width: 100%; max-width: 380px; }
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-photo {
+  border-color: var(--sec-field-border);
+  border-radius: 10px;
+  background: var(--sec-field-bg);
+}
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-block > .repair-intake-instructions { font-size: 14.5px; font-weight: 500; color: var(--sec-label); }
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-footer { gap: 12px; }
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-footer .repair-intake-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-footer .repair-intake-row > span {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="repairIntake"] .repair-intake-footer .repair-intake-row > strong {
+  font-size: 15px;
+  font-weight: 700;
+  text-align: end;
+  color: var(--sec-text);
+}
+
+/* -- Materials & Inventory: the checks as Yes / No lines two to a row; a hairline; the notes field; a
+      hairline; "Stock reserved for this order" with its links at the end, the empty state as a quiet line. -- */
+.order-stack-body[data-stack-card="materials"] .order-stock-block { gap: 12px; }
+.order-stack-body[data-stack-card="materials"] .order-stock-head { gap: 14px; flex-wrap: wrap; }
+.order-stack-body[data-stack-card="materials"] .order-stock-title {
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0;
+  opacity: 1;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="materials"] .order-stock-actions { gap: 16px; }
+.order-stack-body[data-stack-card="materials"] .inventory-link {
+  padding: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--sec-link);
+}
+.order-stack-body[data-stack-card="materials"] .inventory-link.inventory-link-danger { color: var(--sec-red); }
+.order-stack-body[data-stack-card="materials"] .order-stock-block > .app-inline-note,
+.order-stack-body[data-stack-card="materials"] .app-card-panel > .app-inline-note {
+  margin: 0;
+  padding: 18px 22px;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="materials"] .order-stock-list { gap: 0; }
+.order-stack-body[data-stack-card="materials"] .order-stock-list li {
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--sec-rule);
+}
+.order-stack-body[data-stack-card="materials"] .order-stock-name strong { font-size: 14.5px; font-weight: 600; color: var(--sec-text); }
+.order-stack-body[data-stack-card="materials"] .order-stock-cost { font-size: 15px; font-weight: 700; color: var(--sec-text); }
+.order-stack-body[data-stack-card="materials"] .order-stock-total {
+  padding: 15px 18px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+  font-size: 14.5px;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="materials"] .app-card-panel > p.muted-copy { margin: 0; font-size: 14px; color: var(--sec-label); }
+
+/* -- To Do: Open | Overdue | Done as figures with hairline separators (Work Time's top line); the task field
+      with a solid "+" beside it; Assign, Priority and Due on one line, labels above; the filters as the designs'
+      segmented control; tasks as light rows; nothing to show as one quiet line. -- */
+.order-stack-body[data-stack-card="todo"] > .order-detail-card > .app-card-panel { gap: 18px; }
+.order-stack-body[data-stack-card="todo"] .app-todo-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-stat-card {
+  gap: 4px;
+  min-height: 0;
+  padding: 0 22px;
+  border: 0;
+  border-inline-start: 1px solid var(--sec-rule);
+  border-radius: 0;
+  background: none;
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-stat-card:first-child { padding-inline-start: 0; border-inline-start: 0; }
+.order-stack-body[data-stack-card="todo"] .app-todo-stat-card > span { font-size: 13.5px; font-weight: 500; color: var(--sec-label); }
+.order-stack-body[data-stack-card="todo"] .app-todo-stat-card > strong {
+  font-size: 27px;
+  font-weight: 800;
+  line-height: 1.05;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-stat-card.tone-blue,
+.order-stack-body[data-stack-card="todo"] .app-todo-stat-card.tone-blue > strong { color: var(--sec-accent) !important; }
+.order-stack-body[data-stack-card="todo"] .app-todo-stat-card.tone-green,
+.order-stack-body[data-stack-card="todo"] .app-todo-stat-card.tone-green > strong { color: var(--sec-green) !important; }
+.order-stack-body[data-stack-card="todo"] .app-todo-stat-card.tone-gray,
+.order-stack-body[data-stack-card="todo"] .app-todo-stat-card.tone-gray > strong { color: var(--sec-text) !important; }
+.order-stack-body[data-stack-card="todo"] .app-todo-add-panel {
+  gap: 16px;
+  padding: 18px 0 0;
+  border-top: 1px solid var(--sec-rule);
+  border-radius: 0;
+  background: none;
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-add-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-panel :is(input, select).input,
+.order-stack-body[data-stack-card="todo"] .app-todo-panel .app-todo-controls select {
+  box-sizing: border-box;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background-color: var(--sec-field-bg);
+  color: var(--sec-text);
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-panel :is(input, select).input:focus,
+.order-stack-body[data-stack-card="todo"] .app-todo-panel .app-todo-controls select:focus {
+  outline: none;
+  border-color: var(--sec-accent);
+  box-shadow: 0 0 0 3px var(--sec-accent-soft);
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-add-row > button {
+  min-width: 48px;
+  min-height: 42px;
+  padding: 0 16px;
+  border-radius: 10px;
+  background: var(--sec-accent-solid);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-add-row > button:disabled { opacity: 0.45; }
+.order-stack-body[data-stack-card="todo"] .app-todo-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px 20px;
+  font-size: 13.5px;
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-controls > span {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-controls > span > strong {
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-controls > span > b {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0;
+  background: none;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sec-text);
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-panel .app-todo-controls select {
+  width: auto;
+  min-width: 150px;
+  appearance: none;
+  padding-inline-end: 38px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23626b7c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 13px center;
+  background-size: 16px;
+  cursor: pointer;
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-panel .app-todo-controls select:dir(rtl) { background-position: left 13px center; }
+html[data-studio-theme="dark"] .order-stack-body[data-stack-card="todo"] .app-todo-panel .app-todo-controls select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a3a9b5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+/* Due: the designs' switch, level with the fields beside it. */
+.order-stack-body[data-stack-card="todo"] .app-todo-controls .todo-switch { min-height: 42px; }
+.order-stack-body[data-stack-card="todo"] .todo-switch i { width: 46px; height: 28px; background: var(--sec-field-border); }
+.order-stack-body[data-stack-card="todo"] .todo-switch i::after { top: 3px; inset-inline-start: 3px; width: 22px; height: 22px; }
+.order-stack-body[data-stack-card="todo"] .todo-switch input:checked + i { background: var(--sec-green); }
+.order-stack-body[data-stack-card="todo"] .todo-switch input:checked + i::after { transform: translateX(18px); }
+.order-stack-body[data-stack-card="todo"] .todo-switch input:checked + i:dir(rtl)::after { transform: translateX(-18px); }
+.order-stack-body[data-stack-card="todo"] .todo-switch input:disabled + i { opacity: 0.5; }
+.order-stack-body[data-stack-card="todo"] .app-todo-panel input.app-todo-date-input { width: 170px; }
+/* Filters: the segmented control. */
+.order-stack-body[data-stack-card="todo"] .app-todo-filters {
+  align-self: start;
+  justify-self: start;
+  box-sizing: border-box;
+  max-width: 100%;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--sec-field-border);
+  border-radius: 10px;
+  background: var(--sec-field-bg);
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-filters button {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--sec-label);
+  font-size: 14px;
+  font-weight: 600;
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-filters button.is-selected {
+  border-color: var(--sec-field-border);
+  background: var(--sec-surface);
+  color: var(--sec-accent);
+  box-shadow: 0 1px 2px rgba(23, 25, 35, 0.06);
+}
+/* Nothing here: one quiet line. */
+.order-stack-body[data-stack-card="todo"] .app-todo-empty {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 0;
+  padding: 18px 22px;
+  border-radius: 12px;
+  background: var(--sec-result-bg);
+  text-align: start;
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-empty > span {
+  width: auto;
+  height: auto;
+  border: 0;
+  font-size: 17px;
+  color: var(--sec-accent);
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-empty > strong { font-size: 14px; font-weight: 650; color: var(--sec-text); }
+/* Tasks: light rows. */
+.order-stack-body[data-stack-card="todo"] .app-todo-task-list { gap: 8px; }
+.order-stack-body[data-stack-card="todo"] .app-todo-task-row {
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--sec-result-bg);
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-task-row.is-overdue { border-color: var(--sec-red-border); background: var(--sec-red-bg); }
+.order-stack-body[data-stack-card="todo"] .app-todo-task-row.is-todo-drag-over { border-color: var(--sec-accent); background: var(--sec-accent-soft); }
+.order-stack-body[data-stack-card="todo"] .app-todo-check { width: 22px; height: 22px; border-width: 2px; border-color: var(--sec-label); color: var(--sec-green); }
+.order-stack-body[data-stack-card="todo"] .app-todo-task-row.is-done .app-todo-check { border-color: var(--sec-green-border); background: var(--sec-green-bg); }
+.order-stack-body[data-stack-card="todo"] .app-todo-task-title { font-size: 14.5px; font-weight: 600; line-height: 1.3; color: var(--sec-text); }
+.order-stack-body[data-stack-card="todo"] .app-todo-task-row.is-done .app-todo-task-title { color: var(--sec-label); }
+.order-stack-body[data-stack-card="todo"] .app-todo-task-menu-button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--sec-label);
+  font-size: 12px;
+}
+.order-stack-body[data-stack-card="todo"] .app-todo-task-menu-button:hover { background: var(--sec-field-bg); color: var(--sec-text); }
+.order-stack-body[data-stack-card="todo"] .app-todo-meta { gap: 8px 14px; padding: 0; padding-inline-start: 31px; }
+.order-stack-body[data-stack-card="todo"] .app-todo-meta-item { font-size: 13px; font-weight: 500; color: var(--sec-label); }
+.order-stack-body[data-stack-card="todo"] .app-todo-meta-item.due-active { color: var(--sec-amber); }
+.order-stack-body[data-stack-card="todo"] .app-todo-meta-item.due-overdue { color: var(--sec-red); }
+.order-stack-body[data-stack-card="todo"] .app-todo-meta-pill { padding: 4px 9px; border-radius: 8px; font-size: 12.5px; font-weight: 600; }
+.order-stack-body[data-stack-card="todo"] .app-todo-meta-pill.priority-normal { background: var(--sec-accent-soft); color: var(--sec-accent); }
+.order-stack-body[data-stack-card="todo"] .app-todo-meta-pill.priority-low { background: var(--sec-field-bg); color: var(--sec-label); }
+.order-stack-body[data-stack-card="todo"] .app-todo-meta-pill.priority-high { background: var(--sec-amber-bg); color: var(--sec-amber); }
+.order-stack-body[data-stack-card="todo"] .app-todo-meta-pill.priority-urgent { background: var(--sec-red-bg); color: var(--sec-red); }
+.order-stack-body[data-stack-card="todo"] .app-todo-task-note { margin: 0; margin-inline-start: 31px; font-size: 13px; font-weight: 400; color: var(--sec-label); }
+.order-stack-body[data-stack-card="todo"] .app-card-panel > :is(.layout-status, .layout-error).finance-inline-message { margin: 0; font-size: 13.5px; }
+
+/* -- Notes: the notes as fields (label above), the per-order extra fields' titles as labels, "+ Add note field"
+      as a link under them; notes from the Notes app as a list of links. -- */
+.order-stack-body[data-stack-card="notes"] > .order-detail-card > .app-card-panel { gap: 18px; }
+.order-stack-body[data-stack-card="notes"] .order-notes-section { gap: 8px; }
+.order-stack-body[data-stack-card="notes"] .app-notes-heading:empty { display: none; }
+.order-stack-body[data-stack-card="notes"] .order-notes-extra-title {
+  padding: 2px 6px;
+  margin-inline-start: -6px;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--sec-label);
+}
+.order-stack-body[data-stack-card="notes"] .order-notes-extra-remove { color: var(--sec-label); }
+.order-stack-body[data-stack-card="notes"] .order-notes-extra-remove:hover { background: var(--sec-red-bg); color: var(--sec-red); }
+.order-stack-body[data-stack-card="notes"] .order-notes-stack-add {
+  justify-self: start;
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--sec-link);
+  cursor: pointer;
+}
+.order-stack-body[data-stack-card="notes"] .order-notes-stack-add:hover { text-decoration: underline; }
+.order-stack-body[data-stack-card="notes"] .etsy-note-folded { font-size: 13px; color: var(--sec-label); }
+
+@media (max-width: 640px) {
+  .order-stack-body[data-stack-card="todo"] .app-todo-stat-card { padding-inline: 16px; }
+  .order-stack-body[data-stack-card="todo"] .app-todo-stat-card > strong { font-size: 24px; }
+  .order-stack-body[data-stack-card="todo"] .app-todo-empty,
+  .order-stack-body[data-stack-card="materials"] .order-stock-block > .app-inline-note { padding: 14px 16px; }
+  .order-stack-body[data-stack-card="todo"] .app-todo-filters { overflow-x: auto; }
 }
