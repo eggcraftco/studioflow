@@ -7,6 +7,11 @@ import type { StudioLanguage } from "./language";
  * reused, not redefined. "{…}" parts are filled in after t(). The Arabic rows are plain text; dir=rtl mirrors.
  */
 export const ORDER_STACK_VIEW_TRANSLATIONS: Record<string, Partial<Record<StudioLanguage, string>>> = {
+  "Start timer": {
+    "Türkçe": "Başlat", "Deutsch": "Starten", "Français": "Démarrer", "Italiano": "Avvia",
+    "Español (Spanish)": "Iniciar", "Português": "Iniciar", "Русский (Russian)": "Запустить",
+    "日本語 (Japanese)": "開始", "中文 (Chinese)": "开始", "العربية (Arabic)": "ابدأ", "हिन्दी (Hindi)": "शुरू करें"
+  },
   "Sections": {
     "Türkçe": "Bölümler", "Deutsch": "Abschnitte", "Français": "Sections", "Italiano": "Sezioni",
     "Español (Spanish)": "Secciones", "Português": "Seções", "Русский (Russian)": "Разделы",

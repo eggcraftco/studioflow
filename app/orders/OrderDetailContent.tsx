@@ -8781,7 +8781,8 @@ export function OrderDetailContent({
               </button>
             ) : (
               <button type="button" disabled={Boolean(savingWorkTimeAction)} onClick={startWorkTimer}>
-                {t("Start")}
+                {/* Its own key: "Start" alone is the start of a date range ("Başlangıç"), not the verb on a timer. */}
+                {t("Start timer")}
               </button>
             )}
           </div>
