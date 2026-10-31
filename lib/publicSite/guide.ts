@@ -235,7 +235,7 @@ const TREE_EN: GuideNode[] = [
         "The status strip under the order's name is shown in both views: the production steps with the current one, the delivery countdown with the due date, the order's value with the final profit, and what is paid against what remains. It takes the place of the design-preview thumbnail; the Preview card still shows the image.",
         "Reorder sections with the heading's ... menu (Up, Down, Move to top, Move to bottom) or by dragging the handle on a wide screen. The section order is the same order your phone's list uses, and it syncs with your other devices like the card layout.",
         "Colours work the same way in both views: pick a colour in the heading's ... menu and the heading and its body take that tint with the colour's meaning label. Hidden cards stay hidden in both views (Customize cards).",
-        "Actions ▸ Expand all / Collapse all opens or closes every section at once. Which sections you left open is remembered on this device only."
+        "The Expand all / Collapse all button beside the Sections | Cards control (on a phone, the small arrows icon) opens or closes every section at once; the Actions menu has the same two entries. Every order opens with all its sections closed."
       ] },
       { kind: "sub", text: "Export & invoice" },
       { kind: "bullets", items: [
@@ -1887,7 +1887,7 @@ const TREE_TR: GuideNode[] = [
         "Sipariş adının altındaki durum şeridi her iki görünümde de görünür: üretim adımları ve şu anki adım, teslime kalan süre ve teslim tarihi, sipariş değeri ve nihai kâr, ödenen ile kalan tutar. Tasarım önizleme küçük resminin yerini aldı; Preview kartı görseli göstermeye devam eder.",
         "Bölümleri başlıktaki ... menüsüyle (Yukarı, Aşağı, En üste taşı, En alta taşı) ya da geniş ekranda tutamacı sürükleyerek sıralayın. Bölüm sırası telefon listesinin kullandığı sırayla aynıdır ve kart düzeni gibi diğer cihazlarınızla eşitlenir.",
         "Renkler iki görünümde de aynı çalışır: başlığın ... menüsünden bir renk seçin; başlık ve gövdesi o tonu ve rengin anlam etiketini alır. Gizlenen kartlar iki görünümde de gizli kalır (Customize cards).",
-        "Actions ▸ Expand all / Collapse all tüm bölümleri tek seferde açar ya da kapatır. Açık bıraktığınız bölümler yalnız bu cihazda hatırlanır."
+        "Sections | Cards anahtarının yanındaki Expand all / Collapse all (Tümünü aç / Tümünü kapat) düğmesi (telefonda küçük ok simgesi) tüm bölümleri tek seferde açar ya da kapatır; Actions menüsünde de aynı iki seçenek var. Her sipariş tüm bölümleri kapalı açılır."
       ] },
       { kind: "sub", text: "Dışa aktarma & fatura" },
       { kind: "bullets", items: [
