@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useCondensedHeader } from "@/lib/studioflow/useCondensedHeader";
 import { doc, onSnapshot, setDoc } from "firebase/firestore";
 import OrderPaymentLinks from "@/components/OrderPaymentLinks";
@@ -3379,6 +3379,23 @@ export function OrderDetailContent({
   function renderCardTitle(cardId: OrderDetailCardId) {
     return (
       <CardTitle icon={cardIcon(cardId)} title={cardLabel(cardId)} iconSymbol={cardId === "financial" ? orderIconSymbol(orderCurrencyRef, moneySettings) : undefined} />
+    );
+  }
+
+  /** Sections view, Financial (owner's design, 31 Oct 2026): the money body reads in groups — paid and remaining
+   * side by side, the costs and the VAT as label-above fields two to a row. In the card grid the rows stay a flat
+   * list (a fragment adds nothing to the DOM). */
+  function financeStackGroup(name: "paid" | "costs" | "vat", children: ReactNode) {
+    return isStackView ? <div className={`finance-stack-group is-${name}`}>{children}</div> : <>{children}</>;
+  }
+
+  /** "+ Spending": under the spending rows in the card; in the Sections view beside Cost (Base), as designed. */
+  function renderAddSpendingButton() {
+    if (!canInlineEditFinance) return null;
+    return (
+      <button type="button" className="finance-heading-add" onClick={() => addOrderHeading("orderExpenseItemsJSON", orderExpenseHeadings(), "Spending")}>
+        {t("+ Spending")}
+      </button>
     );
   }
 
@@ -7847,6 +7864,7 @@ export function OrderDetailContent({
                 <div className="app-card-panel app-financial-panel">
                   {canSeeAdvancedFinance ? (
                   <>
+                    {financeStackGroup("paid", <>
                     <FinanceInlineRow
                       label={t("Paid")}
                       displayValue={orderValueMoney(order.paidAmount, hideNumbers)}
@@ -7898,17 +7916,20 @@ export function OrderDetailContent({
                         );
                       });
                     })()}
+                    </>)}
                     {canInlineEditFinance ? (
                       <button type="button" className="finance-heading-add" onClick={() => addOrderHeading("orderRemainingItemsJSON", orderRemainingHeadings(), "Remaining")}>
                         {t("+ Remaining")}
                       </button>
                     ) : null}
+                    {isStackView ? <div className="app-card-divider" /> : null}
                     <FinancePaymentReceivedRow
                       remainingAmount={order.remainingAmount}
                       disabled={!canInlineEditFinance || order.remainingAmount <= 0}
                       saving={savingFinanceField === "Full payment"}
                       onSave={() => saveFinancePatch({ fullPaymentReceived: true }, "Full payment")}
                     />
+                    {isStackView ? <div className="app-card-divider" /> : null}
                     <div className="finance-payments-ledger">
                       <div className="finance-payments-head">
                         <span className="finance-payments-title">
@@ -8051,6 +8072,7 @@ export function OrderDetailContent({
                       onSave={value => saveFinancePatch({ paymentMethod: String(value) }, "Payment method")}
                     />
                     <div className="app-card-divider" />
+                    {financeStackGroup("costs", <>
                     <FinanceInlineRow
                       label={orderBaseCostLabel(order, cardLabels.financialBaseCostLabel)}
                       labelRaw={orderBaseCostLabel(order, cardLabels.financialBaseCostLabel)}
@@ -8062,6 +8084,7 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "Cost (Base)"}
                       onSave={value => saveMoneyFinanceValue("watchPurchasePrice", value, "Cost (Base)")}
                     />
+                    {isStackView ? renderAddSpendingButton() : null}
                     {(() => {
                       const expenseHeadings = orderExpenseHeadings();
                       return expenseHeadings.map(item => {
@@ -8083,11 +8106,7 @@ export function OrderDetailContent({
                         );
                       });
                     })()}
-                    {canInlineEditFinance ? (
-                      <button type="button" className="finance-heading-add" onClick={() => addOrderHeading("orderExpenseItemsJSON", orderExpenseHeadings(), "Spending")}>
-                        {t("+ Spending")}
-                      </button>
-                    ) : null}
+                    {isStackView ? null : renderAddSpendingButton()}
                     <FinanceInlineRow
                       label={platformFeeLabel(orderFinance, t, moneySettings)}
                       displayValue={orderValueMoney(orderFinance.platformFee, hideNumbers)}
@@ -8107,6 +8126,7 @@ export function OrderDetailContent({
                       onEditStart={noteDeliveryCostEditStart}
                       onSave={(value, meta) => (channelShipping?.manualEditPath ? saveDeliveryCostManual(value, meta) : saveMoneyFinanceValue("deliveryCost", value, "Shipping Cost"))}
                     />
+                    </>)}
                     {channelShipping?.hasRecord ? (
                       // K5: what the figure is (the channel's, the seller's, or waiting for review) and the explicit actions.
                       <div className="muted-copy" data-testid="k5-shipping-state" style={{ margin: "2px 0 6px", fontSize: 12 }}>
@@ -8141,6 +8161,7 @@ export function OrderDetailContent({
                       </div>
                     ) : null}
                     <div className="app-card-divider" />
+                    {financeStackGroup("vat", <>
                     <FinanceInlineRow
                       label={t("VAT Rule")}
                       displayValue={order.taxType || "-"}
@@ -8160,6 +8181,7 @@ export function OrderDetailContent({
                       saving={savingFinanceField === "VAT Rate (%)"}
                       onSave={value => saveMoneyFinanceValue("taxRate", value, "VAT Rate (%)")}
                     />
+                    </>)}
                     <DetailRow label={t("VAT Amount")} value={orderValueMoney(orderFinance.vatDue, hideNumbers)} tone="negative-soft" />
                     <div className="app-card-divider" />
                     <div className="detail-row order-value-row">
@@ -10420,6 +10442,7 @@ export function OrderDetailContent({
     const dragging = stackDragCardId === cardId;
     const cue = stackDropCue?.cardId === cardId ? stackDropCue.placement : null;
     const canDrag = canMoveResizeCards && !isNarrowLayout;
+    const currencySign = cardId === "financial" ? orderIconSymbol(orderCurrencyRef, moneySettings) : "";
     return (
       <div
         key={cardId}
@@ -10488,9 +10511,14 @@ export function OrderDetailContent({
               <i /><i /><i />
             </span>
           ) : null}
-          <span className="order-stack-icon" aria-hidden="true">
-            <CardIconGlyph icon={cardIcon(cardId)} symbol={cardId === "financial" ? orderIconSymbol(orderCurrencyRef, moneySettings) : undefined} />
-          </span>
+          {cardId === "financial" ? (
+            // The owner's design: the currency sign itself on the tile, not the card grid's filled coin.
+            <span className={["order-stack-icon", "is-symbol", currencySign.length > 1 ? "is-long" : ""].filter(Boolean).join(" ")} aria-hidden="true">{currencySign}</span>
+          ) : (
+            <span className="order-stack-icon" aria-hidden="true">
+              <CardIconGlyph icon={cardIcon(cardId)} />
+            </span>
+          )}
           <span className="order-stack-title">{cardLabel(cardId)}</span>
           <span className="order-stack-summary">{summary}</span>
           {colorMeanings[profileColor] ? (

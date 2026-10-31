@@ -37637,3 +37637,245 @@ html[data-studio-theme="dark"] .order-status-segment i { background: rgba(255, 2
 }
 .order-status-segment.is-blocked i { background: #ef4444; }
 .order-status-segment.is-blocked small { color: #c0352b; }
+
+/* ==== Financial section: the owner's design (31 Oct) ====
+   Groups divided by hairlines: Paid | Remaining side by side (label left, field at the column's end); "Full payment
+   received?" and "Payment method" as label-left lines with the control at the end; the costs and the VAT as
+   label-above fields two to a row ("+ Spending" beside Cost); VAT amount and order value as plain lines; the profit
+   in its own tinted box. Fields are as wide as what they hold, the body a comfortable reading width. Colours are
+   the design's own. Only the Sections view: the card grid keeps its rows. */
+.order-stack-body[data-stack-card="financial"] {
+  --fin-label: #626b7c;
+  --fin-text: #20232e;
+  --fin-field-bg: #f6f7f9;
+  --fin-field-border: #e4e7ee;
+  --fin-green: #168046;
+  --fin-green-bg: #eaf8ef;
+  --fin-green-border: #b0d4bc;
+  --fin-red: #d6424c;
+  --fin-red-bg: rgba(214, 66, 76, 0.08);
+  --fin-red-border: rgba(214, 66, 76, 0.3);
+  --fin-link: #2d5bd7;
+  --fin-rule: #e4e7ee;
+  --fin-result-bg: #f9fafc;
+  padding: 16px 20px 20px;
+}
+html[data-studio-theme="dark"] .order-stack-body[data-stack-card="financial"] {
+  --fin-label: rgba(255, 255, 255, 0.6);
+  --fin-text: rgba(255, 255, 255, 0.92);
+  --fin-field-bg: rgba(255, 255, 255, 0.06);
+  --fin-field-border: rgba(255, 255, 255, 0.12);
+  --fin-green: #4ade80;
+  --fin-green-bg: rgba(74, 222, 128, 0.12);
+  --fin-green-border: rgba(74, 222, 128, 0.32);
+  --fin-red: #f87171;
+  --fin-red-bg: rgba(248, 113, 113, 0.12);
+  --fin-red-border: rgba(248, 113, 113, 0.32);
+  --fin-link: #8aa8ff;
+  --fin-rule: rgba(255, 255, 255, 0.1);
+  --fin-result-bg: rgba(255, 255, 255, 0.05);
+}
+.order-stack-body[data-stack-card="financial"] > .order-detail-card > .app-card-panel {
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: 16px;
+  max-width: 600px;
+}
+.order-stack-body[data-stack-card="financial"] .app-card-panel > .app-card-divider { margin: 2px 0; background: var(--fin-rule); }
+
+/* A line: label at the start, its control at the end. */
+.order-stack-body[data-stack-card="financial"] .app-card-panel .detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+.order-stack-body[data-stack-card="financial"] .app-card-panel .detail-row > span:first-child,
+.order-stack-body[data-stack-card="financial"] .app-card-panel .detail-row > .app-inline-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.3;
+  color: var(--fin-label);
+  justify-self: auto;
+}
+/* A renamable label (Cost (Base), added headings) wraps its text in a span the card's ".detail-row span" styles. */
+.order-stack-body[data-stack-card="financial"] .app-card-panel .detail-row > .app-inline-label > span {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+
+/* The field. */
+.order-stack-body[data-stack-card="financial"] .finance-value-pill,
+.order-stack-body[data-stack-card="financial"] .finance-inline-input {
+  min-height: 39px;
+  padding: 0 13px;
+  border: 1px solid var(--fin-field-border);
+  border-radius: 10px;
+  background: var(--fin-field-bg);
+  color: var(--fin-text);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+.order-stack-body[data-stack-card="financial"] .finance-value-pill:not(:disabled):hover { border-color: rgba(45, 91, 215, 0.35); }
+.order-stack-body[data-stack-card="financial"] .tone-positive { color: var(--fin-green) !important; }
+.order-stack-body[data-stack-card="financial"] .tone-negative,
+.order-stack-body[data-stack-card="financial"] .tone-negative-soft { color: var(--fin-red) !important; }
+.order-stack-body[data-stack-card="financial"] .detail-row > .finance-value-pill,
+.order-stack-body[data-stack-card="financial"] .detail-row > .finance-inline-form,
+.order-stack-body[data-stack-card="financial"] .detail-row > select.finance-inline-input,
+.order-stack-body[data-stack-card="financial"] .finance-value-wrap > .finance-value-pill,
+.order-stack-body[data-stack-card="financial"] .finance-value-wrap > .finance-inline-form,
+.order-stack-body[data-stack-card="financial"] .finance-value-wrap > select.finance-inline-input {
+  flex: 0 0 134px;
+  width: 134px;
+}
+.order-stack-body[data-stack-card="financial"] .detail-row > .finance-value-wrap { flex: 0 0 auto; }
+.order-stack-body[data-stack-card="financial"] .finance-inline-form .finance-inline-input { width: 100%; }
+
+/* Read-only figures (VAT amount, order value) are plain text, not boxes. */
+.order-stack-body[data-stack-card="financial"] .app-card-panel .detail-row > strong {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--fin-label);
+}
+
+/* Groups. */
+.order-stack-body[data-stack-card="financial"] .finance-stack-group {
+  display: grid;
+  column-gap: 24px;
+  row-gap: 14px;
+  min-width: 0;
+}
+.order-stack-body[data-stack-card="financial"] .finance-stack-group.is-paid { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.order-stack-body[data-stack-card="financial"] .finance-stack-group.is-costs,
+.order-stack-body[data-stack-card="financial"] .finance-stack-group.is-vat {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: end;
+}
+/* Costs and VAT: label above, field below. */
+.order-stack-body[data-stack-card="financial"] .finance-stack-group.is-costs .detail-row,
+.order-stack-body[data-stack-card="financial"] .finance-stack-group.is-vat .detail-row {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 7px;
+}
+.order-stack-body[data-stack-card="financial"] .finance-stack-group:is(.is-costs, .is-vat) .detail-row > .finance-value-pill,
+.order-stack-body[data-stack-card="financial"] .finance-stack-group:is(.is-costs, .is-vat) .detail-row > .finance-inline-form,
+.order-stack-body[data-stack-card="financial"] .finance-stack-group:is(.is-costs, .is-vat) .detail-row > select.finance-inline-input {
+  flex: none;
+  width: 100%;
+  max-width: 200px;
+}
+.order-stack-body[data-stack-card="financial"] .finance-stack-group:is(.is-costs, .is-vat) .detail-row > .finance-value-wrap {
+  width: 100%;
+  max-width: 226px;
+}
+.order-stack-body[data-stack-card="financial"] .finance-stack-group:is(.is-costs, .is-vat) .finance-value-wrap > :is(.finance-value-pill, .finance-inline-form, select.finance-inline-input) {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+/* "+ Remaining", "+ Spending". */
+.order-stack-body[data-stack-card="financial"] .finance-heading-add {
+  padding: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--fin-link);
+}
+.order-stack-body[data-stack-card="financial"] .finance-stack-group.is-costs > .finance-heading-add {
+  justify-self: end;
+  align-self: end;
+  margin-bottom: 10px;
+}
+
+/* Full payment received? — a two-way switch at the end of the line. */
+.order-stack-body[data-stack-card="financial"] .finance-binary-row {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--fin-field-bg);
+}
+.order-stack-body[data-stack-card="financial"] .finance-binary-row button {
+  width: auto;
+  min-width: 56px;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fin-label);
+  font-size: 13.5px;
+  font-weight: 600;
+  opacity: 1;
+}
+.order-stack-body[data-stack-card="financial"] .finance-binary-row button:disabled { cursor: default; }
+.order-stack-body[data-stack-card="financial"] .finance-binary-row button.is-selected {
+  border-color: var(--fin-green-border);
+  background: var(--fin-green-bg);
+  color: var(--fin-green);
+}
+.order-stack-body[data-stack-card="financial"] .finance-binary-row button.is-no {
+  border-color: var(--fin-red-border);
+  background: var(--fin-red-bg);
+  color: var(--fin-red);
+}
+
+/* Payments. */
+.order-stack-body[data-stack-card="financial"] .finance-payments-ledger { margin: 0; gap: 12px; }
+.order-stack-body[data-stack-card="financial"] .finance-payments-title { font-size: 14px; font-weight: 650; color: var(--fin-text); }
+.order-stack-body[data-stack-card="financial"] .finance-payments-add {
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: var(--fin-green-bg);
+  color: var(--fin-green);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+
+/* The result: profit in its own box. */
+.order-stack-body[data-stack-card="financial"] .app-card-panel .detail-row.is-emphasis {
+  padding: 15px 18px;
+  border-radius: 12px;
+  background: var(--fin-result-bg);
+}
+.order-stack-body[data-stack-card="financial"] .app-card-panel .detail-row.is-emphasis > span:first-child {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--fin-text);
+}
+.order-stack-body[data-stack-card="financial"] .app-card-panel .detail-row.is-emphasis > strong {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--fin-text);
+}
+.order-stack-body[data-stack-card="financial"] .app-card-panel > p.muted-copy { color: var(--fin-label); line-height: 1.45; }
+
+/* Section headings, after the same design: a little larger title, the currency sign itself on the money tile. */
+.order-stack-title { font-size: 15px; }
+.order-stack-icon { width: 32px; height: 32px; border-radius: 10px; }
+.order-stack-icon svg { width: 17px; height: 17px; }
+.order-stack-icon.is-symbol { font-size: 16px; font-weight: 800; line-height: 1; }
+.order-stack-icon.is-symbol.is-long { font-size: 10.5px; letter-spacing: -0.02em; }
+
+@media (max-width: 640px) {
+  .order-stack-body[data-stack-card="financial"] { padding: 10px 12px 14px; }
+  .order-stack-title { font-size: 14px; }
+}
