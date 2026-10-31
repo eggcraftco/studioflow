@@ -10112,12 +10112,14 @@ export function OrderDetailContent({
               ) : (
                 <div className="order-status-segments" style={{ gridTemplateColumns: `repeat(${shown.length}, minmax(0, 1fr))${hiddenCount > 0 ? " auto" : ""}` }}>
                   {shown.map(step => {
-                    const tone = resolved.delivered ? "done" : stripStepTone(step.value);
+                    // The order's blocker (Production board) holds up the current step: red, whatever its value.
+                    const held = Boolean(resolved.blocker) && step === current;
+                    const tone = resolved.delivered ? "done" : held ? "blocked" : stripStepTone(step.value);
                     return (
                       <div key={step.id || step.title} className={`order-status-segment is-${tone}`} title={`${t(step.title)} · ${t(step.value)}`}>
                         <i aria-hidden="true" />
                         <b>{t(step.title)}</b>
-                        <small>{resolved.blocker && step === current ? t("Blocked") : t(step.value)}</small>
+                        <small>{held ? t("Blocked") : t(step.value)}</small>
                       </div>
                     );
                   })}
