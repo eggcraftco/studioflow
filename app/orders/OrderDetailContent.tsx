@@ -174,6 +174,8 @@ import { EbayOrderStock } from "./EbayOrderStock";
 import { WooOrderStock } from "./WooOrderStock";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
+import { RoyalMailShipmentPanel } from "./RoyalMailShipmentPanel";
+import { royalMailUkAddress } from "@/lib/studioflow/royalMail";
 import { EtsyBlockChannelContext, EtsySafe, EtsySourcePanel, EtsyProductPhoto, useEtsyListingPhotos, useEtsySourceState } from "./EtsySourcePanel";
 import { etsyListingLink, etsyPhotoIsShowable } from "@/lib/studioflow/etsyListingPhotos";
 import { EtsyNotePhotoLinks } from "./EtsyText";
@@ -8319,6 +8321,10 @@ export function OrderDetailContent({
               <OrderShipmentsPanel workspace={workspace} orderId={order.id} language={detailLanguage} onOrderChanged={onReloadOrder} onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)}
                 addressRestricted={order.commerce?.provider === "ebay" && !String(order.shippingStreetAddress || "").trim() && !String(order.shippingPostalCode || "").trim()}
                 etsyOrder={etsyBuyerMessagingBlocked} />
+              {/* Royal Mail Click & Drop, only where the server has opened it for this workspace. */}
+              <RoyalMailShipmentPanel workspace={workspace} orderId={order.id} language={detailLanguage} onOrderChanged={onReloadOrder} onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)}
+                abroad={!royalMailUkAddress(order.shippingCountry)}
+                addressRestricted={order.commerce?.provider === "ebay" && !String(order.shippingStreetAddress || "").trim() && !String(order.shippingPostalCode || "").trim()} />
             </div>
           </section>
         );

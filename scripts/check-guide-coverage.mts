@@ -178,6 +178,8 @@ const INTEGRATION_CHAPTERS: Record<string, string> = {
   "quickbooks-online": "banking",
   "17track-tracking": "card-shipping",
   "cloud-storage": "set-cloud-storage",
+  // Royal Mail Click & Drop (31 Oct 2026): the Settings tile shows where the server opened it; its site card follows when it opens to all.
+  "royal-mail-click-&-drop": "set-royal-mail",
   paypal: "banking",
   quickbooks: "banking",
   xero: "banking",
@@ -195,6 +197,7 @@ const INTEGRATION_NAMES: Record<string, string> = {
   tracking: "17TRACK", inbound: "webhook", truelayer: "Open Banking", chatgpt: "ChatGPT", twilio: "SMS",
   cloudstorage: "Cloud storage",
   "open-banking": "Open Banking", "quickbooks-online": "QuickBooks", "17track-tracking": "17TRACK", "cloud-storage": "Cloud storage",
+  "royal-mail-click-&-drop": "Royal Mail",
 };
 
 const EN = getGuideTree("English");
@@ -275,7 +278,7 @@ check("4 each mapped chapter exists in English AND Turkish, with a paragraph for
 // rewrite it: from then on every line of it must be in all ten GUIDE_T languages.
 const FULLY_TRANSLATED = [
   "calendar", "help-assistant", "set-security", "set-stripe", "set-dhl", "set-team", "messages", "banking",
-  "set-cloud-storage",
+  "set-cloud-storage", "set-royal-mail",
 ];
 // Lines of the older chapters still in English in the other ten languages on 30 Oct 2026. This
 // number can only go down: lower it when you translate some, never raise it.

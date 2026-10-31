@@ -66,8 +66,10 @@ import { AmazonIntegrationSection } from "./AmazonIntegrationSection";
 import { PayPalIntegrationSection } from "./PayPalIntegrationSection";
 import { StripeIntegrationSection } from "./StripeIntegrationSection";
 import { DhlExpressIntegrationSection } from "./DhlExpressIntegrationSection";
+import { RoyalMailIntegrationSection } from "./RoyalMailIntegrationSection";
 import { TrackingRegistrationSection } from "./TrackingRegistrationSection";
 import { getShippingConnection, type ShippingConnectionView } from "@/lib/studioflow/shipping";
+import { getRoyalMailConnection, type RoyalMailConnectionView } from "@/lib/studioflow/royalMail";
 import { QuickBooksIntegrationSection, XeroIntegrationSection } from "./QuickBooksIntegrationSection";
 import { SettingsPageHeader, SettingsHeaderActionsContext, SettingsCardHead, useSettingsHeaderActions, type SettingsHeaderStatus } from "./pageHeader";
 import { CommerceSyncHealthCard } from "./CommerceSyncHealthCard";
@@ -243,6 +245,7 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   quickbooks: "integrations",
   xero: "integrations",
   dhl: "integrations",
+  royalmail: "integrations",
   // The customer channels are two Integrations tiles (28 Sep 2026); the old
   // Customer Channels area and the Instagram return address point here.
   whatsapp: "integrations",
@@ -754,7 +757,7 @@ export default function SettingsPage() {
       rawRequested === "inbound" ||
       rawRequested === "etsy" ||
       rawRequested === "square" || rawRequested === "ebay" || rawRequested === "amazon" || rawRequested === "paypal" || rawRequested === "quickbooks" || rawRequested === "xero" ||
-      rawRequested === "dhl" || rawRequested === "whatsapp" || rawRequested === "instagram" || rawRequested === "stripe" || rawRequested === "tracking" ||
+      rawRequested === "dhl" || rawRequested === "royalmail" || rawRequested === "whatsapp" || rawRequested === "instagram" || rawRequested === "stripe" || rawRequested === "tracking" ||
       rawRequested === "cloudstorage" || rawRequested === "storage" || rawRequested === "gdrive" || rawRequested === "onedrive" || rawRequested === "dropbox" || rawRequested === "box"
     ) {
       setIntegrationProvider(rawRequested);
@@ -5844,6 +5847,8 @@ function IntegrationsSection({
   const [loaded, setLoaded] = useState(false);
   // DHL Express shows only where the server has opened it for this workspace.
   const [dhl, setDhl] = useState<ShippingConnectionView | null>(null);
+  // Royal Mail Click & Drop, the same way: only where the server has opened it (appConfig/shipping.royalMail).
+  const [royalMail, setRoyalMail] = useState<RoyalMailConnectionView | null>(null);
 
   useEffect(() => {
     if (!companyId) return;
@@ -5851,6 +5856,9 @@ function IntegrationsSection({
     void getShippingConnection(companyId)
       .then((view) => { if (active) setDhl(view); })
       .catch(() => { if (active) setDhl(null); });
+    void getRoyalMailConnection(companyId)
+      .then((view) => { if (active) setRoyalMail(view); })
+      .catch(() => { if (active) setRoyalMail(null); });
     return () => { active = false; };
   }, [companyId, managing]);
 
@@ -5889,7 +5897,7 @@ function IntegrationsSection({
         <nav className="integrations-crumb">
           <button type="button" onClick={() => setManaging("")}>{t("Integrations")}</button>
           <span aria-hidden="true">/</span>
-          <strong>{managingStorage ? t("Cloud storage") : managing === "dhl" ? "DHL Express" : managing === "tracking" ? t("17TRACK tracking") : t(INTEGRATION_PROVIDERS.find((p) => p.manage === managing && p.kind !== "planned")?.name ?? "Setup")}</strong>
+          <strong>{managingStorage ? t("Cloud storage") : managing === "dhl" ? "DHL Express" : managing === "royalmail" ? "Royal Mail Click & Drop" : managing === "tracking" ? t("17TRACK tracking") : t(INTEGRATION_PROVIDERS.find((p) => p.manage === managing && p.kind !== "planned")?.name ?? "Setup")}</strong>
         </nav>
         {managing === "shopify" ? <ShopifyIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "etsy" ? <EtsyIntegrationSection workspace={workspace} language={language} /> : null}
@@ -5900,6 +5908,7 @@ function IntegrationsSection({
         {managing === "paypal" ? <PayPalIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "stripe" ? <StripeIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "dhl" ? <DhlExpressIntegrationSection workspace={workspace} language={language} /> : null}
+        {managing === "royalmail" ? <RoyalMailIntegrationSection workspace={workspace} language={language} /> : null}
         {managing === "tracking" ? <TrackingRegistrationSection workspace={workspace} language={language} /> : null}
         {managing === "whatsapp" ? <CustomerChannelPanel workspace={workspace} language={language} channel="whatsapp" /> : null}
         {managing === "instagram" ? <CustomerChannelPanel workspace={workspace} language={language} channel="instagram" /> : null}
@@ -5913,10 +5922,16 @@ function IntegrationsSection({
     );
   }
 
-  // DHL is not one of those rows (its tile is below); a DHL connection counts all the same.
-  const connected = resolved.filter((row) => row.live.state === "connected").length + (dhl?.enabled && dhl.connected ? 1 : 0);
+  // DHL and Royal Mail are not among those rows (their tiles are below); their connections count all the same.
+  const connected = resolved.filter((row) => row.live.state === "connected").length + (dhl?.enabled && dhl.connected ? 1 : 0)
+    + (royalMail?.enabled && royalMail.connected ? 1 : 0);
   const attention = resolved.filter((row) => row.live.state === "attention").length;
   const needle = query.trim().toLowerCase();
+  const shippingTileShown = (enabled: boolean, connected: boolean, name: string) => enabled
+    && (!needle || name.includes(needle))
+    && (filter === "all" || (filter === "connected" ? connected : filter === "available" ? !connected : false));
+  const showDhlTile = Boolean(dhl && shippingTileShown(dhl.enabled, dhl.connected, "dhl express"));
+  const showRoyalMailTile = Boolean(royalMail && shippingTileShown(royalMail.enabled, royalMail.connected, "royal mail click & drop"));
   const matches = (row: (typeof resolved)[number]) => {
     if (needle && !row.provider.name.toLowerCase().includes(needle)
       && !(row.provider.keywords ?? []).some((word) => word.includes(needle))) return false;
@@ -5989,17 +6004,31 @@ function IntegrationsSection({
         </p>
       </div>
 
-      {dhl?.enabled && (!needle || "dhl express".includes(needle)) && (filter === "all" || (filter === "connected" ? dhl.connected : filter === "available" ? !dhl.connected : false)) ? (
+      {showDhlTile || showRoyalMailTile ? (
         <section className="card app-card">
-          <SettingsCardHead title={t("Shipping")} aside={<span className="settings-tag is-muted">1</span>} />
+          <SettingsCardHead title={t("Shipping")} aside={<span className="settings-tag is-muted">{Number(showDhlTile) + Number(showRoyalMailTile)}</span>} />
           <div className="integrations-grid settings-integrations-grid">
-            <IntegrationCard
-              provider={DHL_EXPRESS_TILE}
-              live={{ state: dhl.connected ? "connected" : "available", detail: !dhl.connected ? "" : dhl.environment === "production" ? t("DHL production") : t("DHL test environment") }}
-              t={t}
-              highlighted={false}
-              onManage={() => setManaging("dhl")}
-            />
+            {showDhlTile && dhl ? (
+              <IntegrationCard
+                provider={DHL_EXPRESS_TILE}
+                live={{ state: dhl.connected ? "connected" : "available", detail: !dhl.connected ? "" : dhl.environment === "production" ? t("DHL production") : t("DHL test environment") }}
+                t={t}
+                highlighted={false}
+                onManage={() => setManaging("dhl")}
+              />
+            ) : null}
+            {showRoyalMailTile && royalMail ? (
+              <IntegrationCard
+                provider={ROYAL_MAIL_TILE}
+                live={{
+                  state: royalMail.attention === "key_rejected" ? "attention" : royalMail.connected ? "connected" : "available",
+                  detail: !royalMail.connected ? "" : royalMail.accountType === "olp" ? t("Pay as you go") : royalMail.accountType === "account" ? t("Business account") : ""
+                }}
+                t={t}
+                highlighted={false}
+                onManage={() => setManaging("royalmail")}
+              />
+            ) : null}
           </div>
         </section>
       ) : null}
@@ -6071,6 +6100,14 @@ const DHL_EXPRESS_TILE: IntegrationProvider = {
   id: "dhl_express", name: "DHL Express", category: "commerce", kind: "native", mark: "DHL",
   blurb: "See the DHL Express services for an order's route, create the label with the commercial invoice where customs needs one, and follow each parcel.",
   capabilities: ["DHL services", "Shipping labels", "Commercial invoice", "Tracking"], manage: "dhl",
+};
+
+// The Royal Mail Click & Drop tile, built here like DHL's and shown only to a workspace the server
+// has opened Royal Mail for (appConfig/shipping.royalMail).
+const ROYAL_MAIL_TILE: IntegrationProvider = {
+  id: "royal_mail", name: "Royal Mail Click & Drop", category: "commerce", kind: "native", mark: "RM",
+  blurb: "Send an order to your Click & Drop account without retyping the address; its tracking number comes back to the order.",
+  capabilities: ["UK parcels", "Online prices", "Tracking number", "Dispatched"], manage: "royalmail",
 };
 
 function IntegrationCard({

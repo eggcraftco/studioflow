@@ -1,6 +1,7 @@
 import { MAC_TRANSLATIONS } from "./macTranslations";
 import { SETTINGS_CONTENT_TRANSLATIONS } from "./settingsContentTranslations";
 import { SHIPPING_TRANSLATIONS } from "./shippingTranslations";
+import { ROYAL_MAIL_TRANSLATIONS } from "./royalMailTranslations";
 import { TRACKING_EMAIL_TRANSLATIONS } from "./trackingEmailTranslations";
 import { I18N_GAP_TRANSLATIONS } from "./screenGapTranslations";
 import { NOTES_SHARING_TRANSLATIONS } from "./notesSharingTranslations";
@@ -8808,6 +8809,8 @@ mergeIntoTranslations({
 } as Record<string, Partial<Record<StudioLanguage, string>>>);
 
 mergeIntoTranslations(SHIPPING_TRANSLATIONS);
+// Royal Mail Click & Drop screens (royalMailTranslations.ts), the same per-language merge.
+mergeIntoTranslations(ROYAL_MAIL_TRANSLATIONS);
 
 // "Send the tracking details to the customer by e-mail?" (trackingEmailTranslations.ts):
 // the Shipping card's question, the preview dialog and the result line. Same per-language merge.

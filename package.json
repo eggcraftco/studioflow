@@ -118,6 +118,7 @@
     "test:amazon-appstore": "npx tsx scripts/check-amazon-appstore.mts",
     "test:amazon-site-rules": "npx tsx scripts/check-amazon-site-rules.mts",
     "test:site-integration-names": "npx tsx scripts/check-site-integration-names.mts",
+    "test:royal-mail-web": "npx tsx scripts/check-royal-mail-web.mts",
     "test:sec-bundle-emails": "npx tsx scripts/check-sec-bundle-emails.mts",
     "test:qa-hooks-prod": "npx tsx scripts/check-qa-hooks-not-in-prod.mts",
     "test:sec-csp": "npx tsx scripts/check-sec-csp.mts",

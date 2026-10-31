@@ -1331,6 +1331,38 @@ const TREE_EN: GuideNode[] = [
         ]
       },
       {
+        id: "set-royal-mail",
+        title: "Royal Mail Click & Drop",
+        blocks: [
+          { kind: "para", text: "Send an order to your own Royal Mail Click & Drop account straight from the order, with no address to retype. Click & Drop is free; Royal Mail charges only for postage. Once the label is printed, its tracking number comes back to the order, and the order is marked dispatched when Royal Mail has the parcel. Royal Mail is opened workspace by workspace; where it is not open yet, its tile is not shown. For now it sends parcels within the UK." },
+          { kind: "sub", text: "Getting your Click & Drop API key" },
+          { kind: "bullets", items: [
+            "Sign in to Click & Drop (parcel.royalmail.com, free to register), open Settings ▸ Integrations ▸ Add a new integration and choose Click & Drop API.",
+            "Save it and copy the Click & Drop API authorisation key it shows. Royal Mail decides the kind of account: pay as you go, or a Royal Mail business account."
+          ] },
+          { kind: "sub", text: "Connecting Royal Mail (owner)" },
+          { kind: "steps", items: [
+            "Settings ▸ Integrations ▸ Shipping ▸ Royal Mail Click & Drop ▸ Set up.",
+            "Paste the Click & Drop API key, check the trading name printed on labels, and press Connect Royal Mail. NivaDesk checks the key with Royal Mail before saving it, stores it encrypted and shows only its last four characters."
+          ] },
+          { kind: "sub", text: "Sending an order with Royal Mail" },
+          { kind: "steps", items: [
+            "Open the order ▸ Shipping & Tracking card ▸ + Send with Royal Mail.",
+            "Choose the package (large letter, small or medium parcel), type the weight in grams and press Show services. Pay as you go accounts see Royal Mail's online price for each service; members without financial access see the services without prices.",
+            "Pick a service, tick Signature on delivery or add a safe place if you want, and press Send to Click & Drop.",
+            "Pay as you go: press Pay and print in Click & Drop and print the label there. A business account gets the label in NivaDesk: press Open label.",
+            "The tracking number comes back to the order by itself (or press Check now), the courier becomes Royal Mail, and the order is marked dispatched once Royal Mail has the parcel. A tracking number you typed yourself is never replaced."
+          ] },
+          { kind: "sub", text: "Good to know" },
+          { kind: "bullets", items: [
+            "One press sends one order: pressing again shows the same one. If Click & Drop already has the order (for example from its own Etsy or eBay connection), NivaDesk links it instead of sending it twice.",
+            "Remove from Click & Drop takes the order out while it has no label; after a label is printed, cancel it in Click & Drop.",
+            "Etsy orders: the buyer's e-mail and phone are not given to Royal Mail, so Royal Mail does not notify them.",
+            "Orders abroad, and to a business in Northern Ireland, need customs details: send those from Click & Drop for now."
+          ] }
+        ]
+      },
+      {
         id: "set-cloud-storage",
         title: "Cloud storage (Google Drive, OneDrive, Dropbox, Box)",
         blocks: [
@@ -2925,6 +2957,38 @@ const TREE_TR: GuideNode[] = [
             "Etiket, kargoya vermek demek değildir: koliyi yine DHL'e kendiniz teslim eder ya da alımı DHL'den kendiniz ayarlarsınız.",
             "Kontrol gerekiyor, NivaDesk'in DHL'in gönderiyi oluşturup oluşturmadığını doğrulayamadığı anlamına gelir; MyDHL'de açılmış gönderileri bul ya da DHL'de yeniden ara, bir şey iki kez oluşturulmadan önce durumu netleştirir.",
             "Eşya beyanı ve ticari fatura finans erişimi ister. eBay siparişi için DHL etiketi oluşturulamaz."
+          ] }
+        ]
+      },
+      {
+        id: "set-royal-mail",
+        title: "Royal Mail Click & Drop",
+        blocks: [
+          { kind: "para", text: "Siparişi, adresi yeniden yazmadan, doğrudan siparişten kendi Royal Mail Click & Drop hesabınıza gönderin. Click & Drop ücretsizdir; Royal Mail yalnızca posta ücreti alır. Etiket basılınca takip numarası siparişe döner; Royal Mail koliyi teslim alınca sipariş gönderildi olarak işaretlenir. Royal Mail çalışma alanı çalışma alanı açılır; henüz açılmadığı yerde kartı görünmez. Şimdilik Birleşik Krallık içine koli gönderir." },
+          { kind: "sub", text: "Click & Drop API anahtarınızı almak" },
+          { kind: "bullets", items: [
+            "Click & Drop'a giriş yapın (parcel.royalmail.com, kayıt ücretsiz), Settings ▸ Integrations ▸ Add a new integration'ı açın ve Click & Drop API'yi seçin.",
+            "Kaydedin ve gösterilen Click & Drop API yetkilendirme anahtarını kopyalayın. Hesap türüne Royal Mail karar verir: kullandıkça öde ya da Royal Mail iş hesabı."
+          ] },
+          { kind: "sub", text: "Royal Mail'i bağlamak (sahip)" },
+          { kind: "steps", items: [
+            "Settings ▸ Integrations ▸ Shipping ▸ Royal Mail Click & Drop ▸ Set up.",
+            "Click & Drop API anahtarını yapıştırın, etiketlere basılacak ticari adı kontrol edin ve Connect Royal Mail'e basın. NivaDesk anahtarı kaydetmeden önce Royal Mail ile doğrular, şifreli saklar ve yalnızca son dört karakterini gösterir."
+          ] },
+          { kind: "sub", text: "Siparişi Royal Mail ile göndermek" },
+          { kind: "steps", items: [
+            "Siparişi açın ▸ Shipping & Tracking kartı ▸ + Send with Royal Mail.",
+            "Paketi seçin (büyük mektup, küçük ya da orta koli), ağırlığı gram olarak yazın ve Show services'e basın. Kullandıkça öde hesapları her servisin Royal Mail online fiyatını görür; finans erişimi olmayan üyeler servisleri fiyatsız görür.",
+            "Bir servis seçin, isterseniz Signature on delivery'yi işaretleyin ya da güvenli bir yer ekleyin ve Send to Click & Drop'a basın.",
+            "Kullandıkça öde: Pay and print in Click & Drop'a basın ve etiketi orada basın. İş hesabında etiket NivaDesk'e gelir: Open label'a basın.",
+            "Takip numarası siparişe kendiliğinden döner (ya da Check now'a basın), kurye Royal Mail olur ve Royal Mail koliyi teslim alınca sipariş gönderildi olarak işaretlenir. Sizin yazdığınız bir takip numarası asla değiştirilmez."
+          ] },
+          { kind: "sub", text: "Bilmeniz gerekenler" },
+          { kind: "bullets", items: [
+            "Bir basış bir sipariş gönderir: yeniden basmak aynı siparişi gösterir. Click & Drop siparişe zaten sahipse (örneğin kendi Etsy ya da eBay bağlantısından), NivaDesk iki kez göndermek yerine onu bağlar.",
+            "Remove from Click & Drop, etiket yokken siparişi Click & Drop'tan kaldırır; etiket basıldıktan sonra iptali Click & Drop'ta yapın.",
+            "Etsy siparişleri: alıcının e-postası ve telefonu Royal Mail'e verilmez, bu yüzden Royal Mail alıcıyı bilgilendirmez.",
+            "Yurt dışı siparişler ve Kuzey İrlanda'daki bir işletmeye gönderiler gümrük bilgisi ister: bunları şimdilik Click & Drop'tan gönderin."
           ] }
         ]
       },
