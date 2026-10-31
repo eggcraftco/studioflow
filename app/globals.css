@@ -33259,10 +33259,11 @@ body[data-studio-theme="dark"] .settings-calc-preview { background: rgba(123, 13
 .settings-content-pane .integration-card-head strong { font-size: 14.5px; font-weight: 700; color: var(--text); }
 .settings-content-pane .integration-category { margin-left: auto; }
 /* A card in a three-column grid is phone-narrow even on a laptop: the category
-   badge squeezed the name to a letter ("C", "WooCo"). Below 400px of card the
-   badge takes its own line under the name, as on phones. */
+   badge squeezed the name to a letter ("C", "WooCo"). Below 520px of card (room
+   for the longest name beside the longest badge) the badge takes its own line
+   under the name, as on phones. */
 .settings-content-pane .integration-card { container-type: inline-size; }
-@container (max-width: 400px) {
+@container (max-width: 520px) {
   .settings-content-pane .integration-card-head { flex-wrap: wrap; }
   .settings-content-pane .integration-card-head > div { flex: 1 1 0; }
   .settings-content-pane .integration-card-head strong { white-space: normal; overflow-wrap: anywhere; }
