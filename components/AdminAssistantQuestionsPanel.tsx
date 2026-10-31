@@ -131,13 +131,13 @@ export function AdminAssistantQuestionsPanel({ view }: { view: AdminView }) {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", minWidth: 0, maxWidth: "100%" }}>
             <label style={{ fontSize: 12, fontWeight: 700 }}>
               Last{" "}
-              <select value={days} onChange={event => setDays(Number(event.target.value))} aria-label="Window">
+              <select className="input admin-filter-select" value={days} onChange={event => setDays(Number(event.target.value))} aria-label="Window">
                 {[1, 7, 30, 90, 180].map(value => <option key={value} value={value}>{value === 1 ? "24 hours" : `${value} days`}</option>)}
               </select>
             </label>
             <label style={{ fontSize: 12, fontWeight: 700 }}>
               Bot{" "}
-              <select value={bot} onChange={event => setBot(event.target.value)} aria-label="Bot">
+              <select className="input admin-filter-select" value={bot} onChange={event => setBot(event.target.value)} aria-label="Bot">
                 <option value="">Both</option>
                 <option value="app">In-app helper</option>
                 <option value="website">Website chat</option>
@@ -145,7 +145,7 @@ export function AdminAssistantQuestionsPanel({ view }: { view: AdminView }) {
             </label>
             <label style={{ fontSize: 12, fontWeight: 700 }}>
               Result{" "}
-              <select value={outcome} onChange={event => setOutcome(event.target.value)} aria-label="Result" style={{ maxWidth: 190 }}>
+              <select className="input admin-filter-select" value={outcome} onChange={event => setOutcome(event.target.value)} aria-label="Result">
                 <option value="">All</option>
                 <option value="not_answered">Not answered (all kinds)</option>
                 {Object.entries(outcomes).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
@@ -153,14 +153,14 @@ export function AdminAssistantQuestionsPanel({ view }: { view: AdminView }) {
             </label>
             <label style={{ fontSize: 12, fontWeight: 700 }}>
               Language{" "}
-              <select value={language} onChange={event => setLanguage(event.target.value)} aria-label="Language">
+              <select className="input admin-filter-select" value={language} onChange={event => setLanguage(event.target.value)} aria-label="Language">
                 <option value="">All</option>
                 {languageOptions.map(name => <option key={name} value={name}>{name}</option>)}
               </select>
             </label>
             <form onSubmit={event => { event.preventDefault(); setSearch(draft.trim()); }} style={{ display: "flex", gap: 6, flex: "1 1 220px", minWidth: 0 }}>
-              <input type="search" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Search questions and answers"
-                     aria-label="Search questions and answers" style={{ fontSize: 12, padding: "4px 8px", flex: 1, minWidth: 0 }} />
+              <input type="search" value={draft} onChange={event => setDraft(event.target.value)} placeholder="Search questions"
+                     aria-label="Search questions and answers" className="input admin-filter-input" style={{ flex: 1, minWidth: 0 }} />
               <button type="submit" className="button secondary admin-small-button">Search</button>
             </form>
           </div>

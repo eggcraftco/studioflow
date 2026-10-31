@@ -10012,18 +10012,26 @@ export function OrderDetailContent({
   const jumpMoreButtonRef = useRef<HTMLButtonElement | null>(null);
   const jumpMoreMenuRef = useRef<HTMLDivElement | null>(null);
   const [jumpOverflow, setJumpOverflow] = useState(false);
+  // True while links are cut off at the right edge: the strip fades there instead of clipping a link to one letter.
+  const [jumpFadeEnd, setJumpFadeEnd] = useState(false);
   const [jumpMoreOpen, setJumpMoreOpen] = useState(false);
   const jumpTargetsKey = jumpTargets.map(target => `${target.id}:${target.label}`).join("|");
   useEffect(() => {
     const nav = jumpNavRef.current;
     if (!nav) return;
-    const measure = () => setJumpOverflow(nav.scrollWidth > nav.clientWidth + 1);
+    const measure = () => {
+      const overflowing = nav.scrollWidth > nav.clientWidth + 1;
+      setJumpOverflow(overflowing);
+      setJumpFadeEnd(overflowing && nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 1);
+    };
     measure();
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
     observer?.observe(nav);
+    nav.addEventListener("scroll", measure, { passive: true });
     window.addEventListener("resize", measure);
     return () => {
       observer?.disconnect();
+      nav.removeEventListener("scroll", measure);
       window.removeEventListener("resize", measure);
     };
   }, [jumpTargetsKey, isNarrowLayout]);
@@ -10122,7 +10130,7 @@ export function OrderDetailContent({
   function renderJumpBar() {
     return (
       <div className="order-jump-bar" data-order-jump-bar="" data-has-stack-entry={allCardsHidden ? undefined : ""}>
-        <nav ref={jumpNavRef} className="order-jump-bar__links" aria-label={t("Jump to a card")}>
+        <nav ref={jumpNavRef} className={jumpFadeEnd ? "order-jump-bar__links is-fading-end" : "order-jump-bar__links"} aria-label={t("Jump to a card")}>
           {jumpTargets.map(target => (
             <button
               key={target.id}

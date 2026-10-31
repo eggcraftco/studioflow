@@ -140,13 +140,13 @@ export function AdminDropoffPanel({ view }: { view: AdminView }) {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <label style={{ fontSize: 12, fontWeight: 700 }}>
               Signed up in the last{" "}
-              <select value={days} onChange={event => setDays(Number(event.target.value))} aria-label="Window">
+              <select className="input admin-filter-select" value={days} onChange={event => setDays(Number(event.target.value))} aria-label="Window">
                 {[30, 60, 90, 180].map(value => <option key={value} value={value}>{value} days</option>)}
               </select>
             </label>
             <label style={{ fontSize: 12, fontWeight: 700 }}>
               Platform{" "}
-              <select value={platform} onChange={event => setPlatform(event.target.value)} aria-label="Platform">
+              <select className="input admin-filter-select" value={platform} onChange={event => setPlatform(event.target.value)} aria-label="Platform">
                 <option value="">All</option>
                 {(platform && !platforms.includes(platform) ? [platform, ...platforms] : platforms).map(value => <option key={value} value={value}>{PLATFORM_LABELS[value] || value}</option>)}
               </select>

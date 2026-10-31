@@ -23997,6 +23997,21 @@ body[data-studio-theme="dark"] .admin-hub-link.active {
   gap: 10px;
 }
 
+/* Filter controls in an admin card head (Drop-off, Bot questions): the app's
+   input look at a compact size. Without it they were bare browser selects, and
+   a select as wide as its longest option ran to the card's edge. */
+.admin-card-head .admin-filter-select,
+.admin-card-head .admin-filter-input {
+  width: auto;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.admin-card-head .admin-filter-select { max-width: 210px; margin-left: 4px; }
+
 .admin-page-actions {
   display: flex;
   flex-wrap: wrap;
@@ -33243,6 +33258,18 @@ body[data-studio-theme="dark"] .settings-calc-preview { background: rgba(123, 13
 .settings-content-pane .integration-card-head > div { display: grid; gap: 4px; min-width: 0; }
 .settings-content-pane .integration-card-head strong { font-size: 14.5px; font-weight: 700; color: var(--text); }
 .settings-content-pane .integration-category { margin-left: auto; }
+/* A card in a three-column grid is phone-narrow even on a laptop: the category
+   badge squeezed the name to a letter ("C", "WooCo"). Below 400px of card the
+   badge takes its own line under the name, as on phones. */
+.settings-content-pane .integration-card { container-type: inline-size; }
+@container (max-width: 400px) {
+  .settings-content-pane .integration-card-head { flex-wrap: wrap; }
+  .settings-content-pane .integration-card-head > div { flex: 1 1 0; }
+  .settings-content-pane .integration-card-head strong { white-space: normal; overflow-wrap: anywhere; }
+  /* An empty full-width item breaks the line, so the badge keeps its own width. */
+  .settings-content-pane .integration-card-head::after { content: ""; order: 2; flex: 0 0 100%; height: 0; }
+  .settings-content-pane .integration-category { order: 3; flex: 0 1 auto; margin-left: 0; max-width: 100%; }
+}
 .settings-content-pane .integration-logo { display: inline-grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--settings-border); border-radius: 10px; background: var(--settings-surface); flex: 0 0 auto; }
 .settings-content-pane .integration-logo b { font-size: 14px; font-weight: 800; color: var(--muted); }
 .settings-content-pane .integration-state { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; background: var(--settings-canvas); color: var(--muted); }
@@ -33254,9 +33281,15 @@ body[data-studio-theme="dark"] .settings-calc-preview { background: rgba(123, 13
 .settings-content-pane .integration-state.is-available { background: var(--accent-soft); color: var(--accent); }
 .settings-content-pane .integration-detail { margin: 0; font-size: 13px; font-weight: 600; color: var(--text); }
 .settings-content-pane .integration-blurb { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--muted); }
-.settings-content-pane .integration-caps { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+/* Cards in a row share one height and the grid hands the extra to every row of the card; packed to the top, the chips
+   keep their own height instead of stretching into tall ovals. */
+.settings-content-pane .integration-caps { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; align-content: flex-start; }
 .settings-content-pane .integration-caps li { padding: 3px 8px; border-radius: 999px; background: var(--settings-canvas); font-size: 11.5px; font-weight: 600; color: var(--muted); }
 .settings-content-pane .integration-card .button { justify-self: start; margin-top: 2px; }
+/* Cards in a row share one height. As a grid the extra height went to every row, so the button grew (40-59px) and the
+   chips turned into ovals; as a column the content stays packed and the button sits at the foot, level across the row. */
+.settings-content-pane .integration-card { display: flex; flex-direction: column; }
+.settings-content-pane .integration-card > .button { align-self: flex-start; margin-top: auto; }
 .settings-integration-chip { gap: 6px; }
 .settings-integration-chip img { width: 16px; height: 16px; object-fit: contain; }
 .settings-content-pane .integrations-crumb { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--muted); }
@@ -33568,7 +33601,8 @@ body[data-studio-theme="dark"] .settings-ticket-thread { background: var(--setti
   .settings-content-pane .integration-card-head { flex-wrap: wrap; }
   .settings-content-pane .integration-card-head > div { flex: 1 1 0; }
   .settings-content-pane .integration-card-head strong { white-space: normal; overflow-wrap: anywhere; }
-  .settings-content-pane .integration-category { order: 3; flex: 0 0 100%; margin-left: 0; width: max-content; max-width: 100%; }
+  .settings-content-pane .integration-card-head::after { content: ""; order: 2; flex: 0 0 100%; height: 0; }
+  .settings-content-pane .integration-category { order: 3; flex: 0 1 auto; margin-left: 0; max-width: 100%; }
   .settings-integrations-toolbar .settings-segmented.is-compact { display: flex; flex-wrap: wrap; width: auto; }
   .settings-integrations-toolbar .settings-segmented.is-compact button { min-width: 0; flex: 1 1 auto; padding: 0 12px; }
   .settings-integrations-toolbar .settings-segmented.is-compact button + button { border-left: 1px solid var(--settings-border); }
@@ -36623,6 +36657,12 @@ body[data-studio-theme="dark"] .app-work-session-row small.app-work-session-corr
   cursor: pointer;
 }
 .order-jump-link:hover { background: rgba(37, 99, 235, 0.06); }
+/* Links scroll sideways when they do not fit; a hard cut left a lone letter
+   ("C") beside More. Fade the edge instead, until the strip reaches its end. */
+.order-jump-bar__links.is-fading-end {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+}
 .order-jump-link.is-etsy { color: #9a3412; font-weight: 750; }
 .order-jump-customize {
   flex: 0 0 auto;
