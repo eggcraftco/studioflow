@@ -258,7 +258,9 @@ function panelProblems(panel: string): string[] {
   for (const label of ["What is this payment for?", "Customer name (optional)", "Customer email (optional)"]) {
     if (!new RegExp(`<label[^>]*>\\s*\\{t\\(${JSON.stringify(label).replace(/[?()]/g, "\\$&")}\\)\\}\\s*<input`).test(form)) out.push(`no labelled field: ${label}`);
   }
-  if (!/<label[^>]*>\s*\{standaloneCurrency \? `\$\{t\("Amount"\)\} \(\$\{standaloneCurrency\}\)` : t\("Amount"\)\}\s*<input\s[^<]*?inputMode="decimal"[^<]*?\/>\s*<\/label>/.test(form)) out.push("the amount is not a labelled decimal field naming its currency");
+  // SL-28: the currency the amount is read and shown in is the chosen order's (the server's word for it), else the workspace's.
+  if (!/<label[^>]*>\s*\{standaloneAmountCurrency \? `\$\{t\("Amount"\)\} \(\$\{standaloneAmountCurrency\}\)` : t\("Amount"\)\}\s*<input\s[^<]*?inputMode="decimal"[^<]*?\/>\s*<\/label>/.test(form)) out.push("the amount is not a labelled decimal field naming its currency");
+  if (!/const standaloneAmountCurrency = standaloneOrderId \? \(attachInfo\?\.currency \?\? ""\) : \(standaloneCurrency \?\? ""\);/.test(panel)) out.push("the amount's currency is not the order's when one is chosen, else the workspace's");
   if (!/<input type="checkbox" checked=\{standalonePhone\}[^<]*?\/>\s*\{t\("Ask for phone number"\)\}\s*<\/label>/.test(form)) out.push("no Ask for phone number");
   if (!/<input type="checkbox" checked=\{standaloneAddress\}[^<]*?\/>\s*\{t\("Ask for delivery address"\)\}\s*<\/label>/.test(form)) out.push("no Ask for delivery address");
   if (!/maxLength=\{STANDALONE_TITLE_MAX\}/.test(form)) out.push("the title is not capped at the server's limit");
@@ -266,19 +268,20 @@ function panelProblems(panel: string): string[] {
   if (!/onKeyDown=\{\(e\) => \{ if \(e\.key === "Escape"\) \{ e\.stopPropagation\(\); closeStandalone\(\); \} \}\}/.test(form)) out.push("Escape does not close the form");
   if (!/ref=\{standaloneFieldRef\}/.test(form) || !/if \(standaloneOpen\) standaloneFieldRef\.current\?\.focus\(\);/.test(panel)) out.push("focus does not move into the form");
   if ((form.match(/disabled=\{standaloneBusy/g) || []).length < 7) out.push("the fields and buttons are not all disabled while creating");
-  if (!/disabled=\{standaloneBusy \|\| standaloneCurrency === null\}/.test(form)) out.push("Create can be pressed before the currency is known");
+  if (!/disabled=\{standaloneBusy \|\| \(standaloneOrderId !== "" \? attachInfo === null : standaloneCurrency === null\)\}/.test(form)) out.push("Create can be pressed before the currency is known");
   if (!/const closeStandalone = \(\) => \{\s*if \(standaloneBusy\) return;/.test(panel)) out.push("the form closes while creating");
   // The amount: the currency read first, then the comma reading the order form uses.
   if (!/const codes = workspaceCurrencyCodes\(\{ selectedCurrency: overview\.selectedCurrency \}\);\s*if \(active\) setStandaloneCurrency\(codes\.length === 1 \? codes\[0\] : ""\);/.test(panel)) out.push("the workspace currency is not read, or a symbol with several codes is guessed");
   const problemAt = submit.indexOf("const problem = standaloneFormProblem(");
-  const parseAt = submit.indexOf('const parsed = parseRequestAmount(standaloneAmount, standaloneCurrency ?? "", locale);');
-  const callAt = submit.indexOf("await createStandalonePaymentRequest(");
+  const parseAt = submit.indexOf('const parsed = parseRequestAmount(standaloneAmount, (attached ? attachInfo?.currency : standaloneCurrency) ?? "", locale);');
+  const callAt = submit.indexOf("createAttachedPaymentRequest(");
+  if (callAt < 0 || submit.indexOf("await createStandalonePaymentRequest(") < callAt) out.push("the order-less call is not behind the attached one");
   if (problemAt < 0 || parseAt < problemAt || callAt < parseAt) out.push("the form's checks and the amount reading do not come before the call");
   if (!/if \(!parsed\.ok\) \{ setStandaloneError\(t\(requestAmountMessage\(parsed\.reason\)\)\); return; \}/.test(submit)) out.push("a refused amount does not say why");
   // The id: kept while the same submit is retried, new for a different one, dropped after success or a definite no.
   if (!/const attempt: StandaloneAttempt = previous && sameStandaloneSubmit\(previous, submit\)\s*\? previous\s*: \{ \.\.\.submit, clientRequestId: newClientRequestId\(\) \};/.test(submit)) out.push("the id is not kept for a retried submit");
   const same = region(panel, "function sameStandaloneSubmit(", "\n}\n");
-  for (const field of ["title", "amountMinor", "customerName", "customerEmail", "collectPhone", "collectAddress"]) {
+  for (const field of ["title", "amountMinor", "customerName", "customerEmail", "collectPhone", "collectAddress", "orderId", "purpose"]) {
     if (!new RegExp(`a\\.${field} === b\\.${field}`).test(same)) out.push(`a changed ${field} keeps the old id`);
   }
   if ((panel.match(/newClientRequestId\(\)/g) || []).length !== 1) out.push("ids are made in more than one place");
@@ -290,7 +293,7 @@ function panelProblems(panel: string): string[] {
   if (!/if \(!result\.ok\) throw/.test(submit)) out.push("an empty answer counts as created");
   if (/\.message/.test(catchPart) || !/setStandaloneError\(t\(refusal\.text\)\);/.test(catchPart)) out.push("a refusal is not read through paymentLinkRefusal");
   for (const field of ["title", "amountMinor", "customerName", "customerEmail", "collectPhone", "collectAddress", "clientRequestId"]) {
-    if (!new RegExp(`${field}: attempt\\.${field},`).test(submit)) out.push(`the call does not send the attempt's ${field}`);
+    if (!new RegExp(`${field}: attempt\\.${field},`).test(submit.slice(Math.max(0, submit.indexOf("await createStandalonePaymentRequest("))))) out.push(`the call does not send the attempt's ${field}`);
   }
   if (!/await load\(\);\s*\} catch \(e\) \{/.test(submit)) out.push("the list is not read again after a new link");
   // The list: the title, and the order once the paid link has opened one.
@@ -309,16 +312,17 @@ const panelMutants: Array<[string, string]> = [
   ["Free keeps a button", panelSource.replace('{t("Stripe payments are part of the paid plans.")}{" "}', '{t("Stripe payments are part of the paid plans.")}{" "}<button type="button">x</button>')],
   ["the order picker opens on Free", panelSource.replace("{createOpen && planAllowed !== false ? (", "{createOpen ? (")],
   ["no phone option", panelSource.replace('{t("Ask for phone number")}', "")],
-  ["the amount loses its comma reading", panelSource.replace('const parsed = parseRequestAmount(standaloneAmount, standaloneCurrency ?? "", locale);', "const parsed = { ok: true as const, amountMinor: Math.round(Number(standaloneAmount) * 100) };")],
+  ["the amount loses its comma reading", panelSource.replace('const parsed = parseRequestAmount(standaloneAmount, (attached ? attachInfo?.currency : standaloneCurrency) ?? "", locale);', "const parsed = { ok: true as const, amountMinor: Math.round(Number(standaloneAmount) * 100) };")],
   ["a symbol with several codes is guessed", panelSource.replace('setStandaloneCurrency(codes.length === 1 ? codes[0] : "")', 'setStandaloneCurrency(codes[0] ?? "")')],
   ["a new id on every submit", panelSource.replace("previous && sameStandaloneSubmit(previous, submit)\n      ? previous", "previous && sameStandaloneSubmit(previous, submit) && false\n      ? previous")],
   ["a changed amount keeps the id", panelSource.replace(" && a.amountMinor === b.amountMinor", "")],
   ["a definite refusal keeps the id", panelSource.replace("      if (refusal.definite) standaloneAttempt.current = null;\n", "")],
   ["the id dropped on any failure", panelSource.replace("      const refusal = paymentLinkRefusal(e);\n", "      standaloneAttempt.current = null;\n      const refusal = paymentLinkRefusal(e);\n")],
-  ["the call sends the typed title, not the attempt's", panelSource.replace("        title: attempt.title,\n", "        title: standaloneTitle,\n")],
+  ["the call sends the typed title, not the attempt's", panelSource.replace("          title: attempt.title,\n", "          title: standaloneTitle,\n")],
   ["the raw message shown", panelSource.replace("setStandaloneError(t(refusal.text));", "setStandaloneError((e as Error).message || t(refusal.text));")],
   ["Escape ignored", panelSource.replace('onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closeStandalone(); } }}', "")],
-  ["Create before the currency is read", panelSource.replace("disabled={standaloneBusy || standaloneCurrency === null}", "disabled={standaloneBusy}")],
+  ["Create before the currency is read", panelSource.replace('disabled={standaloneBusy || (standaloneOrderId !== "" ? attachInfo === null : standaloneCurrency === null)}', "disabled={standaloneBusy}")],
+  ["a changed order keeps the id", panelSource.replace("\n    && a.orderId === b.orderId && a.purpose === b.purpose;", ";")],
   ["no order link once paid", panelSource.replace("onClick={() => onOpenOrder(row.orderId)}\n                                style", "onClick={() => undefined}\n                                style")],
 ];
 for (const [name, mutant] of panelMutants) {
@@ -425,10 +429,15 @@ const screenKeys = [...(panelText + settingsText).matchAll(/\bt\("([^"]+)"\)/g)]
 // SL-27: the order link form's three sentences live in the order components, not in the regions read above
 // (they sit in the same block of language.ts, right after the order-less ones); check-order-link-label.mjs pins their use.
 const ORDER_LABEL_KEYS = ["What the customer is buying (optional)", "Shown on the payment page. Left empty, it shows the order number.",
-  "Keep what the customer is buying to 120 characters or fewer."];
+  "Keep what the customer is buying to 120 characters or fewer.",
+  // SL-28: the order-less form attaches its link to an order.
+  "Add to an order (optional)", "No order (a new one opens when it is paid)",
+  "The payment is added to this order. Your customer sees only the name you typed above, not the order."];
 const keys = [...new Set([...libKeys, ...screenKeys, ...ORDER_LABEL_KEYS])];
 expect("the new sentences were found (lib + panel + Settings)", libKeys.length >= 8 && screenKeys.length >= 20, `${libKeys.length} + ${screenKeys.length}`);
 const REUSED = new Set(["New payment link", "Amount", "Create link", "Creating…", "Close", "Open order", "See plans", "Payment",
+  // SL-28: the order-less form's order part reuses the order card's words.
+  "Loading…", "Purpose", "Deposit", "Instalment", "Remaining balance", "Still to pay", "Not yet asked for",
   "Sign in again to see payment links.", "That payment link cannot be created."]);
 const tableFiles = readdirSync(path.join(webRoot, "lib/studioflow")).filter((f) => /\.ts$/.test(f)).map((f) => read(`lib/studioflow/${f}`)).join("\n");
 const lines = languageSource.split("\n");

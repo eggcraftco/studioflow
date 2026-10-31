@@ -68,6 +68,7 @@ try {
     // Order-less links and the plan gate (SL-23/SL-24): lib/studioflow/stripeConnect.ts and the hook, the
     // workspace currency read; checked by check-standalone-ui.mts. Nothing here reaches them.
     "export const createStandalonePaymentRequest = refuse('createStandalonePaymentRequest');",
+    "export const createAttachedPaymentRequest = refuse('createAttachedPaymentRequest');",
     "export const newClientRequestId = refuse('newClientRequestId');",
     "export const paymentLinkRefusal = refuse('paymentLinkRefusal');",
     "export const orderLinkRefusalText = refuse('orderLinkRefusalText');",

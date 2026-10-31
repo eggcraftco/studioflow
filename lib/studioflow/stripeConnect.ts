@@ -236,6 +236,26 @@ export async function createStandalonePaymentRequest(input: CreateStandalonePaym
   return { ok: data?.ok === true, request: data?.request ?? null };
 }
 
+/**
+ * SL-28 (31 Oct 2026): the order-less form with an order chosen. The link is that order's: the ORDER link's callable,
+ * named by what was typed in the form (`label`), so the customer's page and Stripe's say that name alone and the
+ * money counts against what the order still owes. Same answer shape as the order-less call. No customer details:
+ * the order has them. The id is the form's attempt id, so a lost answer retried is one link.
+ */
+export async function createAttachedPaymentRequest(input: {
+  companyId: string; orderId: string; title: string; amountMinor: number; purpose: string; clientRequestId: string;
+}): Promise<CreateStandalonePaymentResult> {
+  const data = (await call<Record<string, unknown>, Partial<CreateStandalonePaymentResult>>("createOrderPaymentRequest")({
+    companyId: input.companyId,
+    orderId: input.orderId,
+    amountMinor: input.amountMinor,
+    purpose: input.purpose,
+    clientRequestId: input.clientRequestId,
+    label: String(input.title ?? "").trim(),
+  })).data;
+  return { ok: data?.ok === true, request: data?.request ?? null };
+}
+
 /** Why the server refused to create a link — an order's or an order-less one. */
 export type PaymentLinkRefusal = {
   /** `details.reason`, or "" when the error carried none. */
