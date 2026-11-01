@@ -127,7 +127,13 @@ export type AccountingCatalog = {
   connectionId: string;
   importedAtMs: number;
   counts: Record<string, number>;
-  accounts: { externalId: string; name: string; fullyQualifiedName: string; accountType: string; accountSubType: string; classification: string; currency: string; active: boolean }[];
+  accounts: {
+    externalId: string; name: string; fullyQualifiedName: string; accountType: string; accountSubType: string; classification: string; currency: string; active: boolean;
+    /** Xero: the account code (lines are posted by code). */
+    accountNumber?: string;
+    /** Xero: "Enable payments to this account" — a non-bank account can receive payments only with it. */
+    enablePaymentsToAccount?: boolean;
+  }[];
   taxCodes: { externalId: string; name: string; description: string; active: boolean; hidden: boolean; effectiveSalesRate: number; effectivePurchaseRate: number }[];
   taxRates: { externalId: string; name: string; rateValue: number; active: boolean }[];
   items: { externalId: string; name: string; sku: string; type: string; active: boolean }[];
@@ -233,6 +239,123 @@ export async function xeroSyncNow(companyId: string, connectionId: string) {
 
 export async function xeroDisconnect(companyId: string, connectionId: string, purge = false) {
   return (await call<{ companyId: string; connectionId: string; purge: boolean }, { ok: boolean; revoked: boolean; removed: boolean }>("xeroDisconnect")({ companyId, connectionId, purge })).data;
+}
+
+// ---- Posting, phase 3a: sales invoices, payments and refunds -----------------------------------
+// The owner previews and approves each document before it is sent (functions/accountingPosting.js).
+// Readers: the owner and members with the bank grant; every write is the owner's, and sending
+// also needs Pro/Team, the workspace's posting switch and this connection as the writer.
+export type PostingKind = "sale" | "payment" | "refund";
+export type PostingStatus = "draft" | "ready" | "queued" | "retry" | "needs_attention" | "synced" | "reconciled" | "conflict" | "ignored";
+export const POSTING_DEPOSIT_METHODS = ["stripe", "card", "paypal", "bank_transfer", "bank", "cash", "other"] as const;
+export type PostingMethod = (typeof POSTING_DEPOSIT_METHODS)[number];
+
+export type PostingPreview = {
+  lines: { description: string; quantity: number; amount: number }[];
+  expectedTax: number;
+  expectedTotal: number;
+  /** Sales only: the VAT NivaDesk's finance engine holds for the order. */
+  nivadeskVat: number | null;
+  vatDifference: number;
+};
+
+export type PostingRow = {
+  id: string;
+  kind: PostingKind;
+  status: PostingStatus | string;
+  label: string;
+  orderId: string;
+  paymentId?: string;
+  docNumber?: string;
+  /** YYYY-MM-DD, London calendar. */
+  occurredOn: string;
+  amount: number;
+  /** ISO code. */
+  currency: string;
+  reasons?: string[];
+  preview?: PostingPreview;
+  sourceHash: string;
+  evidence?: "manual" | "provider" | "bank" | string;
+  method?: PostingMethod | string;
+  /** Payments and refunds: the sale posting they belong to. */
+  dependsOn?: string;
+  externalId?: string;
+  externalNumber?: string;
+  providerTotals?: { total: number; tax: number; number: string };
+  approvedAtMs?: number;
+  attemptCount?: number;
+  lastError?: string;
+  nextAttemptAtMs?: number;
+  waitingFor?: "invoice" | "rate_limit" | "switch" | "plan" | "" | string;
+  changed?: { hash: string; atMs: number; label: string; amount: number; removed: boolean };
+  providerState?: "voided" | string;
+  customerCandidates?: { externalId: string; displayName: string; email: string }[];
+  ignoredReason?: string;
+  postedAtMs?: number;
+  createdAtMs?: number;
+  updatedAtMs?: number;
+};
+
+export type PostingSettings = {
+  qboSalesItemId?: string;
+  depositAccounts?: Partial<Record<PostingMethod, string>>;
+  xeroInvoiceStatus?: "AUTHORISED" | "DRAFT";
+  updatedAtMs?: number;
+};
+
+export type PostingList = {
+  ok: boolean;
+  postings: PostingRow[];
+  /** The posting switch is open for this workspace and provider (pilot first). */
+  writeOpen: boolean;
+  canPost: boolean;
+  planAllows: boolean;
+  isOwner: boolean;
+  connection: { mode: string; status: string; writeBoundaryDate: string; scopeLevel: string; environment: string; externalCompanyId: string; provider: string };
+  posting: PostingSettings;
+};
+
+export type PostingScanResult = { ok: boolean; orders: number; created: number; refreshed: number; changed: number; unchanged: number; since: string; truncated: boolean };
+export type PostingApproveResult = { ok: boolean; approved: number; results: { id: string; ok: boolean; reason?: string }[] };
+
+type PostingBase = { companyId: string; connectionId: string };
+
+export async function accountingPostingList(companyId: string, connectionId: string) {
+  return (await call<PostingBase, PostingList>("accountingPostingList")({ companyId, connectionId })).data;
+}
+
+/** Builds or refreshes the candidates from the orders; reads nothing from and writes nothing to the books. */
+export async function accountingPostingScan(companyId: string, connectionId: string, lookbackDays?: number) {
+  return (await call<PostingBase & { lookbackDays?: number }, PostingScanResult>("accountingPostingScan")({ companyId, connectionId, ...(lookbackDays ? { lookbackDays } : {}) })).data;
+}
+
+export async function accountingPostingSettingsSave(companyId: string, connectionId: string, posting: Omit<PostingSettings, "updatedAtMs">) {
+  return (await call<PostingBase & { posting: Omit<PostingSettings, "updatedAtMs"> }, { ok: boolean; posting: PostingSettings }>("accountingPostingSettingsSave")({ companyId, connectionId, posting })).data;
+}
+
+/** At most 50; `hash` is the row's sourceHash, so an order that changed after the preview is refused (`preview_stale`). */
+export async function accountingPostingApprove(companyId: string, connectionId: string, items: { id: string; hash: string }[]) {
+  return (await call<PostingBase & { items: { id: string; hash: string }[] }, PostingApproveResult>("accountingPostingApprove")({ companyId, connectionId, items })).data;
+}
+
+export async function accountingPostingIgnore(companyId: string, connectionId: string, id: string, reason: string) {
+  return (await call<PostingBase & { id: string; reason: string }, { ok: boolean }>("accountingPostingIgnore")({ companyId, connectionId, id, reason })).data;
+}
+
+/** `customerChoice`: one of the row's customerCandidates (externalId), or "new" to create the customer. */
+export async function accountingPostingRetry(companyId: string, connectionId: string, id: string, customerChoice?: string) {
+  return (await call<PostingBase & { id: string; customerChoice?: string }, { ok: boolean }>("accountingPostingRetry")({ companyId, connectionId, id, ...(customerChoice ? { customerChoice } : {}) })).data;
+}
+
+/** A sent document whose source changed: keep what the books hold, or void it there. */
+export async function accountingPostingResolveChange(companyId: string, connectionId: string, id: string, action: "keep" | "void") {
+  return (await call<PostingBase & { id: string; action: "keep" | "void" }, { ok: boolean }>("accountingPostingResolveChange")({ companyId, connectionId, id, action })).data;
+}
+
+/** The callable error's code without the "functions/" prefix ("permission-denied", "not-found", …), or "". */
+export function accountingErrorCode(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code.replace(/^functions\//, "") : "";
 }
 
 /** The NivaDesk events an accountant maps to provider accounts (mirror of functions/accounting/core/adapter.js). */

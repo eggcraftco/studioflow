@@ -24,6 +24,7 @@ import { ORDER_DELIVERY_ADDRESS_TRANSLATIONS } from "./orderDeliveryAddressTrans
 import { SECURITY_FIX_TRANSLATIONS } from "./securityFixTranslations";
 import { CALENDAR_TRANSLATIONS } from "./calendarTranslations";
 import { STORAGE_TRANSLATIONS } from "./storageTranslations";
+import { ACCOUNTING_POSTING_TRANSLATIONS } from "./accountingPostingTranslations";
 
 import { SECOND_FACTOR_TRANSLATIONS } from "./secondFactorTranslations";
 
@@ -9518,6 +9519,9 @@ mergeIntoTranslations(SECOND_FACTOR_TRANSLATIONS);
 // gaps, so no wording elsewhere changes.
 mergeMissingIntoTranslations(CALENDAR_TRANSLATIONS);
 mergeMissingIntoTranslations(STORAGE_TRANSLATIONS);
+// Accounting write 3a (1 Nov 2026): the QuickBooks / Xero Sales tab where the owner approves what is sent.
+// Gaps only, so shared words ("Refresh", "Sent", "Invoice") keep the wording other screens use.
+mergeMissingIntoTranslations(ACCOUNTING_POSTING_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

@@ -6,13 +6,16 @@
 // suppliers and items, proposes mappings for a person to confirm, keeps one
 // primary writer per period next to Pandle, and follows what changes in the
 // provider through webhooks and change tracking. Nothing is posted yet; the
-// tabs say so honestly. Everything provider-specific sits in PROVIDER_UI; the
+// tabs say so honestly — except Sales where posting is open for the workspace
+// (phase 3a, AccountingSalesPanel: owner-approved invoices, payments and
+// refunds). Everything provider-specific sits in PROVIDER_UI; the
 // copy uses {provider} / {providerName} / {vendor} placeholders so one set of
 // translations serves every provider.
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { studioT } from "@/lib/studioflow/language";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
+import { AccountingSalesPanel } from "./AccountingSalesPanel";
 import { auth } from "@/lib/firebase/client";
 import { useNivaDeskAdmin } from "@/lib/security/adminGate";
 import {
@@ -719,8 +722,20 @@ export function AccountingProviderSection({ workspace, language = "English", pro
         </>
       ) : null}
 
-      {tab === "sales" ? readOnlyPanel(t("Sales"), t("Bespoke orders become invoices or sales receipts with their payments; channel orders follow the posting mode you chose; refunds keep their VAT treatment. Every document carries NivaDesk's identity so it can never be posted twice."), t("Sales posting is the next phase."))
-        : null}
+      {/* Phase 3a: where posting is open for the workspace, the owner previews and approves what is
+          sent; everywhere else the panel below shows the read-only text unchanged. */}
+      {tab === "sales" ? (
+        <AccountingSalesPanel
+          companyId={companyId}
+          connectionId={connection.connectionId}
+          provider={provider}
+          providerShort={ui.short}
+          providerName={ui.name}
+          language={language}
+          closedPanel={readOnlyPanel(t("Sales"), t("Bespoke orders become invoices or sales receipts with their payments; channel orders follow the posting mode you chose; refunds keep their VAT treatment. Every document carries NivaDesk's identity so it can never be posted twice."), t("Sales posting is the next phase."))}
+          onOpenSetup={() => setTab("setup")}
+        />
+      ) : null}
       {tab === "purchases" ? readOnlyPanel(t("Purchases"), t("Supplier bills, purchases paid on the spot, bill payments, supplier credits and receipt attachments — each linked back to the NivaDesk purchase, order and bank row."), t("Purchases follow the sales phase."))
         : null}
       {tab === "inventory" ? readOnlyPanel(t("Inventory & COGS"), t("NivaDesk stays the owner of physical stock. With the inventory-asset policy, a period-end valuation and COGS journal is proposed for approval; with purchases expensed, nothing is journaled."), t("Optional, and only after the accountant approves the policy."))
