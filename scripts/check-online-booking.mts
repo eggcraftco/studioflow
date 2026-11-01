@@ -126,7 +126,8 @@ function frameProblems(config: string, libSrc: string): string[] {
   const rule = config.match(/source: "\/book\/:slug\(([^"]+)\)",\s*headers: \[([\s\S]*?)\]/);
   if (!rule) return [...out, "no frame rule for /book/<slug>"];
   if (!rule[1].includes("(?!manage$)")) out.push("the frame rule does not exclude the manage page");
-  if (!/frame-ancestors \*/.test(rule[2])) out.push("the frame rule does not set frame-ancestors");
+  if (!/\{ key: "X-Frame-Options", value: "ALLOWALL" \}/.test(rule[2])) out.push("the frame rule does not lift X-Frame-Options");
+  if (/key: "Content-Security-Policy/.test(config)) out.push("a static CSP header (it carries no nonce; middleware owns the policy)");
   const frameIdx = config.indexOf('source: "/book/:slug(');
   const globalIdx = config.indexOf("headers: SECURITY_HEADERS");
   if (!(frameIdx > globalIdx && globalIdx > 0)) out.push("the frame rule is not after the global headers (it would lose)");
@@ -136,7 +137,8 @@ function frameProblems(config: string, libSrc: string): string[] {
 }
 const frameMutants: Array<[string, string, string]> = [
   ["manage frameable", nextConfig.replace("(?!manage$)", ""), lib],
-  ["no frame-ancestors", nextConfig.replace('{ key: "Content-Security-Policy", value: "frame-ancestors *" }', ""), lib],
+  ["X-Frame-Options not lifted", nextConfig.replace('headers: [{ key: "X-Frame-Options", value: "ALLOWALL" }]', 'headers: []'), lib],
+  ["a static CSP sneaks in", nextConfig.replace('headers: [{ key: "X-Frame-Options", value: "ALLOWALL" }]', 'headers: [{ key: "X-Frame-Options", value: "ALLOWALL" }, { key: "Content-Security-Policy", value: "frame-ancestors *" }]'), lib],
   ["DENY dropped", nextConfig.replace('{ key: "X-Frame-Options", value: "DENY" },', ""), lib],
   ["embed listens to anyone", nextConfig, lib.replace('if(e.origin!=="${new URL(url).origin}")return;', "")]
 ];

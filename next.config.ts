@@ -105,14 +105,13 @@ const nextConfig: NextConfig = {
       },
       // A business's online booking page may sit inside its own website (Settings ▸ Online booking ▸ embed
       // code, 1 Nov 2026). Only /book/<slug>: the manage page, which can cancel a booking, stays DENY.
-      // Listed after the rule above, so for this path these two win; a page that answers in a frame shows no
-      // signed-in data (the booking page has none) and its one button books for whoever types the details.
+      // Listed after the rule above, so for this path it wins. "ALLOWALL" is not a value browsers act on, so
+      // they ignore the header and the page may be framed; the policy itself stays report-only and nonce'd in
+      // middleware (no static CSP here — scripts/check-sec-csp.mts). The page shows no signed-in data and its
+      // one button books for whoever types the details.
       {
         source: "/book/:slug((?!manage$)[a-z0-9][a-z0-9-]{1,46}[a-z0-9])",
-        headers: [
-          { key: "X-Frame-Options", value: "ALLOWALL" },
-          { key: "Content-Security-Policy", value: "frame-ancestors *" }
-        ]
+        headers: [{ key: "X-Frame-Options", value: "ALLOWALL" }]
       }
     ];
   }
