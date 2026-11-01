@@ -294,6 +294,88 @@ const FEATURE_HIGHLIGHTS: FeatureHighlight[] = [
     tone: "graphite",
     metricKey: "feature.history.metric",
     artifactKey: "feature.history.artifact"
+  },
+  // 1 Nov 2026: features added since this grid was written (24 cards fill the three-column grid).
+  {
+    titleKey: "feature.sections.title",
+    eyebrowKey: "feature.sections.eyebrow",
+    bodyKey: "feature.sections.body",
+    bulletKeys: ["feature.sections.bullet1", "feature.sections.bullet2", "feature.sections.bullet3", "feature.sections.availability"],
+    tone: "sage",
+    metricKey: "feature.sections.metric",
+    artifactKey: "feature.sections.artifact"
+  },
+  {
+    titleKey: "feature.calendar.title",
+    eyebrowKey: "feature.calendar.eyebrow",
+    bodyKey: "feature.calendar.body",
+    bulletKeys: ["feature.calendar.bullet1", "feature.calendar.bullet2", "feature.calendar.availability"],
+    tone: "lilac",
+    metricKey: "feature.calendar.metric",
+    artifactKey: "feature.calendar.artifact"
+  },
+  {
+    titleKey: "feature.home.title",
+    eyebrowKey: "feature.home.eyebrow",
+    bodyKey: "feature.home.body",
+    bulletKeys: ["feature.home.bullet1", "feature.home.bullet2", "feature.home.bullet3"],
+    tone: "rose",
+    metricKey: "feature.home.metric",
+    artifactKey: "feature.home.artifact"
+  },
+  {
+    titleKey: "feature.marketplaces.title",
+    eyebrowKey: "feature.marketplaces.eyebrow",
+    bodyKey: "feature.marketplaces.body",
+    bulletKeys: ["feature.marketplaces.bullet1", "feature.marketplaces.bullet2", "feature.marketplaces.bullet3"],
+    tone: "gold",
+    metricKey: "feature.marketplaces.metric",
+    artifactKey: "feature.marketplaces.artifact"
+  },
+  {
+    titleKey: "feature.dhl.title",
+    eyebrowKey: "feature.dhl.eyebrow",
+    bodyKey: "feature.dhl.body",
+    bulletKeys: ["feature.dhl.bullet1", "feature.dhl.bullet2", "feature.dhl.availability"],
+    tone: "sky",
+    metricKey: "feature.dhl.metric",
+    artifactKey: "feature.dhl.artifact"
+  },
+  {
+    titleKey: "feature.paymentLinks.title",
+    eyebrowKey: "feature.paymentLinks.eyebrow",
+    bodyKey: "feature.paymentLinks.body",
+    bulletKeys: ["feature.paymentLinks.bullet1", "feature.paymentLinks.bullet2", "feature.paymentLinks.bullet3"],
+    tone: "clay",
+    metricKey: "feature.paymentLinks.metric",
+    artifactKey: "feature.paymentLinks.artifact"
+  },
+  {
+    titleKey: "feature.scanReceipt.title",
+    eyebrowKey: "feature.scanReceipt.eyebrow",
+    bodyKey: "feature.scanReceipt.body",
+    bulletKeys: ["feature.scanReceipt.bullet1", "feature.scanReceipt.bullet2", "feature.scanReceipt.bullet3"],
+    tone: "graphite",
+    metricKey: "feature.scanReceipt.metric",
+    artifactKey: "feature.scanReceipt.artifact"
+  },
+  {
+    titleKey: "feature.twoStep.title",
+    eyebrowKey: "feature.twoStep.eyebrow",
+    bodyKey: "feature.twoStep.body",
+    bulletKeys: ["feature.twoStep.bullet1", "feature.twoStep.bullet2", "feature.twoStep.bullet3"],
+    tone: "sage",
+    metricKey: "feature.twoStep.metric",
+    artifactKey: "feature.twoStep.artifact"
+  },
+  {
+    titleKey: "feature.claude.title",
+    eyebrowKey: "feature.claude.eyebrow",
+    bodyKey: "feature.claude.body",
+    bulletKeys: ["feature.claude.bullet1", "feature.claude.bullet2", "feature.claude.bullet3"],
+    tone: "sky",
+    metricKey: "feature.claude.metric",
+    artifactKey: "feature.claude.artifact"
   }
 ];
 
@@ -474,6 +556,11 @@ const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
     planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
   },
   {
+    titleKey: "planBridge.claude.title",
+    bodyKey: "planBridge.claude.body",
+    planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
     titleKey: "planBridge.helpAssistant.title",
     bodyKey: "planBridge.helpAssistant.body",
     planKeys: ["lifetime_lite", "pro_monthly", "team_monthly"]
@@ -489,8 +576,24 @@ const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
     planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
   },
   {
+    titleKey: "planBridge.calendar.title",
+    bodyKey: "planBridge.calendar.body",
+    planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
+    titleKey: "planBridge.twoStep.title",
+    bodyKey: "planBridge.twoStep.body",
+    planKeys: ["demo", "lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
     titleKey: "planBridge.cardCustomization.title",
     bodyKey: "planBridge.cardCustomization.body",
+    planKeys: ["lifetime_lite", "pro_monthly", "team_monthly"]
+  },
+  {
+    // Stripe payments are part of the paid plans (SL-23: Free has no Connect).
+    titleKey: "planBridge.paymentLinks.title",
+    bodyKey: "planBridge.paymentLinks.body",
     planKeys: ["lifetime_lite", "pro_monthly", "team_monthly"]
   },
   {
@@ -511,6 +614,12 @@ const PLAN_FEATURE_BRIDGE: PlanFeatureBridge[] = [
   {
     titleKey: "planBridge.storageAddons.title",
     bodyKey: "planBridge.storageAddons.body",
+    planKeys: ["pro_monthly", "team_monthly"]
+  },
+  {
+    // PLAN_ENTITLEMENTS bank_feed: Pro and Team.
+    titleKey: "planBridge.bankSpending.title",
+    bodyKey: "planBridge.bankSpending.body",
     planKeys: ["pro_monthly", "team_monthly"]
   },
   {
@@ -1905,13 +2014,21 @@ const PLAN_FEATURE_ICONS: { icon: React.ReactNode; tone: string }[] = [
   { tone: "blue", icon: FI("M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6M21 19v-1a4 4 0 0 0-3-3.85M16.5 4.15a4 4 0 0 1 0 7.7") },
   { tone: "violet", icon: FI("M8 4h6l4 4v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM13 4v5h5") },
   { tone: "amber", icon: FI("M12 3l1.8 4.6L18.5 9l-3.7 3 1.3 4.8L12 14.5 7.9 16.8 9.2 12 5.5 9l4.7-1.4Z") },
+  { tone: "violet", icon: FI("M12 4v16M5 8l14 8M19 8L5 16") },
+  // In-app help assistant. Its row went into PLAN_FEATURE_BRIDGE without an icon, which shifted
+  // every icon below it by one row on phones and left To Do assignment with none (1 Nov 2026).
+  { tone: "blue", icon: FI("M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17h0") },
   { tone: "teal", icon: FI("M5 20V10M12 20V4M19 20v-7") },
   { tone: "rose", icon: FI("M12 3v10m0 0l4-4m-4 4l-4-4M5 17v2a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2") },
+  { tone: "blue", icon: FI("M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1ZM4 10h16M8 3v4M16 3v4") },
+  { tone: "sage", icon: FI("M7 11V8a5 5 0 0 1 10 0v3M6 11h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1ZM12 15v2") },
   { tone: "blue", icon: FI("M4 6a1 1 0 0 1 1-1h6l2 2h6a1 1 0 0 1 1 1v3H4ZM4 11h17v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z") },
+  { tone: "teal", icon: FI("M4 6h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1ZM3 10h18M7 15h3") },
   { tone: "sage", icon: FI("M4 18l5-5 3 3 7-8M16 8h3v3") },
   { tone: "violet", icon: FI("M12 3a9 9 0 1 0 0 18c1 0 1.5-.8 1.5-1.6 0-.8-.7-1.4-.7-2.2 0-.6.5-1.2 1.2-1.2H16a4 4 0 0 0 4-4c0-4.4-3.6-7-8-7ZM7.5 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM11 8.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2ZM15.5 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z") },
   { tone: "amber", icon: FI("M4 7a1 1 0 0 1 1-1h4l2 2h8a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1Z") },
   { tone: "teal", icon: FI("M5 7c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3ZM5 7v10c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3") },
+  { tone: "violet", icon: FI("M3 9l9-5 9 5M5 10v7M9.7 10v7M14.3 10v7M19 10v7M3 20h18") },
   { tone: "rose", icon: FI("M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4V6a1 1 0 0 1 1-1H4Z") },
   { tone: "amber", icon: FI("M13 3L5 13h6l-1 8 8-10h-6l1-8Z") },
   { tone: "sage", icon: FI("M9 12l2 2 4-4M12 3l7 3v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3Z") },
@@ -2938,6 +3055,13 @@ const ADVANCED_AREAS = [
   { id: "domain", titleKey: "adv.domain.title", bodyKey: "adv.domain.body" }
 ] as const;
 
+// Written out on /features after the six above (1 Nov 2026). The home tiles stay six.
+const FEATURES_PAGE_AREAS = [
+  { id: "production", titleKey: "adv.production.title", bodyKey: "adv.production.body" },
+  { id: "accounting", titleKey: "adv.accounting.title", bodyKey: "adv.accounting.body" },
+  { id: "cloud", titleKey: "adv.cloud.title", bodyKey: "adv.cloud.body" }
+] as const;
+
 function AdvancedAreasSection({ detailed = false }: { detailed?: boolean }) {
   const { t } = usePublicSiteLanguage();
   const icons: Record<string, ReactNode> = {
@@ -2946,7 +3070,10 @@ function AdvancedAreasSection({ detailed = false }: { detailed?: boolean }) {
     estimates: <><path d="M6 3h8a1.5 1.5 0 0 1 1.5 1.5v11A1.5 1.5 0 0 1 14 17H6a1.5 1.5 0 0 1-1.5-1.5v-11A1.5 1.5 0 0 1 6 3z" /><path d="M7.5 7h5M7.5 10h5M7.5 13h3" /></>,
     repairs: <><path d="M12.5 3.5a4 4 0 0 0-4.9 5L3 13.1V17h3.9l4.6-4.6a4 4 0 0 0 5-4.9l-2.6 2.6-2.4-.6-.6-2.4z" /></>,
     files: <><path d="M3 6l1.5-2h4l1 1.5H17v10.5H3z" /></>,
-    domain: <><circle cx="10" cy="10" r="7" /><path d="M3 10h14M10 3c2.2 2 3.3 4.4 3.3 7S12.2 15 10 17c-2.2-2-3.3-4.4-3.3-7S7.8 5 10 3z" /></>
+    domain: <><circle cx="10" cy="10" r="7" /><path d="M3 10h14M10 3c2.2 2 3.3 4.4 3.3 7S12.2 15 10 17c-2.2-2-3.3-4.4-3.3-7S7.8 5 10 3z" /></>,
+    production: <><rect x="3" y="3.5" width="4" height="13" rx="1.2" /><rect x="8" y="3.5" width="4" height="8.5" rx="1.2" /><rect x="13" y="3.5" width="4" height="11" rx="1.2" /></>,
+    accounting: <><rect x="4.5" y="2.8" width="11" height="14.4" rx="1.6" /><path d="M7 6.2h6M7 9.6h.01M10 9.6h.01M13 9.6h.01M7 12.8h.01M10 12.8h.01M13 12.8h.01" /></>,
+    cloud: <path d="M6.2 15.5a3.3 3.3 0 0 1-.4-6.6 4.4 4.4 0 0 1 8.5-1.1 3 3 0 0 1 .4 7.7z" />
   };
   const areaIcon = (id: string) => (
     <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">{icons[id]}</svg>
@@ -2971,7 +3098,7 @@ function AdvancedAreasSection({ detailed = false }: { detailed?: boolean }) {
             <p>{t("section.backoffice.body")}</p>
           </div>
           <div className="public-features-deep-list">
-            {ADVANCED_AREAS.map(area => (
+            {[...ADVANCED_AREAS, ...FEATURES_PAGE_AREAS].map(area => (
               <article id={`area-${area.id}`} key={area.id}>
                 <span className="public-features-deep-icon" aria-hidden="true">{areaIcon(area.id)}</span>
                 <div className="public-features-deep-titles">
