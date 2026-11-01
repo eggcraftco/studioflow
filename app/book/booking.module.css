@@ -4,6 +4,8 @@
 .page {
   --bk-accent: #2563eb;
   --bk-on-accent: #ffffff;
+  /* The card is always light, so form controls are too (a dark-mode browser would draw them dark). */
+  color-scheme: light;
   min-height: 100vh;
   padding: 20px 12px 32px;
   background: #f6f7f9;
@@ -394,6 +396,14 @@
   border-radius: 10px;
   background: #fff4ed;
   color: #9a3412;
+}
+
+.ok {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #ecfdf3;
+  color: #166534;
 }
 
 .primary,

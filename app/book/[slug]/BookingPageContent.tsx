@@ -294,9 +294,9 @@ export function BookingPageContent({ slug, initialLanguage, initialDirection, em
             <h2>{pending ? c.requestTitle : c.doneTitle}</h2>
             <p className={styles.muted}>{(pending ? c.requestBody : c.doneBody).replace("{business}", page.business.name).replace("{email}", done.email)}</p>
             <dl className={styles.summary}>
-              <div><dt>{c.chooseService}</dt><dd>{b.serviceName}</dd></div>
-              <div><dt>{c.chooseDay}</dt><dd>{longDate(b.dateKey, locale)}, {b.startTime}–{b.endTime}</dd></div>
-              {b.providerName ? <div><dt>{c.choosePerson}</dt><dd>{b.providerName}</dd></div> : null}
+              <div><dt>{c.labelService}</dt><dd>{b.serviceName}</dd></div>
+              <div><dt>{c.labelWhen}</dt><dd>{longDate(b.dateKey, locale)}, {b.startTime}–{b.endTime}</dd></div>
+              {b.providerName ? <div><dt>{c.labelWith}</dt><dd>{b.providerName}</dd></div> : null}
               <div><dt>{locationLabel(b.location, language)}</dt><dd>{b.location === "customer_address" ? b.address : page.business.name}</dd></div>
             </dl>
             <div className={styles.doneActions}>
@@ -325,12 +325,12 @@ export function BookingPageContent({ slug, initialLanguage, initialDirection, em
 
         <section className={styles.step} aria-labelledby="bk-service">
           <h2 id="bk-service" className={styles.stepTitle}><span className={styles.stepNo}>1</span>{c.chooseService}</h2>
-          <div className={styles.services} role="list">
+          <div className={styles.services}>
             {page.services.map((s) => {
               const price = priceLabel(s, page.currency, language);
               const selected = s.id === serviceId;
               return (
-                <button key={s.id} type="button" role="listitem" className={`${styles.service} ${selected ? styles.selected : ""}`} aria-pressed={selected} onClick={() => pickService(s.id)} data-service={s.id}>
+                <button key={s.id} type="button" className={`${styles.service} ${selected ? styles.selected : ""}`} aria-pressed={selected} onClick={() => pickService(s.id)} data-service={s.id}>
                   <span className={styles.serviceName}>{s.name}</span>
                   <span className={styles.serviceMeta}>
                     {c.minutes.replace("{n}", String(s.durationMin))}
@@ -362,13 +362,13 @@ export function BookingPageContent({ slug, initialLanguage, initialDirection, em
             {visitorZoneDiffers(page.timeZone) ? <p className={styles.zone}>🕑 {c.timesIn.replace("{zone}", zoneCity(page.timeZone))}</p> : null}
             <div className={styles.stripRow}>
               <button type="button" className={styles.arrow} aria-label={c.earlierDates} disabled={!stripStart || stripStart <= today} onClick={() => setStripStart(addDaysKey(stripStart, -BOOKING_STRIP_DAYS) < today ? today : addDaysKey(stripStart, -BOOKING_STRIP_DAYS))}>‹</button>
-              <div className={styles.strip} role="list">
+              <div className={styles.strip}>
                 {strip.map((key) => {
                   const parts = dayChipParts(key, locale);
                   const free = Boolean(days?.some((d) => d.dateKey === key && d.times.length));
                   const beyond = key > lastKey;
                   return (
-                    <button key={key} type="button" role="listitem" className={`${styles.day} ${key === dateKey ? styles.selected : ""}`} disabled={!free || beyond} aria-pressed={key === dateKey} onClick={() => pickDay(key)} data-day={key}>
+                    <button key={key} type="button" className={`${styles.day} ${key === dateKey ? styles.selected : ""}`} disabled={!free || beyond} aria-pressed={key === dateKey} onClick={() => pickDay(key)} data-day={key}>
                       <span className={styles.dayWeek}>{parts.weekday}</span>
                       <span className={styles.dayNum}>{parts.day}</span>
                       <span className={styles.dayMonth}>{parts.month}</span>

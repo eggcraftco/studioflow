@@ -326,7 +326,8 @@ function QuickSetup({ companyId, setup, t, disabled, gate, onDone, saveError, pr
     const services: BookingService[] = [];
     for (const i of chosen) {
       const p = presets[i];
-      if (p) services.push(blankService(services, { name: p.name, durationMin: p.durationMin, location: p.location || "in_person", approval: p.approval || "instant" }));
+      // Saved in the language the owner sees them in: the page shows customers exactly this name.
+      if (p) services.push(blankService(services, { name: t(p.name), durationMin: p.durationMin, location: p.location || "in_person", approval: p.approval || "instant" }));
     }
     if (custom.name.trim()) services.push(blankService(services, { name: custom.name.trim(), durationMin: custom.durationMin }));
     const owner = setup.config.providers[0];
@@ -404,7 +405,7 @@ function ServicesCard({ draft, setDraft, setup, t, disabled, problems }: { draft
   const [openId, setOpenId] = useState<string | null>(null);
   const update = (id: string, patch: Partial<BookingService>) => setDraft({ ...draft, services: draft.services.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
   const remove = (id: string) => setDraft({ ...draft, services: draft.services.filter((s) => s.id !== id) });
-  const presets = presetsForBusinessType(setup.businessType).filter((p) => !draft.services.some((s) => s.name === p.name));
+  const presets = presetsForBusinessType(setup.businessType).filter((p) => !draft.services.some((s) => s.name === p.name || s.name === t(p.name)));
   const team = draft.providers.length > 1;
   return (
     <section className="card app-card" data-testid="booking-services">
@@ -507,7 +508,7 @@ function ServicesCard({ draft, setDraft, setup, t, disabled, problems }: { draft
       <div className={styles.presetChips}>
         {presets.map((p) => (
           <button key={p.name} type="button" className={styles.presetChip} disabled={disabled || draft.services.length >= 20} onClick={() => {
-            const service = blankService(draft.services, { name: p.name, durationMin: p.durationMin, location: p.location || "in_person", approval: p.approval || "instant" });
+            const service = blankService(draft.services, { name: t(p.name), durationMin: p.durationMin, location: p.location || "in_person", approval: p.approval || "instant" });
             setDraft({ ...draft, services: [...draft.services, service] });
           }}>+ {t(p.name)}</button>
         ))}

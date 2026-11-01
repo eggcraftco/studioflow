@@ -288,6 +288,9 @@ export type BookingCopy = {
   tooLate: string;
   linkInvalid: string;
   poweredBy: string;
+  labelService: string;
+  labelWhen: string;
+  labelWith: string;
 };
 
 export const BOOKING_LANGUAGES: readonly BookingLanguage[] = ["en", "tr", "de", "fr", "it", "es", "pt", "ru", "ja", "zh", "ar", "hi"];
@@ -373,7 +376,10 @@ export const BOOKING_COPY: Record<BookingLanguage, BookingCopy> = {
     cancelled: "Your booking is cancelled. We've emailed you.",
     tooLate: "This booking can no longer be changed online. Please contact {business}.",
     linkInvalid: "This link is not valid any more.",
-    poweredBy: "Booking by NivaDesk"
+    poweredBy: "Booking by NivaDesk",
+    labelService: "Service",
+    labelWhen: "When",
+    labelWith: "With"
   },
   tr: {
     loading: "Yükleniyor…",
@@ -455,7 +461,10 @@ export const BOOKING_COPY: Record<BookingLanguage, BookingCopy> = {
     cancelled: "Randevunuz iptal edildi. Size e-posta gönderdik.",
     tooLate: "Bu randevu artık online değiştirilemiyor. Lütfen {business} ile iletişime geçin.",
     linkInvalid: "Bu bağlantı artık geçerli değil.",
-    poweredBy: "Randevu: NivaDesk"
+    poweredBy: "Randevu: NivaDesk",
+    labelService: "Hizmet",
+    labelWhen: "Ne zaman",
+    labelWith: "Kiminle"
   },
   de: {
     loading: "Wird geladen…",
@@ -537,7 +546,10 @@ export const BOOKING_COPY: Record<BookingLanguage, BookingCopy> = {
     cancelled: "Ihr Termin ist storniert. Wir haben Ihnen eine E-Mail geschickt.",
     tooLate: "Dieser Termin kann online nicht mehr geändert werden. Bitte wenden Sie sich an {business}.",
     linkInvalid: "Dieser Link ist nicht mehr gültig.",
-    poweredBy: "Buchung über NivaDesk"
+    poweredBy: "Buchung über NivaDesk",
+    labelService: "Leistung",
+    labelWhen: "Wann",
+    labelWith: "Bei"
   },
   fr: {
     loading: "Chargement…",
@@ -619,7 +631,10 @@ export const BOOKING_COPY: Record<BookingLanguage, BookingCopy> = {
     cancelled: "Votre rendez-vous est annulé. Nous vous avons écrit.",
     tooLate: "Ce rendez-vous ne peut plus être modifié en ligne. Contactez {business}.",
     linkInvalid: "Ce lien n’est plus valide.",
-    poweredBy: "Réservation par NivaDesk"
+    poweredBy: "Réservation par NivaDesk",
+    labelService: "Prestation",
+    labelWhen: "Quand",
+    labelWith: "Avec"
   },
   it: {
     loading: "Caricamento…",
@@ -701,7 +716,10 @@ export const BOOKING_COPY: Record<BookingLanguage, BookingCopy> = {
     cancelled: "La prenotazione è annullata. Ti abbiamo scritto.",
     tooLate: "Questa prenotazione non può più essere modificata online. Contatta {business}.",
     linkInvalid: "Questo link non è più valido.",
-    poweredBy: "Prenotazione con NivaDesk"
+    poweredBy: "Prenotazione con NivaDesk",
+    labelService: "Servizio",
+    labelWhen: "Quando",
+    labelWith: "Con"
   },
   es: {
     loading: "Cargando…",
@@ -783,7 +801,10 @@ export const BOOKING_COPY: Record<BookingLanguage, BookingCopy> = {
     cancelled: "Tu cita está cancelada. Te hemos escrito.",
     tooLate: "Esta cita ya no se puede cambiar online. Contacta con {business}.",
     linkInvalid: "Este enlace ya no es válido.",
-    poweredBy: "Reservas con NivaDesk"
+    poweredBy: "Reservas con NivaDesk",
+    labelService: "Servicio",
+    labelWhen: "Cuándo",
+    labelWith: "Con"
   },
   pt: {
     loading: "A carregar…",
@@ -865,7 +886,10 @@ export const BOOKING_COPY: Record<BookingLanguage, BookingCopy> = {
     cancelled: "A sua marcação foi cancelada. Enviámos-lhe um e-mail.",
     tooLate: "Esta marcação já não pode ser alterada online. Contacte {business}.",
     linkInvalid: "Esta ligação já não é válida.",
-    poweredBy: "Marcações com NivaDesk"
+    poweredBy: "Marcações com NivaDesk",
+    labelService: "Serviço",
+    labelWhen: "Quando",
+    labelWith: "Com"
   },
   ru: {
     loading: "Загрузка…",
@@ -947,7 +971,10 @@ export const BOOKING_COPY: Record<BookingLanguage, BookingCopy> = {
     cancelled: "Ваша запись отменена. Мы отправили вам письмо.",
     tooLate: "Эту запись больше нельзя изменить онлайн. Свяжитесь с {business}.",
     linkInvalid: "Эта ссылка больше не действует.",
-    poweredBy: "Запись через NivaDesk"
+    poweredBy: "Запись через NivaDesk",
+    labelService: "Услуга",
+    labelWhen: "Когда",
+    labelWith: "Специалист"
   },
   ja: {
     loading: "読み込み中…",
@@ -1029,7 +1056,10 @@ export const BOOKING_COPY: Record<BookingLanguage, BookingCopy> = {
     cancelled: "予約はキャンセルされました。メールをお送りしました。",
     tooLate: "この予約はオンラインで変更できなくなりました。{business} にお問い合わせください。",
     linkInvalid: "このリンクは無効になりました。",
-    poweredBy: "予約: NivaDesk"
+    poweredBy: "予約: NivaDesk",
+    labelService: "サービス",
+    labelWhen: "日時",
+    labelWith: "担当"
   },
   zh: {
     loading: "加载中…",
@@ -1111,7 +1141,10 @@ export const BOOKING_COPY: Record<BookingLanguage, BookingCopy> = {
     cancelled: "您的预约已取消。我们已发邮件给您。",
     tooLate: "此预约已无法在线更改。请联系 {business}。",
     linkInvalid: "此链接已失效。",
-    poweredBy: "预约由 NivaDesk 提供"
+    poweredBy: "预约由 NivaDesk 提供",
+    labelService: "服务",
+    labelWhen: "时间",
+    labelWith: "服务人员"
   },
   ar: {
     loading: "جارٍ التحميل…",
@@ -1193,7 +1226,10 @@ export const BOOKING_COPY: Record<BookingLanguage, BookingCopy> = {
     cancelled: "تم إلغاء حجزك. أرسلنا إليك رسالة.",
     tooLate: "لم يعد بالإمكان تغيير هذا الحجز عبر الإنترنت. يُرجى التواصل مع {business}.",
     linkInvalid: "هذا الرابط لم يعد صالحًا.",
-    poweredBy: "الحجز عبر NivaDesk"
+    poweredBy: "الحجز عبر NivaDesk",
+    labelService: "الخدمة",
+    labelWhen: "الموعد",
+    labelWith: "مع"
   },
   hi: {
     loading: "लोड हो रहा है…",
@@ -1275,6 +1311,9 @@ export const BOOKING_COPY: Record<BookingLanguage, BookingCopy> = {
     cancelled: "आपकी बुकिंग रद्द हो गई है। हमने आपको ईमेल भेजा है।",
     tooLate: "यह बुकिंग अब ऑनलाइन नहीं बदली जा सकती। कृपया {business} से संपर्क करें।",
     linkInvalid: "यह लिंक अब मान्य नहीं है।",
-    poweredBy: "बुकिंग: NivaDesk"
+    poweredBy: "बुकिंग: NivaDesk",
+    labelService: "सेवा",
+    labelWhen: "कब",
+    labelWith: "किसके साथ"
   }
 };

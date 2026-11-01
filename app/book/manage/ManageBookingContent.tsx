@@ -52,6 +52,8 @@ export function ManageBookingContent({ initialLanguage, initialDirection }: { in
   const [mode, setMode] = useState<"view" | "cancel" | "move">("view");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  // Done (moved / cancelled) reads as good news; anything else as a warning.
+  const [noticeOk, setNoticeOk] = useState(false);
   const [stripStart, setStripStart] = useState("");
   const [days, setDays] = useState<BookingDay[] | null>(null);
   const [dateKey, setDateKey] = useState("");
@@ -116,10 +118,12 @@ export function ManageBookingContent({ initialLanguage, initialDirection }: { in
     if (!view || busy) return;
     setBusy(true);
     setNotice("");
+    setNoticeOk(false);
     try {
       const data = await call<{ booking?: BookingSummary }>({ action: "cancel" });
       if (data.booking) setView({ ...view, booking: data.booking, canCancel: false, canReschedule: false });
       setNotice(c.cancelled);
+      setNoticeOk(true);
       setMode("view");
     } catch (error) {
       setNotice(errorReason(error) === "too_late" ? c.tooLate.replace("{business}", view.business.name) : errorCode(error) === "resource-exhausted" ? c.tooMany : c.failed);
@@ -132,10 +136,12 @@ export function ManageBookingContent({ initialLanguage, initialDirection }: { in
     if (!view || busy || !dateKey || !time) return;
     setBusy(true);
     setNotice("");
+    setNoticeOk(false);
     try {
       const data = await call<{ booking?: BookingSummary }>({ action: "reschedule", dateKey, time });
       if (data.booking) setView({ ...view, booking: data.booking });
       setNotice(c.moved);
+      setNoticeOk(true);
       setMode("view");
     } catch (error) {
       const reason = errorReason(error);
@@ -197,12 +203,12 @@ export function ManageBookingContent({ initialLanguage, initialDirection }: { in
           <span className={markClass} aria-hidden="true">{live ? (b.status === "pending" ? "…" : "✓") : "×"}</span>
           <h2>{statusText[b.status] || b.status}</h2>
           <dl className={styles.summary}>
-            <div><dt>{c.chooseService}</dt><dd>{b.serviceName}</dd></div>
-            <div><dt>{c.chooseDay}</dt><dd>{longDate(b.dateKey, locale)}, {b.startTime}–{b.endTime}</dd></div>
-            {b.providerName ? <div><dt>{c.choosePerson}</dt><dd>{b.providerName}</dd></div> : null}
+            <div><dt>{c.labelService}</dt><dd>{b.serviceName}</dd></div>
+            <div><dt>{c.labelWhen}</dt><dd>{longDate(b.dateKey, locale)}, {b.startTime}–{b.endTime}</dd></div>
+            {b.providerName ? <div><dt>{c.labelWith}</dt><dd>{b.providerName}</dd></div> : null}
             <div><dt>{locationLabel(b.location, language)}</dt><dd>{b.location === "customer_address" ? b.address : view.business.name}</dd></div>
           </dl>
-          {notice ? <p className={styles.alert} role="status">{notice}</p> : null}
+          {notice ? <p className={noticeOk ? styles.ok : styles.alert} role="status">{notice}</p> : null}
 
           {mode === "view" && live ? (
             view.canCancel || view.canReschedule ? (
@@ -230,12 +236,12 @@ export function ManageBookingContent({ initialLanguage, initialDirection }: { in
             <h2 id="bk-move" className={styles.stepTitle}>{c.chooseDay}</h2>
             <div className={styles.stripRow}>
               <button type="button" className={styles.arrow} aria-label={c.earlierDates} disabled={stripStart <= todayKeyIn(b.timeZone)} onClick={() => { const from = addDaysKey(stripStart, -BOOKING_STRIP_DAYS); const today = todayKeyIn(b.timeZone); const next = from < today ? today : from; setStripStart(next); void loadTimes(next); }}>‹</button>
-              <div className={styles.strip} role="list">
+              <div className={styles.strip}>
                 {stripKeys(stripStart).map((key) => {
                   const parts = dayChipParts(key, locale);
                   const free = Boolean(days?.some((d) => d.dateKey === key && d.times.length));
                   return (
-                    <button key={key} type="button" role="listitem" className={`${styles.day} ${key === dateKey ? styles.selected : ""}`} disabled={!free} aria-pressed={key === dateKey} onClick={() => { setDateKey(key); setTime(""); }}>
+                    <button key={key} type="button" className={`${styles.day} ${key === dateKey ? styles.selected : ""}`} disabled={!free} aria-pressed={key === dateKey} onClick={() => { setDateKey(key); setTime(""); }}>
                       <span className={styles.dayWeek}>{parts.weekday}</span>
                       <span className={styles.dayNum}>{parts.day}</span>
                       <span className={styles.dayMonth}>{parts.month}</span>
