@@ -4,6 +4,7 @@
 // functions insights/presence.js (leaderboardSummary); this file only names and formats.
 
 import { PRESENCE_APPS, type PresenceApp } from "./adminLivePresence";
+import type { BrowserItem } from "./adminBrowsers";
 
 export type OnlinePeriod = "today" | "yesterday" | "7d";
 
@@ -15,6 +16,8 @@ export type OnlinePerson = {
   lastSeenMs: number | null;
   byApp: Partial<Record<PresenceApp, number>>;
   devices: { device: string; sessions: number }[];
+  /** Browsers (1 Nov 2026): what each of the person's sessions connected with; absent on an older server. */
+  browsers?: BrowserItem[];
   internal: "" | "staff" | "workspace";
   email: string;
   name: string;

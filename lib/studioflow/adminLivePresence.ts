@@ -19,6 +19,9 @@ export type PresenceLive = PresenceCounts & {
   devices: { device: string; sessions: number }[];
   versions: { platform: string; appVersion: string; appBuild: string; sessions: number }[];
   systems: { platform: string; os: string; browser: string; sessions: number }[];
+  /** Browsers (1 Nov 2026): per kind and per browser family; absent on an older server. Names in adminBrowsers.ts. */
+  browserKinds?: Partial<Record<string, PresenceBucket>>;
+  browsers?: (PresenceBucket & { family: string; kind: string; brand: string; versions: { major: string; sessions: number }[] })[];
 };
 
 export type PresenceHistory = {

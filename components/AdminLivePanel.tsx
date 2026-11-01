@@ -9,6 +9,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { CardTitle } from "@/components/CardTitle";
+import { BrowserKindBadge, KindBars } from "@/components/AdminBrowserKinds";
+import { browserLabel, familyOrder, kindRows, type BrowserKind, type BrowserBucket } from "@/lib/studioflow/adminBrowsers";
 import {
   PRESENCE_APPS,
   PLATFORM_LABELS,
@@ -352,6 +354,32 @@ export function AdminLivePanel({ view }: { view: AdminView }) {
           ) : (
             <p className="muted-copy">{legacy ? "Available after the server update." : "No one is in an app right now."}</p>
           )}
+        </section>
+
+        <section className="card app-card">
+          <CardTitle icon="dashboard" eyebrow="Right now" title="Browsers" />
+          {now?.browserKinds ? (
+            (() => {
+              const rows = kindRows(now.browserKinds as Partial<Record<BrowserKind, BrowserBucket>>);
+              const families = [...(now.browsers ?? [])].sort(familyOrder);
+              return rows.length ? (
+                <>
+                  <KindBars unit={["session", "sessions"]} rows={rows.map(row => ({ ...row, value: row.sessions, people: row.people }))} />
+                  <ul className="admin-plain-list">
+                    {families.map(row => (
+                      <li key={`${row.family}|${row.kind}|${row.brand}`}>
+                        <span>{browserLabel({ family: row.family, brand: row.brand })} <BrowserKindBadge kind={row.kind} /></span>
+                        <strong>{row.sessions}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : <p className="muted-copy">No one is in an app right now.</p>;
+            })()
+          ) : (
+            <p className="muted-copy">{legacy || now ? "Available after the server update." : "No one is in an app right now."}</p>
+          )}
+          <p className="muted-copy admin-footnote">AI browser, AI agent or normal browser for the web app; the app itself for iPhone, iPad, Mac and Android. Per person and per period: Browsers.</p>
         </section>
 
         <section className="card app-card">

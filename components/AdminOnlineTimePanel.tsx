@@ -4,7 +4,7 @@
 // spent how long in the NivaDesk apps today, yesterday or over the last 7 UK days, longest first, with
 // workspace, last seen and the split per app. Reads getSitePresence's `leaderboard` answer (admins only
 // on the server); the counting is functions insights/presence.js leaderboardSummary and the on-screen
-// names lib/studioflow/adminOnlineTime.ts. This is the one Insights page that names people.
+// names lib/studioflow/adminOnlineTime.ts. With Browsers, the Insights pages that name people.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { httpsCallable } from "firebase/functions";
@@ -12,6 +12,7 @@ import { functions } from "@/lib/firebase/client";
 import { CardTitle } from "@/components/CardTitle";
 import { LiveStatusPill } from "@/components/AdminLivePanel";
 import { deviceLabel } from "@/lib/studioflow/adminLivePresence";
+import { browsersLine, isAiKind } from "@/lib/studioflow/adminBrowsers";
 import {
   ONLINE_PERIODS,
   appSplit,
@@ -106,6 +107,8 @@ function PersonRow({ person, rank, percent, now, byHours }: { person: OnlinePers
   const split = appSplitLabel(person.byApp);
   const devices = person.devices.map(d => (d.sessions > 1 ? `${deviceLabel(d.device)} ×${d.sessions}` : deviceLabel(d.device))).join(", ");
   const online = isOnlineNow(person.lastSeenMs, now);
+  const browsers = browsersLine(person.browsers);
+  const ai = (person.browsers ?? []).some(item => isAiKind(item.kind));
   return (
     <li className="admin-online-row">
       <span className="admin-online-rank" aria-label={`Rank ${rank}`}>{rank}</span>
@@ -128,6 +131,7 @@ function PersonRow({ person, rank, percent, now, byHours }: { person: OnlinePers
           {lastSeenLabel(person.lastSeenMs, now)}
         </span>
         <span className="admin-online-devices">{devices}</span>
+        {browsers ? <span className={ai ? "admin-online-browsers is-ai" : "admin-online-browsers"} title="Browser or app of each session (Insights ▸ Browsers)">{browsers}</span> : null}
       </div>
     </li>
   );
@@ -135,11 +139,16 @@ function PersonRow({ person, rank, percent, now, byHours }: { person: OnlinePers
 
 export function AdminOnlineTimePanel({ view, onViewChange }: { view: AdminView; onViewChange: (view: AdminView) => void }) {
   const [period, setPeriod] = useState<OnlinePeriod>("today");
+  const [aiOnly, setAiOnly] = useState(false);
   const { board, legacy, status, error, updatedAt, loading, refresh } = useOnlineLeaderboard(view, period);
   const now = updatedAt ?? Date.now();
   const cover = board ? coverage(board) : "full";
   const byHours = cover === "none";
-  const people = board?.people ?? [];
+  const allPeople = board?.people ?? [];
+  // Browsers (1 Nov 2026): "AI browsers & agents only" keeps the people with at least one such session; ranks stay
+  // the full list's, so a filtered row still says where it stands.
+  const people = aiOnly ? allPeople.filter(person => (person.browsers ?? []).some(item => isAiKind(item.kind))) : allPeople;
+  const browsersKnown = allPeople.some(person => Array.isArray(person.browsers));
   const unidentified = board?.unidentified;
 
   return (
@@ -165,6 +174,10 @@ export function AdminOnlineTimePanel({ view, onViewChange }: { view: AdminView; 
           <label className="admin-online-check" title="NivaDesk staff, and members of workspaces flagged internal / QA / pilot">
             <input type="checkbox" checked={view === "business"} onChange={event => onViewChange(event.target.checked ? "business" : "qa")} />
             Hide internal accounts
+          </label>
+          <label className="admin-online-check" title="People with at least one session from an AI browser or an AI agent (Insights ▸ Browsers)">
+            <input type="checkbox" checked={aiOnly} onChange={event => setAiOnly(event.target.checked)} disabled={Boolean(board) && !browsersKnown} />
+            AI browsers &amp; agents only
           </label>
         </div>
         <p className="muted-copy" style={{ marginTop: 8 }}>
@@ -197,24 +210,24 @@ export function AdminOnlineTimePanel({ view, onViewChange }: { view: AdminView; 
         </div>
         <div className="admin-tile">
           <span>{view === "business" ? "Internal accounts hidden" : "Internal accounts shown"}</span>
-          <strong>{board ? (view === "business" ? board.hidden.people.toLocaleString() : people.filter(p => p.internal).length.toLocaleString()) : "…"}</strong>
+          <strong>{board ? (view === "business" ? board.hidden.people.toLocaleString() : allPeople.filter(p => p.internal).length.toLocaleString()) : "…"}</strong>
         </div>
       </div>
 
       <section className="card app-card">
         <div className="admin-card-head">
           <CardTitle icon="team" eyebrow={board ? periodRangeLabel(board) : "Online time"} title="Top list" />
-          {board && board.totalPeople > people.length ? <span className="admin-generated">Top {people.length} of {board.totalPeople}</span> : null}
+          {board && aiOnly ? <span className="admin-generated">{people.length} of {allPeople.length} used AI</span> : board && board.totalPeople > allPeople.length ? <span className="admin-generated">Top {allPeople.length} of {board.totalPeople}</span> : null}
         </div>
         {board && people.length ? (
           <ol className="admin-online-list" aria-label="People by online time, longest first">
             {people.map((person, index) => (
-              <PersonRow key={person.uid} person={person} rank={index + 1} percent={barPercent(person, people, byHours)} now={now} byHours={byHours} />
+              <PersonRow key={person.uid} person={person} rank={aiOnly ? allPeople.indexOf(person) + 1 : index + 1} percent={barPercent(person, allPeople, byHours)} now={now} byHours={byHours} />
             ))}
           </ol>
         ) : (
           <p className="muted-copy" style={{ marginTop: 10 }}>
-            {legacy ? "Available after the server update." : loading && !board ? "Loading…" : board ? "No signed-in member was in an app in this period." : "—"}
+            {legacy ? "Available after the server update." : loading && !board ? "Loading…" : board && aiOnly && allPeople.length ? "Nobody in this period used an AI browser or an AI agent." : board ? "No signed-in member was in an app in this period." : "—"}
           </p>
         )}
 

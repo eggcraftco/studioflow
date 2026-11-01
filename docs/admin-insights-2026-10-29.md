@@ -148,3 +148,24 @@ Tanımlar (etiketler sektörle uyumlu olsun diye): DAU/WAU/MAU kayan 24 saat / 7
 - `lastRefreshTime` "uygulaması açık ve oturumu yenilenmiş" demek; sayfa görüntüleme ya da işlem değil.
 - Gizlilik: politika §4.4 cihaz türü, işletim sistemi, uygulama sürümü, giriş zamanları ve kullanılan özellikleri zaten sayıyor; meşru menfaat paragrafı "understanding product usage" diyor. Yeni bir veri türü eklenmediği için taslak hazırlanmadı. İstenirse tek cümlelik açıklama eklenebilir (TTL açıldıktan sonra doğru olur): "Uygulamanın açık olduğunu gösteren oturum kayıtlarını son görüldükleri andan itibaren 8 gün saklarız ve yalnız toplu sayım için kullanırız."
 - Users & Workspaces, Subscriptions, Revenue, Plans, Feature Usage, Storage, Lookup, Setup Answers, Google Search, Landing ve Feedback ekranda gezilmedi; bulgular kod okumasıdır.
+
+## 7. Ek — Insights ▸ Browsers (1 Kas 2026)
+
+Sahip: "insights kisminda kullanicilar hangi tarayiciyla baglandiklarini da gostersin ki ai tarayicilari mi kullaniyolar yoksa
+normal tarayicilar mi onlari da gorelim."
+
+- **Yeni sayfa Pulse ▸ Browsers (`#browsers`):** bugün / dün / son 7 İngiltere günü; tür başına (AI tarayıcı, AI ajan, normal
+  tarayıcı, ayırt edilemiyor, bot, NivaDesk uygulaması, güncellemeden önce kontrol edilmemiş) oturum + kişi + pay; tarayıcı ve
+  sürüm tablosu; kişi başına kullandığı tarayıcılar (filtre: yalnız AI tarayıcı ve ajanlar; adres/ad/çalışma alanı araması);
+  herkese açık sitenin anonim ziyaretleri (tür, tarayıcı, sayfayı çalıştıran tarayıcılar). Okuma: `getSitePresence`
+  `{ browsers: { period } }` (yalnız admin). Live'a "Browsers" kartı (kimse adlandırılmaz), Online time'a her satırda tarayıcı
+  satırı + "AI browsers & agents only" kutusu.
+- **Etiket sunucuda verilir** (functions `insights/browser.js`, paket `~/Developer/nivadesk-deploy-2026-11-01/insights-browser/`):
+  user agent + `Sec-CH-UA` markaları + `Signature-Agent` (Web Bot Auth) + `X-Requested-With`. Saklanan yalnız kaba etiket
+  (aile, ana sürüm, tür, sinyal; bilinmeyen Chromium'da kendine verdiği marka adı). Ham dize saklanmaz.
+- **Dürüst sınır:** Comet (bilgisayarda), Dia, Arc, Opera Neon, ChatGPT masaüstü uygulamasının tarayıcısı ve kişinin kendi
+  tarayıcısında çalışan asistanlar (Claude in Chrome, Gemini in Chrome, Edge Copilot Mode, Brave Leo, Opera Aria) Chrome / Edge /
+  Opera ile aynı istek gönderir → o tarayıcı sayılır. Tanınan: ChatGPT ajanı (imzalı istek), Google-Agent, Manus, Nova Act,
+  Claude ajanı (UA), ChatGPT Atlas (eki varsa; Ağu 2026'da kapandı), Comet Android, Arc Search, Genspark.
+- Kanıt: `npm run test:admin-browsers` (13 kontrol); sunucu `bash test/run.sh` (66 gerçek UA/Client Hint fixture'ı, emülatör
+  kabulü); ekranlar paketin `screens/` klasöründe.

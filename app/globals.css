@@ -24516,6 +24516,154 @@ body[data-studio-theme="dark"] .admin-hub-link.active {
   }
 }
 
+/* Admin Insights ▸ Browsers (1 Nov 2026): kind bars with a share and a count line, a browser table that scrolls
+   inside its card on a phone, and one row per person — who, the browsers they used as chips with a kind badge,
+   last seen. AI kinds get a tinted badge so they stand out in a long list. */
+.admin-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Two lists side by side: each keeps its own row height instead of stretching to the longer one. */
+.admin-browser-lists {
+  align-items: start;
+}
+
+.admin-browser-search {
+  width: auto;
+  min-width: 0;
+  flex: 1 1 220px;
+  max-width: 320px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.admin-browser-kinds .admin-browser-kind-row {
+  grid-template-columns: minmax(0, 1.1fr) minmax(60px, 2fr) 44px;
+  row-gap: 1px;
+}
+
+.admin-browser-kind-count {
+  grid-column: 1 / -1;
+  padding-left: 17px;
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-browser-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--admin-chip-bg);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.admin-browser-badge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+
+.admin-browser-badge.is-ai_browser,
+.admin-browser-badge.is-ai_agent {
+  background: rgba(191, 90, 242, 0.16);
+}
+
+.admin-search-table tr.is-ai td:first-child {
+  font-weight: 800;
+}
+
+.admin-browser-person {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.admin-online-list > .admin-browser-person:first-child {
+  border-top: 0;
+}
+
+.admin-browser-person.is-ai .admin-online-name {
+  color: #bf5af2;
+}
+
+.admin-browser-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.admin-browser-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: var(--admin-tile-bg);
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-browser-chip em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-browser-chip.is-ai_browser,
+.admin-browser-chip.is-ai_agent {
+  outline: 1px solid rgba(191, 90, 242, 0.45);
+}
+
+.admin-online-browsers {
+  font-size: 11.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.admin-online-browsers.is-ai {
+  color: #bf5af2;
+  font-weight: 800;
+}
+
+@media (max-width: 640px) {
+  .admin-browser-person {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  /* On a phone the versions and the share (the kind bars above carry it) go, so the counts stay on screen. */
+  .admin-browser-table th:nth-child(3),
+  .admin-browser-table td:nth-child(3),
+  .admin-browser-table th:nth-child(5),
+  .admin-browser-table td:nth-child(5) {
+    display: none;
+  }
+
+  .admin-browser-search {
+    max-width: none;
+  }
+}
+
 /* Admin Insights ▸ Online time (31 Oct 2026): the top list. One row per person: rank, who, time with
    the per-app bar, then active hours / last seen / devices. The four columns fold into two rows on a
    tablet and into one column on a phone; nothing in a row can push the page wider than the screen. */
