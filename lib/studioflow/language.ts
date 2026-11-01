@@ -20,6 +20,7 @@ import { ETSY_SHIPPING_COST_TRANSLATIONS } from "./etsyShippingCost";
 import { CHANNEL_SHIPPING_COST_TRANSLATIONS } from "./channelShippingCost";
 import { ETSY_ORDER_VIEW_TRANSLATIONS } from "./etsyOrderViewTranslations";
 import { ORDER_STACK_VIEW_TRANSLATIONS } from "./orderStackViewTranslations";
+import { ORDER_DELIVERY_ADDRESS_TRANSLATIONS } from "./orderDeliveryAddressTranslations";
 import { SECURITY_FIX_TRANSLATIONS } from "./securityFixTranslations";
 import { CALENDAR_TRANSLATIONS } from "./calendarTranslations";
 import { STORAGE_TRANSLATIONS } from "./storageTranslations";
@@ -9500,6 +9501,9 @@ mergeIntoTranslations(ETSY_ORDER_VIEW_TRANSLATIONS);
 // Sections view (31 Oct 2026): the order header's status strip, the Sections / Cards toggle and the section headings.
 // New keys only; after ETSY-UI-1 so nothing earlier is redefined.
 mergeIntoTranslations(ORDER_STACK_VIEW_TRANSLATIONS);
+
+// Delivery address (1 Nov 2026): the block on Shipping & Tracking. New keys only, and only where nothing translates them yet.
+mergeMissingIntoTranslations(ORDER_DELIVERY_ADDRESS_TRANSLATIONS);
 
 // Security fixes (28 Oct 2026): the sign-out question about undelivered writes, the re-authentication prompt.
 mergeIntoTranslations(SECURITY_FIX_TRANSLATIONS);

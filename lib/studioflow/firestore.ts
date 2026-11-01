@@ -715,6 +715,8 @@ export type OrderDetail = {
   instagramUsername: string;
   whatsappNumber: string;
   shippingName: string;
+  /** Delivery address (1 Nov 2026): the recipient's business, read by Royal Mail. */
+  shippingCompany: string;
   shippingStreetAddress: string;
   shippingCity: string;
   shippingPostalCode: string;
@@ -2737,6 +2739,7 @@ function mapOrderDetailSnapshot(
     instagramUsername: stringValue(data.instagramUsername, ""),
     whatsappNumber: stringValue(data.whatsappNumber, ""),
     shippingName: stringValue(data.shippingName, ""),
+    shippingCompany: stringValue(data.shippingCompany, ""),
     shippingStreetAddress: stringValue(data.shippingStreetAddress, ""),
     shippingCity: stringValue(data.shippingCity, ""),
     shippingPostalCode: stringValue(data.shippingPostalCode, ""),

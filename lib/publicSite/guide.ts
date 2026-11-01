@@ -557,6 +557,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "bullets", items: [
             "Set the Courier (Auto Detect, Royal Mail, DHL, FedEx or UPS) and enter the Tracking number.",
             "Mark the order Dispatched and Delivered as it moves.",
+            "Delivery address: Add address (or Edit) sets the recipient that Royal Mail and DHL labels use — name, company, address lines (one per row), city, postcode, country and phone. Use customer address copies the Customer & Communication address in for you to finish. Owners, Admins and Members can change it.",
             "Refresh live status to pull the latest delivery progress from 17TRACK, so you always know where a parcel is."
           ] },
           { kind: "sub", text: "Good to know" },
@@ -2209,6 +2210,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Courier'i ayarlayın (Auto Detect, Royal Mail, DHL, FedEx veya UPS) ve Tracking numarasını girin.",
             "Sipariş ilerledikçe Dispatched ve Delivered olarak işaretleyin.",
+            "Teslimat adresi: Adres ekle (ya da Düzenle), Royal Mail ve DHL etiketlerinin kullandığı alıcıyı ayarlar — ad, şirket, adres satırları (her satıra bir), şehir, posta kodu, ülke ve telefon. Müşteri adresini kullan, Müşteri ve İletişim kartındaki adresi tamamlamanız için içeri kopyalar. Sahip, Admin ve Member değiştirebilir.",
             "Refresh live status ile 17TRACK'ten en güncel teslimat ilerlemesini çekin; böylece kargonun nerede olduğunu her zaman bilin."
           ] },
           { kind: "sub", text: "Bilmekte fayda var" },

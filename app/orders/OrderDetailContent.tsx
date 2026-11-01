@@ -175,6 +175,8 @@ import { WooOrderStock } from "./WooOrderStock";
 import { OrderStockBlock } from "./OrderStockBlock";
 import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
 import { RoyalMailShipmentPanel } from "./RoyalMailShipmentPanel";
+import { OrderDeliveryAddress } from "./OrderDeliveryAddress";
+import { deliveryAddressFrom, type DeliveryAddress } from "@/lib/studioflow/deliveryAddress";
 import { royalMailUkAddress } from "@/lib/studioflow/royalMail";
 import { EtsyBlockChannelContext, EtsySafe, EtsySourcePanel, EtsyProductPhoto, useEtsyListingPhotos, useEtsySourceState } from "./EtsySourcePanel";
 import { etsyListingLink, etsyPhotoIsShowable } from "@/lib/studioflow/etsyListingPhotos";
@@ -2421,6 +2423,8 @@ export function OrderDetailContent({
   // phone) are gone. Error, warning and required-action texts are untouched.
   // Workspace colour meanings (defaults overridable via Manage colour labels).
   const [colorMeanings, setColorMeanings] = useState<Record<string, string>>(CARD_COLOR_MEANINGS);
+  // The workspace's country (onboarding answer, companySettings.selectedCountry): where a new delivery address starts.
+  const [workspaceCountry, setWorkspaceCountry] = useState("");
   const [colorLabelsOpen, setColorLabelsOpen] = useState(false);
   const [colorLabelDrafts, setColorLabelDrafts] = useState<Record<string, string>>({});
   const [savingColorLabels, setSavingColorLabels] = useState(false);
@@ -3568,6 +3572,7 @@ export function OrderDetailContent({
           priorityCardLabel: str("priorityCardLabel", "Priority"),
           riskCardLabel: str("riskCardLabel", "Risk")
         });
+        setWorkspaceCountry(str("selectedCountry", ""));
         // Workspace-wide colour meanings: the fixed defaults, overridable per
         // workshop (an empty label deliberately hides the chip for that colour).
         const meanings: Record<string, string> = { ...CARD_COLOR_MEANINGS };
@@ -4765,6 +4770,7 @@ export function OrderDetailContent({
     if (typeof patch.whatsappNumber === "string") nextPatch.whatsappNumber = patch.whatsappNumber;
     if (typeof patch.instagramUsername === "string") nextPatch.instagramUsername = patch.instagramUsername;
     if (typeof patch.shippingName === "string") nextPatch.shippingName = patch.shippingName;
+    if (typeof patch.shippingCompany === "string") nextPatch.shippingCompany = patch.shippingCompany;
     if (typeof patch.shippingStreetAddress === "string") nextPatch.shippingStreetAddress = patch.shippingStreetAddress;
     if (typeof patch.shippingCity === "string") nextPatch.shippingCity = patch.shippingCity;
     if (typeof patch.shippingPostalCode === "string") nextPatch.shippingPostalCode = patch.shippingPostalCode;
@@ -5012,6 +5018,26 @@ export function OrderDetailContent({
       setInlineStatus(null);
       setInlineError(saveFailure instanceof Error ? saveFailure.message : "Could not update order detail.");
       return false;
+    } finally {
+      setSavingInlineField(null);
+    }
+  }
+
+  /**
+   * Delivery address (1 Nov 2026): one save of the seven shipping* keys through the order save path. Unlike
+   * writeDetailsPatch it hands the failure back to the block (which keeps the form open with the person's text
+   * and says why) instead of the page-level line. Full-edit roles only, as on the server (Workflow Only is refused).
+   */
+  async function saveDeliveryAddress(patch: DeliveryAddress): Promise<string | null> {
+    if (!canEditOrderFully) return "Your workspace role cannot edit full order details.";
+    setSavingInlineField("Delivery address");
+    applyOptimisticDetailsPatch(patch);
+    try {
+      await updateOrderFromWeb(workspace, { orderId: order.id, details: patch });
+      return null;
+    } catch (saveFailure) {
+      await onReloadOrder();
+      return saveFailure instanceof Error && saveFailure.message ? saveFailure.message : "Could not update order detail.";
     } finally {
       setSavingInlineField(null);
     }
@@ -8505,6 +8531,21 @@ export function OrderDetailContent({
                   <a href={etsyAddTrackingLink(etsySource)} target="_blank" rel="noopener noreferrer">{t("Add tracking on Etsy")} ↗</a>
                 </div>
               ) : null}
+              {/* Delivery address (1 Nov 2026): the recipient Royal Mail and DHL read. Not on an eBay order whose buyer
+                  address eBay keeps private — the order document must not carry it. */}
+              {order.commerce?.provider === "ebay" && !String(order.shippingStreetAddress || "").trim() && !String(order.shippingPostalCode || "").trim() ? null : (
+                <OrderDeliveryAddress
+                  address={deliveryAddressFrom(order)}
+                  customerName={order.customerName}
+                  customerAddress={String(order.customFields?.communicationAddress ?? "")}
+                  workspaceCountry={workspaceCountry}
+                  canEdit={canEditOrderFully}
+                  language={detailLanguage}
+                  saving={savingInlineField === "Delivery address"}
+                  onSave={saveDeliveryAddress}
+                  onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)}
+                />
+              )}
               {/* DHL Express, only where the server has opened it for this workspace. */}
               <OrderShipmentsPanel workspace={workspace} orderId={order.id} language={detailLanguage} onOrderChanged={onReloadOrder} onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)}
                 addressRestricted={order.commerce?.provider === "ebay" && !String(order.shippingStreetAddress || "").trim() && !String(order.shippingPostalCode || "").trim()}
@@ -13579,6 +13620,7 @@ export function pdfPreviewSampleOrder(): OrderDetail {
     instagramUsername: "@alexcarter",
     whatsappNumber: "+44 7700 900123",
     shippingName: "Alex Carter",
+    shippingCompany: "",
     shippingStreetAddress: "12 Goldsmith Row",
     shippingCity: "London",
     shippingPostalCode: "E2 8QA",
