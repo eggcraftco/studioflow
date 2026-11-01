@@ -1,14 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { OPEN_HELP_ASSISTANT_EVENT } from "@/lib/studioflow/gettingStarted";
-import { askAppAssistant, getAppAssistantAvailability, type AppAssistantAnswer, type AppAssistantAvailability } from "@/lib/studioflow/appAssistant";
+import { askAppAssistant, getAppAssistantAvailability, type AppAssistantAvailability } from "@/lib/studioflow/appAssistant";
+import {
+  appHelpHistoryKey,
+  appHelpHistoryStorageKey,
+  canKeepAppHelpTurns,
+  clearAppHelpTurns,
+  loadAppHelpTurns,
+  newAppHelpTurnId,
+  readAppHelpOpen,
+  saveAppHelpTurns,
+  writeAppHelpOpen,
+  type AppHelpTurn
+} from "@/lib/studioflow/appHelpHistory";
 import { createNivaDeskSupportTicket } from "@/lib/studioflow/supportTickets";
 import { type WorkspaceContext } from "@/lib/studioflow/firestore";
-
-type HelpTurn = { question: string; answer: AppAssistantAnswer; ticket?: "sending" | "sent" | string };
 
 // In-app "how do I…?" helper. It answers from the user guide only: it has no
 // access to workspace data, and points at the ChatGPT app or at support when a
@@ -17,24 +27,99 @@ type HelpTurn = { question: string; answer: AppAssistantAnswer; ticket?: "sendin
 // It is hidden for everyone whenever the shared OpenAI key is missing — which it
 // was from 17 Sep 2026, so the owner saw no helper and no reason. A support admin
 // now sees a paused button that says why (offReason, sent to them only).
+//
+// The conversation is kept in this browser (appHelpHistory.ts, 1 Nov 2026): one
+// per account and workspace, so a reload, a sign-in refresh or the next page
+// (AppShell is mounted by each page) shows it again, and an open panel opens
+// again in the same tab. "New conversation" starts over; sign-out deletes it.
 export default function AppHelpAssistant({
   workspace,
+  userId,
   language,
   t
 }: {
   workspace: WorkspaceContext | null;
+  userId: string;
   language: string;
   t: (text: string) => string;
 }) {
   const [availability, setAvailability] = useState<AppAssistantAvailability>({});
   const available = availability.available === true;
   const paused = !available && Boolean(availability.offReason);
-  const [open, setOpen] = useState(false);
+  // Nothing is drawn before availability arrives, so reading the tab's last
+  // state here cannot differ from the server's (empty) render.
+  const [open, setOpen] = useState(() => readAppHelpOpen());
   const [question, setQuestion] = useState("");
-  const [turns, setTurns] = useState<HelpTurn[]>([]);
+  const [turns, setTurns] = useState<AppHelpTurn[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const threadRef = useRef<HTMLDivElement | null>(null);
+  // The conversation's name in this browser: null until it is known, or when
+  // the account or workspace is not (then nothing is kept).
+  const [historyKey, setHistoryKey] = useState<string | null>(null);
+  const historyKeyRef = useRef<string | null>(null);
+  // False in a browser that refuses storage (some private windows): the
+  // conversation then stays on screen only, and the panel does not claim it is kept.
+  const [keeping, setKeeping] = useState(false);
+  const keepingRef = useRef(false);
+  const companyId = workspace?.id ?? "";
+
+  useEffect(() => { writeAppHelpOpen(open); }, [open]);
+
+  useEffect(() => {
+    let cancelled = false;
+    historyKeyRef.current = null;
+    keepingRef.current = false;
+    setHistoryKey(null);
+    setKeeping(false);
+    setTurns([]);
+    void (async () => {
+      const key = await appHelpHistoryKey(userId, companyId);
+      if (cancelled) return;
+      const canKeep = Boolean(key) && canKeepAppHelpTurns();
+      historyKeyRef.current = key;
+      keepingRef.current = canKeep;
+      setHistoryKey(key);
+      setKeeping(canKeep);
+      setTurns(key && canKeep ? loadAppHelpTurns(key) : []);
+    })();
+    return () => { cancelled = true; };
+  }, [userId, companyId]);
+
+  // Another tab of the same account asked, or started over: show the same.
+  useEffect(() => {
+    if (!historyKey || !keeping) return;
+    const name = appHelpHistoryStorageKey(historyKey);
+    const reload = (event: StorageEvent) => {
+      if (event.key === name || event.key === null) setTurns(loadAppHelpTurns(historyKey));
+    };
+    window.addEventListener("storage", reload);
+    return () => window.removeEventListener("storage", reload);
+  }, [historyKey, keeping]);
+
+  /**
+   * Changes the conversation that `forKey` names: the copy in this browser
+   * first (another tab may have added to it), then the screen if it still
+   * shows that conversation — an answer that arrives after the workspace
+   * changed is kept with the conversation it was asked in. One asked before
+   * the name was known goes to the conversation shown now.
+   */
+  const changeTurns = useCallback((forKey: string | null, change: (current: AppHelpTurn[]) => AppHelpTurn[]) => {
+    const target = forKey ?? historyKeyRef.current;
+    if (target && keepingRef.current) {
+      const saved = saveAppHelpTurns(target, change(loadAppHelpTurns(target)));
+      if (historyKeyRef.current === target) setTurns(saved);
+      return;
+    }
+    if (historyKeyRef.current === target) setTurns(current => change(current));
+  }, []);
+
+  function startNewConversation() {
+    const key = historyKeyRef.current;
+    if (key) clearAppHelpTurns(key);
+    setTurns([]);
+    setError("");
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -54,11 +139,13 @@ export default function AppHelpAssistant({
    * again. One press sends it, with the answer the assistant gave attached so
    * support can see what it already tried.
    */
-  async function sendToSupport(index: number) {
+  async function sendToSupport(turn: AppHelpTurn) {
     if (!workspace) return;
-    const turn = turns[index];
-    if (!turn || turn.ticket === "sending" || turn.ticket === "sent") return;
-    setTurns(previous => previous.map((item, n) => n === index ? { ...item, ticket: "sending" } : item));
+    if (turn.ticket === "sending" || turn.ticket === "sent") return;
+    const forKey = historyKeyRef.current;
+    const mark = (ticket: string) =>
+      changeTurns(forKey, current => current.map(item => item.id === turn.id ? { ...item, ticket } : item));
+    mark("sending");
     try {
       await createNivaDeskSupportTicket(workspace, {
         title: turn.question.trim().slice(0, 120),
@@ -67,17 +154,16 @@ export default function AppHelpAssistant({
         priority: "normal",
         language
       });
-      setTurns(previous => previous.map((item, n) => n === index ? { ...item, ticket: "sent" } : item));
+      mark("sent");
     } catch (sendError) {
-      setTurns(previous => previous.map((item, n) => n === index
-        ? { ...item, ticket: sendError instanceof Error ? sendError.message : t("The ticket could not be sent.") }
-        : item));
+      mark(sendError instanceof Error ? sendError.message : t("The ticket could not be sent."));
     }
   }
 
+  // The newest turn in view: after an answer, and when the panel opens on a kept conversation.
   useEffect(() => {
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
-  }, [turns, busy]);
+  }, [turns, busy, open]);
 
   // Opened from Getting started ▸ "Ask the help assistant a question" (GN-05):
   // by the window event when the button is on the same page, and by
@@ -141,9 +227,11 @@ export default function AppHelpAssistant({
     if (!text || busy) return;
     setBusy(true);
     setError("");
+    const forKey = historyKeyRef.current;
     try {
       const answer = await askAppAssistant({ question: text, language, companyId: workspace?.id ?? "" });
-      setTurns(current => [...current, { question: text, answer }]);
+      const turn: AppHelpTurn = { id: newAppHelpTurnId(), askedAt: Date.now(), question: text, answer: { ...answer, answer: answer.answer ?? "" }, ticket: "" };
+      changeTurns(forKey, current => [...current, turn]);
       setQuestion("");
     } catch (askError) {
       setError(askError instanceof Error ? askError.message : String(askError));
@@ -174,20 +262,31 @@ export default function AppHelpAssistant({
             <div>
               <strong>{t("NivaDesk help")}</strong>
               <span>{t("Answers from the user guide.")}</span>
+              {turns.length && keeping ? (
+                <span className="app-help-kept">{t("This conversation is kept on this device for 7 days.")}</span>
+              ) : null}
             </div>
-            <button type="button" onClick={() => setOpen(false)} aria-label={t("Close")}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                <path d="M6 6l12 12M18 6L6 18" />
-              </svg>
-            </button>
+            <div className="app-help-head-actions">
+              {turns.length ? (
+                <button type="button" className="app-help-new" onClick={startNewConversation} disabled={busy}
+                        data-testid="app-help-new-conversation">
+                  {t("New conversation")}
+                </button>
+              ) : null}
+              <button type="button" onClick={() => setOpen(false)} aria-label={t("Close")}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <div className="app-help-thread" ref={threadRef}>
             {turns.length === 0 ? (
               <p className="app-help-intro">{t("Ask how something in NivaDesk works — where a button lives, what a card is for, how to set something up. This assistant reads the guide, not your workspace, so it never sees your orders or figures.")}</p>
             ) : null}
-            {turns.map((turn, index) => (
-              <div className="app-help-turn" key={`${index}-${turn.question}`}>
+            {turns.map(turn => (
+              <div className="app-help-turn" key={turn.id}>
                 <p className="app-help-question">{turn.question}</p>
                 <div className="app-help-answer">
                   <p>{turn.answer.answer}</p>
@@ -205,14 +304,14 @@ export default function AppHelpAssistant({
                     turn.ticket === "sent" ? (
                       <p className="app-help-sent">
                         {t("Sent to NivaDesk Support.")}{" "}
-                        <Link href="/settings?section=support-tickets&support=appSupport">
+                        <Link href="/settings?section=support-tickets&support=appSupport" onClick={() => setOpen(false)}>
                           {t("See your tickets")} →
                         </Link>
                       </p>
                     ) : (
                       <>
                         <button type="button" className="app-help-action" disabled={!workspace || turn.ticket === "sending"}
-                                onClick={() => void sendToSupport(index)}>
+                                onClick={() => void sendToSupport(turn)}>
                           {turn.ticket === "sending" ? t("Sending...") : t("Send this to NivaDesk Support")} →
                         </button>
                         {typeof turn.ticket === "string" && turn.ticket !== "sending" ? (

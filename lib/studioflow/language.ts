@@ -24,6 +24,7 @@ import { ORDER_DELIVERY_ADDRESS_TRANSLATIONS } from "./orderDeliveryAddressTrans
 import { SECURITY_FIX_TRANSLATIONS } from "./securityFixTranslations";
 import { CALENDAR_TRANSLATIONS } from "./calendarTranslations";
 import { ONLINE_BOOKING_TRANSLATIONS } from "./onlineBookingTranslations";
+import { APP_HELP_HISTORY_TRANSLATIONS } from "./appHelpHistoryTranslations";
 import { STORAGE_TRANSLATIONS } from "./storageTranslations";
 import { ACCOUNTING_POSTING_TRANSLATIONS } from "./accountingPostingTranslations";
 
@@ -9506,6 +9507,9 @@ mergeIntoTranslations(ETSY_ORDER_VIEW_TRANSLATIONS);
 // Sections view (31 Oct 2026): the order header's status strip, the Sections / Cards toggle and the section headings.
 // New keys only; after ETSY-UI-1 so nothing earlier is redefined.
 mergeIntoTranslations(ORDER_STACK_VIEW_TRANSLATIONS);
+
+// The help assistant keeps its conversation (1 Nov 2026): the kept-on-device line. One new key, in no other table.
+mergeIntoTranslations(APP_HELP_HISTORY_TRANSLATIONS);
 
 // Delivery address (1 Nov 2026): the block on Shipping & Tracking. New keys only, and only where nothing translates them yet.
 mergeMissingIntoTranslations(ORDER_DELIVERY_ADDRESS_TRANSLATIONS);

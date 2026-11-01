@@ -3633,7 +3633,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           }}
         />
       ) : null}
-      <AppHelpAssistant workspace={workspace} language={language} t={t} />
+      <AppHelpAssistant workspace={workspace} userId={user?.uid ?? ""} language={language} t={t} />
       <WebUpdateNotice t={t} />
       <FeedbackCenter
         workspace={workspace}

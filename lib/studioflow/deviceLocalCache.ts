@@ -1,4 +1,5 @@
 import { orderDetailViewStorageKeys } from "@/lib/studioflow/orderDetailView";
+import { appHelpHistoryStorageKeys, writeAppHelpOpen } from "@/lib/studioflow/appHelpHistory";
 
 // Device-local (localStorage) workspace UI state that must not leak from one
 // signed-in account to the next on the same browser — mirrors the iOS/Mac
@@ -21,7 +22,9 @@ export function clearDeviceLocalWorkspaceCache() {
   if (typeof window === "undefined") return;
   // The Sections / Cards choice and the open sections are per workspace (one
   // key each), so they are found by prefix rather than listed.
-  for (const key of [...DEVICE_LOCAL_WORKSPACE_KEYS, ...orderDetailViewStorageKeys()]) {
+  // The help assistant's kept conversations (appHelpHistory.ts) go too, every account's: one key each.
+  for (const key of [...DEVICE_LOCAL_WORKSPACE_KEYS, ...orderDetailViewStorageKeys(), ...appHelpHistoryStorageKeys()]) {
     try { window.localStorage.removeItem(key); } catch { /* storage unavailable */ }
   }
+  writeAppHelpOpen(false);
 }
