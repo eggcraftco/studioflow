@@ -129,8 +129,10 @@ export function AccountingSalesPanel({ companyId, connectionId, provider, provid
       setDenied(false);
       setLoadError("");
     } catch (err) {
-      // A reader the server does not let in sees the panel everyone saw before.
-      if (accountingErrorCode(err) === "permission-denied") setDenied(true);
+      // A reader the server does not let in sees the panel everyone saw before — and so does every
+      // workspace while the callable is not deployed yet (the web may ship before the functions).
+      const code = accountingErrorCode(err);
+      if (code === "permission-denied" || code === "not-found" || code === "unimplemented") setDenied(true);
       else setLoadError(err instanceof Error && err.message ? err.message : t("Could not load."));
     } finally {
       setLoading(false);
@@ -239,6 +241,7 @@ export function AccountingSalesPanel({ companyId, connectionId, provider, provid
       provider_permission_denied: pt("{provider} refused the request."),
       provider_conflict: pt("Changed in {provider} meanwhile."),
       doc_number_taken: pt("That invoice number already exists in {provider}."),
+      provider_rejected: pt("{provider} rejected the document."),
       internal_error: t("Something went wrong on our side."),
       provider_totals_differ: pt("Posted, but {provider}'s totals differ."),
       no_answer: pt("{provider} did not answer yet; NivaDesk tries again."),
@@ -376,7 +379,23 @@ export function AccountingSalesPanel({ companyId, connectionId, provider, provid
   }
 
   const kindLabel = (kind: string) => (kind === "sale" ? t("Invoice") : kind === "refund" ? t("Refund") : t("Payment"));
-  const evidenceLabel = (evidence?: string) => (evidence === "provider" ? "Stripe" : evidence === "bank" ? t("Bank") : evidence === "manual" ? t("Manual") : "");
+  // A provider-verified payment came through the processor that holds it: PayPal pay links or Stripe.
+  const evidenceLabel = (row: PostingRow) => (row.evidence === "provider" ? (row.method === "paypal" ? "PayPal" : "Stripe") : row.evidence === "bank" ? t("Bank") : row.evidence === "manual" ? t("Manual") : "");
+  const choiceNeeded = (row: PostingRow) => row.status === "needs_attention" && (row.attentionReason === "customer_choice_needed" || (!row.attentionReason && row.lastError === "customer_choice_needed"));
+  // A problem in words, by the server's attentionReason. Only provider_rejected shows lastError, which
+  // is then the provider's own message; our own errors (internal_error) are never shown raw. Rows
+  // written before attentionReason existed fall back to reading lastError.
+  const problemText = (row: PostingRow) => {
+    if (row.status !== "needs_attention" || choiceNeeded(row)) return "";
+    const code = row.attentionReason || "";
+    const detail = (row.lastError || "").trim();
+    if (code === "provider_rejected") return detail && detail !== "provider_rejected" ? `${pt("{provider} rejected it:")} ${detail}` : reasonText("provider_rejected");
+    if (code) return reasonText(code);
+    if (!detail) return "";
+    return known(detail) ? reasonText(detail) : `${pt("{provider} rejected it:")} ${detail}`;
+  };
+  // Why a sent document is in conflict: the server says; older rows are read from the totals.
+  const conflictTotals = (row: PostingRow) => (row.conflictReason ? row.conflictReason === "provider_totals_differ" : totalsDiffer(row));
   const waitingText = (row: PostingRow) => {
     if (row.waitingFor === "invoice") return t("Waiting for its invoice");
     if (row.waitingFor === "rate_limit") return pt("Waiting — {provider} asked us to slow down");
@@ -573,17 +592,16 @@ export function AccountingSalesPanel({ companyId, connectionId, provider, provid
     const open = expanded[row.id] === true;
     const link = SENT.has(row.status) ? openUrl(row) : null;
     const number = row.externalNumber || row.providerTotals?.number || "";
-    const evidence = row.kind === "sale" ? "" : evidenceLabel(row.evidence);
+    const evidence = row.kind === "sale" ? "" : evidenceLabel(row);
     const showReasons = (row.status === "draft" || row.status === "ready") && reasons.length > 0;
-    const problem = row.status === "needs_attention" && row.lastError && row.lastError !== "customer_choice_needed"
-      ? (known(row.lastError) ? reasonText(row.lastError) : `${pt("{provider} rejected it:")} ${row.lastError}`) : "";
+    const problem = problemText(row);
     const retryNote = row.status === "retry" && !row.waitingFor
       ? `${reasonText(row.lastError === "rate_limit" ? "rate_limit" : "no_answer")}${row.nextAttemptAtMs ? ` ${t("Next try:")} ${when(row.nextAttemptAtMs)}` : ""}` : "";
-    const conflictNote = row.status === "conflict" ? (totalsDiffer(row) ? reasonText("provider_totals_differ") : reasonText("provider_conflict")) : "";
+    const conflictNote = row.status === "conflict" ? (conflictTotals(row) ? reasonText("provider_totals_differ") : reasonText("provider_conflict")) : "";
     const checkable = selectable(row);
     const canIgnore = isOwner && ["draft", "ready", "needs_attention", "retry"].includes(row.status) && !row.externalId;
-    const canRetry = isOwner && canPost && ["needs_attention", "retry"].includes(row.status) && Boolean(row.approvedAtMs) && row.lastError !== "customer_choice_needed";
-    const choosing = isOwner && canPost && row.status === "needs_attention" && row.lastError === "customer_choice_needed";
+    const canRetry = isOwner && canPost && ["needs_attention", "retry"].includes(row.status) && Boolean(row.approvedAtMs) && !choiceNeeded(row);
+    const choosing = isOwner && canPost && choiceNeeded(row);
     const canKeep = isOwner && SENT.has(row.status) && (Boolean(row.changed) || row.status === "conflict");
     const canVoid = isOwner && canPost && SENT.has(row.status) && row.changed?.removed === true && row.kind !== "refund" && row.providerState !== "voided";
     const rowBusy = busy.endsWith(`-${row.id}`);
@@ -624,7 +642,7 @@ export function AccountingSalesPanel({ companyId, connectionId, provider, provid
           {conflictNote ? (
             <span style={{ fontSize: 12 }}>
               {conflictNote}
-              {totalsDiffer(row) && row.providerTotals ? ` ${providerShort}: ${money(row.providerTotals.total, row.currency)}${row.kind === "sale" ? ` (${t("VAT")} ${money(row.providerTotals.tax, row.currency)})` : ""} · NivaDesk: ${money(row.kind === "sale" ? row.preview?.expectedTotal : row.amount, row.currency)}${row.kind === "sale" ? ` (${t("VAT")} ${money(row.preview?.expectedTax, row.currency)})` : ""}` : ""}
+              {conflictTotals(row) && row.providerTotals ? ` ${providerShort}: ${money(row.providerTotals.total, row.currency)}${row.kind === "sale" ? ` (${t("VAT")} ${money(row.providerTotals.tax, row.currency)})` : ""} · NivaDesk: ${money(row.kind === "sale" ? row.preview?.expectedTotal : row.amount, row.currency)}${row.kind === "sale" ? ` (${t("VAT")} ${money(row.preview?.expectedTax, row.currency)})` : ""}` : ""}
             </span>
           ) : null}
           {row.changed ? (

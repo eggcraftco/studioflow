@@ -284,6 +284,11 @@ export type PostingRow = {
   providerTotals?: { total: number; tax: number; number: string };
   approvedAtMs?: number;
   attemptCount?: number;
+  /** needs_attention rows: why, as a code (customer_choice_needed, reconnect_required, provider_rejected, internal_error, …). */
+  attentionReason?: string;
+  /** conflict rows: the books' totals differ from the preview, or the document was changed in the books. */
+  conflictReason?: "provider_totals_differ" | "changed_in_provider" | string;
+  /** For provider_rejected, the provider's own message; otherwise usually the reason code. */
   lastError?: string;
   nextAttemptAtMs?: number;
   waitingFor?: "invoice" | "rate_limit" | "switch" | "plan" | "" | string;
