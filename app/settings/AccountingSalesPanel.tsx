@@ -398,6 +398,7 @@ export function AccountingSalesPanel({ companyId, connectionId, provider, provid
   const conflictTotals = (row: PostingRow) => (row.conflictReason ? row.conflictReason === "provider_totals_differ" : totalsDiffer(row));
   const waitingText = (row: PostingRow) => {
     if (row.waitingFor === "invoice") return t("Waiting for its invoice");
+    if (row.waitingFor === "invoice_busy") return t("Waiting — another payment on this invoice is being sent");
     if (row.waitingFor === "rate_limit") return pt("Waiting — {provider} asked us to slow down");
     if (row.waitingFor === "switch") return t("Paused — posting is closed");
     if (row.waitingFor === "plan") return t("Paused — needs Pro or Team");
@@ -549,7 +550,7 @@ export function AccountingSalesPanel({ companyId, connectionId, provider, provid
             <label style={{ fontSize: 12.5, display: "grid", gap: 4 }}>{t("Product or service on invoice lines")}
               <select style={selectStyle} value={salesItemDraft} onChange={(event) => setSalesItemDraft(event.target.value)}>
                 <option value="">{t("Not chosen")}</option>
-                {(catalog.items || []).filter((item) => item.active !== false || item.externalId === salesItemDraft).map((item) => <option key={item.externalId} value={item.externalId}>{item.name}{item.type ? ` · ${item.type}` : ""}</option>)}
+                {(catalog.items || []).filter((item) => item.externalId === salesItemDraft || (item.active !== false && !/^(category|group)$/i.test(item.type || ""))).map((item) => <option key={item.externalId} value={item.externalId}>{item.name}{item.type ? ` · ${item.type}` : ""}</option>)}
               </select>
               <span style={small}>{t("QuickBooks puts a product or service on every invoice line; its income account is where the sale lands.")}</span>
             </label>
@@ -808,7 +809,7 @@ export function AccountingSalesPanel({ companyId, connectionId, provider, provid
             </div>
             {confirmApprove && chosen.length ? (
               <div style={{ ...softBox, borderColor: "var(--accent)" }} role="group" aria-label={t("Approve and send")} data-accounting-sales="confirm">
-                <strong style={{ fontSize: 13 }}>{pt("Send {count} documents to {provider}?").replace("{count}", String(chosen.length))}</strong>
+                <strong style={{ fontSize: 13 }}>{chosen.length === 1 ? pt("Send 1 document to {provider}?") : pt("Send {count} documents to {provider}?").replace("{count}", String(chosen.length))}</strong>
                 <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5 }}>{selectionSummary.map((line) => <li key={line}>{line}</li>)}</ul>
                 <span style={small}>{pt("Each document goes to {provider} once, as the preview shows it. An order that changed since you looked is held back for you to see again.")}</span>
                 <div className="settings-action-row">
