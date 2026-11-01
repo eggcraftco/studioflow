@@ -1279,6 +1279,7 @@ const TREE_EN: GuideNode[] = [
             "Copy link and send it to your customer yourself — by email, message or however you talk to them. NivaDesk never sends it for you."
           ] },
           { kind: "bullets", items: [
+            "[Web] Before Create link you can type What the customer is buying (optional), up to 120 characters — here and in Banking ▸ Payment Links ▸ Link for an order. Your customer then sees only that name on the payment page and on Stripe's page, not the order number; left empty, they see Order # and the order number. The field is never filled in from the order, and a link that has been made keeps its name.",
             "The link is in your workspace's currency. Amounts take at most two decimals, and 12,50 means 12.50 in every language.",
             "Each link shows its status: Open, Processing, Paid, Expired, Cancelled, Refunded, Partially refunded or Disputed. Cancel closes an open link.",
             "When the customer pays, the order's paid and remaining amounts update on their own.",
@@ -2920,6 +2921,7 @@ const TREE_TR: GuideNode[] = [
             "Bağlantıyı kopyala ve müşterinize kendiniz gönderin — e-postayla, mesajla ya da onunla nasıl konuşuyorsanız öyle. NivaDesk onu sizin yerinize asla göndermez."
           ] },
           { kind: "bullets", items: [
+            "[Web] Bağlantı oluştur'a basmadan önce Müşterinin satın aldığı şey (isteğe bağlı) alanına en çok 120 karakterlik bir ad yazabilirsiniz — burada ve Banka ▸ Ödeme Bağlantıları ▸ Sipariş için bağlantı'da. Müşteriniz ödeme sayfasında ve Stripe'ın sayfasında sipariş numarasını değil, yalnız bu adı görür; boş bırakırsanız Order # ve sipariş numarasını görür. Alan siparişten kendiliğinden dolmaz; oluşturulmuş bir bağlantının adı sonradan değişmez.",
             "Bağlantı çalışma alanınızın para birimindedir. Tutarlar en çok iki ondalık alır ve 12,50 her dilde 12.50 demektir.",
             "Her bağlantı durumunu gösterir: Açık, İşleniyor, Ödenen, Süresi doldu, İptal Edildi, İade Edildi, Kısmen iade edildi ya da İtiraz edildi. İptal açık bir bağlantıyı kapatır.",
             "Müşteri ödeyince siparişin ödenen ve kalan tutarları kendiliğinden güncellenir.",
