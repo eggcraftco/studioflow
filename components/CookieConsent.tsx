@@ -160,7 +160,8 @@ const RTL_LANGS = new Set(["ar"]);
 // (/pay/done), often on the business's own pay.<domain> — is not a NivaDesk visitor, and a "Cookies on NivaDesk"
 // banner over the business's payment card reads as somebody else's software standing between them and the
 // payment. Neither page sets anything but what the page needs to work, so the banner stays away there.
-const PAYMENT_PATHS = [/^\/p\//, /^\/pay\//];
+// The same holds for a business's online booking page and the customer's manage page (/book/…, 1 Nov 2026).
+const PAYMENT_PATHS = [/^\/p\//, /^\/pay\//, /^\/book\//];
 
 function onPaymentPage(): boolean {
   return typeof window !== "undefined" && PAYMENT_PATHS.some(pattern => pattern.test(window.location.pathname));

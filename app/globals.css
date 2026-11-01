@@ -39910,3 +39910,18 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
 @media (max-width: 640px) {
   .order-stack-body[data-stack-card="estimate"] .estimate-card-prereq { padding: 14px 16px; }
 }
+
+/* Online booking (1 Nov 2026): the booking behind a calendar entry (app/calendar/CalendarBookingBlock.tsx). */
+.cal-booking-head { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cal-booking-status { font-weight: 700; }
+.cal-booking-status.is-pending { color: var(--warning, #b45309); }
+.cal-booking-status.is-confirmed { color: var(--success, #15803d); }
+.cal-booking-status.is-cancelled, .cal-booking-status.is-declined, .cal-booking-status.is-expired, .cal-booking-status.is-no_show { color: var(--muted); }
+.cal-booking-facts { display: grid; gap: 4px; margin: 4px 0 6px; }
+.cal-booking-facts div { display: grid; grid-template-columns: minmax(84px, 32%) 1fr; gap: 8px; }
+.cal-booking-facts dt { color: var(--muted); font-size: 13px; }
+.cal-booking-facts dd { margin: 0; overflow-wrap: anywhere; }
+.cal-booking-times { display: grid; gap: 8px; max-height: 260px; overflow-y: auto; margin: 6px 0; }
+.cal-booking-times > div { display: grid; gap: 4px; }
+.cal-booking-time-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.cal-booking-time-list .button { padding: 6px 10px; min-height: 0; font-variant-numeric: tabular-nums; }

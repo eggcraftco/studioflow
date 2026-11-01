@@ -78,6 +78,8 @@ const PAGE_CHAPTERS: Record<string, string> = {
   "/pay/done": "set-stripe",
   "/e/[token]": "card-estimate",
   "/track/[token]": "card-shipping",
+  "/book/[slug]": "set-online-booking",
+  "/book/manage": "set-online-booking",
 };
 const PAGES_WITHOUT_CHAPTER: Record<string, string> = {
   "/": "public home page (the website chat's facts cover what NivaDesk is)",
@@ -139,6 +141,7 @@ const SETTINGS_CHAPTERS: Record<string, string> = {
   "quick-reply": "set-quickreply",
   sales: "sales",
   "sms-notifications": "set-sms",
+  "online-booking": "set-online-booking",
   financial: "set-financial",
   "team-access": "set-team",
   "message-settings": "messages",
@@ -281,7 +284,7 @@ check("4 each mapped chapter exists in English AND Turkish, with a paragraph for
 // rewrite it: from then on every line of it must be in all ten GUIDE_T languages.
 const FULLY_TRANSLATED = [
   "calendar", "help-assistant", "set-security", "set-stripe", "set-dhl", "set-team", "messages", "banking",
-  "set-cloud-storage", "set-royal-mail",
+  "set-cloud-storage", "set-royal-mail", "set-online-booking",
 ];
 // Lines of the older chapters still in English in the other ten languages on 30 Oct 2026. This
 // number can only go down: lower it when you translate some, never raise it.

@@ -11,6 +11,8 @@ import type { CalendarEntryMeta, CalendarReminderRow } from "@/lib/studioflow/ca
 import type { NoteWorkspaceMember } from "@/lib/studioflow/noteSharing";
 import { TYPE_META, TASK_STATE_META, dayLabel, dateTimeLabel, timeLabel } from "./calendarUi";
 import { weekdayShort } from "./CalendarEntryForm";
+import { CalendarBookingBlock } from "./CalendarBookingBlock";
+import { bookingIdFromEntryId } from "@/lib/studioflow/onlineBooking";
 
 type Props = {
   item: CalendarItem;
@@ -35,11 +37,13 @@ type Props = {
   canManageFormer?: boolean;
   transferTargets?: { uid: string; label: string }[];
   onManageFormer?: (action: "archive" | "transfer", toUid: string | null) => Promise<void>;
+  /** The workspace, for an entry made by online booking (id bk_<bookingId>): its booking block asks the server. */
+  companyId?: string;
 };
 
 const OFFSETS: [string, string][] = [["", "Off"], ["0", "At the time"], ["15", "15 minutes before"], ["60", "1 hour before"], ["1440", "1 day before"]];
 
-export function CalendarDetailPanel({ item, uid, access, members, orderTitles, reminder, locale, timeZone, t, onClose, onEdit, onDelete, onStatus, onReminder, meta: rowMeta = null, formerOwner = false, canManageFormer = false, transferTargets = [], onManageFormer }: Props) {
+export function CalendarDetailPanel({ item, uid, access, members, orderTitles, reminder, locale, timeZone, t, onClose, onEdit, onDelete, onStatus, onReminder, meta: rowMeta = null, formerOwner = false, canManageFormer = false, transferTargets = [], onManageFormer, companyId = "" }: Props) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -104,6 +108,9 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
   const writtenLater = entry && item.kind === "note" && entry.createdAtMs && occ
     && core.localParts(entry.createdAtMs, timeZone).dateKey > occ.dateKey;
   const isSeriesOcc = Boolean(entry && entry.rowType === "series" && occ);
+  // An online booking's entry: the booking block takes the place of a bare delete (deleting would cancel the
+  // booking and e-mail the customer, which "Cancel booking" says plainly).
+  const bookingId = entry ? bookingIdFromEntryId(entry.id) : null;
 
   return (
     <aside className="cal-detail" role="dialog" aria-modal="false" aria-labelledby="cal-detail-title" onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}>
@@ -129,6 +136,7 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
       ) : null}
       {repeat ? <p className="muted-copy">{repeat}</p> : null}
       {sharedLine ? <p className="cal-share-summary">{sharedLine}</p> : null}
+      {bookingId && companyId ? <CalendarBookingBlock companyId={companyId} bookingId={bookingId} locale={locale} t={t} /> : null}
 
       {item.kind === "orderDue" && item.orderId ? (
         <div className="cal-detail-block">
@@ -208,7 +216,7 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
 
           <div className="cal-actions">
             {access.edit && !archived ? <button type="button" className="button secondary" disabled={Boolean(busy)} onClick={onEdit}>{t("Edit")}</button> : null}
-            {access.remove && !archived && !confirmDelete ? <button type="button" className="button danger secondary" disabled={Boolean(busy)} onClick={() => setConfirmDelete(true)}>{t("Delete")}</button> : null}
+            {access.remove && !archived && !confirmDelete && !bookingId ? <button type="button" className="button danger secondary" disabled={Boolean(busy)} onClick={() => setConfirmDelete(true)}>{t("Delete")}</button> : null}
           </div>
           {confirmDelete ? (
             <div className="cal-confirm" role="alertdialog" aria-label={t("Delete")}>

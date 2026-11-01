@@ -17,6 +17,9 @@ const APP_ROUTES = [
   "/f/",
   "/e/",
   "/track/",
+  // A business's booking page and the customer's manage page (1 Nov 2026): reached by the business's own
+  // link, never through search; both pages also say noindex.
+  "/book/",
   "/chatgptMcp",
   "/chatgptOAuthApprove",
   "/chatgptOAuthAuthorizationServer",

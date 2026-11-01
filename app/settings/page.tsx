@@ -78,6 +78,7 @@ import { CommerceReviewCard } from "./CommerceReviewList";
 import { ClientDomainSection } from "./ClientDomainSection";
 import { SmsNotificationsSection } from "./SmsNotificationsSection";
 import { SalesSettingsSection } from "./SalesSettingsSection";
+import { OnlineBookingSection } from "./OnlineBookingSection";
 import { fetchSalesCapability } from "@/lib/studioflow/sales";
 import { NotificationSettingsSection } from "./NotificationSettingsSection";
 import { CustomerChannelPanel } from "./CustomerChannelPanel";
@@ -194,7 +195,8 @@ type SettingsSectionId =
   | "support-tickets"
   | "getting-started"
   | "client-domain"
-  | "sales";
+  | "sales"
+  | "online-booking";
 
 type SettingsGroup =
   | "personal"
@@ -256,6 +258,9 @@ const SETTINGS_SECTION_ALIASES: Record<string, SettingsSectionId> = {
   cloudstorage: "integrations",
   // The Calendar tile (Google Calendar / Outlook, 31 Oct 2026) and its deep link.
   calendar: "integrations",
+  // Online booking (1 Nov 2026): the booking page's own section; links from e-mails and the guide.
+  booking: "online-booking",
+  "booking-page": "online-booking",
   storage: "integrations",
   gdrive: "integrations",
   onedrive: "integrations",
@@ -290,7 +295,8 @@ const SETTINGS_ICON_PATHS = {
   brand: ["M3 11.5 11.5 3H19a2 2 0 0 1 2 2v6.5L12.5 20a2 2 0 0 1-2.8 0l-5.7-5.7a2 2 0 0 1 0-2.8Z", "M16 8h.01"],
   sliders: ["M4 8h9", "M16 8h4", "M4 16h4", "M11 16h9", "M13 6v4", "M8 14v4"],
   checklist: ["M10 6h10M10 12h10M10 18h10", "m3.5 6 1.5 1.5L7.5 5", "m3.5 12 1.5 1.5L7.5 11", "m3.5 18 1.5 1.5L7.5 17"],
-  bell: ["M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16Z", "M10 20a2 2 0 0 0 4 0"]
+  bell: ["M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16Z", "M10 20a2 2 0 0 0 4 0"],
+  booking: ["M4 6h16v14H4V6Z", "M4 10h16", "M8 3v4M16 3v4", "m9 15 2 2 4-4"]
 };
 
 // The reviewer's point stands: personal preferences, tax rules, destructive
@@ -310,6 +316,8 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "quick-reply", title: "AI Reply Settings", appKey: "Quick Reply", description: "Reply engine, tone and company knowledge.", icon: "reply", group: "workflowGroup" },
   // S-2 (23 Oct 2026): owner/admin only, and only for a workspace in the Sales pilot.
   { id: "sales", title: "Sales", appKey: "Sales", description: "Show or hide Sales in the main menu.", icon: "cart", group: "workflowGroup" },
+  // Online booking (1 Nov 2026): the public booking page. Owner and admins (the server refuses everyone else's changes).
+  { id: "online-booking", title: "Online booking", appKey: "Online booking", description: "A booking page where customers pick a service and a free time.", icon: "booking", group: "workflowGroup" },
   { id: "sms-notifications", title: "Customer SMS", appKey: "Customer SMS", description: "Text updates to customers: sender ID, what triggers a message, this month's usage.", icon: "reply", group: "workflowGroup" },
   { id: "financial", title: "Financial Settings", appKey: "Financial", description: "Fees, tax and calculations.", icon: "financial", group: "finance" },
   { id: "team-access", title: "Team Access", appKey: "Team Access", description: "Members, roles and workspace requests.", icon: "team", group: "team" },
@@ -338,6 +346,7 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
   workflow: "status steps template material headings badges",
   "quick-reply": "ai reply openai api key knowledge tone quick",
   sales: "sales menu sold store brand channel pilot show hide",
+  "online-booking": "online booking appointment appointments book booking page schedule slot availability calendly consultation reservation randevu qr embed website link hours",
   "sms-notifications": "sms text message texts sender id twilio notification trigger calling code customer updates mobile",
   financial: "vat tax fee currency corporation margin recalculate decimal",
   "team-access": "role member permission invite seat join request",
@@ -597,6 +606,8 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   // (workflow-only members included); the controls inside are gated separately.
   if (sectionId === "safety-uploads") return uploadPolicySettingsAccessFor(workspace).showsSection;
   if (sectionId === "support-tickets") return allowed("settingsSupport");
+  // Online booking is the business's setup: the owner (above) and admins. Members see their own bookings in the Calendar.
+  if (sectionId === "online-booking") return normalizeWorkspaceRole(workspace.role) === "admin";
   if (sectionId === "team-access") return allowed("settingsTeamAccess");
   // Message Settings — workspace messaging toggles, only meaningful on a plan with
   // the Messages feature (mirrors the Mac/Android team-access gate).
@@ -1404,6 +1415,8 @@ function renderSettingsSection({
       return <SmsNotificationsSection workspace={workspace} language={language} />;
     case "sales":
       return <SalesSettingsSection workspace={workspace} language={language} />;
+    case "online-booking":
+      return <OnlineBookingSection workspace={workspace} language={language} />;
     case "notifications":
       return <NotificationSettingsSection workspace={workspace} language={language} />;
     case "support-tickets":

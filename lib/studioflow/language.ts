@@ -23,6 +23,7 @@ import { ORDER_STACK_VIEW_TRANSLATIONS } from "./orderStackViewTranslations";
 import { ORDER_DELIVERY_ADDRESS_TRANSLATIONS } from "./orderDeliveryAddressTranslations";
 import { SECURITY_FIX_TRANSLATIONS } from "./securityFixTranslations";
 import { CALENDAR_TRANSLATIONS } from "./calendarTranslations";
+import { ONLINE_BOOKING_TRANSLATIONS } from "./onlineBookingTranslations";
 import { STORAGE_TRANSLATIONS } from "./storageTranslations";
 import { ACCOUNTING_POSTING_TRANSLATIONS } from "./accountingPostingTranslations";
 
@@ -9518,6 +9519,8 @@ mergeIntoTranslations(SECOND_FACTOR_TRANSLATIONS);
 // Calendar V1 (28 Oct 2026): the /calendar screen and the bell's calendar reminders. Last, and filling only
 // gaps, so no wording elsewhere changes.
 mergeMissingIntoTranslations(CALENDAR_TRANSLATIONS);
+// Online booking (1 Nov 2026): Settings ▸ Online booking and the booking block in the Calendar.
+mergeMissingIntoTranslations(ONLINE_BOOKING_TRANSLATIONS);
 mergeMissingIntoTranslations(STORAGE_TRANSLATIONS);
 // Accounting write 3a (1 Nov 2026): the QuickBooks / Xero Sales tab where the owner approves what is sent.
 // Gaps only, so shared words ("Refresh", "Sent", "Invoice") keep the wording other screens use.

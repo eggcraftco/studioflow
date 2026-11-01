@@ -1,0 +1,250 @@
+/* Settings → Online booking. The cards, switches, inputs and buttons are the app's own (globals.css);
+   this file only lays out what is particular to this screen: the share block, the service rows, the
+   weekly hours and the sticky save bar. Colours come from the app's theme variables. */
+.share {
+  display: grid;
+  gap: 12px;
+  margin: 8px 0 12px;
+}
+
+.shareRow {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.qr {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.qr img {
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 6px;
+  border: 1px solid var(--border, #e3e6eb);
+}
+
+.embed {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.embed textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.steps {
+  display: grid;
+  gap: 18px;
+  margin: 12px 0 16px;
+  padding-inline-start: 22px;
+}
+
+.steps > li {
+  display: grid;
+  gap: 8px;
+}
+
+.presetChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.presetChip {
+  padding: 8px 12px;
+  border: 1.5px solid var(--border, #d6dae0);
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.presetChip.on {
+  border-color: var(--accent, #2563eb);
+  background: color-mix(in srgb, var(--accent, #2563eb) 12%, transparent);
+  font-weight: 600;
+}
+
+.presetChip:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.inline > input {
+  flex: 1 1 220px;
+}
+
+.list {
+  display: grid;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.listRow,
+.serviceHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.listRow {
+  padding: 10px 12px;
+  border: 1px solid var(--border, #e3e6eb);
+  border-radius: 12px;
+}
+
+.service {
+  padding: 12px;
+  border: 1px solid var(--border, #e3e6eb);
+  border-radius: 12px;
+}
+
+.rowActions {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0 0 8px;
+}
+
+.field > span:first-child,
+.field > legend {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.wide {
+  grid-column: 1 / -1;
+}
+
+.small {
+  justify-self: start;
+  width: auto;
+}
+
+.hours {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.hoursRow {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+}
+
+.dayToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.windows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.window {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.window input {
+  width: 116px;
+}
+
+.iconButton,
+.linkButton {
+  border: 0;
+  background: none;
+  color: var(--accent, #2563eb);
+  font: inherit;
+  cursor: pointer;
+}
+
+.iconButton {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.slugEdit {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.saveBar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border, #e3e6eb);
+  background: var(--surface, #ffffff);
+  box-shadow: 0 6px 24px rgba(20, 30, 45, 0.12);
+}
+
+.saveBar p {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .shareRow {
+    grid-template-columns: 1fr;
+  }
+
+  .hoursRow {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

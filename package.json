@@ -121,6 +121,7 @@
     "test:amazon-site-rules": "npx tsx scripts/check-amazon-site-rules.mts",
     "test:site-integration-names": "npx tsx scripts/check-site-integration-names.mts",
     "test:calendar-integration-card": "npx tsx scripts/check-calendar-integration-card.mts",
+    "test:online-booking": "npx tsx scripts/check-online-booking.mts",
     "test:royal-mail-web": "npx tsx scripts/check-royal-mail-web.mts",
     "test:delivery-address": "npx tsx scripts/check-delivery-address.mts",
     "test:sec-bundle-emails": "npx tsx scripts/check-sec-bundle-emails.mts",

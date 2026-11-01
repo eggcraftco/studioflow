@@ -1553,6 +1553,40 @@ const TREE_EN: GuideNode[] = [
         ]
       },
       {
+        id: "set-online-booking",
+        title: "Online booking",
+        blocks: [
+          { kind: "para", text: "Online booking gives your business its own booking page — nivadesk.app/book/your-name — where customers choose a service, a day and a free time and leave their details. Free times leave out your leave, your meetings in the NivaDesk calendar and your connected Google or Outlook calendar. Each booking arrives in your Calendar and Customers, and you and the customer both get an email. Part of NivaDesk Pro and Team." },
+          { kind: "sub", text: "Turn on online booking" },
+          { kind: "steps", items: [
+            "Open Settings ▸ Online booking (the workspace owner or an admin).",
+            "Pick a link name, tick the services customers can book (suggested from your business type) and set the days and hours.",
+            "Press Turn on my booking page. Then copy the link, download the QR code, or copy the embed code for your website."
+          ] },
+          { kind: "sub", text: "Services, prices and confirmation" },
+          { kind: "bullets", items: [
+            "Under Services, press Edit on a service to set its length, the price shown (free, fixed, from …, on request or hidden), where it happens (your place, the customer's address, phone or video), free time before and after, and Confirmation: Booked straight away or I confirm each booking.",
+            "Open an order for each booking turns every booking of that service into an order with the customer on it — handy for drop-offs and repairs."
+          ] },
+          { kind: "sub", text: "Booking hours, leave and Google or Outlook busy times" },
+          { kind: "bullets", items: [
+            "Booking hours are set day by day; on Team, pick a person first to set their own hours. Only on my work days in the Calendar limits booking to days with a Work day entry.",
+            "To block time off, add an Unavailable entry in the Calendar; timed meetings in NivaDesk and in your connected Google or Outlook calendar count as busy too. Booking rules set the start-time step, the minimum notice, how far ahead, a daily limit and closed dates."
+          ] },
+          { kind: "sub", text: "Requests, moving and cancelling bookings" },
+          { kind: "bullets", items: [
+            "Each booking is an entry in the Calendar, marked 📅. Open it to see the customer, Confirm or Decline a request, Move it to another free time, Cancel booking, or mark it Done or Did not come; the customer is emailed.",
+            "Requests waiting for you are also listed in Settings ▸ Online booking. A request not answered within 48 hours, or by its start time, is released and the customer is told.",
+            "Deleting a booking's entry or changing its time from any app also cancels or moves the booking and emails the customer."
+          ] },
+          { kind: "sub", text: "What the customer gets" },
+          { kind: "bullets", items: [
+            "An email with the details, a calendar file and a Manage booking link to cancel or change the time online until the cut-off you set (24 hours by default), and a reminder before the booking.",
+            "The page and the emails follow the customer's language (12 languages) and show times in your business's time zone."
+          ] }
+        ]
+      },
+      {
         id: "chatgpt-app",
         title: "NivaDesk in ChatGPT",
         blocks: [
@@ -3191,6 +3225,40 @@ const TREE_TR: GuideNode[] = [
             "Aynı bölümde sipariş takip sayfası için bir vurgu rengi seçin — durum yazısını ve ilerleme noktalarını renklendirir. Use the default colour düğmesi rengi temizler.",
             "Müşteri sayfalarındaki \"Powered by NivaDesk\" satırı Pro ve Team planlarında kapatılabilir.",
             "Logonuz, işletme adınız ve alt not zaten çalışma alanı markalama ayarlarınızdan gelir."
+          ] }
+        ]
+      },
+      {
+        id: "set-online-booking",
+        title: "Online randevu",
+        blocks: [
+          { kind: "para", text: "Online randevu, işletmenize kendi randevu sayfasını verir — nivadesk.app/book/adiniz — müşteriler burada hizmeti, günü ve boş bir saati seçip bilgilerini bırakır. Boş saatlerden izinleriniz, NivaDesk takvimindeki toplantılarınız ve bağlı Google ya da Outlook takviminiz düşülür. Her randevu Takvim'inize ve Müşteriler'e düşer; size ve müşteriye e-posta gider. NivaDesk Pro ve Team'de vardır." },
+          { kind: "sub", text: "Online randevuyu açma" },
+          { kind: "steps", items: [
+            "Ayarlar ▸ Online booking'i açın (çalışma alanı sahibi ya da yönetici).",
+            "Bir bağlantı adı seçin, müşterilerin alabileceği hizmetleri işaretleyin (işletme türünüze göre önerilir) ve günleri ve saatleri ayarlayın.",
+            "Turn on my booking page düğmesine basın. Sonra bağlantıyı kopyalayın, QR kodu indirin ya da web siteniz için gömme kodunu kopyalayın."
+          ] },
+          { kind: "sub", text: "Hizmetler, fiyatlar ve onay" },
+          { kind: "bullets", items: [
+            "Services altında bir hizmette Edit'e basıp süresini, gösterilen fiyatı (ücretsiz, sabit, …'den başlayan, teklifle ya da gizli), nerede olduğunu (sizin yeriniz, müşterinin adresi, telefon ya da görüntülü), önce ve sonra boş süreyi ve onay şeklini ayarlayın: Booked straight away (hemen alınır) ya da I confirm each booking (her randevuyu ben onaylarım).",
+            "Open an order for each booking açıksa o hizmetin her randevusu müşterisiyle birlikte siparişe dönüşür — bırakma ve tamir için kullanışlıdır."
+          ] },
+          { kind: "sub", text: "Randevu saatleri, izinler ve Google ya da Outlook meşgul saatleri" },
+          { kind: "bullets", items: [
+            "Randevu saatleri gün gün ayarlanır; Team planında önce kişiyi seçip onun saatlerini ayarlayın. Only on my work days in the Calendar açıksa yalnız Takvim'de Çalışma günü kaydı olan günlerde randevu alınır.",
+            "Bir zamanı kapatmak için Takvim'e Uygun değil / izinli kaydı ekleyin; NivaDesk'teki saatli toplantılar ve bağlı Google ya da Outlook takviminiz de meşgul sayılır. Booking rules bölümü başlangıç aralığını, en erken süreyi, ne kadar ileriye alınabileceğini, günlük sınırı ve kapalı günleri belirler."
+          ] },
+          { kind: "sub", text: "İstekler, randevuyu taşıma ve iptal" },
+          { kind: "bullets", items: [
+            "Her randevu Takvim'de 📅 işaretli bir kayıttır. Açıp müşteriyi görün; isteği Confirm (onayla) ya da Decline (reddet), Move ile başka boş saate taşıyın, Cancel booking ile iptal edin ya da Done / Did not come olarak işaretleyin; müşteriye e-posta gider.",
+            "Bekleyen istekler Ayarlar ▸ Online booking'de de listelenir. 48 saat içinde ya da randevu saatine kadar yanıtlanmayan istek boşa çıkar ve müşteriye bildirilir.",
+            "Randevunun takvim kaydını herhangi bir uygulamadan silmek ya da saatini değiştirmek de randevuyu iptal eder ya da taşır ve müşteriye e-posta gönderir."
+          ] },
+          { kind: "sub", text: "Müşteriye ne gider" },
+          { kind: "bullets", items: [
+            "Ayrıntılı bir e-posta, takvim dosyası ve sizin belirlediğiniz sınıra kadar (varsayılan 24 saat) online iptal ya da saat değiştirme için Manage booking bağlantısı; randevudan önce de hatırlatma.",
+            "Sayfa ve e-postalar müşterinin dilindedir (12 dil) ve saatleri işletmenizin saat diliminde gösterir."
           ] }
         ]
       },

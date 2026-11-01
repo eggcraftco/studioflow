@@ -607,7 +607,7 @@ export default function CalendarPage() {
         onClick={(e) => { e.stopPropagation(); detailOpener.current = e.currentTarget; setSelectedId(item.id); }}
         title={`${t(meta.label)}${stateText ? ` · ${stateText}` : ""} · ${label}${completionNote}${metaNote}${visNote ? ` · ${visNote}` : ""}${sourceNote}`}
       >
-        <span className="cal-chip-icon" aria-hidden="true">{iconFor(item.kind, state)}</span>
+        <span className="cal-chip-icon" aria-hidden="true">{item.entry?.id.startsWith("bk_") ? "📅" : iconFor(item.kind, state)}</span>
         <span className="cal-chip-text">{label}{marks ? <span aria-hidden="true">{marks}</span> : null}</span>
         {!compact && stateText ? <span className="cal-chip-state">{stateText}</span> : null}
         {visMark && !compact ? <span className="cal-chip-vis" aria-hidden="true">{visMark}</span> : null}
@@ -933,6 +933,7 @@ export default function CalendarPage() {
               canManageFormer={isBusinessOwner}
               transferTargets={transferTargets}
               onManageFormer={(action, toUid) => (selected.entry ? manageFormer(selected.entry, action, toUid) : Promise.resolve())}
+              companyId={workspace.id}
             />
           ) : null}
         </div>
