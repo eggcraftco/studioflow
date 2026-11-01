@@ -535,7 +535,8 @@ export function AccountingSalesPanel({ companyId, connectionId, provider, provid
 
   // ---- settings card (owner) ------------------------------------------------------------------
   const accounts = (catalog?.accounts || []).filter((account) => account.active !== false);
-  const payable = (account: AccountingCatalog["accounts"][number]) => String(account.accountType).toUpperCase() === "BANK" || account.enablePaymentsToAccount === true;
+  // The catalogue row is slim (no "payments enabled"); the server reads the full account and says which take payments.
+  const payable = (account: AccountingCatalog["accounts"][number]) => String(account.accountType).toUpperCase() === "BANK" || account.enablePaymentsToAccount === true || (data?.payableAccountIds || []).includes(account.externalId);
   const depositOptions = (method: PostingMethod) => {
     // Xero takes a payment only into a bank account or one open to payments; the saved choice always stays listed.
     const list = provider === "xero" ? accounts.filter((account) => payable(account) || account.externalId === depositDraft[method]) : accounts;

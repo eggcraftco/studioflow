@@ -318,6 +318,8 @@ export type PostingList = {
   isOwner: boolean;
   connection: { mode: string; status: string; writeBoundaryDate: string; scopeLevel: string; environment: string; externalCompanyId: string; provider: string };
   posting: PostingSettings;
+  /** Xero: accounts that can take a payment (bank, or "payments enabled" on the account), read by the server. */
+  payableAccountIds?: string[];
 };
 
 export type PostingScanResult = { ok: boolean; orders: number; created: number; refreshed: number; changed: number; unchanged: number; since: string; truncated: boolean };
