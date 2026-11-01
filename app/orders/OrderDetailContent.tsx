@@ -2387,6 +2387,9 @@ export function OrderDetailContent({
   // nothing is stored.
   const [orderDetailView, setOrderDetailView] = useState<OrderDetailView>(DEFAULT_ORDER_DETAIL_VIEW);
   const [openStackSections, setOpenStackSections] = useState<OrderDetailCardId[]>([]);
+  // Bumped by Collapse all: the page goes back to the top of the order when the list's top is out of view (below).
+  const [stackCollapseToken, setStackCollapseToken] = useState(0);
+  const stackViewRef = useRef<HTMLDivElement | null>(null);
   const [stackDragCardId, setStackDragCardId] = useState<OrderDetailCardId | null>(null);
   const [stackDropCue, setStackDropCue] = useState<{ cardId: OrderDetailCardId; placement: "before" | "after" } | null>(null);
   const stackSectionRefs = useRef(new Map<OrderDetailCardId, HTMLDivElement>());
@@ -2792,6 +2795,7 @@ export function OrderDetailContent({
 
   function collapseAllStackSections() {
     setStackSections([]);
+    setStackCollapseToken(token => token + 1);
   }
 
   function toggleCardsLocked() {
@@ -10411,6 +10415,21 @@ export function OrderDetailContent({
     return (document.scrollingElement as HTMLElement | null) ?? document.documentElement;
   }
 
+  // Collapse all (owner report, 1 Nov 2026): collapsing while scrolled deep into open sections kept the scroll
+  // position, so the short list showed its last headings and the ones just closed sat above the screen, under the
+  // sticky header. Once they have closed, the order goes back to how it opened when the list's top is out of view.
+  useEffect(() => {
+    if (!stackCollapseToken) return;
+    const stack = stackViewRef.current;
+    if (!stack) return;
+    const headBottom = orderHeadRef.current?.getBoundingClientRect().bottom ?? 0;
+    if (stack.getBoundingClientRect().top >= headBottom) return;
+    // At once, not smooth: on a phone the header grows back from its condensed form on the way up, and that relayout
+    // stopped a smooth scroll part way (measured at 375 px: it stopped after a fifth of the distance).
+    scrollParentOf(stack).scrollTo({ top: 0, behavior: "auto" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one scroll per Collapse all
+  }, [stackCollapseToken]);
+
   function jumpToOrderCard(targetId: string) {
     const refs = isStackView ? stackSectionRefs.current : isNarrowLayout ? mobileCardFrameRefs.current : desktopCardFrameRefs.current;
     const target = targetId === ETSY_BLOCK_JUMP_ID ? etsyBlockRef.current : refs.get(targetId as OrderDetailCardId) ?? null;
@@ -10636,7 +10655,7 @@ export function OrderDetailContent({
     // The same tab panel id the card canvas carries (written as an expression so the source-order check in
     // scripts/check-etsy-ui-1.mts still finds the canvas, which follows the Etsy block, first).
     return (
-      <div id={"order-tab-panel-overview"} className="order-detail-stack" data-order-stack="">
+      <div ref={stackViewRef} id={"order-tab-panel-overview"} className="order-detail-stack" data-order-stack="">
         {fold.main.map(cardId => renderStackSection(cardId))}
         {fold.folded.length ? (
           <>
