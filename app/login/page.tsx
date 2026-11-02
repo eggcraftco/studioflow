@@ -18,6 +18,7 @@ import {
   PublicSiteLanguageProvider,
   usePublicSiteLanguage
 } from "@/lib/publicSite/i18n";
+import { PUBLIC_FONT_CLASSES } from "@/lib/publicSite/fonts";
 
 // Post-login destination: honour a same-site ?next= (used by e.g. the Shopify
 // connect handshake) and fall back to the app default. Same-origin only.
@@ -131,7 +132,7 @@ function LoginPageContent() {
   if (loading || user) return <LoadingScreen />;
 
   return (
-    <main className="page-shell login-public-shell">
+    <main className={`page-shell login-public-shell public-cream ${PUBLIC_FONT_CLASSES}`}>
       <nav className="login-public-nav" aria-label={t("login.nav.publicNavigation")}>
         <Link href="/" className="login-public-brand">
           <img className="public-brand-logo" src="/brand/nivadesk-logo.png" alt={t("brand.name")} />

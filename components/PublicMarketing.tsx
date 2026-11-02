@@ -98,6 +98,9 @@ import {
 } from "@/lib/studioflow/billingActions";
 import { CardIconGlyph, type CardIcon } from "@/components/CardTitle";
 import SupportChatWidget from "@/components/SupportChatWidget";
+import { PublicMascot } from "@/components/PublicMascot";
+import { CITY_ANCHORS, PublicIsoCity, PublicIsoTile } from "@/components/PublicIllustrations";
+import { PUBLIC_FONT_CLASSES } from "@/lib/publicSite/fonts";
 import { safeNextFromLocation } from "@/lib/security/safeNext";
 
 type FeatureTone = "sage" | "clay" | "sky" | "lilac" | "rose" | "gold" | "graphite";
@@ -971,33 +974,162 @@ function PublicLanguageSelector() {
   );
 }
 
+// The header's two menus (cream redesign, 2 Nov 2026): the pages that used to
+// sit in one row, grouped the way the footer already groups them.
+type HeaderMenuItem = { href: string; labelKey: PublicSiteTranslationKey; descKey: PublicSiteTranslationKey; icon: ReactNode };
+type HeaderMenu = { id: "product" | "support"; labelKey: PublicSiteTranslationKey; items: HeaderMenuItem[] };
+
+const HEADER_MENUS: HeaderMenu[] = [
+  {
+    id: "product",
+    labelKey: "footer.product",
+    items: [
+      { href: "/features", labelKey: "nav.features", descKey: "navMenu.features.desc", icon: <><rect x="3.5" y="3.5" width="5.5" height="5.5" rx="1.2" /><rect x="11" y="3.5" width="5.5" height="5.5" rx="1.2" /><rect x="3.5" y="11" width="5.5" height="5.5" rx="1.2" /><circle cx="13.75" cy="13.75" r="2.75" /></> },
+      { href: "/integrations", labelKey: "nav.integrations", descKey: "navMenu.integrations.desc", icon: <><path d="M7.5 6.5V3.5M12.5 6.5V3.5M5.5 6.5h9v3a4.5 4.5 0 0 1-9 0zM10 14v2.5" /></> },
+      { href: "/chatgpt", labelKey: "nav.chatgpt", descKey: "navMenu.chatgpt.desc", icon: <path d="M10 3l1.6 4.4L16 9l-4.4 1.6L10 15l-1.6-4.4L4 9l4.4-1.6z" /> },
+      { href: "/changelog", labelKey: "nav.changelog", descKey: "navMenu.changelog.desc", icon: <><circle cx="10" cy="10" r="6.5" /><path d="M10 6.5V10l2.5 1.6" /></> }
+    ]
+  },
+  {
+    id: "support",
+    labelKey: "footer.support",
+    items: [
+      { href: "/guide", labelKey: "nav.guide", descKey: "navMenu.guide.desc", icon: <path d="M4 4.5h4.5A1.5 1.5 0 0 1 10 6v10a1.5 1.5 0 0 0-1.5-1.5H4zM16 4.5h-4.5A1.5 1.5 0 0 0 10 6v10a1.5 1.5 0 0 1 1.5-1.5H16z" /> },
+      { href: "/faq", labelKey: "nav.faq", descKey: "navMenu.faq.desc", icon: <><circle cx="10" cy="10" r="6.5" /><path d="M8.2 8.2a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.1v.4M10 13.6h.01" /></> },
+      { href: "/security", labelKey: "nav.security", descKey: "navMenu.security.desc", icon: <path d="M10 3l6 2.5v4.2c0 3.8-2.6 6.3-6 7.3-3.4-1-6-3.5-6-7.3V5.5zM7.5 10l1.8 1.8 3.3-3.6" /> },
+      { href: "/contact", labelKey: "nav.contact", descKey: "navMenu.contact.desc", icon: <><rect x="3" y="5" width="14" height="10.5" rx="1.8" /><path d="M3.5 6l6.5 5 6.5-5" /></> }
+    ]
+  }
+];
+
+function HeaderMenuIcon({ children }: { children: ReactNode }) {
+  return (
+    <span className="public-menu-tile-icon" aria-hidden="true">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+    </span>
+  );
+}
+
+// The newest release, in the Product menu and above the home page's picture.
+// Only the page's own localized labels and the version are shown: release
+// text is English by design (lib/publicSite/changelog.ts).
+function LatestReleaseLink({ className, onNavigate }: { className: string; onNavigate?: () => void }) {
+  const { language } = usePublicSiteLanguage();
+  const labels = getChangelogLabels(language);
+  const latest = CHANGELOG[0];
+  if (!latest) return null;
+  return (
+    <Link href={`/changelog#${changelogAnchor(latest)}`} className={className} onClick={onNavigate}>
+      <span className="public-latest-tag">{labels.latest}</span>
+      <span className="public-latest-text">
+        {labels.title} · {latest.platform ? `${latest.platform} ` : ""}{labels.versionWord} {latest.version}
+      </span>
+      <span className="public-latest-arrow" aria-hidden="true">→</span>
+    </Link>
+  );
+}
+
 export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean } = {}) {
   const { user } = useAuth();
   const { t } = usePublicSiteLanguage();
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [openMenu, setOpenMenu] = useState<HeaderMenu["id"] | null>(null);
+  const [scrolled, setScrolled] = useState(false);
+  const navRef = useRef<HTMLElement | null>(null);
   const closeMenu = () => setMenuOpen(false);
   // On the sign-up page itself "Start Free" linked to /signup, i.e. back to the
   // top of the page it was on, while the form sat below the pitch (the email
   // field at y≈1241 on a 390 px phone). There it goes to the form (review N07).
   const onSignupForm = pathname === "/signup" && !user;
+
+  useEffect(() => {
+    setOpenMenu(null);
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenMenu(null);
+    };
+    const onPointer = (event: PointerEvent) => {
+      if (navRef.current && !navRef.current.contains(event.target as Node)) setOpenMenu(null);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointer);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onPointer);
+    };
+  }, [openMenu]);
+
   return (
-    <header className="public-header">
-      <div className="public-shell public-header-inner">
-        <Link href="/" className="public-brand" aria-label={t("brand.homeAria")}>
-          <img className="public-brand-logo" src="/brand/nivadesk-logo.png" alt="" aria-hidden="true" />
-        </Link>
+    <header className="public-header" data-scrolled={scrolled ? "true" : "false"}>
+      <div className="public-header-inner">
+        <div className="public-header-pill public-header-pill-main">
+          <Link href="/" className="public-brand" aria-label={t("brand.homeAria")}>
+            <img className="public-brand-logo" src="/brand/nivadesk-logo.png" alt="" aria-hidden="true" />
+          </Link>
+          <span className="public-header-divider" aria-hidden="true" />
+          <nav className="public-nav-links" aria-label={t("nav.publicPages")} ref={navRef}>
+            {HEADER_MENUS.map(menu => (
+              <div
+                className="public-nav-menu"
+                key={menu.id}
+                data-open={openMenu === menu.id ? "true" : "false"}
+                onMouseEnter={() => setOpenMenu(menu.id)}
+                onMouseLeave={() => setOpenMenu(current => (current === menu.id ? null : current))}
+              >
+                <button
+                  type="button"
+                  className="public-nav-trigger"
+                  aria-expanded={openMenu === menu.id}
+                  aria-controls={`public-menu-${menu.id}`}
+                  onClick={() => setOpenMenu(current => (current === menu.id ? null : menu.id))}
+                >
+                  {t(menu.labelKey)}
+                  <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" /></svg>
+                </button>
+                <div className="public-nav-dropdown" id={`public-menu-${menu.id}`} hidden={openMenu !== menu.id}>
+                  <div className="public-nav-dropdown-tiles">
+                    <span className="public-nav-dropdown-label">{t(menu.labelKey)}</span>
+                    {menu.items.map(item => (
+                      <Link key={item.href} href={item.href} className="public-menu-tile" onClick={() => setOpenMenu(null)}>
+                        <HeaderMenuIcon>{item.icon}</HeaderMenuIcon>
+                        <span className="public-menu-tile-text">
+                          <strong>{t(item.labelKey)}</strong>
+                          <span>{t(item.descKey)}</span>
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                  {menu.id === "product" ? (
+                    <div className="public-nav-dropdown-aside">
+                      <LatestReleaseLink className="public-nav-latest" onNavigate={() => setOpenMenu(null)} />
+                      <PublicMascot pose="clipboard" className="public-nav-mascot" />
+                    </div>
+                  ) : (
+                    <div className="public-nav-dropdown-aside">
+                      <a className="public-nav-mail" href="mailto:contact@nivadesk.co.uk">contact@nivadesk.co.uk</a>
+                      <PublicMascot pose="wave" className="public-nav-mascot" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            <Link href="/pricing" className="public-nav-plain">{t("nav.pricing")}</Link>
+          </nav>
+        </div>
 
-        <nav className="public-nav-links" aria-label={t("nav.publicPages")}>
-          <Link href="/">{t("nav.home")}</Link>
-          <Link href="/features">{t("nav.features")}</Link>
-          <Link href="/integrations">{t("nav.integrations")}</Link>
-          <Link href="/pricing">{t("nav.pricing")}</Link>
-          <Link href="/faq">{t("nav.faq")}</Link>
-          <Link href="/security">{t("nav.security")}</Link>
-        </nav>
-
-        <div className="public-header-actions">
+        <div className="public-header-pill public-header-actions">
           {hideLanguage ? null : <span className="public-header-lang-desktop"><PublicLanguageSelector /></span>}
           <Link href={user ? "/dashboard" : "/login"} className="public-button ghost public-header-login-desktop">
             {user ? t("cta.openPortal") : t("cta.login")}
@@ -1027,15 +1159,28 @@ export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean 
 
       {menuOpen ? (
         <div className="public-header-mobile-menu">
-          <Link href="/" onClick={closeMenu}>{t("nav.home")}</Link>
-          <Link href="/features" onClick={closeMenu}>{t("nav.features")}</Link>
-          <Link href="/integrations" onClick={closeMenu}>{t("nav.integrations")}</Link>
-          <Link href="/pricing" onClick={closeMenu}>{t("nav.pricing")}</Link>
-          <Link href="/faq" onClick={closeMenu}>{t("nav.faq")}</Link>
-          <Link href="/security" onClick={closeMenu}>{t("nav.security")}</Link>
-          <Link href={user ? "/dashboard" : "/login"} onClick={closeMenu}>
-            {user ? t("cta.openPortal") : t("cta.login")}
-          </Link>
+          <Link href="/" onClick={closeMenu} className="public-mobile-home">{t("nav.home")}</Link>
+          {HEADER_MENUS.map(menu => (
+            <section className="public-mobile-group" key={menu.id}>
+              <h2>{t(menu.labelKey)}</h2>
+              {menu.items.map(item => (
+                <Link key={item.href} href={item.href} onClick={closeMenu} className="public-menu-tile">
+                  <HeaderMenuIcon>{item.icon}</HeaderMenuIcon>
+                  <span className="public-menu-tile-text">
+                    <strong>{t(item.labelKey)}</strong>
+                    <span>{t(item.descKey)}</span>
+                  </span>
+                </Link>
+              ))}
+            </section>
+          ))}
+          <Link href="/pricing" onClick={closeMenu} className="public-mobile-home">{t("nav.pricing")}</Link>
+          <div className="public-mobile-actions">
+            <Link href={user ? "/dashboard" : "/login"} onClick={closeMenu} className="public-button ghost">
+              {user ? t("cta.openPortal") : t("cta.login")}
+            </Link>
+            <Link href="/signup" onClick={closeMenu} className="public-button">{t("cta.startFree")}</Link>
+          </div>
           {hideLanguage ? null : <div className="public-header-mobile-lang"><PublicLanguageSelector /></div>}
         </div>
       ) : null}
@@ -1047,6 +1192,7 @@ function PublicFooter() {
   const { t } = usePublicSiteLanguage();
   return (
     <footer className="public-footer">
+      <div className="public-footer-main">
       <div className="public-shell public-footer-inner">
         <div className="public-footer-brand-block">
           <img className="public-footer-logo" src="/brand/nivadesk-logo.png" alt={t("brand.full")} />
@@ -1093,7 +1239,10 @@ function PublicFooter() {
             </nav>
           </section>
         </div>
-        <div className="public-footer-meta">
+      </div>
+      </div>
+      <div className="public-footer-bottom">
+        <div className="public-shell public-footer-meta">
           <span>{t("footer.rights").replace("\u00A9", `\u00A9 ${new Date().getFullYear()}`)}</span>
           <span className="public-footer-recaptcha">
             {(() => {
@@ -1124,7 +1273,7 @@ function PublicShellContent({ children }: { children: ReactNode }) {
   usePublicScrollReveal(pathname);
 
   return (
-    <div className="public-site" dir={dir}>
+    <div className={`public-site public-cream ${PUBLIC_FONT_CLASSES}`} dir={dir}>
       <SiteVisitBeacon />
       <GoogleAdsTag />
       <a href="#public-main" className="public-skip-link">{t("nav.skipToContent")}</a>
@@ -1172,34 +1321,9 @@ function HeroFeatureChips() {
   );
 }
 
-// Pick a currency symbol matching the visitor's region for the decorative hero badge:
-// US/Americas → $, continental Europe → €, UK and everywhere else → £. Uses the browser
-// timezone (a good proxy for physical location), falling back to the language region.
-function heroCurrencySymbol(): string {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-    if (tz.startsWith("America/")) return "$";
-    if (["Europe/London", "Europe/Belfast", "Europe/Guernsey", "Europe/Jersey", "Europe/Isle_of_Man"].includes(tz)) return "£";
-    if (tz.startsWith("Europe/")) return "€";
-  } catch {
-    // ignore: fall through to the language region / default
-  }
-  if (typeof navigator !== "undefined") {
-    const region = (navigator.language || "").split("-")[1]?.toUpperCase() || "";
-    if (region === "US") return "$";
-    if (region === "GB") return "£";
-  }
-  return "£";
-}
-
 function ProductScene() {
   const { t } = usePublicSiteLanguage();
-  // Default to £ for the server render; resolve the visitor's symbol after hydration.
-  const [currencySymbol, setCurrencySymbol] = useState("£");
   const [shotOpen, setShotOpen] = useState(false);
-  useEffect(() => {
-    setCurrencySymbol(heroCurrencySymbol());
-  }, []);
   useEffect(() => {
     if (!shotOpen) return;
     const previousOverflow = document.body.style.overflow;
@@ -1216,6 +1340,7 @@ function ProductScene() {
   return (
     <div className="public-hero-visual">
       <div className="hero-app-shot">
+        <span className="hero-app-shot-bar" aria-hidden="true"><i /><i /><i /></span>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/hero-app2.webp" alt="NivaDesk order workspace" loading="eager" />
         <button type="button" className="hero-shot-zoom" onClick={() => setShotOpen(true)}>
@@ -1249,34 +1374,6 @@ function ProductScene() {
             document.body
           )
         : null}
-      {/* The mock's stat strip: four small live-looking cards above the shot
-          instead of scattered floats. */}
-      <div className="hero-stat-strip" aria-hidden="true">
-        <div className="hero-stat-card">
-          <span className="hero-float-icon" data-tone="sage">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="4.5" width="13" height="12" rx="2" /><path d="M3.5 8h13M7 3v3M13 3v3" /></svg>
-          </span>
-          <div><strong>{t("heroFloat.ordersTitle")}</strong><span>{t("heroFloat.ordersSub")}</span></div>
-        </div>
-        <div className="hero-stat-card">
-          <span className="hero-float-icon" data-tone="green">
-            <span className="hero-float-currency">{currencySymbol}</span>
-          </span>
-          <div><strong>{t("heroFloat.receivedTitle").replace(/^[^\d]+/, currencySymbol)}</strong><span>{t("heroFloat.receivedSub")}</span></div>
-        </div>
-        <div className="hero-stat-card">
-          <span className="hero-float-icon" data-tone="blue">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 6h9v8h-9zM11.5 9h3.2l2.8 2.6V14h-6M5.5 14.4a1.6 1.6 0 1 0 3.2 0M12.5 14.4a1.6 1.6 0 1 0 3.2 0" /></svg>
-          </span>
-          <div><strong>{t("heroStat.transitTitle")}</strong><span>{t("heroStat.transitSub")}</span></div>
-        </div>
-        <div className="hero-stat-card">
-          <span className="hero-float-icon" data-tone="violet">
-            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 10.5l4 4 8-9" /></svg>
-          </span>
-          <div><strong>{t("heroStat.tasksTitle")}</strong><span>{t("heroStat.tasksSub")}</span></div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -2809,7 +2906,7 @@ function PlatformHintBanner({ kind, text }: { kind: "android" | "windows"; text:
 function PlatformNote() {
   const { t } = usePublicSiteLanguage();
   return (
-    <section className="public-section public-section-soft public-scroll-reveal">
+    <section className="public-section public-section-soft public-platform-section public-scroll-reveal">
       <div className="public-shell public-platform-panel">
         <div className="public-platform-intro">
           <span className="public-eyebrow">{t("platform.eyebrow")}</span>
@@ -2839,73 +2936,56 @@ function PlatformNote() {
   );
 }
 
-// Mock hub diagram: one order in the middle, the four life areas around it.
+// The order in the middle of the studio (cream redesign, 2 Nov 2026): one
+// isometric plate with the four parts of the work around the order, each with
+// a label pinned to it. The labels are the words the card diagram used.
 function ConnectedOrderDiagram() {
   const { t } = usePublicSiteLanguage();
-  const sides: { titleKey: PublicSiteTranslationKey; subKey: PublicSiteTranslationKey; icon: ReactNode; tone: string }[] = [
-    { titleKey: "orderCards.group.customer", subKey: "connected.customerSub", tone: "sage", icon: <><circle cx="10" cy="7" r="3" /><path d="M4.5 16.5c1-3 3-4.5 5.5-4.5s4.5 1.5 5.5 4.5" /></> },
-    { titleKey: "orderCards.group.work", subKey: "connected.workSub", tone: "violet", icon: <><path d="M13 3.5l3.5 3.5-9 9H4v-3.5z" /></> },
-    { titleKey: "orderCards.group.money", subKey: "connected.moneySub", tone: "green", icon: <><circle cx="10" cy="10" r="6.5" /><path d="M10 6.5v7M8 8.2c0-.9.9-1.5 2-1.5s2 .6 2 1.4c0 2.2-4 1.2-4 3.4 0 .8.9 1.4 2 1.4s2-.6 2-1.5" /></> },
-    { titleKey: "orderCards.group.items", subKey: "connected.itemsSub", tone: "gold", icon: <><path d="M10 2.8 16.5 6v8L10 17.2 3.5 14V6z" /><path d="M3.5 6 10 9.2 16.5 6M10 9.2v8" /></> }
+  const sides: { titleKey: PublicSiteTranslationKey; subKey: PublicSiteTranslationKey; icon: ReactNode; tone: string; anchor: "customer" | "work" | "money" | "items"; place: "top" | "bottom" }[] = [
+    { titleKey: "orderCards.group.customer", subKey: "connected.customerSub", tone: "sage", anchor: "customer", place: "top", icon: <><circle cx="10" cy="7" r="3" /><path d="M4.5 16.5c1-3 3-4.5 5.5-4.5s4.5 1.5 5.5 4.5" /></> },
+    { titleKey: "orderCards.group.work", subKey: "connected.workSub", tone: "violet", anchor: "work", place: "top", icon: <><path d="M13 3.5l3.5 3.5-9 9H4v-3.5z" /></> },
+    { titleKey: "orderCards.group.money", subKey: "connected.moneySub", tone: "green", anchor: "money", place: "top", icon: <><circle cx="10" cy="10" r="6.5" /><path d="M10 6.5v7M8 8.2c0-.9.9-1.5 2-1.5s2 .6 2 1.4c0 2.2-4 1.2-4 3.4 0 .8.9 1.4 2 1.4s2-.6 2-1.5" /></> },
+    { titleKey: "orderCards.group.items", subKey: "connected.itemsSub", tone: "gold", anchor: "items", place: "bottom", icon: <><path d="M10 2.8 16.5 6v8L10 17.2 3.5 14V6z" /><path d="M3.5 6 10 9.2 16.5 6M10 9.2v8" /></> }
   ];
   return (
     <section className="public-section public-connected-section public-scroll-reveal">
       <div className="public-shell">
+        <span className="public-eyebrow public-connected-eyebrow">{t("section.flow.eyebrow")}</span>
         <h2 className="public-connected-title">{t("section.flow.title")}</h2>
-        <div className="public-connected-diagram">
-          <svg className="public-connected-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            <path d="M22 26 C 34 26, 36 42, 46 44" />
-            <path d="M22 74 C 34 74, 36 58, 46 56" />
-            <path d="M78 26 C 66 26, 64 42, 54 44" />
-            <path d="M78 74 C 66 74, 64 58, 54 56" />
+        <div className="public-iso-city-wrap">
+          <div className="public-iso-city-stage">
+          <PublicIsoCity />
+          <svg className="public-iso-pins" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            {sides.map(side => {
+              const anchor = CITY_ANCHORS[side.anchor];
+              return (
+                <line
+                  key={side.anchor}
+                  data-tone={side.tone}
+                  x1={anchor.x}
+                  y1={side.place === "top" ? 13 : 100}
+                  x2={anchor.x}
+                  y2={anchor.y}
+                  vectorEffect="non-scaling-stroke"
+                />
+              );
+            })}
           </svg>
-          <div className="public-connected-col">
-            {sides.slice(0, 2).map(side => (
-              <div className="public-card public-connected-card" data-side="left" key={side.titleKey}>
+          <span className="public-iso-order-pill" style={{ left: `${CITY_ANCHORS.order.x}%`, top: `${CITY_ANCHORS.order.y}%` }}>
+            {t("orderCards.group.order")}
+          </span>
+          </div>
+          <ul className="public-iso-labels">
+            {sides.map(side => (
+              <li key={side.anchor} data-place={side.place} data-tone={side.tone} style={{ left: `${CITY_ANCHORS[side.anchor].x}%` }}>
                 <span className="hero-float-icon" data-tone={side.tone} aria-hidden="true">
                   <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{side.icon}</svg>
                 </span>
-                <div>
-                  <strong>{t(side.titleKey)}</strong>
-                  <span>{t(side.subKey)}</span>
-                </div>
-              </div>
+                <strong>{t(side.titleKey)}</strong>
+                <span>{t(side.subKey)}</span>
+              </li>
             ))}
-          </div>
-          <div className="public-card public-connected-center">
-            <div className="public-connected-center-head">
-              <span className="public-connected-center-icon" aria-hidden="true">
-                <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6.5 7V5.5a3.5 3.5 0 0 1 7 0V7M4 7h12l-.8 9.5H4.8z" /></svg>
-              </span>
-              <span className="public-connected-center-tag">{t("orderCards.group.order")}</span>
-            </div>
-            <div className="public-connected-center-body">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/order-bag-thumb.jpg" alt="" loading="lazy" decoding="async" />
-              <div>
-                <strong>Custom Leather Duffle Bag</strong>
-                <span className="public-connected-status">{t("connected.status")}</span>
-              </div>
-            </div>
-            <div className="public-connected-chips" aria-hidden="true">
-              <span><i data-tone="green" />{t("connected.chipTimeline")}</span>
-              <span><i data-tone="blue" />{t("connected.chipFiles")}</span>
-              <span><i data-tone="gold" />{t("connected.chipNotes")}</span>
-            </div>
-          </div>
-          <div className="public-connected-col">
-            {sides.slice(2).map(side => (
-              <div className="public-card public-connected-card" data-side="right" key={side.titleKey}>
-                <span className="hero-float-icon" data-tone={side.tone} aria-hidden="true">
-                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{side.icon}</svg>
-                </span>
-                <div>
-                  <strong>{t(side.titleKey)}</strong>
-                  <span>{t(side.subKey)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+          </ul>
         </div>
       </div>
     </section>
@@ -2923,8 +3003,13 @@ function CustomisationShowcase() {
   ];
   return (
     <section className="public-section public-kanban-section public-scroll-reveal">
+      <PublicIsoTile scene="work" className="public-deco public-deco-start" />
+      <PublicIsoTile scene="customer" className="public-deco public-deco-end" />
       <div className="public-shell public-card public-kanban-card">
-        <h2>{t("accent.title")}</h2>
+        <div className="public-bento-head">
+          <h2>{t("accent.title")}</h2>
+          <span className="public-bento-tag">{t("accent.eyebrow")}</span>
+        </div>
         <div className="public-kanban" aria-hidden="true">
           {columns.map(column => (
             <div className="public-kanban-col" key={column.titleKey}>
@@ -2954,6 +3039,7 @@ function ShippingStrip() {
   return (
     <section className="public-section public-shipstrip-section public-scroll-reveal">
       <div className="public-shell public-card public-shipstrip-card">
+        <PublicIsoTile scene="shipping" className="public-shipstrip-art" />
         <h2>{t("shippingStrip.title")}</h2>
         <div className="public-shipstrip" aria-hidden="true">
           {([
@@ -2989,6 +3075,7 @@ function HomePricingSummary() {
   return (
     <section className="public-section public-home-pricing public-scroll-reveal">
       <div className="public-shell">
+        <PublicIsoTile scene="money" className="public-home-pricing-art" />
         <h2 className="public-home-pricing-title">{t("homePricing.simpleTitle")}</h2>
         <div className="public-home-pricing-grid">
           <div className="public-card public-home-pricing-card">
@@ -3121,6 +3208,8 @@ function AdvancedAreasSection({ detailed = false }: { detailed?: boolean }) {
   return (
     <section className="public-section public-backoffice-section public-scroll-reveal">
       <div className="public-shell">
+        <PublicIsoTile scene="items" className="public-backoffice-art" />
+        <span className="public-eyebrow public-backoffice-eyebrow">{t("section.backoffice.eyebrow")}</span>
         <h2 className="public-backoffice-title">{t("section.backoffice.title")}</h2>
         <div className="public-backoffice-grid">
           {ADVANCED_AREAS.map(area => (
@@ -3147,8 +3236,7 @@ function PublicHomePageContent() {
   return (
     <>
       <section className="public-hero">
-        <ProductScene />
-        <div className="public-shell public-hero-content">
+        <div className="public-shell public-hero-grid">
           <div className="public-hero-copy public-scroll-reveal">
             <h1>
               {t("hero.titleLead")} <span className="hero-accent">{t("hero.titleAccent")}</span> {t("hero.titleTail")}
@@ -3176,10 +3264,21 @@ function PublicHomePageContent() {
                 </span>
                 <strong>{t("hero.watchDemo")}</strong>
               </button>
-              <Link href="/pricing" className="public-hero-pricing-link">
-                {t("cta.viewPricing")}<span aria-hidden="true"> →</span>
-              </Link>
             </div>
+            <Link href="/pricing" className="public-hero-pricing-link">
+              {t("cta.viewPricing")}<span aria-hidden="true"> →</span>
+            </Link>
+          </div>
+          <div className="public-hero-media">
+            <LatestReleaseLink className="public-hero-latest" />
+            <ProductScene />
+          </div>
+          <div className="public-hero-aside">
+            <p className="public-hero-quote">
+              {t("mascot.quote")}
+              <span>{t("mascot.signature")}</span>
+            </p>
+            <PublicMascot pose="wave" className="public-hero-mascot" />
           </div>
         </div>
       </section>
@@ -3243,6 +3342,7 @@ function PublicHomePageContent() {
 
       <section className="public-section public-cta-band public-scroll-reveal">
         <div className="public-shell public-cta-ready">
+          <PublicMascot pose="parcel" className="public-cta-mascot" />
           <h2>{t("ctaBand.readyTitle")}</h2>
           <div className="public-cta-ready-actions">
             <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
@@ -3319,6 +3419,10 @@ function PublicFeaturesPageContent() {
               </span>
               <h1>{t("featuresPage.title")}</h1>
               <p>{t("featuresPage.body")}</p>
+            </div>
+            <div className="public-page-hero-art" aria-hidden="true">
+              <PublicIsoTile scene="order" />
+              <PublicMascot pose="parcel" />
             </div>
           </div>
           <div className="public-features-hero-strip">
@@ -3473,6 +3577,7 @@ function PublicPricingPageContent() {
           </div>
 
           <div className="public-pricing-cluster" aria-hidden="true">
+            <PublicMascot pose="clipboard" className="public-pricing-mascot" />
             <div className="public-pricing-orb" />
             <div className="pc-card pc-card-demo">
               <span className="pc-ico pc-ico-solid"><svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="11" rx="1.5" /><path d="M4 13h16M12 9v11M9 9a2 2 0 110-4c2 0 3 4 3 4M15 9a2 2 0 100-4c-2 0-3 4-3 4" /></svg></span>
@@ -4689,8 +4794,9 @@ function PublicChangelogPageContent() {
   };
   return (
     <>
-      <section className="public-page-hero public-info-hero">
+      <section className="public-page-hero public-info-hero public-changelog-hero">
         <div className="public-shell">
+          <PublicMascot pose="clipboard" className="public-changelog-mascot" />
           <span className="public-eyebrow">{labels.eyebrow}</span>
           <h1>{labels.title}</h1>
           <p>{labels.intro}</p>
