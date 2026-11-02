@@ -37706,9 +37706,10 @@ body[data-studio-theme="dark"] .inv-categories .btn-danger { color: #f87171; bor
   .order-view-toggle button svg { width: 16px; height: 16px; }
   .order-detail-stack { padding: 12px; gap: 8px; }
   .order-stack-heading { min-height: 48px; padding: 6px 6px 6px 12px; gap: 8px; }
-  /* The title wins the width on a phone; the summary takes what is left and ends with an ellipsis. */
-  .order-stack-title { flex: 1 1 auto; white-space: normal; line-height: 1.2; }
-  .order-stack-summary { flex: 0 1 40%; font-size: 12px; }
+  /* The title wins the width on a phone; the summary takes what is left, on up to two lines, and ends with an ellipsis
+     (one line cut German "Bezahlt £400.00 · Verbleibend £0.00" before the amount still owed — language audit, 2 Nov 2026). */
+  .order-stack-title { flex: 1 1 auto; white-space: normal; line-height: 1.2; hyphens: auto; -webkit-hyphens: auto; }
+  .order-stack-summary { flex: 0 1 40%; font-size: 12px; white-space: normal; line-height: 1.25; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
   .order-stack-section.is-open > .order-stack-heading .order-stack-summary { display: none; }
   .order-stack-chip { display: none; }
   .order-stack-body { padding: 4px 12px 14px; }

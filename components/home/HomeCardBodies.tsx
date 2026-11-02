@@ -916,7 +916,7 @@ export function InventoryCardBody({ size, data, t, language, moneySettings, hide
                     piece, the count on the shelf for a quantity line. */}
                 {/* MC-3 cost: no cost entered is not a £0 item. */}
                 <b>{inventoryCostKind(item) === "notEntered" && !(Number(item.valuationCost) > 0)
-                  ? (wooInventoryText("Not entered", language || "English") || "Not entered")
+                  ? (wooInventoryText("Not entered", language || "English") || t("Not entered"))
                   : money(item.trackingType === "unique"
                     ? item.valuationCost
                     : item.valuationCost * (item.quantity?.onHand ?? 0))}</b>

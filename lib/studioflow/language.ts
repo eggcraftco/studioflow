@@ -27,6 +27,7 @@ import { ONLINE_BOOKING_TRANSLATIONS } from "./onlineBookingTranslations";
 import { APP_HELP_HISTORY_TRANSLATIONS } from "./appHelpHistoryTranslations";
 import { STORAGE_TRANSLATIONS } from "./storageTranslations";
 import { ACCOUNTING_POSTING_TRANSLATIONS } from "./accountingPostingTranslations";
+import { LANGUAGE_AUDIT_TRANSLATIONS } from "./languageAuditTranslations";
 
 import { SECOND_FACTOR_TRANSLATIONS } from "./secondFactorTranslations";
 
@@ -9529,6 +9530,8 @@ mergeMissingIntoTranslations(STORAGE_TRANSLATIONS);
 // Accounting write 3a (1 Nov 2026): the QuickBooks / Xero Sales tab where the owner approves what is sent.
 // Gaps only, so shared words ("Refresh", "Sent", "Invoice") keep the wording other screens use.
 mergeMissingIntoTranslations(ACCOUNTING_POSTING_TRANSLATIONS);
+// Language audit (2 Nov 2026): texts the web drew in English in at least one language. Gaps only.
+mergeMissingIntoTranslations(LANGUAGE_AUDIT_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

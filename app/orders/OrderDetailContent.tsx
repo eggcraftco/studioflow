@@ -12812,7 +12812,7 @@ function InlineNotesField({
             }}
           />
           <div className="app-notes-actions">
-            <button type="button" onClick={() => { setDraft(value); setEditing(false); }} disabled={saving}>Cancel</button>
+            <button type="button" onClick={() => { setDraft(value); setEditing(false); }} disabled={saving}>{t("Cancel")}</button>
             <button type="button" onClick={() => { void submit(); }} disabled={saving}>{t(saving ? "Saving..." : "Save")}</button>
           </div>
         </div>
