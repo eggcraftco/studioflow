@@ -41820,3 +41820,12 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
   .public-site.public-cream .public-tour-step button,
   .public-site.public-cream .public-tour-toggle { transition: none; }
 }
+
+/* ---- Links that sit on their own dark fill keep their white text ----
+   The theme's `.public-site.public-cream a { color: inherit }` is more specific than these older rules, so the App Store /
+   Google Play badges read dark ink on black (contrast 1.3) and the keyboard skip link dark ink on terracotta. The badges keep
+   the stores' own look (white on black). */
+.public-site.public-cream .public-appstore-btn,
+.public-site.public-cream .public-appstore-btn:hover,
+.public-site.public-cream .public-appstore-btn:focus-visible { color: #fff; }
+.public-site.public-cream .public-skip-link { color: #fff; }
