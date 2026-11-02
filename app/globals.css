@@ -40099,12 +40099,14 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
    the end of the file so it wins ties on source order; the selectors carry two
    classes so it also beats the single-class rules above at every width.
    Type: Inter Tight + Fraunces italic (lib/publicSite/fonts.ts, self-hosted).
+   Tone: option B "soft cream" (#F8F0E4), the owner's pick on 2 Nov 2026 from five
+   rendered options; Fibery's own #FAEBD6 read as too much cream.
    ========================================================================== */
 .public-site.public-cream {
-  --cream-bg: #faebd6;
-  --cream-surface: #fdf7ef;
-  --cream-surface-2: #fffdfa;
-  --cream-menu: #fff5e8;
+  --cream-bg: #f8f0e4;
+  --cream-surface: #fdf9f3;
+  --cream-surface-2: #fffefb;
+  --cream-menu: #fcf6ee;
   --cream-ink: #251d1a;
   --cream-ink-soft: #3a2e29;
   --cream-muted: #6b5d55;
@@ -40113,11 +40115,11 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
   --cream-terracotta: #b0694a;
   --cream-terracotta-text: #8f4f32;
   --cream-terracotta-fill: #c17b58;
-  --cream-sand: #f6d3a0;
+  --cream-sand: #f3dcb6;
   --cream-blush: #eed0bf;
   --cream-peach: #f0b89b;
-  --cream-peach-line: #f3cbb2;
-  --cream-peach-band: #f1c4a5;
+  --cream-peach-line: #eed6c4;
+  --cream-peach-band: #efcfb8;
   --cream-teal: #2f6f6d;
   --cream-teal-deep: #24585a;
   --cream-sage: #e9ebe4;
@@ -40132,7 +40134,7 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
   --public-bg: var(--cream-bg);
   --public-surface: var(--cream-surface);
   --public-surface-strong: var(--cream-surface-2);
-  --public-surface-soft: #f6e4cb;
+  --public-surface-soft: #fdf9f3;
   --public-border: var(--cream-line);
   --public-text: var(--cream-ink);
   --public-muted: var(--cream-muted);
@@ -40245,7 +40247,7 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
 }
 .public-site.public-cream .public-button.large { min-height: 48px; padding: 0 24px; font-size: 17px; }
 .public-site.public-cream .public-button.secondary {
-  background: rgba(250, 235, 214, 0.1);
+  background: rgba(248, 240, 228, 0.1);
   color: var(--cream-ink);
   box-shadow: inset 0 0 0 1px var(--cream-ink);
 }
@@ -40294,7 +40296,7 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
   transition: background-color 180ms ease, box-shadow 180ms ease;
 }
 .public-site.public-cream .public-header[data-scrolled="true"] .public-header-pill {
-  background: rgba(253, 247, 239, 0.95);
+  background: rgba(253, 249, 243, 0.95);
   box-shadow: var(--cream-shadow);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
@@ -40681,7 +40683,7 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
   padding: 0 20px 0 8px;
   border: 0;
   border-radius: 6px;
-  background: rgba(250, 235, 214, 0.1);
+  background: rgba(248, 240, 228, 0.1);
   box-shadow: inset 0 0 0 1px var(--cream-ink);
   color: var(--cream-ink);
   font-family: var(--cream-sans);
@@ -40979,7 +40981,7 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
   border-color: var(--cream-peach-line);
   border-radius: 12px;
   background:
-    linear-gradient(180deg, var(--cream-surface) 55%, rgba(253, 247, 239, 0.4)),
+    linear-gradient(180deg, var(--cream-surface) 55%, rgba(253, 249, 243, 0.4)),
     var(--cream-grid);
   background-size: auto, 12px 12px;
   color: var(--cream-ink);
@@ -41083,12 +41085,12 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
   min-height: 40px;
   padding: 0 16px;
   border-radius: 6px;
-  box-shadow: inset 0 0 0 1px rgba(250, 235, 214, 0.75);
+  box-shadow: inset 0 0 0 1px rgba(248, 240, 228, 0.75);
   color: var(--cream-bg);
   font-weight: 600;
   text-decoration: none;
 }
-.public-site.public-cream .public-shipstrip-link:hover { background: rgba(250, 235, 214, 0.12); }
+.public-site.public-cream .public-shipstrip-link:hover { background: rgba(248, 240, 228, 0.12); }
 @media (max-width: 1180px) { .public-site.public-cream .public-shipstrip-art { display: none; } }
 /* /features uses the same link class on cream. */
 .public-site.public-cream .public-features-deep-section .public-shipstrip-link {
@@ -41344,7 +41346,7 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
 .public-site.public-cream .public-feature-card {
   border-radius: 16px;
   background:
-    linear-gradient(180deg, var(--cream-surface) 62%, rgba(253, 247, 239, 0.5)),
+    linear-gradient(180deg, var(--cream-surface) 62%, rgba(253, 249, 243, 0.5)),
     var(--cream-grid);
   background-size: auto, 12px 12px;
 }
@@ -41504,7 +41506,7 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
 
 /* ---- Sign-in page (its own shell, same look) ------------------------- */
 .login-public-shell.public-cream {
-  --cream-bg: #faebd6;
+  --cream-bg: #f8f0e4;
   --cream-ink: #251d1a;
   background: var(--cream-bg);
   color: var(--cream-ink);
@@ -41516,9 +41518,9 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
   color: var(--cream-bg);
 }
 .login-public-shell.public-cream .login-card-frame {
-  border: 1px solid #f3cbb2;
+  border: 1px solid #eed6c4;
   border-radius: 16px;
-  background: #fdf7ef;
+  background: #fdf9f3;
   box-shadow: 0 10px 16px -3px rgba(20, 21, 26, 0.08), 0 1px 2px rgba(20, 21, 26, 0.05);
 }
 .login-public-shell.public-cream .button,
