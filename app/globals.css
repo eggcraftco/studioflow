@@ -41676,3 +41676,118 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
   .public-site.public-cream .public-home-faq-mascot { position: static; display: block; width: 96px; margin: 0 auto 8px; }
 }
 .public-site.public-cream .public-shipstrip-card .public-shipstrip-link { justify-self: center; }
+
+/* Desk objects (2 Nov 2026, owner: tools around the text and pictures, "çalışma pedi"
+   kept). Maker tools and seller things lie on the page like on a desk: at the
+   corners of cards and pictures, some in front of the edge, some tucked behind.
+   Logical insets only (check-etsy-ui-1 E3 reads to the end of this file). */
+.public-site.public-cream .public-desk {
+  position: absolute;
+  z-index: 3;
+  height: auto;
+  overflow: visible;
+  pointer-events: none;
+  filter: drop-shadow(0 6px 5px rgba(37, 29, 26, 0.16));
+  transform: rotate(var(--r, 0deg));
+}
+.public-site.public-cream .hero-app-shot { z-index: 1; }
+
+.public-site.public-cream .desk-hero-tape { top: 46px; inset-inline-start: -30px; width: 108px; --r: -36deg; }
+.public-site.public-cream .desk-hero-ruler { bottom: -24px; inset-inline-end: 7%; width: 300px; --r: 3deg; z-index: 0; }
+.public-site.public-cream .desk-hero-tag { bottom: -44px; inset-inline-start: 5%; width: 104px; --r: -9deg; }
+
+.public-site.public-cream .desk-city-scissors { bottom: 128px; inset-inline-start: -12px; width: 150px; --r: -16deg; }
+.public-site.public-cream .desk-city-label { top: 27%; inset-inline-end: -76px; width: 120px; --r: 9deg; }
+
+.public-site.public-cream .desk-kanban-tape1 { top: -15px; inset-inline-start: 26px; width: 104px; --r: -6deg; filter: none; }
+.public-site.public-cream .desk-kanban-tape2 { top: -13px; inset-inline-end: 34px; width: 104px; --r: 5deg; filter: none; }
+.public-site.public-cream .desk-kanban-pencil { bottom: -16px; inset-inline-end: 120px; width: 210px; --r: -4deg; }
+
+.public-site.public-cream .desk-backoffice-tag { bottom: -36px; inset-inline-start: -38px; width: 112px; --r: -14deg; }
+
+.public-site.public-cream .desk-mat-square { top: -46px; inset-inline-start: 150px; width: 124px; --r: -10deg; }
+.public-site.public-cream .desk-mat-compass { top: -34px; inset-inline-end: 270px; width: 74px; --r: 16deg; }
+.public-site.public-cream .desk-mat-knife { bottom: 40px; inset-inline-end: 240px; width: 176px; --r: -24deg; filter: drop-shadow(0 6px 5px rgba(0, 0, 0, 0.28)); }
+.public-site.public-cream .desk-mat-spool { bottom: -32px; inset-inline-end: 36px; width: 64px; --r: 8deg; }
+
+.public-site.public-cream .public-platform-panel { position: relative; }
+.public-site.public-cream .desk-platform-card { bottom: 26px; inset-inline-start: 0; width: 128px; --r: -10deg; }
+.public-site.public-cream .desk-platform-stamp { bottom: 30px; inset-inline-start: 150px; width: 62px; --r: 8deg; }
+
+.public-site.public-cream .desk-pricing-receipt { bottom: -14px; inset-inline-end: -44px; width: 74px; --r: 10deg; }
+
+.public-site.public-cream .desk-faq-note { top: 72px; inset-inline-end: max(0px, calc(50% - 610px)); width: 108px; --r: 6deg; }
+.public-site.public-cream .desk-faq-clip { top: 58px; inset-inline-end: calc(max(0px, calc(50% - 610px)) + 72px); width: 22px; --r: 12deg; z-index: 4; }
+
+.public-site.public-cream .desk-cta-parcel { top: 36%; inset-inline-start: max(16px, calc(50% - 520px)); width: 120px; --r: -8deg; }
+.public-site.public-cream .desk-cta-brush { top: 30%; inset-inline-end: max(16px, calc(50% - 540px)); width: 210px; --r: 28deg; }
+.public-site.public-cream .desk-cta-button { top: 64%; inset-inline-end: max(60px, calc(50% - 440px)); width: 34px; }
+
+.public-site.public-cream .desk-features-tape { bottom: -4px; inset-inline-start: -116px; width: 130px; --r: -6deg; }
+.public-site.public-cream .desk-pricing-card { bottom: -86px; inset-inline-start: -8px; width: 112px; --r: -12deg; }
+.public-site.public-cream .desk-pricing-coins { bottom: -78px; inset-inline-start: 112px; width: 64px; }
+.public-site.public-cream .desk-changelog-note { top: 150px; inset-inline-end: 4px; width: 96px; --r: -6deg; z-index: 0; }
+
+@media (max-width: 1180px) {
+  .public-site.public-cream .desk-city-label,
+  .public-site.public-cream .desk-pricing-receipt,
+  .public-site.public-cream .desk-faq-note,
+  .public-site.public-cream .desk-faq-clip { display: none; }
+}
+@media (max-width: 1023px) {
+  .public-site.public-cream .public-desk:not(.public-desk-keep) { display: none; }
+  .public-site.public-cream .desk-hero-tape { top: 48px; inset-inline-start: -10px; width: 80px; }
+  .public-site.public-cream .desk-kanban-tape1,
+  .public-site.public-cream .desk-kanban-tape2 { width: 82px; }
+}
+
+/* The tracking band becomes the work mat: a green self-healing cutting mat on
+   the cream desk — 12px squares, a bolder line every 60px, angle guides, and the
+   ruler printed along its top and bottom edges. */
+.public-site.public-cream .public-shipstrip-section {
+  margin: clamp(28px, 4vw, 56px) 0;
+  padding: 0;
+  background: none;
+  color: var(--cream-bg);
+}
+.public-site.public-cream .public-shipstrip-card {
+  padding: clamp(60px, 6vw, 84px) clamp(20px, 4vw, 48px);
+  border-radius: 18px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.17) 1px, transparent 1px) 0 0 / 60px 60px,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.17) 1px, transparent 1px) 0 0 / 60px 60px,
+    linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px) 0 0 / 12px 12px,
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px) 0 0 / 12px 12px,
+    repeating-linear-gradient(45deg, transparent 0 168px, rgba(255, 255, 255, 0.08) 168px 169px),
+    var(--cream-teal);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.14), 0 26px 44px -20px rgba(37, 29, 26, 0.4);
+}
+.public-site.public-cream .public-mat-ruler {
+  position: absolute;
+  inset-inline: 0;
+  display: flex;
+  height: 24px;
+  overflow: hidden;
+  direction: ltr;
+  pointer-events: none;
+}
+.public-site.public-cream .public-mat-ruler-top { top: 0; border-radius: 18px 18px 0 0; }
+.public-site.public-cream .public-mat-ruler-bottom { bottom: 0; border-radius: 0 0 18px 18px; }
+.public-site.public-cream .public-mat-ruler span {
+  flex: 0 0 60px;
+  padding: 13px 0 0 3px;
+  color: rgba(250, 235, 214, 0.72);
+  font-family: var(--cream-sans);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.7) 1.5px, transparent 1.5px) 0 0 / 60px 11px no-repeat,
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.5) 0 1px, transparent 1px 12px) 0 0 / 100% 6px no-repeat;
+}
+.public-site.public-cream .public-mat-ruler-bottom span {
+  padding: 2px 0 0 3px;
+  background-position: 0 100%, 0 100%;
+}
+/* Right to left: the desk is the mirror image (objects carry no text). */
+.public-site.public-cream[dir="rtl"] .public-desk { transform: scaleX(-1) rotate(var(--r, 0deg)); }

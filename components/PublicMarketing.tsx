@@ -99,6 +99,7 @@ import {
 import { CardIconGlyph, type CardIcon } from "@/components/CardTitle";
 import SupportChatWidget from "@/components/SupportChatWidget";
 import { PublicMascot } from "@/components/PublicMascot";
+import { DeskObject, MatRuler } from "@/components/PublicDeskObjects";
 import { CITY_ANCHORS, PublicIsoCity, PublicIsoTile } from "@/components/PublicIllustrations";
 import { PUBLIC_FONT_CLASSES } from "@/lib/publicSite/fonts";
 import { safeNextFromLocation } from "@/lib/security/safeNext";
@@ -2914,6 +2915,8 @@ function PlatformNote() {
   return (
     <section className="public-section public-section-soft public-platform-section public-scroll-reveal">
       <div className="public-shell public-platform-panel">
+        <DeskObject kind="card" className="desk-platform-card" />
+        <DeskObject kind="stamp" className="desk-platform-stamp" />
         <div className="public-platform-intro">
           <span className="public-eyebrow">{t("platform.eyebrow")}</span>
           <h2>{t("platform.title")}</h2>
@@ -2982,6 +2985,8 @@ function ConnectedOrderDiagram() {
           </span>
           <PublicMascot pose="magnifier" className="public-iso-mascot" />
           </div>
+          <DeskObject kind="scissors" className="desk-city-scissors" />
+          <DeskObject kind="label" className="desk-city-label" />
           <ul className="public-iso-labels">
             {sides.map(side => (
               <li key={side.anchor} data-place={side.place} data-tone={side.tone} style={{ left: `${CITY_ANCHORS[side.anchor].x}%` }}>
@@ -3013,6 +3018,9 @@ function CustomisationShowcase() {
       <PublicIsoTile scene="work" className="public-deco public-deco-start" />
       <PublicIsoTile scene="customer" className="public-deco public-deco-end" />
       <div className="public-shell public-card public-kanban-card">
+        <DeskObject kind="tapeTeal" className="desk-kanban-tape1 public-desk-keep" />
+        <DeskObject kind="tape" className="desk-kanban-tape2 public-desk-keep" />
+        <DeskObject kind="pencil" className="desk-kanban-pencil" />
         <div className="public-bento-head">
           <h2>{t("accent.title")}</h2>
           <span className="public-bento-tag">{t("accent.eyebrow")}</span>
@@ -3046,6 +3054,12 @@ function ShippingStrip() {
   return (
     <section className="public-section public-shipstrip-section public-scroll-reveal">
       <div className="public-shell public-card public-shipstrip-card">
+        <MatRuler edge="top" />
+        <MatRuler edge="bottom" />
+        <DeskObject kind="setSquare" className="desk-mat-square" />
+        <DeskObject kind="compass" className="desk-mat-compass" />
+        <DeskObject kind="knife" className="desk-mat-knife" />
+        <DeskObject kind="spool" className="desk-mat-spool" />
         <PublicMascot pose="boxes" className="public-shipstrip-mascot" />
         <PublicIsoTile scene="shipping" className="public-shipstrip-art" />
         <h2>{t("shippingStrip.title")}</h2>
@@ -3084,6 +3098,7 @@ function HomePricingSummary() {
     <section className="public-section public-home-pricing public-scroll-reveal">
       <div className="public-shell">
         <PublicIsoTile scene="money" className="public-home-pricing-art" />
+        <DeskObject kind="receipt" className="desk-pricing-receipt" />
         <h2 className="public-home-pricing-title">{t("homePricing.simpleTitle")}</h2>
         <div className="public-home-pricing-grid">
           <div className="public-card public-home-pricing-card">
@@ -3122,6 +3137,8 @@ function HomeFaqSummary() {
     <section className="public-section public-home-faq public-scroll-reveal">
       <div className="public-shell">
         <PublicMascot pose="ponder" className="public-home-faq-mascot" />
+        <DeskObject kind="note" className="desk-faq-note" />
+        <DeskObject kind="clip" className="desk-faq-clip" />
         <h2 className="public-home-faq-title">{t("homeFaq.title")}</h2>
         <div className="public-home-faq-list">
           {items.map(([q, a]) => (
@@ -3218,6 +3235,7 @@ function AdvancedAreasSection({ detailed = false }: { detailed?: boolean }) {
     <section className="public-section public-backoffice-section public-scroll-reveal">
       <div className="public-shell">
         <PublicIsoTile scene="items" className="public-backoffice-art" />
+        <DeskObject kind="tag" className="desk-backoffice-tag" />
         <span className="public-eyebrow public-backoffice-eyebrow">{t("section.backoffice.eyebrow")}</span>
         <h2 className="public-backoffice-title">{t("section.backoffice.title")}</h2>
         <div className="public-backoffice-grid">
@@ -3281,6 +3299,9 @@ function PublicHomePageContent() {
           <div className="public-hero-media">
             <LatestReleaseLink className="public-hero-latest" />
             <ProductScene />
+            <DeskObject kind="tape" className="desk-hero-tape public-desk-keep" />
+            <DeskObject kind="ruler" className="desk-hero-ruler" />
+            <DeskObject kind="tag" className="desk-hero-tag" />
           </div>
           <div className="public-hero-aside">
             <p className="public-hero-quote">
@@ -3351,6 +3372,9 @@ function PublicHomePageContent() {
 
       <section className="public-section public-cta-band public-scroll-reveal">
         <div className="public-shell public-cta-ready">
+          <DeskObject kind="parcel" className="desk-cta-parcel" />
+          <DeskObject kind="brush" className="desk-cta-brush" />
+          <DeskObject kind="button" className="desk-cta-button" />
           <PublicMascot pose="celebrate" className="public-cta-mascot" />
           <h2>{t("ctaBand.readyTitle")}</h2>
           <div className="public-cta-ready-actions">
@@ -3430,6 +3454,7 @@ function PublicFeaturesPageContent() {
               <p>{t("featuresPage.body")}</p>
             </div>
             <div className="public-page-hero-art" aria-hidden="true">
+              <DeskObject kind="tapeMeasure" className="desk-features-tape" />
               <PublicIsoTile scene="order" />
               <PublicMascot pose="laptop" />
             </div>
@@ -3587,6 +3612,8 @@ function PublicPricingPageContent() {
 
           <div className="public-pricing-cluster" aria-hidden="true">
             <PublicMascot pose="ponder" className="public-pricing-mascot" />
+            <DeskObject kind="card" className="desk-pricing-card" />
+            <DeskObject kind="coins" className="desk-pricing-coins" />
             <div className="public-pricing-orb" />
             <div className="pc-card pc-card-demo">
               <span className="pc-ico pc-ico-solid"><svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="11" rx="1.5" /><path d="M4 13h16M12 9v11M9 9a2 2 0 110-4c2 0 3 4 3 4M15 9a2 2 0 100-4c-2 0-3 4-3 4" /></svg></span>
@@ -4806,6 +4833,7 @@ function PublicChangelogPageContent() {
       <section className="public-page-hero public-info-hero public-changelog-hero">
         <div className="public-shell">
           <PublicMascot pose="pencil" className="public-changelog-mascot" />
+          <DeskObject kind="note" className="desk-changelog-note" />
           <span className="public-eyebrow">{labels.eyebrow}</span>
           <h1>{labels.title}</h1>
           <p>{labels.intro}</p>
