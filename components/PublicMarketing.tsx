@@ -10,6 +10,7 @@ import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { SiteVisitBeacon } from "@/components/SiteVisitBeacon";
+import { PublicHomeTour } from "@/components/PublicHomeTour";
 import { clearLandingAttribution, getLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
 import { GoogleAdsTag } from "@/components/GoogleAdsTag";
 import { fireGoogleAdsSignupConversion } from "@/lib/googleAds";
@@ -3331,7 +3332,10 @@ function PublicHomePageContent() {
       {/* Mock-driven layout: connected-order diagram, customisation kanban,
           the (kept) ChatGPT showcase, back-office tiles, a compact tracking
           strip (the full scroll story now lives on /features), the (kept)
-          platform section, then pricing and FAQ. */}
+          platform section, then pricing and FAQ. The seven-step video tour
+          comes first, right under the hero. */}
+
+      <PublicHomeTour />
 
       <ConnectedOrderDiagram />
 
