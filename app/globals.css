@@ -41164,14 +41164,15 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
 @media (max-width: 860px) { .public-site.public-cream .public-home-pricing-art { display: none; } }
 .public-site.public-cream .public-home-faq-list { display: grid; gap: 10px; max-width: 820px; margin: 0 auto; }
 .public-site.public-cream .public-home-faq-item {
+  display: block;
   padding: 0;
   border: 1px solid var(--cream-line);
   border-radius: 12px;
   background: var(--cream-surface);
   box-shadow: none;
 }
-.public-site.public-cream .public-home-faq-item summary { padding: 18px 20px; font-size: 18px; font-weight: 700; }
-.public-site.public-cream .public-home-faq-item p { margin: 0; padding: 0 20px 18px; color: var(--cream-muted); line-height: 1.5; }
+.public-site.public-cream .public-home-faq-item summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; font-size: 18px; font-weight: 700; cursor: pointer; }
+.public-site.public-cream .public-home-faq-item p { margin: 0; padding: 0 20px 18px; color: var(--cream-muted); font-size: 16px; font-weight: 400; line-height: 1.5; }
 .public-site.public-cream .public-home-faq-more a { color: var(--cream-ink); font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
 
 /* ---- Closing band ----------------------------------------------------- */
