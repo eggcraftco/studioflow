@@ -107,11 +107,11 @@ export function ExportOrdersPanel({
       });
       setStatus(
         result.rowCount > 0
-          ? `Downloaded ${result.rowCount} row${result.rowCount === 1 ? "" : "s"} — ${result.filename}`
-          : "No invoices matched this date range."
+          ? t(result.rowCount === 1 ? "Downloaded 1 row — {file}" : "Downloaded {count} rows — {file}").replace("{count}", String(result.rowCount)).replace("{file}", result.filename)
+          : t("No invoices matched this date range.")
       );
     } catch (runError) {
-      setError(runError instanceof Error ? runError.message : "Export failed.");
+      setError(runError instanceof Error ? runError.message : t("Export failed."));
     } finally {
       setBusy(false);
     }
@@ -124,9 +124,9 @@ export function ExportOrdersPanel({
           <FileIcon />
         </div>
         <div>
-          <h2 style={{ margin: "2px 0 4px" }}>Export invoices to CSV</h2>
+          <h2 style={{ margin: "2px 0 4px" }}>{t("Export invoices to CSV")}</h2>
           <p style={{ color: "var(--muted)", margin: 0 }}>
-            Select a report and date range. The file opens cleanly in Excel, Numbers or Google Sheets.
+            {t("Select a report and date range. The file opens cleanly in Excel, Numbers or Google Sheets.")}
           </p>
         </div>
       </div>
@@ -186,24 +186,24 @@ export function ExportOrdersPanel({
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
         <label style={optLabelStyle}>
           <input type="checkbox" checked={includeTrash} onChange={(event) => setIncludeTrash(event.target.checked)} disabled={busy} />
-          Include trashed invoices
-          <InfoDot text="Also include invoices that are currently in the Trash." />
+          {t("Include trashed invoices")}
+          <InfoDot text={t("Also include invoices that are currently in the Trash.")} />
         </label>
         <label style={optLabelStyle}>
           <input type="checkbox" checked={bom} onChange={(event) => setBom(event.target.checked)} disabled={busy} />
-          Excel-friendly (UTF-8 BOM)
-          <InfoDot text="Adds a byte-order mark so Excel shows Turkish and other non-Latin characters correctly." />
+          {t("Excel-friendly (UTF-8 BOM)")}
+          <InfoDot text={t("Adds a byte-order mark so Excel shows Turkish and other non-Latin characters correctly.")} />
         </label>
         <label style={{ ...optLabelStyle, gap: 10 }}>
-          Separator
+          {t("Separator")}
           <select
             style={{ ...fieldStyle, width: "auto", padding: "8px 10px" }}
             value={delimiter}
             onChange={(event) => setDelimiter(event.target.value === ";" ? ";" : ",")}
             disabled={busy}
           >
-            <option value=",">Comma ( , )</option>
-            <option value=";">Semicolon ( ; )</option>
+            <option value=",">{t("Comma ( , )")}</option>
+            <option value=";">{t("Semicolon ( ; )")}</option>
           </select>
         </label>
       </div>
@@ -215,7 +215,7 @@ export function ExportOrdersPanel({
         disabled={disabled || busy || !workspace}
       >
         <DownloadIcon />
-        {busy ? "Preparing…" : "Download CSV"}
+        {busy ? t("Preparing…") : t("Download CSV")}
       </button>
 
       {status ? <p style={{ margin: "14px 0 0", color: "var(--muted)", fontWeight: 800 }}>{t(status)}</p> : null}

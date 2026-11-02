@@ -133,7 +133,7 @@ function AuthActionContent() {
 
   const goToLogin = (
     <Link href="/login" className="button" style={{ display: "inline-flex", justifyContent: "center", textDecoration: "none", minWidth: 200 }}>
-      Continue to NivaDesk
+      {t("Continue to NivaDesk")}
     </Link>
   );
 
@@ -144,29 +144,29 @@ function AuthActionContent() {
 
         {phase === "working" ? (
           <>
-            <h1 style={{ fontSize: 22, margin: "0 0 8px" }}>One moment…</h1>
-            <p style={{ color: "var(--muted)" }}>Checking your secure link.</p>
+            <h1 style={{ fontSize: 22, margin: "0 0 8px" }}>{t("One moment…")}</h1>
+            <p style={{ color: "var(--muted)" }}>{t("Checking your secure link.")}</p>
           </>
         ) : null}
 
         {phase === "verified" ? (
           <>
             <div style={{ fontSize: 40 }} aria-hidden="true">✅</div>
-            <h1 style={{ fontSize: 22, margin: "12px 0 8px" }}>Email verified</h1>
-            <p style={{ color: "var(--muted)", marginBottom: 22 }}>Your address is confirmed. Welcome to NivaDesk!</p>
+            <h1 style={{ fontSize: 22, margin: "12px 0 8px" }}>{t("Email verified")}</h1>
+            <p style={{ color: "var(--muted)", marginBottom: 22 }}>{t("Your address is confirmed. Welcome to NivaDesk!")}</p>
             {goToLogin}
           </>
         ) : null}
 
         {phase === "resetForm" ? (
           <>
-            <h1 style={{ fontSize: 22, margin: "0 0 8px" }}>Choose a new password</h1>
-            <p style={{ color: "var(--muted)", marginBottom: 18 }}>for <strong>{resetEmail}</strong></p>
+            <h1 style={{ fontSize: 22, margin: "0 0 8px" }}>{t("Choose a new password")}</h1>
+            <p style={{ color: "var(--muted)", marginBottom: 18 }}>{t("for {email}").split("{email}")[0]}<strong>{resetEmail}</strong>{t("for {email}").split("{email}")[1] ?? ""}</p>
             <form onSubmit={submitNewPassword} className="grid" style={{ gap: 12, textAlign: "left" }}>
               <input
                 className="input"
                 type="password"
-                placeholder="New password"
+                placeholder={t("New password")}
                 value={newPassword}
                 onChange={event => setNewPassword(event.target.value)}
                 autoComplete="new-password"
@@ -175,7 +175,7 @@ function AuthActionContent() {
               <input
                 className="input"
                 type="password"
-                placeholder="Confirm new password"
+                placeholder={t("Confirm new password")}
                 value={confirmPassword}
                 onChange={event => setConfirmPassword(event.target.value)}
                 autoComplete="new-password"
@@ -183,7 +183,7 @@ function AuthActionContent() {
               />
               {message ? <p style={{ color: "var(--danger)", margin: 0, fontSize: 13 }}>{t(message)}</p> : null}
               <button className="button" type="submit" disabled={busy}>
-                {busy ? "Saving…" : "Save new password"}
+                {busy ? t("Saving…") : t("Save new password")}
               </button>
             </form>
           </>
@@ -192,8 +192,8 @@ function AuthActionContent() {
         {phase === "resetDone" ? (
           <>
             <div style={{ fontSize: 40 }} aria-hidden="true">🔒</div>
-            <h1 style={{ fontSize: 22, margin: "12px 0 8px" }}>Password updated</h1>
-            <p style={{ color: "var(--muted)", marginBottom: 22 }}>You can now sign in with your new password.</p>
+            <h1 style={{ fontSize: 22, margin: "12px 0 8px" }}>{t("Password updated")}</h1>
+            <p style={{ color: "var(--muted)", marginBottom: 22 }}>{t("You can now sign in with your new password.")}</p>
             {goToLogin}
           </>
         ) : null}
@@ -201,8 +201,8 @@ function AuthActionContent() {
         {phase === "recovered" ? (
           <>
             <div style={{ fontSize: 40 }} aria-hidden="true">↩️</div>
-            <h1 style={{ fontSize: 22, margin: "12px 0 8px" }}>Email restored</h1>
-            <p style={{ color: "var(--muted)", marginBottom: 22 }}>Your previous email address has been restored. We recommend changing your password.</p>
+            <h1 style={{ fontSize: 22, margin: "12px 0 8px" }}>{t("Email restored")}</h1>
+            <p style={{ color: "var(--muted)", marginBottom: 22 }}>{t("Your previous email address has been restored. We recommend changing your password.")}</p>
             {goToLogin}
           </>
         ) : null}
@@ -210,7 +210,7 @@ function AuthActionContent() {
         {phase === "error" ? (
           <>
             <div style={{ fontSize: 40 }} aria-hidden="true">⚠️</div>
-            <h1 style={{ fontSize: 22, margin: "12px 0 8px" }}>Link problem</h1>
+            <h1 style={{ fontSize: 22, margin: "12px 0 8px" }}>{t("Link problem")}</h1>
             <p style={{ color: "var(--muted)", marginBottom: 22 }}>{t(message)}</p>
             {goToLogin}
           </>

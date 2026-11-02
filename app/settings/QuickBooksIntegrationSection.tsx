@@ -13,6 +13,7 @@
 // translations serves every provider.
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { studioT } from "@/lib/studioflow/language";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
 import { CardTitle } from "@/components/CardTitle";
 import { AccountingSalesPanel } from "./AccountingSalesPanel";
@@ -182,7 +183,7 @@ export function AccountingProviderSection({ workspace, language = "English", pro
       setOverview(next);
       if (!keepError) setError("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("Could not load."));
+      setError(friendlyErrorMessage(err, t) || t("Could not load."));
     } finally {
       setLoading(false);
     }
@@ -240,13 +241,13 @@ export function AccountingProviderSection({ workspace, language = "English", pro
     let cancelled = false;
     xeroListTenants(companyId, chooseState)
       .then((result) => { if (!cancelled) { setTenants(result.tenants); setTenantChoice(result.tenants[0]?.tenantId || ""); } })
-      .catch((err) => { if (!cancelled) { setError(err instanceof Error ? err.message : t("Could not load.")); setChooseState(""); } });
+      .catch((err) => { if (!cancelled) { setError(friendlyErrorMessage(err, t) || t("Could not load.")); setChooseState(""); } });
     return () => { cancelled = true; };
   }, [chooseState, companyId, t]);
 
   async function guard(key: string, fn: () => Promise<void>) {
     setBusy(key); setError(""); setNotice(""); setVerdict(null);
-    try { await fn(); } catch (err) { setError(err instanceof Error ? err.message : t("Could not load.")); } finally { setBusy(""); }
+    try { await fn(); } catch (err) { setError(friendlyErrorMessage(err, t) || t("Could not load.")); } finally { setBusy(""); }
   }
 
   async function syncNow(quiet = false) {

@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { CardTitle } from "@/components/CardTitle";
+import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import {
   accountingConnectRefusal, accountingErrorCode, accountingPostingApprove, accountingPostingIgnore, accountingPostingList, accountingPostingResolveChange,
   accountingPostingRetry, accountingPostingScan, accountingPostingSettingsSave, getAccountingCatalog, xeroConnectStart,
@@ -133,7 +134,7 @@ export function AccountingSalesPanel({ companyId, connectionId, provider, provid
       // workspace while the callable is not deployed yet (the web may ship before the functions).
       const code = accountingErrorCode(err);
       if (code === "permission-denied" || code === "not-found" || code === "unimplemented") setDenied(true);
-      else setLoadError(err instanceof Error && err.message ? err.message : t("Could not load."));
+      else setLoadError(friendlyErrorMessage(err, t) || t("Could not load."));
     } finally {
       setLoading(false);
     }
@@ -279,7 +280,7 @@ export function AccountingSalesPanel({ companyId, connectionId, provider, provid
   const errorText = useCallback((err: unknown) => {
     const reason = accountingConnectRefusal(err);
     if (reason && reasonText(reason) !== reason) return reasonText(reason);
-    return err instanceof Error && err.message ? err.message : t("Could not load.");
+    return friendlyErrorMessage(err, t) || t("Could not load.");
   }, [reasonText, t]);
 
   async function act(key: string, fn: () => Promise<void>) {

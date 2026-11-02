@@ -112,26 +112,26 @@ export default function ExportPage() {
       {loadingExport ? <LoadingScreen /> : null}
 
       <section className="card" style={{ padding: 24, marginBottom: 18 }}>
-        <div className="pill">Data export</div>
-        <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "14px 0 8px" }}>Export your workspace data</h1>
+        <div className="pill">{t("Data export")}</div>
+        <h1 style={{ fontSize: 34, lineHeight: 1.05, margin: "14px 0 8px" }}>{t("Export your workspace data")}</h1>
         <p style={{ color: "var(--muted)", margin: 0 }}>
-          {workspace ? `${workspace.name} · ${workspace.billingPlanName}` : "Loading workspace…"}
+          {workspace ? `${workspace.name} · ${workspace.billingPlanName}` : t("Loading workspace…")}
         </p>
       </section>
 
       {error ? (
         <section className="card" style={{ padding: 22, marginBottom: 18 }}>
-          <div className="pill">Export error</div>
-          <h2 style={{ margin: "12px 0 6px" }}>Could not prepare export</h2>
+          <div className="pill">{t("Export error")}</div>
+          <h2 style={{ margin: "12px 0 6px" }}>{t("Could not prepare export")}</h2>
           <p style={{ color: "var(--danger)", margin: 0 }}>{t(error)}</p>
         </section>
       ) : null}
 
       <section className="card" style={{ padding: 22, marginBottom: 18 }}>
-        <div className="pill">Export-first rule</div>
-        <h2 style={{ margin: "12px 0 6px" }}>Exports stay available on Free</h2>
+        <div className="pill">{t("Export-first rule")}</div>
+        <h2 style={{ margin: "12px 0 6px" }}>{t("Exports stay available on Free")}</h2>
         <p style={{ color: "var(--muted)", margin: 0 }}>
-          If a subscription expires, the workspace can fall back to Free, but existing orders and customers can still be downloaded. Uploading files, creating new team data, or advanced features can remain locked by plan.
+          {t("If a subscription expires, the workspace can fall back to Free, but existing orders and customers can still be downloaded. Uploading files, creating new team data, or advanced features can remain locked by plan.")}
         </p>
       </section>
 
@@ -141,28 +141,31 @@ export default function ExportPage() {
 
       <section className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
         <ExportCard
-          title="Customers CSV"
-          description="Download customer rows for spreadsheets. This first version keeps the common fields and leaves full details in the JSON backup."
+          title={t("Customers CSV")}
+          description={t("Download customer rows for spreadsheets. This first version keeps the common fields and leaves full details in the JSON backup.")}
           count={exportData?.customers.length ?? 0}
-          buttonTitle="Download customers CSV"
+          recordsLabel={t("{count} records")}
+          buttonTitle={t("Download customers CSV")}
           disabled={!exportAllowed || !exportData}
           onClick={exportCustomersCsv}
         />
 
         <ExportCard
-          title="Export Backup"
-          description="Download a NivaDesk app-compatible backup. This can be imported back into NivaDesk or into the web portal."
+          title={t("Export Backup")}
+          description={t("Download a NivaDesk app-compatible backup. This can be imported back into NivaDesk or into the web portal.")}
           count={(exportData?.orders.length ?? 0) + (exportData?.customers.length ?? 0)}
-          buttonTitle="Download backup"
+          recordsLabel={t("{count} records")}
+          buttonTitle={t("Download backup")}
           disabled={!exportAllowed || !exportData}
           onClick={exportAppBackup}
         />
 
         <ExportCard
-          title="Web JSON backup"
-          description="Download the raw web archive with document ids and workspace metadata. The web importer can read this format too."
+          title={t("Web JSON backup")}
+          description={t("Download the raw web archive with document ids and workspace metadata. The web importer can read this format too.")}
           count={(exportData?.orders.length ?? 0) + (exportData?.customers.length ?? 0)}
-          buttonTitle="Download web JSON"
+          recordsLabel={t("{count} records")}
+          buttonTitle={t("Download web JSON")}
           disabled={!exportAllowed || !exportData}
           onClick={exportFullBackup}
         />
@@ -181,6 +184,7 @@ function ExportCard({
   title,
   description,
   count,
+  recordsLabel,
   buttonTitle,
   disabled,
   onClick
@@ -188,13 +192,14 @@ function ExportCard({
   title: string;
   description: string;
   count: number;
+  recordsLabel: string;
   buttonTitle: string;
   disabled: boolean;
   onClick: () => void;
 }) {
   return (
     <div className="card" style={{ padding: 22 }}>
-      <div className="pill">{count} records</div>
+      <div className="pill">{recordsLabel.replace("{count}", String(count))}</div>
       <h2 style={{ margin: "12px 0 6px" }}>{title}</h2>
       <p style={{ color: "var(--muted)", marginTop: 0, minHeight: 78 }}>{description}</p>
       <button
