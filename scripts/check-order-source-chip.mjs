@@ -310,13 +310,13 @@ expect("orders (desktop): the bar sits directly under the search box, above Orde
   /className="orders-search">[\s\S]{0,320}?<\/label>\s*(?:\{\/\*[\s\S]*?\*\/\}\s*)?<OrderPlatformBar orders=\{visibleOrders\} filter=\{orderFilter\} source=\{orderSource\} onSourceChange=\{setOrderSource\} t=\{t\} \/>\s*<OrderQuickFilterBar/.test(listPage), true);
 expect("orders (phone): the bar sits at the top of the phone list, under its search", /className="orders-search orders-mobile-search">[\s\S]{0,520}?\) : null\}\s*<OrderPlatformBar orders=\{visibleOrders\} filter=\{orderFilter\} source=\{orderSource\} onSourceChange=\{setOrderSource\} t=\{t\} className="orders-mobile-platform-bar" \/>/.test(listPage), true);
 expect("orders: Order Filters and the bar share one state (2 + 2 bindings, one useState)",
-  [(listPage.match(/<OrderQuickFilterBar[\s\S]{0,400}?source=\{orderSource\}\s*onSourceChange=\{setOrderSource\}/g) || []).length, (listPage.match(/<OrderPlatformBar [^>]*source=\{orderSource\} onSourceChange=\{setOrderSource\}/g) || []).length, (listPage.match(/useState<OrderSourceId>/g) || []).length],
+  [(listPage.match(/<OrderQuickFilterBar[\s\S]{0,400}?source=\{orderSource\}\s*onSourceChange=\{setOrderSource\}/g) || []).length, (listPage.match(/<OrderPlatformBar [^>]*source=\{orderSource\} onSourceChange=\{setOrderSource\}/g) || []).length, (listPage.match(/useState<OrderSource(?:Choice)?Id>/g) || []).length],
   [2, 2, 1]);
 expect("orders: the list is filtered by that state", listPage.includes("filterAndSortOrders(orderFilter === \"trash\" ? deletedOrders : visibleOrders, orderSearch, orderFilter, orderSortMode, orderSource)"), true);
 const schedulePage = read("app/schedule/page.tsx");
 expect("schedule (same list column): the bar under the search box, above Order Filters, on one state",
   /className="orders-search">[\s\S]{0,320}?<\/label>\s*<OrderPlatformBar orders=\{visibleSourceOrders\} filter=\{filter\} source=\{source\} onSourceChange=\{setSource\} t=\{t\} \/>\s*<OrderQuickFilterBar/.test(schedulePage)
-    && (schedulePage.match(/source=\{source\}\s*onSourceChange=\{setSource\}/g) || []).length === 3 && (schedulePage.match(/useState<OrderSourceId>/g) || []).length === 1
+    && (schedulePage.match(/source=\{source\}\s*onSourceChange=\{setSource\}/g) || []).length === 3 && (schedulePage.match(/useState<OrderSource(?:Choice)?Id>/g) || []).length === 1
     && schedulePage.includes("filterAndSortOrders(visibleSourceOrders, search, filter, sortMode, source)"), true);
 // No third-party logo: the monogram, the row badge, the bar and the screens that show them reference no logo file,
 // no image and no CSS url(); the globe is drawn from three primitives.

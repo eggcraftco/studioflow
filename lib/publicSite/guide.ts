@@ -214,6 +214,7 @@ const TREE_EN: GuideNode[] = [
         "Add Project: create a new order. You give it a customer, a title and the basics; you can fill in the rest inside the order.",
         "Search: type a customer name, order number or keyword to jump straight to an order.",
         "Quick filters: narrow the list (for example only your assigned orders, or by stage) without losing the others.",
+        "Source bar: the buttons under the search show where orders came from — All, one per platform with its letters and count, and By hand. Tap one to see only those orders; tap it again, or All, to see every order. When two or more WooCommerce stores are connected (for example EGGcraft and TickToon), each store has its own button with its name, and Woo orders that do not record their store sit under Store unknown. Order Filters ▸ Source offers the same choices.",
         "Sort: order the list by smart priority, newest, due date and more.",
         "Status badges: small colored tags on each card show production status at a glance; you can turn them off in settings.",
         "Open an order: tap a card to open its detail workspace."
@@ -1903,6 +1904,7 @@ const TREE_TR: GuideNode[] = [
         "Add Project: yeni sipariş oluşturur. Müşteri, başlık ve temel bilgileri verirsiniz; gerisini siparişin içinde doldurabilirsiniz.",
         "Arama: müşteri adı, sipariş numarası veya anahtar kelime yazarak doğrudan siparişe gidin.",
         "Hızlı filtreler: listeyi daraltın (örneğin yalnızca size atanan siparişler ya da aşamaya göre), diğerlerini kaybetmeden.",
+        "Kaynak çubuğu: aramanın altındaki düğmeler siparişlerin nereden geldiğini gösterir — Tümü, her platform için kısaltması ve sayısıyla bir düğme, ve Elle eklenen. Yalnız o siparişleri görmek için birine dokunun; hepsini görmek için yeniden ya da Tümü'ne dokunun. İki veya daha fazla WooCommerce mağazası bağlıysa (örneğin EGGcraft ve TickToon) her mağazanın kendi adıyla ayrı bir düğmesi olur; mağazasını kaydetmemiş Woo siparişleri Mağaza bilinmiyor altında durur. Aynı seçimler Order Filters ▸ Kaynak içinde de var.",
         "Sıralama: listeyi akıllı önceliğe, en yeniye, teslim tarihine ve daha fazlasına göre sıralayın.",
         "Durum etiketleri: her kartta üretim durumunu bir bakışta gösteren küçük renkli etiketler; ayarlardan kapatabilirsiniz.",
         "Siparişi aç: bir karta dokunarak detay çalışma alanını açın."

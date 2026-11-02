@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 import {
   ORDER_QUICK_FILTERS,
-  ORDER_SOURCE_FILTERS,
   orderMatchesSource,
+  orderSourceChoiceName,
   orderSourceChoices,
   quickFilterCount,
   type FilterableOrder,
   type OrderQuickFilterId,
   type OrderSortMode,
-  type OrderSourceId
+  type OrderSourceChoiceId
 } from "@/lib/studioflow/orderFilters";
 import { studioT } from "@/lib/studioflow/language";
 
@@ -34,9 +34,9 @@ export function OrderQuickFilterBar({
   filters?: typeof ORDER_QUICK_FILTERS;
   language?: string | null;
   deletedCount?: number;
-  /** Where the orders came from (eBay, Shopify, …). Offered only when the list carries more than one source, or one is chosen. */
-  source?: OrderSourceId;
-  onSourceChange?: (source: OrderSourceId) => void;
+  /** Where the orders came from (eBay, Shopify, one WooCommerce store, …). Offered only when the list carries more than one source, or one is chosen. */
+  source?: OrderSourceChoiceId;
+  onSourceChange?: (source: OrderSourceChoiceId) => void;
 }) {
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const selectedFilter = filters.find(item => item.id === filter) ?? filters[0] ?? ORDER_QUICK_FILTERS[0];
@@ -51,7 +51,7 @@ export function OrderQuickFilterBar({
   // top of the column shows (orderSourceChoices), on the same `source` state. A
   // workspace that only ever adds orders by hand sees no source section at all.
   const sourceRows = onSourceChange ? orderSourceChoices(orders, filter, source) : [];
-  const selectedSource = ORDER_SOURCE_FILTERS.find(item => item.id === source) ?? ORDER_SOURCE_FILTERS[0];
+  const selectedSourceName = orderSourceChoiceName(orders, source, t);
 
   useEffect(() => {
     if (!filterMenuOpen) return;
@@ -74,7 +74,7 @@ export function OrderQuickFilterBar({
     setFilterMenuOpen(false);
   }
 
-  function chooseSource(nextSource: OrderSourceId) {
+  function chooseSource(nextSource: OrderSourceChoiceId) {
     onSourceChange?.(nextSource);
     setFilterMenuOpen(false);
   }
@@ -85,7 +85,7 @@ export function OrderQuickFilterBar({
         <span className="order-filter-icon" aria-hidden="true">☰</span>
         <div>
           <small>{t("Order Filters")}</small>
-          <strong>{t(selectedFilter.label)} {" • "} {sortMode === "smart" ? t("Smart") : t("Recent")}{source !== "all" ? <> {" • "} {t(selectedSource.label)}</> : null}</strong>
+          <strong>{t(selectedFilter.label)} {" • "} {sortMode === "smart" ? t("Smart") : t("Recent")}{source !== "all" ? <> {" • "} {selectedSourceName}</> : null}</strong>
         </div>
         <span className="order-filter-count">{selectedCount}</span>
         <span className="order-filter-chevron" aria-hidden="true">⌄</span>
@@ -149,7 +149,7 @@ export function OrderQuickFilterBar({
                     onClick={() => chooseSource(item.id)}
                   >
                     <span className="order-filter-menu-icon">{source === item.id ? "✓" : "◦"}</span>
-                    <span>{t(item.label)}</span>
+                    <span>{item.wooStoreKey ? item.label : t(item.label)}</span>
                     <span className="order-filter-menu-count">({item.count})</span>
                   </button>
                 ))}
