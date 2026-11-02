@@ -1085,8 +1085,14 @@ export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean 
                 className="public-nav-menu"
                 key={menu.id}
                 data-open={openMenu === menu.id ? "true" : "false"}
-                onMouseEnter={() => setOpenMenu(menu.id)}
-                onMouseLeave={() => setOpenMenu(current => (current === menu.id ? null : current))}
+                // Hover opens it for a mouse only: on a tablet a tap fires the
+                // enter and then the click, and the click would close it again.
+                onPointerEnter={event => {
+                  if (event.pointerType === "mouse") setOpenMenu(menu.id);
+                }}
+                onPointerLeave={event => {
+                  if (event.pointerType === "mouse") setOpenMenu(current => (current === menu.id ? null : current));
+                }}
               >
                 <button
                   type="button"
