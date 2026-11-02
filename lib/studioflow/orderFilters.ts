@@ -294,16 +294,18 @@ export function orderSourceChoices(orders: FilterableOrder[], filter: OrderQuick
       if (item.id === "all" || present.includes(item.id) || item.id === source) rows.push(row(item.id, item.label));
       continue;
     }
-    if (stores.length > 0) {
-      for (const store of stores) rows.push(row(`woocommerce:${store.key}`, store.label, store.key));
-      if (source === "woocommerce") rows.push(row(item.id, item.label));
-    } else if (present.includes(item.id) || item.id === source) {
-      rows.push(row(item.id, item.label));
-    }
+    // WooCommerce itself while it does not split (or when it is the choice), then its stores by label — the chosen one
+    // among them even when the list lacks it — then "store unknown". The same order on Apple and Android.
+    if ((present.includes(item.id) && stores.length === 0) || item.id === source) rows.push(row(item.id, item.label));
+    const keys = stores.map(store => store.key);
     const chosenStore = wooStoreKeyOfChoice(source);
-    if (chosenStore !== null && !rows.some(choice => choice.wooStoreKey === chosenStore)) {
-      rows.push(row(`woocommerce:${chosenStore}`, chosenStore ? wooStoreLabels(orders).get(chosenStore) ?? chosenStore : WOO_STORE_UNKNOWN_LABEL, chosenStore));
+    if (chosenStore !== null && !keys.includes(chosenStore)) keys.push(chosenStore);
+    const labels = wooStoreLabels(orders);
+    const labelOf = (key: string) => labels.get(key) ?? key;
+    for (const key of keys.filter(Boolean).sort((left, right) => compareLabels(labelOf(left), labelOf(right)) || compareLabels(left, right))) {
+      rows.push(row(`woocommerce:${key}`, labelOf(key), key));
     }
+    if (keys.includes("")) rows.push(row("woocommerce:", WOO_STORE_UNKNOWN_LABEL, ""));
   }
   return rows;
 }

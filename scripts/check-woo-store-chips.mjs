@@ -163,8 +163,11 @@ expect("choices: the chosen store is kept when the list no longer splits",
   rowsOf([...OTHERS, ...EGG], "all", "woocommerce:ticktoon.co.uk"), [["all", "All sources", 5], ["ebay", "eBay", 1], ["woocommerce", "WooCommerce", 3], ["woocommerce:ticktoon.co.uk", "ticktoon.co.uk", 0], ["manual", "Added by hand", 1]]);
 expect("choices: a chosen store still in the list keeps its name", rowsOf(EGG, "all", "woocommerce:eggcraft.co.uk"), [["all", "All sources", 3], ["woocommerce", "WooCommerce", 3], ["woocommerce:eggcraft.co.uk", "EGGcraft", 3]]);
 expect("choices: the chosen 'store unknown' is kept too", rowsOf(EGG, "all", "woocommerce:"), [["all", "All sources", 3], ["woocommerce", "WooCommerce", 3], ["woocommerce:", "WooCommerce (store unknown)", 0]]);
+expect("choices: a chosen store the split list lacks sits among the stores by its name",
+  rowsOf([...OTHERS, ...EGG, ...TICK, ...LEGACY], "all", "woocommerce:freshshop.example").map(([id]) => id),
+  ["all", "ebay", "woocommerce:eggcraft.co.uk", "woocommerce:freshshop.example", "woocommerce:ticktoon.co.uk", "woocommerce:", "manual"]);
 expect("choices: plain WooCommerce chosen while split (a link) shows beside the stores",
-  rowsOf(LIST, "all", "woocommerce").map(([id, , n]) => [id, n]), [["all", 9], ["ebay", 1], ["woocommerce:eggcraft.co.uk", 3], ["woocommerce:ticktoon.co.uk", 2], ["woocommerce:", 2], ["woocommerce", 7], ["manual", 1]]);
+  rowsOf(LIST, "all", "woocommerce").map(([id, , n]) => [id, n]), [["all", 9], ["ebay", 1], ["woocommerce", 7], ["woocommerce:eggcraft.co.uk", 3], ["woocommerce:ticktoon.co.uk", 2], ["woocommerce:", 2], ["manual", 1]]);
 const pick = (source, filter = "all") => O.filterAndSortOrders(LIST, "", filter, "recent", source).map((o) => o.id).sort();
 const idsOf = (orders) => orders.map((o) => o.id).sort();
 expect("filter: a store shows only its own orders", [pick("woocommerce:eggcraft.co.uk"), pick("woocommerce:ticktoon.co.uk")], [idsOf(EGG), idsOf(TICK)]);
