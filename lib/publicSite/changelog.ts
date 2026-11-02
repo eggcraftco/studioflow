@@ -62,9 +62,27 @@ export function isLatestForPlatform(entry: ChangelogEntry, list: ChangelogEntry[
   return list.find((item) => item.platformKey === entry.platformKey) === entry;
 }
 
-export const CHANGELOG_LAST_UPDATED = "29 October 2026";
+export const CHANGELOG_LAST_UPDATED = "2 November 2026";
 
 export const CHANGELOG: ChangelogEntry[] = [
+  // 2.4 (Android) — from the Play notes that were entered (~/Developer/nivadesk-deploy-2026-11-01/store-2.4/play-notes-2.4.txt,
+  // en-GB) for native-2.4-release-2026-11-01 @7de677bde, vc22. Play Console: production "22 (2.4)", last published
+  // 1 November 2026, managed publishing off (read 2 Nov 2026). Apple 2.4 was still in review: its entry follows on its
+  // own release day.
+  {
+    version: "2.4",
+    platformKey: "android",
+    platform: "Android",
+    date: "1 November 2026",
+    highlight: "Orders open in the new Sections view, a delivery address for labels, and the Calendar. Released on Google Play on 1 November 2026.",
+    changes: [
+      { tag: "new", text: "Orders open in the new Sections view, with a jump bar, Expand all / Collapse all and a status strip in the header; Cards is still there." },
+      { tag: "new", text: "Delivery address on Shipping & Tracking, with Use customer address." },
+      { tag: "new", text: "Calendar: meetings, tasks, notes and reminders, private or shared; connect Google Calendar or Outlook, read only." },
+      { tag: "new", text: "Cloud storage: owners can keep new order files in Google Drive (Pro/Team)." },
+      { tag: "fixed", text: "Smaller fixes and translations." },
+    ],
+  },
   // 2.3 — from the store notes that were entered (App Store "What's New" read back from the live App Store page on
   // 29 Oct 2026; Play notes ~/Developer/nivadesk-deploy-2026-10-28/store/play-notes-2.3.txt) for native-unified-2026-10-28
   // @66ccd292, Apple 2.3 (33) / Android vc21. Server-gated or pilot features are left out on purpose.
