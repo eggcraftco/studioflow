@@ -41640,3 +41640,37 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
 @media (max-width: 560px) {
   .public-site.public-cream .public-bento-head { flex-direction: column; gap: 6px; }
 }
+
+/* The owl at work in more places (2 Nov 2026, owner: "ifadeli veya bir eylem yaparken"). */
+.public-site.public-cream .public-iso-mascot {
+  position: absolute;
+  right: 1%;
+  bottom: 4%;
+  z-index: 2;
+  width: clamp(84px, 11vw, 136px);
+  height: auto;
+  pointer-events: none;
+}
+.public-site.public-cream .public-shipstrip-mascot {
+  position: absolute;
+  top: 50%;
+  inset-inline-start: -10px;
+  width: 150px;
+  height: auto;
+  transform: translateY(-50%);
+  --mascot-ink: #1c1512;
+}
+.public-site.public-cream .public-home-faq .public-shell { position: relative; }
+.public-site.public-cream .public-home-faq-mascot {
+  position: absolute;
+  top: -12px;
+  inset-inline-start: max(0px, calc(50% - 560px));
+  width: 140px;
+  height: auto;
+  pointer-events: none;
+}
+@media (max-width: 1180px) { .public-site.public-cream .public-shipstrip-mascot { display: none; } }
+@media (max-width: 1060px) {
+  .public-site.public-cream .public-home-faq-mascot { position: static; display: block; width: 96px; margin: 0 auto 8px; }
+}
+.public-site.public-cream .public-shipstrip-card .public-shipstrip-link { justify-self: center; }

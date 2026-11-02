@@ -1125,7 +1125,7 @@ export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean 
                   ) : (
                     <div className="public-nav-dropdown-aside">
                       <a className="public-nav-mail" href="mailto:contact@nivadesk.co.uk">contact@nivadesk.co.uk</a>
-                      <PublicMascot pose="wave" className="public-nav-mascot" />
+                      <PublicMascot pose="coffee" className="public-nav-mascot" />
                     </div>
                   )}
                 </div>
@@ -2980,6 +2980,7 @@ function ConnectedOrderDiagram() {
           <span className="public-iso-order-pill" style={{ left: `${CITY_ANCHORS.order.x}%`, top: `${CITY_ANCHORS.order.y}%` }}>
             {t("orderCards.group.order")}
           </span>
+          <PublicMascot pose="magnifier" className="public-iso-mascot" />
           </div>
           <ul className="public-iso-labels">
             {sides.map(side => (
@@ -3045,6 +3046,7 @@ function ShippingStrip() {
   return (
     <section className="public-section public-shipstrip-section public-scroll-reveal">
       <div className="public-shell public-card public-shipstrip-card">
+        <PublicMascot pose="boxes" className="public-shipstrip-mascot" />
         <PublicIsoTile scene="shipping" className="public-shipstrip-art" />
         <h2>{t("shippingStrip.title")}</h2>
         <div className="public-shipstrip" aria-hidden="true">
@@ -3119,6 +3121,7 @@ function HomeFaqSummary() {
   return (
     <section className="public-section public-home-faq public-scroll-reveal">
       <div className="public-shell">
+        <PublicMascot pose="ponder" className="public-home-faq-mascot" />
         <h2 className="public-home-faq-title">{t("homeFaq.title")}</h2>
         <div className="public-home-faq-list">
           {items.map(([q, a]) => (
@@ -3348,7 +3351,7 @@ function PublicHomePageContent() {
 
       <section className="public-section public-cta-band public-scroll-reveal">
         <div className="public-shell public-cta-ready">
-          <PublicMascot pose="parcel" className="public-cta-mascot" />
+          <PublicMascot pose="celebrate" className="public-cta-mascot" />
           <h2>{t("ctaBand.readyTitle")}</h2>
           <div className="public-cta-ready-actions">
             <Link href="/signup" className="public-button large">{t("cta.startFree")}</Link>
@@ -3428,7 +3431,7 @@ function PublicFeaturesPageContent() {
             </div>
             <div className="public-page-hero-art" aria-hidden="true">
               <PublicIsoTile scene="order" />
-              <PublicMascot pose="parcel" />
+              <PublicMascot pose="laptop" />
             </div>
           </div>
           <div className="public-features-hero-strip">
@@ -3583,7 +3586,7 @@ function PublicPricingPageContent() {
           </div>
 
           <div className="public-pricing-cluster" aria-hidden="true">
-            <PublicMascot pose="clipboard" className="public-pricing-mascot" />
+            <PublicMascot pose="ponder" className="public-pricing-mascot" />
             <div className="public-pricing-orb" />
             <div className="pc-card pc-card-demo">
               <span className="pc-ico pc-ico-solid"><svg viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="11" rx="1.5" /><path d="M4 13h16M12 9v11M9 9a2 2 0 110-4c2 0 3 4 3 4M15 9a2 2 0 100-4c-2 0-3 4-3 4" /></svg></span>
@@ -4802,7 +4805,7 @@ function PublicChangelogPageContent() {
     <>
       <section className="public-page-hero public-info-hero public-changelog-hero">
         <div className="public-shell">
-          <PublicMascot pose="clipboard" className="public-changelog-mascot" />
+          <PublicMascot pose="pencil" className="public-changelog-mascot" />
           <span className="public-eyebrow">{labels.eyebrow}</span>
           <h1>{labels.title}</h1>
           <p>{labels.intro}</p>
