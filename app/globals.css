@@ -4534,6 +4534,8 @@ body[data-studio-theme="dark"] .order-platform-bar { --order-platform-bar-ground
 }
 .order-platform-bar-item .order-source-monogram { --order-source-monogram-size: 20px; font-size: 10px; letter-spacing: 0; }
 .order-platform-bar-word { padding-inline-start: 5px; white-space: nowrap; }
+/* WOO-STORES: a WooCommerce store's name beside its monogram; the full name is the tooltip and the accessible name. */
+.order-platform-bar-store { max-width: 14ch; overflow: hidden; padding-inline-start: 5px; text-overflow: ellipsis; white-space: nowrap; }
 .order-platform-bar-count { min-width: 1ch; color: var(--muted); font-variant-numeric: tabular-nums; }
 .order-platform-bar-item:hover { border-color: rgba(23, 25, 35, 0.28); }
 html[data-studio-theme="dark"] .order-platform-bar-item:hover,

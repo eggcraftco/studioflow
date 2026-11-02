@@ -56,6 +56,7 @@ import {
   filterAndSortOrders,
   ORDER_SOURCE_FILTERS,
   type OrderQuickFilterId,
+  type OrderSourceChoiceId,
   type OrderSourceId,
   type OrderSortMode
 } from "@/lib/studioflow/orderFilters";
@@ -183,7 +184,8 @@ export default function OrdersPage() {
   const [firstProjectGuide, setFirstProjectGuide] = useState<FirstProjectGuideState | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderFilter, setOrderFilter] = useState<OrderQuickFilterId>("all");
-  const [orderSource, setOrderSource] = useState<OrderSourceId>("all");
+  // WOO-STORES: a platform, or one WooCommerce store when the list holds two or more (orderSourceChoices).
+  const [orderSource, setOrderSource] = useState<OrderSourceChoiceId>("all");
   const [orderSortMode, setOrderSortMode] = useState<OrderSortMode>("smart");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [blockHeadingSettings, setBlockHeadingSettings] = useState<BlockHeadingSettings | null>(null);

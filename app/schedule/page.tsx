@@ -39,7 +39,7 @@ import {
   filterAndSortOrders,
   type OrderQuickFilterId,
   type OrderSortMode,
-  type OrderSourceId
+  type OrderSourceChoiceId
 } from "@/lib/studioflow/orderFilters";
 import { studioT, studioLocaleTag } from "@/lib/studioflow/language";
 import { studioCountLabel } from "@/lib/studioflow/countLabel";
@@ -443,7 +443,7 @@ export default function SchedulePage() {
   const [filter, setFilter] = useState<ScheduleFilter>("all");
   const [sortMode, setSortMode] = useState<OrderSortMode>("smart");
   // UX-010 / UX-006: the platform the list shows — one state for the quick platform bar and the Source rows in Order Filters.
-  const [source, setSource] = useState<OrderSourceId>("all");
+  const [source, setSource] = useState<OrderSourceChoiceId>("all");
   const [timelineZoom, setTimelineZoom] = useState(1);
   const [timelineZoomHydrated, setTimelineZoomHydrated] = useState(false);
   const [search, setSearch] = useState("");

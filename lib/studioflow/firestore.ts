@@ -34,7 +34,7 @@ import { mapWorkDayHistory, mapWorkDays, type WorkDayDetail, type WorkDayHistory
 import { mapWorkSessionAudit, type WorkSessionAuditDetail } from "@/lib/studioflow/workSessionCorrections";
 import { productionWorkIsLive, type ProductionStage } from "@/lib/studioflow/production";
 import type { HeadingItem } from "@/lib/studioflow/blockHeadings";
-import { compareOrdersTieBreak, orderIsCancelled, type FilterableOrder } from "@/lib/studioflow/orderFilters";
+import { compareOrdersTieBreak, orderIsCancelled, wooStoreFieldsFrom, type FilterableOrder } from "@/lib/studioflow/orderFilters";
 import { isEtsyOrder } from "@/lib/studioflow/etsyOrder";
 
 export type JoinedWorkspaceOption = {
@@ -407,6 +407,9 @@ export type OrderListItem = {
   orderSource: string;
   /** True when the order carries Etsy's own copy (`etsySource`); the copy itself stays off the row (UX-010 platform chip). */
   hasEtsySource: boolean;
+  /** WOO-STORES: the WooCommerce store's host and name (wooStoreFieldsFrom); "" on every other order. */
+  wooStoreKey: string;
+  wooStoreName: string;
 };
 
 export type ScheduleOrderItem = {
@@ -445,6 +448,9 @@ export type ScheduleOrderItem = {
   commerceProvider?: string;
   orderSource?: string;
   hasEtsySource?: boolean;
+  /** WOO-STORES: the WooCommerce store (wooStoreFieldsFrom). Absent on the Team Schedule callable's rows. */
+  wooStoreKey?: string;
+  wooStoreName?: string;
 };
 
 export type OrderOptionItem = {
@@ -2055,10 +2061,12 @@ function orderListItemFromDocument(orderDocument: QueryDocumentSnapshot<Document
 /**
  * What orderSourceOf needs from an order document besides its id and custom fields
  * (UX-010 platform chip): the engine's provider, the public form's `orderSource`, and
- * whether Etsy's own copy is there. Read from the snapshot already in hand.
+ * whether Etsy's own copy is there. Read from the snapshot already in hand. WOO-STORES
+ * (2 Nov 2026): also the WooCommerce store the order came from, for the per-store choice.
  */
-function orderSourceFieldsFrom(data: DocumentData): { commerceProvider: string; orderSource: string; hasEtsySource: boolean } {
+function orderSourceFieldsFrom(data: DocumentData): { commerceProvider: string; orderSource: string; hasEtsySource: boolean; wooStoreKey: string; wooStoreName: string } {
   return {
+    ...wooStoreFieldsFrom(data),
     commerceProvider: data.commerce && typeof data.commerce === "object" && !Array.isArray(data.commerce)
       ? stringValue((data.commerce as Record<string, unknown>).provider, "")
       : "",
