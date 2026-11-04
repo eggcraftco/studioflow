@@ -73,6 +73,16 @@ const nextConfig: NextConfig = {
   // canonical and hreflang outside <head> (live 4 Nov 2026). The public pages' metadata reads no data, so
   // resolving it before the head is sent costs nothing.
   htmlLimitedBots: /.*/,
+  // /en and /en/… are the English pages under a second address (lib/publicSite/locales.ts: English has no prefix):
+  // one 308 to the unprefixed page that already ranks. Here rather than in middleware: Next's own redirects answer
+  // with a relative Location, so behind Cloud Run's load balancer the container's 0.0.0.0:8080 never leaks into
+  // it, and the query string is kept.
+  async redirects() {
+    return [
+      { source: "/en", destination: "/", permanent: true },
+      { source: "/en/:path*", destination: "/:path*", permanent: true }
+    ];
+  },
   async rewrites() {
     return [
       {

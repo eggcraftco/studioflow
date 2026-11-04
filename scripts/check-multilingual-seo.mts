@@ -10,7 +10,7 @@
 //    reciprocal hreflang set (12 languages + x-default → English) as every other version and as the sitemap.
 // 4. The sitemap lists every version once, nothing more; robots.txt still blocks /guide and nothing localized.
 // 5. The FAQ's structured data is built from exactly the faq.qN keys the FAQ page shows.
-// 6. The wiring: middleware (header + /en redirect, no country lookup), <html lang>, metadata in the first <head>
+// 6. The wiring: middleware (language header, no country lookup), the /en redirect in next.config, <html lang>, metadata in the first <head>
 //    for Googlebot too (next.config htmlLimitedBots), the locale-aware Link on the public pages, the footer's
 //    language links, and the address helpers themselves.
 import fs from "node:fs";
@@ -34,6 +34,7 @@ import { PUBLIC_SITE_EN } from "../lib/publicSite/translations";
 import { SUPPORTED_STUDIO_LANGUAGES } from "../lib/studioflow/language";
 import { NextRequest } from "next/server";
 import { middleware as runMiddleware } from "../middleware";
+import * as nextConfigModule from "../next.config";
 import * as sitemapModule from "../app/sitemap";
 import * as robotsModule from "../app/robots";
 
@@ -55,6 +56,8 @@ const unwrap = <T,>(mod: DefaultExport<T>): T => {
 };
 const sitemap = unwrap(sitemapModule as unknown as DefaultExport<typeof sitemapModule.default>);
 const robots = unwrap(robotsModule as unknown as DefaultExport<typeof robotsModule.default>);
+const nextConfigExport = (nextConfigModule as unknown as { default: unknown }).default as Record<string, unknown>;
+const nextConfig = ("redirects" in nextConfigExport ? nextConfigExport : nextConfigExport.default) as { redirects?: () => Promise<Array<{ source: string; destination: string; permanent?: boolean }>> };
 // Google cuts titles and snippets by width: a Han, kana or hangul character is about two Latin ones.
 const displayLength = (text: string) => [...text].reduce((n, ch) => n + (/[\u1100-\u11ff\u2e80-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/.test(ch) ? 2 : 1), 0);
 const pages = Object.keys(LOCALIZED_PUBLIC_PAGE_PATHS) as LocalizedPublicPage[];
@@ -180,14 +183,16 @@ check(structured.includes("/^faq\\.q(\\d+)\\.title$/"), "structuredData.tsx buil
 // 6. Wiring and helpers.
 const middleware = read("middleware.ts");
 check(/PUBLIC_LOCALE_HEADER/.test(middleware) && /requestHeaders\.delete\(PUBLIC_LOCALE_HEADER\)/.test(middleware), "middleware: sets the language header, drops a client-sent one");
-check(/\^\\\/en\(\\\/\.\*\)\?\$/.test(middleware) && /status: 308/.test(middleware) && /Location: `\$\{englishPrefix\[1\] \|\| "\/"\}/.test(middleware),
-  "middleware: /en and /en/… → 308 to the English address, relative Location");
+check(!/\/en\(/.test(middleware) && !/NextResponse\.redirect/.test(middleware), "middleware: no redirect of its own (an absolute one would carry the container's host)");
 check(!/geo|x-vercel-ip-country|cf-ipcountry|accept-language/i.test(middleware), "middleware: no country or Accept-Language redirect");
 // The middleware itself, as Cloud Run runs it (its own URL is the container's 0.0.0.0:8080, not nivadesk.app).
 const mw = (url: string) => runMiddleware(new NextRequest(`https://0.0.0.0:8080${url}`, { headers: { "x-nivadesk-public-locale": "zz" } }));
-for (const [from, to] of [["/en", "/"], ["/en/pricing?ref=x", "/pricing?ref=x"], ["/en/guide", "/guide"]] as const) {
-  const res = mw(from);
-  check(res.status === 308 && res.headers.get("location") === to, `middleware ${from} → 308 ${to} (got ${res.status} ${res.headers.get("location")})`);
+const redirects = await nextConfig.redirects?.() ?? [];
+check(redirects.some(r => r.source === "/en" && r.destination === "/" && r.permanent === true)
+  && redirects.some(r => r.source === "/en/:path*" && r.destination === "/:path*" && r.permanent === true),
+  "next.config: /en and /en/… → 308 to the English address (Next's relative redirect)");
+for (const path of ["/en", "/en/pricing"]) {
+  check(mw(path).status !== 308 && !mw(path).headers.get("location"), `middleware leaves ${path} to next.config's redirect`);
 }
 for (const [path, code] of [["/de/pricing", "de"], ["/hi", "hi"], ["/pricing", null], ["/enterprise", null], ["/design", null]] as const) {
   const forwarded = mw(path).headers.get("x-middleware-request-x-nivadesk-public-locale");

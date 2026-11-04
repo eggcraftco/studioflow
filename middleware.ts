@@ -16,19 +16,9 @@ import { PUBLIC_LOCALE_HEADER, splitPublicLocalePath } from "@/lib/publicSite/lo
 //
 // Public site languages (lib/publicSite/locales.ts): /de, /de/pricing … are real routes (app/[lang]); the
 // middleware only tells the root layout which language the document is, so <html lang dir> is right in the
-// server's HTML. /en and /en/… are the English pages under a second address, so one 308 sends them to the
-// unprefixed address that already ranks. Nothing here looks at the visitor's country or browser language.
+// server's HTML (/en/… → English is a redirect in next.config.ts). Nothing here looks at the visitor's country
+// or browser language.
 export function middleware(request: NextRequest) {
-  const englishPrefix = request.nextUrl.pathname.match(/^\/en(\/.*)?$/);
-  if (englishPrefix) {
-    // A relative Location, like Next's own trailing-slash redirect: behind Cloud Run's load balancer the server's
-    // own URL carries its internal host and port, so an absolute one built from nextUrl could point there.
-    return new NextResponse(null, {
-      status: 308,
-      headers: { Location: `${englishPrefix[1] || "/"}${request.nextUrl.search}` }
-    });
-  }
-
   const nonce = createCspNonce();
   const policy = buildContentSecurityPolicy({
     nonce,
