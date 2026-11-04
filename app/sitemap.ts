@@ -1,5 +1,11 @@
 import type { MetadataRoute } from "next";
 import { CLAUDE_CONNECTOR_URL } from "@/lib/studioflow/claudeConnector";
+import {
+  isLocalizedPublicPath,
+  localizedPublicPath,
+  PREFIXED_PUBLIC_LOCALES,
+  publicHreflangAlternates
+} from "@/lib/publicSite/locales";
 
 const BASE_URL = "https://nivadesk.app";
 
@@ -32,12 +38,28 @@ const PUBLIC_PAGES: { path: string; priority: number; changeFrequency: MetadataR
   { path: "/data-processing-agreement", priority: 0.3, changeFrequency: "yearly" }
 ];
 
+// A page with language versions is listed once per language (/pricing, /de/pricing, … /hi/pricing), and every
+// one of those entries carries the same hreflang set as the pages' <head> (lib/publicSite/locales.ts), so the
+// sitemap and the HTML never disagree. Twelve languages × the localized pages stay far under the 50,000-URL
+// limit of one sitemap, so there is no sitemap index.
 export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date();
-  return PUBLIC_PAGES.map(page => ({
-    url: `${BASE_URL}${page.path}`,
-    lastModified,
-    changeFrequency: page.changeFrequency,
-    priority: page.priority
-  }));
+  return PUBLIC_PAGES.flatMap(page => {
+    const entry = {
+      url: `${BASE_URL}${page.path}`,
+      lastModified,
+      changeFrequency: page.changeFrequency,
+      priority: page.priority
+    };
+    if (!isLocalizedPublicPath(page.path)) return [entry];
+    const alternates = { languages: publicHreflangAlternates(page.path) };
+    return [
+      { ...entry, alternates },
+      ...PREFIXED_PUBLIC_LOCALES.map(locale => ({
+        ...entry,
+        url: `${BASE_URL}${localizedPublicPath(page.path, locale.language)}`,
+        alternates
+      }))
+    ];
+  });
 }

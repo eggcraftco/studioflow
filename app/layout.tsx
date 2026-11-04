@@ -20,6 +20,8 @@ import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { SessionAutoLock } from "@/components/SessionAutoLock";
 import { SecondFactorPromptHost } from "@/components/SecondFactorPromptHost";
 import { StudioToastHost } from "@/components/StudioToastHost";
+import { PUBLIC_LOCALE_HEADER, publicLocaleByCode } from "@/lib/publicSite/locales";
+import { studioLanguageDir } from "@/lib/studioflow/languageDirection";
 
 const isStagingPreview = process.env.NEXT_PUBLIC_STAGING_NO_INDEX === "true";
 
@@ -64,8 +66,16 @@ try {
 
 export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
+  // A language-prefixed public page (/de/pricing) is that language in the server's HTML, <html lang dir>
+  // included; everything else keeps lang="en" until the client sets the reader's language.
+  const publicLocale = publicLocaleByCode((await headers()).get(PUBLIC_LOCALE_HEADER));
   return (
-    <html lang="en" className={`${inter.variable} ${manrope.variable}`} suppressHydrationWarning>
+    <html
+      lang={publicLocale?.htmlLang ?? "en"}
+      dir={publicLocale ? studioLanguageDir(publicLocale.language) : undefined}
+      className={`${inter.variable} ${manrope.variable}`}
+      suppressHydrationWarning
+    >
       <body suppressHydrationWarning>
         <ThemeBootstrapScript nonce={nonce} />
         <AuthProvider>

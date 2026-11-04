@@ -1,0 +1,42 @@
+/* The footer's language row (components/PublicLanguageLinks.tsx). A module rather than the end of globals.css:
+   the cream theme's tokens are read with fallbacks, and nothing here can restyle /track, /e or /invite. */
+.languages {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-block: 0 14px;
+  margin-inline: auto;
+  padding-block: 0 14px;
+  border-block-end: 1px solid var(--cream-line, rgba(37, 29, 26, 0.12));
+  color: var(--cream-muted, #6b5d55);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.globe {
+  flex: none;
+  font-size: 13px;
+}
+
+.list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.link {
+  color: var(--cream-ink, #251d1a);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link[aria-current="true"] {
+  font-weight: 700;
+}

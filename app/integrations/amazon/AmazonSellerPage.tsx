@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/lib/publicSite/PublicLink";
 import { PublicShell } from "@/components/PublicMarketing";
 import { usePublicSiteLanguage } from "@/lib/publicSite/i18n";
 import { AMAZON_SELLER_COPY, AMAZON_SELLER_MARKETPLACES_EU, type AmazonSellerCopy } from "@/lib/publicSite/amazonSellerCopy";

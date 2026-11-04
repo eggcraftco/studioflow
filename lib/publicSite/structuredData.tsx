@@ -1,5 +1,15 @@
 // JSON-LD structured data for the public marketing pages. Rendered from the
 // server page shells so Google and AI crawlers see it without running JS.
+import type { StudioLanguage } from "@/lib/studioflow/language";
+import {
+  absolutePublicUrl,
+  LOCALIZED_PUBLIC_PAGE_PATHS,
+  localizedPublicPath,
+  publicLocaleByLanguage,
+  type LocalizedPublicPage
+} from "@/lib/publicSite/locales";
+import { PUBLIC_SEO_COPY } from "@/lib/publicSite/seoCopy";
+import { PUBLIC_SITE_EN, PUBLIC_SITE_TRANSLATIONS, type PublicSiteTranslationKey } from "@/lib/publicSite/translations";
 
 const BASE_URL = "https://nivadesk.app";
 
@@ -149,14 +159,89 @@ function JsonLd({ data }: { data: object[] }) {
   );
 }
 
-export function HomeStructuredData() {
+// A language version (/de, /de/faq …) describes the same Organization and software in its own language: the
+// software's description from seoCopy.ts, the offers without their English notes and no English feature list,
+// a WebPage naming the page's language, and on /xx/faq the questions built from the very keys the page shows.
+type ForeignLanguage = Exclude<StudioLanguage, "English">;
+
+function localizedSoftwareApplication(language: ForeignLanguage) {
+  const software: Record<string, unknown> = {
+    ...softwareApplication,
+    description: PUBLIC_SEO_COPY[language].home.description,
+    offers: softwareApplication.offers.map(offer => ({
+      "@type": offer["@type"],
+      name: offer.name,
+      price: offer.price,
+      priceCurrency: offer.priceCurrency
+    }))
+  };
+  delete software.featureList;
+  return software;
+}
+
+function localizedWebPage(page: LocalizedPublicPage, language: ForeignLanguage) {
+  const url = absolutePublicUrl(localizedPublicPath(LOCALIZED_PUBLIC_PAGE_PATHS[page], language));
+  return {
+    "@type": "WebPage",
+    "@id": `${url}#webpage`,
+    url,
+    name: PUBLIC_SEO_COPY[language][page].title,
+    description: PUBLIC_SEO_COPY[language][page].description,
+    inLanguage: publicLocaleByLanguage(language).hreflang,
+    isPartOf: { "@id": `${BASE_URL}/#website` },
+    about: { "@id": `${BASE_URL}/#software` }
+  };
+}
+
+// Every faq.qN pair in the dictionary is on the FAQ page (scripts/check-multilingual-seo.mts compares the set
+// with FAQ_GROUPS in components/PublicMarketing.tsx), so the structured data never says what the page does not.
+export const FAQ_STRUCTURED_DATA_NUMBERS = Object.keys(PUBLIC_SITE_EN)
+  .map(key => key.match(/^faq\.q(\d+)\.title$/)?.[1])
+  .filter((value): value is string => Boolean(value))
+  .map(Number)
+  .sort((a, b) => a - b);
+
+function localizedFaqPage(language: ForeignLanguage) {
+  const table = PUBLIC_SITE_TRANSLATIONS[language];
+  const text = (key: PublicSiteTranslationKey) => table[key] || PUBLIC_SITE_EN[key];
+  const url = absolutePublicUrl(localizedPublicPath("/faq", language));
+  return {
+    "@type": "FAQPage",
+    "@id": `${url}#faq`,
+    inLanguage: publicLocaleByLanguage(language).hreflang,
+    mainEntity: FAQ_STRUCTURED_DATA_NUMBERS.map(n => ({
+      "@type": "Question",
+      name: text(`faq.q${n}.title` as PublicSiteTranslationKey),
+      acceptedAnswer: { "@type": "Answer", text: text(`faq.q${n}.body` as PublicSiteTranslationKey) }
+    }))
+  };
+}
+
+type StructuredDataProps = { language?: StudioLanguage };
+
+export function HomeStructuredData({ language }: StructuredDataProps = {}) {
+  if (language && language !== "English") {
+    return <JsonLd data={[organization, webSite, localizedSoftwareApplication(language), localizedWebPage("home", language)]} />;
+  }
   return <JsonLd data={[organization, webSite, softwareApplication]} />;
 }
 
-export function PricingStructuredData() {
+export function PricingStructuredData({ language }: StructuredDataProps = {}) {
+  if (language && language !== "English") {
+    return <JsonLd data={[organization, localizedSoftwareApplication(language), localizedWebPage("pricing", language)]} />;
+  }
   return <JsonLd data={[organization, softwareApplication]} />;
 }
 
-export function FaqStructuredData() {
+export function FaqStructuredData({ language }: StructuredDataProps = {}) {
+  if (language && language !== "English") {
+    return <JsonLd data={[organization, localizedWebPage("faq", language), localizedFaqPage(language)]} />;
+  }
   return <JsonLd data={[organization, faqPage]} />;
+}
+
+// The other language versions: the page and its language.
+export function LocalizedPageStructuredData({ page, language }: { page: LocalizedPublicPage; language: StudioLanguage }) {
+  if (language === "English") return null;
+  return <JsonLd data={[organization, localizedWebPage(page, language)]} />;
 }

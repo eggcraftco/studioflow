@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
+import Link from "@/lib/publicSite/PublicLink";
 import { openCookiePreferences } from "@/lib/cookieConsent";
 import { usePathname, useRouter } from "next/navigation";
 import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from "firebase/auth";
@@ -11,6 +11,7 @@ import { auth, functions } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { SiteVisitBeacon } from "@/components/SiteVisitBeacon";
 import { PublicHomeTour } from "@/components/PublicHomeTour";
+import { PublicLanguageLinks } from "@/components/PublicLanguageLinks";
 import { clearLandingAttribution, getLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
 import { GoogleAdsTag } from "@/components/GoogleAdsTag";
 import { fireGoogleAdsSignupConversion } from "@/lib/googleAds";
@@ -1249,6 +1250,7 @@ function PublicFooter() {
       </div>
       </div>
       <div className="public-footer-bottom">
+        <PublicLanguageLinks />
         <div className="public-shell public-footer-meta">
           <span>{t("footer.rights").replace("\u00A9", `\u00A9 ${new Date().getFullYear()}`)}</span>
           <span className="public-footer-recaptcha">

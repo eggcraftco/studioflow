@@ -1,4 +1,16 @@
 import type { Metadata } from "next";
+import type { StudioLanguage } from "@/lib/studioflow/language";
+import {
+  isLocalizedPublicPath,
+  LOCALIZED_PUBLIC_PAGE_PATHS,
+  localizedPublicPath,
+  PUBLIC_SITE_LOCALES,
+  publicHreflangAlternates,
+  publicLocaleByCode,
+  type LocalizedPublicPage,
+  type PublicSiteLocale
+} from "@/lib/publicSite/locales";
+import { PUBLIC_SEO_COPY } from "@/lib/publicSite/seoCopy";
 
 type PublicMetadataKey =
   | "home"
@@ -23,6 +35,9 @@ type PublicMetadataKey =
 
 const siteName = "NivaDesk";
 const brandImage = "/brand/nivadesk-logo.png";
+// A staging/preview deployment is noindex in the root layout; a page's own robots would override that, so the
+// public pages repeat it.
+const isStagingPreview = process.env.NEXT_PUBLIC_STAGING_NO_INDEX === "true";
 
 // `noindex` keeps a page reachable for people while telling search and AI
 // crawlers not to store it. Used for the user guide: it explains the product
@@ -148,8 +163,21 @@ const publicMetadata: Record<
   }
 };
 
+const NOINDEX_ROBOTS: Metadata["robots"] = {
+  index: false,
+  follow: false,
+  nocache: true,
+  googleBot: { index: false, follow: false, noimageindex: true }
+};
+
+function otherOgLocales(current: PublicSiteLocale) {
+  return PUBLIC_SITE_LOCALES.filter(locale => locale !== current).map(locale => locale.ogLocale);
+}
+
 export function publicPageMetadata(key: PublicMetadataKey): Metadata {
   const page = publicMetadata[key];
+  // A page with language versions names all of them (hreflang + x-default), the same set every version carries.
+  const localized = isLocalizedPublicPath(page.path);
 
   return {
     title: page.title,
@@ -157,7 +185,8 @@ export function publicPageMetadata(key: PublicMetadataKey): Metadata {
     metadataBase: new URL("https://nivadesk.app"),
     applicationName: "NivaDesk",
     alternates: {
-      canonical: page.path
+      canonical: page.path,
+      ...(localized ? { languages: publicHreflangAlternates(page.path) } : {})
     },
     openGraph: {
       title: page.title,
@@ -165,6 +194,7 @@ export function publicPageMetadata(key: PublicMetadataKey): Metadata {
       siteName,
       type: "website",
       locale: "en_GB",
+      ...(localized ? { alternateLocale: otherOgLocales(PUBLIC_SITE_LOCALES[0]) } : {}),
       images: [
         {
           url: brandImage,
@@ -180,16 +210,62 @@ export function publicPageMetadata(key: PublicMetadataKey): Metadata {
       description: page.description,
       images: [brandImage]
     },
-    robots: page.noindex
-      ? {
-          index: false,
-          follow: false,
-          nocache: true,
-          googleBot: { index: false, follow: false, noimageindex: true }
-        }
+    robots: page.noindex || isStagingPreview
+      ? NOINDEX_ROBOTS
       : {
           index: true,
           follow: true
         }
+  };
+}
+
+// The English metadata of a page that keeps its own (the integration pages) plus its language versions.
+export function publicHreflangMetadata(page: LocalizedPublicPage): Metadata["alternates"] {
+  const path = LOCALIZED_PUBLIC_PAGE_PATHS[page];
+  return isLocalizedPublicPath(path) ? { languages: publicHreflangAlternates(path) } : {};
+}
+
+// A language version (/de/pricing): its own title and description, a canonical to itself — never to the
+// English page — and the shared hreflang set. app/[lang] only calls this for a prefix and page that exist.
+export function localizedPublicPageMetadata(page: LocalizedPublicPage, code: string): Metadata {
+  const locale = publicLocaleByCode(code);
+  const path = LOCALIZED_PUBLIC_PAGE_PATHS[page];
+  if (!locale || !isLocalizedPublicPath(path)) return {};
+  const copy = PUBLIC_SEO_COPY[locale.language as Exclude<StudioLanguage, "English">][page];
+  const url = localizedPublicPath(path, locale.language);
+
+  return {
+    title: copy.title,
+    description: copy.description,
+    metadataBase: new URL("https://nivadesk.app"),
+    applicationName: "NivaDesk",
+    alternates: {
+      canonical: url,
+      languages: publicHreflangAlternates(path)
+    },
+    openGraph: {
+      title: copy.title,
+      description: copy.description,
+      url,
+      siteName,
+      type: "website",
+      locale: locale.ogLocale,
+      alternateLocale: otherOgLocales(locale),
+      images: [
+        {
+          url: brandImage,
+          width: 3021,
+          height: 752,
+          alt: "NivaDesk"
+        }
+      ]
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: copy.title,
+      description: copy.description,
+      images: [brandImage]
+    },
+    robots: isStagingPreview ? NOINDEX_ROBOTS : { index: true, follow: true }
   };
 }

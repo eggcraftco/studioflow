@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import Link from "@/lib/publicSite/PublicLink";
 import { PublicShell } from "@/components/PublicMarketing";
 import { usePublicSiteLanguage } from "@/lib/publicSite/i18n";
 import { SHOPIFY_APP_STORE_URL } from "@/lib/studioflow/shopifyListing";

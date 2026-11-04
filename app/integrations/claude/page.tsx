@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { publicHreflangMetadata } from "@/lib/publicSite/metadata";
 import { CLAUDE_CONNECTOR_URL } from "@/lib/studioflow/claudeConnector";
 import ClaudeHelpPage from "./ClaudeHelpPage";
 
@@ -10,7 +11,7 @@ import ClaudeHelpPage from "./ClaudeHelpPage";
 export const metadata: Metadata = {
   title: "NivaDesk for Claude: setup guide, tools and permissions | NivaDesk",
   description: "How the NivaDesk connector for Claude works: who can use it, how to connect with your own NivaDesk account, the 21 tools for orders, notes, money, bank spending and inventory, the permission and safety rules, your data, and how to disconnect.",
-  alternates: { canonical: "https://nivadesk.app/integrations/claude" },
+  alternates: { canonical: "https://nivadesk.app/integrations/claude", ...publicHreflangMetadata("claude") },
   robots: CLAUDE_CONNECTOR_URL ? undefined : { index: false, follow: true }
 };
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { buildContentSecurityPolicy, createCspNonce, CSP_REPORT_ONLY_HEADER } from "@/lib/security/contentSecurityPolicy";
+import { PUBLIC_LOCALE_HEADER, splitPublicLocalePath } from "@/lib/publicSite/locales";
 
 // Content-Security-Policy, report-only (security audit #18): a fresh nonce per
 // response. The policy goes on the REQUEST too, because that is where Next looks
@@ -12,7 +13,19 @@ import { buildContentSecurityPolicy, createCspNonce, CSP_REPORT_ONLY_HEADER } fr
 // once the wildcard/custom-hostname serving is switched on — and lands on the
 // same token-addressed portal page. A rewrite (not a redirect) keeps the
 // branded hostname in the customer's address bar.
+//
+// Public site languages (lib/publicSite/locales.ts): /de, /de/pricing … are real routes (app/[lang]); the
+// middleware only tells the root layout which language the document is, so <html lang dir> is right in the
+// server's HTML. /en and /en/… are the English pages under a second address, so one 308 sends them to the
+// unprefixed address that already ranks. Nothing here looks at the visitor's country or browser language.
 export function middleware(request: NextRequest) {
+  const englishPrefix = request.nextUrl.pathname.match(/^\/en(\/.*)?$/);
+  if (englishPrefix) {
+    const url = request.nextUrl.clone();
+    url.pathname = englishPrefix[1] || "/";
+    return NextResponse.redirect(url, 308);
+  }
+
   const nonce = createCspNonce();
   const policy = buildContentSecurityPolicy({
     nonce,
@@ -23,6 +36,9 @@ export function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set(CSP_REPORT_ONLY_HEADER.toLowerCase(), policy);
+  requestHeaders.delete(PUBLIC_LOCALE_HEADER);
+  const { locale } = splitPublicLocalePath(request.nextUrl.pathname);
+  if (locale.code !== "en") requestHeaders.set(PUBLIC_LOCALE_HEADER, locale.code);
 
   const match = request.nextUrl.pathname.match(/^\/r\/([A-Za-z0-9_-]{8,})\/?$/);
   let response: NextResponse;
