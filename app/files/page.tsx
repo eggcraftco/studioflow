@@ -19,6 +19,8 @@ import {
   deleteClientFileForOrder,
   deleteClientFilesBatchForOrders,
   downloadClientFilesZip,
+  downloadSelectedFilesZip,
+  filesDownloadProblem,
   isClientFileImage,
   renameClientFileForOrder,
   uploadClientFileForOrder,
@@ -344,6 +346,34 @@ export default function FilesPage() {
     }
   }
 
+  // "Download selected (ZIP)" (4 Nov 2026): the ticked AND shown rows, as the
+  // delete takes them; the server decides what this member may have.
+  const [downloadingSelection, setDownloadingSelection] = useState(false);
+  async function handleDownloadSelection() {
+    if (!workspace || downloadingSelection) return;
+    const chosen = selectedRows(selection, filteredSortedFiles);
+    if (chosen.length === 0) return;
+    setActionError(null);
+    setActionStatus(null);
+    setDownloadingSelection(true);
+    try {
+      const outcome = await downloadSelectedFilesZip({
+        workspaceId: workspace.id,
+        items: chosen.map(file => ({ orderId: file.orderId, fileId: file.fileId }))
+      });
+      setActionStatus(
+        t("The download has started: {count} files.").replace("{count}", String(outcome.count)) +
+          (outcome.skipped.length > 0
+            ? " " + t("{count} files were left out. The list is in NOT INCLUDED.txt inside the ZIP.").replace("{count}", String(outcome.skipped.length))
+            : "")
+      );
+    } catch (downloadError) {
+      setActionError(filesDownloadProblem(downloadError));
+    } finally {
+      setDownloadingSelection(false);
+    }
+  }
+
   function toggleFileSelected(fileId: string, selected: boolean) {
     setSelection(previous => toggleSelectionId(previous, fileId, selected));
   }
@@ -561,6 +591,9 @@ export default function FilesPage() {
   const canManageClientFiles = Boolean(workspace && canUseClientFiles && canManageClientFilesForRole(workspace.role));
   const canUploadClientFiles = canManageClientFiles;
   const canDeleteClientFiles = Boolean(canManageClientFiles && workspace?.memberAccess?.deleteClientFiles !== false);
+  // Ticking serves two actions now: Download for anyone who may download, Delete
+  // only for those who may delete. Each button checks its own permission.
+  const canSelectFiles = canUseClientFiles || canDeleteClientFiles;
   const maxUploadSizeMB = Math.min(Math.max(Math.round(uploadSafetySettings?.uploadSafetyMaxFileSizeMB ?? 10), 1), 50);
   const requireUploadPolicyAcceptance = uploadSafetySettings?.uploadSafetyRequirePolicyAcceptance ?? true;
   const uploadPolicyVersionId = uploadPolicyVersion(uploadSafetySettings);
@@ -981,7 +1014,7 @@ export default function FilesPage() {
           </div>
         </div>
 
-        {canDeleteClientFiles && filteredSortedFiles.length > 0 ? (
+        {canSelectFiles && filteredSortedFiles.length > 0 ? (
           <label className="files-select-shown">
             <input
               type="checkbox"
@@ -998,7 +1031,7 @@ export default function FilesPage() {
           </label>
         ) : null}
 
-        {canDeleteClientFiles && (selectedCount > 0 || selectionFailures.length > 0) ? (
+        {canSelectFiles && (selectedCount > 0 || selectionFailures.length > 0) ? (
           <div className="files-selection-bar" role="region" aria-label={t("Selected files")} aria-live="polite">
             <div className="files-selection-bar-row">
               <strong>{t("{count} selected").replace("{count}", String(selectedCount))}</strong>
@@ -1011,15 +1044,27 @@ export default function FilesPage() {
                     )}
               </span>
               <span style={{ flex: 1 }} />
-              <button
-                className="button"
-                type="button"
-                style={{ background: "var(--danger)", borderColor: "var(--danger)" }}
-                disabled={deletingSelection || selectedCount === 0}
-                onClick={handleDeleteSelection}
-              >
-                {deletingSelection ? t("Deleting…") : t("Delete selected")}
-              </button>
+              {canUseClientFiles ? (
+                <button
+                  className="button"
+                  type="button"
+                  disabled={downloadingSelection || deletingSelection || selectedCount === 0}
+                  onClick={() => void handleDownloadSelection()}
+                >
+                  {downloadingSelection ? t("Preparing…") : t("Download selected (ZIP)")}
+                </button>
+              ) : null}
+              {canDeleteClientFiles ? (
+                <button
+                  className="button"
+                  type="button"
+                  style={{ background: "var(--danger)", borderColor: "var(--danger)" }}
+                  disabled={deletingSelection || downloadingSelection || selectedCount === 0}
+                  onClick={handleDeleteSelection}
+                >
+                  {deletingSelection ? t("Deleting…") : t("Delete selected")}
+                </button>
+              ) : null}
               <button className="button secondary" type="button" disabled={deletingSelection} onClick={clearSelection}>
                 {t("Clear selection")}
               </button>
@@ -1071,7 +1116,7 @@ export default function FilesPage() {
                   <span style={{ color: "var(--muted)", fontSize: 12, fontWeight: 700 }}>
                     {studioCountLabel(group.files.length, "file", language)}
                   </span>
-                  {canDeleteClientFiles ? (() => {
+                  {canSelectFiles ? (() => {
                     const allSelected = group.files.every(file => selectedFileIds.has(file.id));
                     return (
                       <label className="files-select-order" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
@@ -1118,7 +1163,7 @@ export default function FilesPage() {
                     const showThumb = canOpenPreview && isClientFileImage(file);
                     return (
                       <article key={file.id} className={selectedFileIds.has(file.id) ? "client-file-list-row is-selected" : "client-file-list-row"}>
-                        {canDeleteClientFiles ? (
+                        {canSelectFiles ? (
                           <label className="client-file-select">
                             <input
                               type="checkbox"

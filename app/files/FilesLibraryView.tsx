@@ -27,6 +27,7 @@ import {
 } from "@/lib/studioflow/filesLibrary";
 import { loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { openSharedFile } from "@/lib/studioflow/fileMask";
+import { downloadSelectedFilesZip, filesDownloadProblem } from "@/lib/studioflow/clientFiles";
 import { UploadQueuePanel } from "@/components/UploadQueuePanel";
 import { useUploadQueue } from "@/lib/studioflow/useUploadQueue";
 import {
@@ -173,7 +174,38 @@ export function FilesLibraryView({
   const tickedRows = selectedRows(ticked, visible);
   const tickScope = selectionScope(ticked, visibleIds);
   const inTrash = view === "trash";
-  const canTickRows = canEdit && (inTrash || canDelete);
+  // Outside the trash anyone who sees the list may tick, to download (4 Nov
+  // 2026); moving to trash still needs edit + delete. In the trash, ticking is
+  // for restore and permanent delete, as before.
+  const canTickRows = inTrash ? canEdit : true;
+  const canTrashTicked = canEdit && canDelete;
+  const [downloading, setDownloading] = useState(false);
+
+  async function downloadTicked() {
+    const rows = tickedRows;
+    if (rows.length === 0 || busy) return;
+    setBusy(true);
+    setDownloading(true);
+    setNotice("");
+    setBulkFailures([]);
+    try {
+      const outcome = await downloadSelectedFilesZip({
+        workspaceId: workspace.id,
+        items: rows.map(file => ({ libraryFileId: file.id }))
+      });
+      setNotice(
+        t("The download has started: {count} files.").replace("{count}", String(outcome.count)) +
+          (outcome.skipped.length > 0
+            ? " " + t("{count} files were left out. The list is in NOT INCLUDED.txt inside the ZIP.").replace("{count}", String(outcome.skipped.length))
+            : "")
+      );
+    } catch (failure) {
+      setNotice(t(filesDownloadProblem(failure)));
+    } finally {
+      setBusy(false);
+      setDownloading(false);
+    }
+  }
 
   async function runBulk(kind: "trash" | "restore" | "delete") {
     const rows = tickedRows;
@@ -370,15 +402,27 @@ export function FilesLibraryView({
                   ) : null}
                 </>
               ) : (
-                <button
-                  className="button"
-                  type="button"
-                  style={{ background: "var(--danger)", borderColor: "var(--danger)" }}
-                  disabled={busy || tickedRows.length === 0}
-                  onClick={() => void runBulk("trash")}
-                >
-                  {t("Move selected to trash")}
-                </button>
+                <>
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={busy || tickedRows.length === 0}
+                    onClick={() => void downloadTicked()}
+                  >
+                    {downloading ? t("Preparing…") : t("Download selected (ZIP)")}
+                  </button>
+                  {canTrashTicked ? (
+                    <button
+                      className="button"
+                      type="button"
+                      style={{ background: "var(--danger)", borderColor: "var(--danger)" }}
+                      disabled={busy || tickedRows.length === 0}
+                      onClick={() => void runBulk("trash")}
+                    >
+                      {t("Move selected to trash")}
+                    </button>
+                  ) : null}
+                </>
               )}
               <button
                 className="button secondary"

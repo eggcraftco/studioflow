@@ -11,6 +11,7 @@ import { WEB_SMALL_FIXES_TRANSLATIONS } from "./webSmallFixesTranslations";
 import { NOTIFICATION_SETTINGS_TRANSLATIONS } from "./notificationSettingsTranslations";
 import { ORDER_LIST_VIEW_TRANSLATIONS } from "./orderListViewTranslations";
 import { FILES_NOTES_ACCOUNT_TRANSLATIONS } from "./filesNotesAccountTranslations";
+import { FILES_BULK_DOWNLOAD_TRANSLATIONS } from "./filesBulkDownloadTranslations";
 import { SALES_STORES_TRANSLATIONS } from "./salesStoresTranslations";
 import { WOO_STORES_TRANSLATIONS } from "./wooStoresTranslations";
 import { ETSY_ROUND_TWO_TRANSLATIONS } from "./etsyRoundTwoTranslations";
@@ -9532,6 +9533,9 @@ mergeMissingIntoTranslations(STORAGE_TRANSLATIONS);
 mergeMissingIntoTranslations(ACCOUNTING_POSTING_TRANSLATIONS);
 // Language audit (2 Nov 2026): texts the web drew in English in at least one language. Gaps only.
 mergeMissingIntoTranslations(LANGUAGE_AUDIT_TRANSLATIONS);
+// "Download selected (ZIP)" on the Files page (4 Nov 2026). Gaps only, so "Could not download files." keeps any
+// wording another table already gives it.
+mergeMissingIntoTranslations(FILES_BULK_DOWNLOAD_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

@@ -45,6 +45,62 @@ export async function downloadClientFilesZip(params: {
   setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
 }
 
+/** One ticked file: an order's attachment, or a library record. */
+export type FilesDownloadItem =
+  | { orderId: string; fileId?: string; ref?: string }
+  | { libraryFileId: string };
+
+export type FilesDownloadOutcome = {
+  count: number;
+  totalBytes: number;
+  zipName: string;
+  skipped: { fileName: string; reason: string }[];
+};
+
+/** What the server's refusal means, as a sentence the page translates. */
+export function filesDownloadProblem(error: unknown): string {
+  const details = (error as { details?: { reason?: string; skipped?: { reason?: string }[] } } | null)?.details;
+  const reason = details?.reason ?? "";
+  if (reason === "too_large") return "The selection is larger than 2 GB. Select fewer files and download them in parts.";
+  if (reason === "too_many") return "Select at most 500 files at a time.";
+  if (reason === "nothing_to_download") {
+    return (details?.skipped ?? []).some(row => row.reason === "being_checked")
+      ? "Some files are still being checked by the safety scan. Try again in a minute."
+      : "None of the selected files can be downloaded right now.";
+  }
+  return "Could not download files.";
+}
+
+/**
+ * "Download selected (ZIP)" (4 Nov 2026). The server decides, per file, what
+ * this member may have and what the safety scan has cleared, and answers with
+ * a single-use link that lives five minutes. The link is opened as a plain
+ * navigation, so the browser streams the ZIP to disk itself — a 2 GB
+ * selection never has to fit in this tab's memory, which the older
+ * fetch-then-blob ZIP above needs.
+ */
+export async function downloadSelectedFilesZip(params: {
+  workspaceId: string;
+  items: FilesDownloadItem[];
+}): Promise<FilesDownloadOutcome> {
+  const prepare = httpsCallable<
+    { companyId: string; items: FilesDownloadItem[] },
+    FilesDownloadOutcome & { ok: boolean; url: string; expiresAtMs: number }
+  >(functions, "prepareFilesDownload");
+  // Not through withWebSyncStatus: nothing is being saved, and "Saved to cloud."
+  // after a download would say something untrue.
+  const result = await prepare({ companyId: params.workspaceId, items: params.items });
+  const data = result.data;
+  const anchor = document.createElement("a");
+  anchor.href = data.url;
+  anchor.rel = "noopener noreferrer";
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  return { count: data.count, totalBytes: data.totalBytes, zipName: data.zipName, skipped: data.skipped ?? [] };
+}
+
 const ALLOWED_CLIENT_FILE_EXTENSIONS = new Set(["pdf", "jpg", "jpeg", "png", "heic", "heif", "webp", "psd", "psb", "zip"]);
 
 export const CLIENT_FILE_ACCEPT = [
