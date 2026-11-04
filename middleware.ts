@@ -21,9 +21,12 @@ import { PUBLIC_LOCALE_HEADER, splitPublicLocalePath } from "@/lib/publicSite/lo
 export function middleware(request: NextRequest) {
   const englishPrefix = request.nextUrl.pathname.match(/^\/en(\/.*)?$/);
   if (englishPrefix) {
-    const url = request.nextUrl.clone();
-    url.pathname = englishPrefix[1] || "/";
-    return NextResponse.redirect(url, 308);
+    // A relative Location, like Next's own trailing-slash redirect: behind Cloud Run's load balancer the server's
+    // own URL carries its internal host and port, so an absolute one built from nextUrl could point there.
+    return new NextResponse(null, {
+      status: 308,
+      headers: { Location: `${englishPrefix[1] || "/"}${request.nextUrl.search}` }
+    });
   }
 
   const nonce = createCspNonce();

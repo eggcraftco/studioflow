@@ -32,6 +32,8 @@ import { PUBLIC_SEO_COPY } from "../lib/publicSite/seoCopy";
 import { localizedPublicPageMetadata, publicPageMetadata } from "../lib/publicSite/metadata";
 import { PUBLIC_SITE_EN } from "../lib/publicSite/translations";
 import { SUPPORTED_STUDIO_LANGUAGES } from "../lib/studioflow/language";
+import { NextRequest } from "next/server";
+import { middleware as runMiddleware } from "../middleware";
 import * as sitemapModule from "../app/sitemap";
 import * as robotsModule from "../app/robots";
 
@@ -178,8 +180,19 @@ check(structured.includes("/^faq\\.q(\\d+)\\.title$/"), "structuredData.tsx buil
 // 6. Wiring and helpers.
 const middleware = read("middleware.ts");
 check(/PUBLIC_LOCALE_HEADER/.test(middleware) && /requestHeaders\.delete\(PUBLIC_LOCALE_HEADER\)/.test(middleware), "middleware: sets the language header, drops a client-sent one");
-check(/\^\\\/en\(\\\/\.\*\)\?\$/.test(middleware) && /NextResponse\.redirect\(url, 308\)/.test(middleware), "middleware: /en and /en/… → 308 to the English address");
+check(/\^\\\/en\(\\\/\.\*\)\?\$/.test(middleware) && /status: 308/.test(middleware) && /Location: `\$\{englishPrefix\[1\] \|\| "\/"\}/.test(middleware),
+  "middleware: /en and /en/… → 308 to the English address, relative Location");
 check(!/geo|x-vercel-ip-country|cf-ipcountry|accept-language/i.test(middleware), "middleware: no country or Accept-Language redirect");
+// The middleware itself, as Cloud Run runs it (its own URL is the container's 0.0.0.0:8080, not nivadesk.app).
+const mw = (url: string) => runMiddleware(new NextRequest(`https://0.0.0.0:8080${url}`, { headers: { "x-nivadesk-public-locale": "zz" } }));
+for (const [from, to] of [["/en", "/"], ["/en/pricing?ref=x", "/pricing?ref=x"], ["/en/guide", "/guide"]] as const) {
+  const res = mw(from);
+  check(res.status === 308 && res.headers.get("location") === to, `middleware ${from} → 308 ${to} (got ${res.status} ${res.headers.get("location")})`);
+}
+for (const [path, code] of [["/de/pricing", "de"], ["/hi", "hi"], ["/pricing", null], ["/enterprise", null], ["/design", null]] as const) {
+  const forwarded = mw(path).headers.get("x-middleware-request-x-nivadesk-public-locale");
+  check(forwarded === code, `middleware ${path}: language header ${code ?? "absent"} (client's "zz" dropped; got ${forwarded})`);
+}
 check(/^\s*htmlLimitedBots: \/\.\*\/,/m.test(read("next.config.ts")), "next.config: metadata in <head> for every user agent, Googlebot included");
 check(/PUBLIC_LOCALE_HEADER/.test(read("app/layout.tsx")) && /lang=\{publicLocale\?\.htmlLang \?\? "en"\}/.test(read("app/layout.tsx")), "<html lang> follows the language address");
 for (const f of ["components/PublicMarketing.tsx", "app/integrations/IntegrationsDirectory.tsx", "app/integrations/amazon/AmazonSellerPage.tsx",
