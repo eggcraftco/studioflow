@@ -27,16 +27,18 @@
   list-style: none;
 }
 
-.link {
+/* Two classes, so the footer's own `.public-footer nav a` (bold, muted) does not win over the row. */
+.languages .link {
   color: var(--cream-ink, #251d1a);
+  font-weight: 400;
   text-decoration: none;
 }
 
-.link:hover {
+.languages .link:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.link[aria-current="true"] {
+.languages .link[aria-current="true"] {
   font-weight: 700;
 }
