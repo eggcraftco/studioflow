@@ -65,10 +65,32 @@ export function isLatestForPlatform(entry: ChangelogEntry, list: ChangelogEntry[
 export const CHANGELOG_LAST_UPDATED = "2 November 2026";
 
 export const CHANGELOG: ChangelogEntry[] = [
+  // 2.4 (Apple, iPhone & iPad) — from the App Store "What's New" that was entered, read back from the public App Store
+  // record (itunes lookup, gb + us, 4 Nov 2026: version 2.4, currentVersionReleaseDate 2026-11-02T21:39:46Z; same text as
+  // ~/Developer/nivadesk-deploy-2026-11-01/store-2.4/notes-2.4.md en-GB) for native-2.4-release-2026-11-01, build 34.
+  // The macOS 2.4 build was still In Review (Mac 2.3 live) when this was added: once it is released, change `platform`
+  // to "iPhone, iPad & Mac" and add the Mac release day to `highlight` — keep version and anchor (#apple-2.4) as they are.
+  {
+    version: "2.4",
+    platformKey: "apple",
+    platform: "iPhone & iPad",
+    date: "2 November 2026",
+    highlight: "Orders open in the new Sections view, a delivery address for labels, and the Calendar. Released to the App Store for iPhone and iPad on 2 November 2026.",
+    changes: [
+      { tag: "new", text: "Orders: an order now opens in the new Sections view — one column of headings, all closed, each opening with a tap. The jump bar takes you straight to a heading, and Expand all / Collapse all opens or closes every section at once. Cards stays available as the second view, and the view you pick is your own and follows you to your other devices." },
+      { tag: "new", text: "Order header: a status strip shows each production step, the days left to delivery and, if you can see finances, the order value with its profit and how much has been paid — in both views." },
+      { tag: "new", text: "Delivery address: add or edit an order's delivery address under Shipping & Tracking, also on orders you created by hand; shipping labels use this address. \"Use customer address\" copies the customer's address in and puts a UK postcode and town into Postcode and City. View Only members see the address read only." },
+      { tag: "new", text: "Calendar: a new Calendar in the menu for meetings, tasks, daily notes, work days and times you are unavailable — just for you, for people you choose or for the whole workspace. The Day, Week, Month and Agenda views also show your orders' due dates, and reminders arrive in the bell." },
+      { tag: "new", text: "Google Calendar and Outlook: in Calendar, press Your other calendars to connect your own calendar and see its meetings beside your work — read only, and only you can see them. A new Calendar tile in Settings ▸ Integrations shows whether you are connected." },
+      { tag: "new", text: "Cloud storage: the workspace owner can connect Google Drive in Settings ▸ Integrations ▸ Cloud storage; new order files are then saved in your Drive and opened from there (Pro and Team plans)." },
+      { tag: "improved", text: "Sign-in: NivaDesk no longer keeps your password itself — your device's Password AutoFill can save it instead." },
+      { tag: "fixed", text: "Smaller fixes and translations." },
+    ],
+  },
   // 2.4 (Android) — from the Play notes that were entered (~/Developer/nivadesk-deploy-2026-11-01/store-2.4/play-notes-2.4.txt,
   // en-GB) for native-2.4-release-2026-11-01 @7de677bde, vc22. Play Console: production "22 (2.4)", last published
   // 1 November 2026, managed publishing off (read 2 Nov 2026). Apple 2.4 was still in review: its entry follows on its
-  // own release day.
+  // own release day (added 4 Nov, above).
   {
     version: "2.4",
     platformKey: "android",

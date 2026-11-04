@@ -140,7 +140,7 @@ const facts = { setupFinished: false, hasCustomer: false, hasOrder: false, hasSt
   });
   await check("6.2 each platform's newest entry is its 'Latest', dated, with real changes", () => {
     const latest = changelog.CHANGELOG.filter((entry) => changelog.isLatestForPlatform(entry)).map((entry) => changelog.changelogAnchor(entry));
-    assert.deepEqual(latest, ["android-2.4", "apple-2.3", "all-0.1.3"]);
+    assert.deepEqual(latest, ["apple-2.4", "android-2.4", "all-0.1.3"]);
     for (const entry of changelog.CHANGELOG) {
       assert.match(entry.date, /\d{4}/, entry.version);
       assert.ok(entry.changes.length > 0, entry.version);
