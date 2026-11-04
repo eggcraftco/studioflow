@@ -318,6 +318,20 @@ export function OrderShipmentsPanel({
                   </div>
                 ) : null}
 
+                {shipment.pickup ? (
+                  // A DHL courier booked with the label (DHL-10): the day, the window and DHL's number for it.
+                  <div className="shipment-facts" data-testid="pickup-booked">
+                    <span>
+                      {shipment.pickup.dispatchConfirmationNumber ? t("DHL courier booked:") : t("DHL courier requested:")}{" "}
+                      {[shipment.pickup.date ? new Date(`${shipment.pickup.date}T12:00:00Z`).toLocaleDateString(studioLocaleTag(language), { day: "numeric", month: "short", timeZone: "UTC" }) : "", shipment.pickup.readyTime && shipment.pickup.closeTime ? `${shipment.pickup.readyTime}–${shipment.pickup.closeTime}` : ""].filter(Boolean).join(" · ")}
+                    </span>
+                    {shipment.pickup.dispatchConfirmationNumber
+                      ? <span>{t("Pickup number")} <strong className="shipment-mono">{shipment.pickup.dispatchConfirmationNumber}</strong></span>
+                      // DHL's answer was lost (the shipment was found by its reference): the courier may be booked.
+                      : <span className="shipment-muted">{t("DHL's pickup number did not come back. Check the pickup in MyDHL+ before booking another.")}</span>}
+                  </div>
+                ) : null}
+
                 {editable && can?.prepare && connected ? (
                   <p className="shipment-note">
                     {issues.length > 0

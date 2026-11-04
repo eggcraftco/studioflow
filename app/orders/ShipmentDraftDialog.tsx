@@ -15,10 +15,19 @@
 //   access). Others see why the section is closed.
 // - The label is requested once per click. A lost answer is "unknown" and is
 //   searched for by reference on the order; this dialog never sends twice.
+// - DHL-10 (4 Nov 2026, the owner's comparison with MyDHL+): the phone's country
+//   code is chosen beside the number; the company is the person's name unless one
+//   is typed (DHL needs one on every label); the currency is picked from DHL's
+//   list, the sender's country's first, and amounts show its mark and the reader's
+//   grouping; a courier can be booked with the label, with the latest collection
+//   time; incoterms carry their names.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { DHL_COUNTRIES, dhlCountryName } from "@/lib/studioflow/dhlCountries";
+import { currencyChoices, currencyMark, currencyName, dhlCountryCurrency } from "@/lib/studioflow/dhlCurrencies";
+import { callingCodeFor, composePhone, splitPhone } from "@/lib/studioflow/dhlPhone";
+import { amountText, formatMoney, readAmount } from "@/lib/studioflow/customsAmount";
 import {
   EXPORT_REASONS,
   QUANTITY_UNITS,
@@ -56,6 +65,12 @@ type ItemInput = {
 };
 
 const DHL_INCOTERMS = ["DAP", "DDP", "EXW", "FCA", "CPT", "CIP", "DPU", "FAS", "FOB", "CFR", "CIF"];
+// The ICC's Incoterms® 2020 names, shown beside each code as MyDHL+ does.
+const INCOTERM_NAMES: Record<string, string> = {
+  DAP: "Delivered at Place", DDP: "Delivered Duty Paid", EXW: "Ex Works", FCA: "Free Carrier", CPT: "Carriage Paid To",
+  CIP: "Carriage and Insurance Paid To", DPU: "Delivered at Place Unloaded", FAS: "Free Alongside Ship", FOB: "Free on Board",
+  CFR: "Cost and Freight", CIF: "Cost, Insurance and Freight"
+};
 const IMPLIED_INCOTERM: Record<string, string> = { receiver: "DAP", sender: "DDP" };
 
 // DHL's price in its own currency (the account's billing currency), in the reader's number format.
@@ -135,6 +150,14 @@ export function ShipmentDraftDialog({
     kind: (draft.recipient?.kind ?? "") as "" | "business" | "consumer",
     vat: (draft.recipient?.registrationNumbers ?? []).find(r => String(r.typeCode).toUpperCase() === "VAT")?.number ?? ""
   }));
+  // The phone as MyDHL+ asks for it: the country code chosen beside the number ("+44" · "7700 900123").
+  const [phone, setPhone] = useState(() => splitPhone(draft.recipient?.phone ?? "", draft.recipient?.address?.countryCode ?? ""));
+  // DHL needs a company on every label; a private person's own name is what it expects there. Stored
+  // empty (the server sends the name), so the EU consumer rule still reads "no company".
+  const [noCompany, setNoCompany] = useState(() => {
+    const company = String(draft.recipient?.companyName ?? "").trim().toLowerCase();
+    return !company || company === String(draft.recipient?.fullName ?? "").trim().toLowerCase();
+  });
   const [pieces, setPieces] = useState<PieceInput[]>(() => {
     const list = (draft.pieces ?? []).map(p => ({ weight: asInput(p.weight), length: asInput(p.length), width: asInput(p.width), height: asInput(p.height) }));
     return list.length ? list : [{ weight: "", length: "", width: "", height: "" }];
@@ -142,18 +165,28 @@ export function ShipmentDraftDialog({
   const [contents, setContents] = useState(draft.contentsDescription ?? "");
   const [plannedDate, setPlannedDate] = useState(draft.planned?.date ?? "");
   const [plannedTime, setPlannedTime] = useState(draft.planned?.time ?? "10:00");
+  // A DHL courier booked with the label (DHL-10): from the ready time until the close time.
+  const [pickup, setPickup] = useState(() => ({
+    requested: draft.pickup?.requested === true,
+    closeTime: draft.pickup?.closeTime || "17:00",
+    location: draft.pickup?.location ?? "",
+    instructions: draft.pickup?.instructions ?? ""
+  }));
   const [productCode, setProductCode] = useState(draft.service?.productCode ?? "");
   const [declarable, setDeclarable] = useState<boolean | null>(typeof customsView.declarable === "boolean" ? customsView.declarable : null);
   const [dutiesPayer, setDutiesPayer] = useState<"" | "receiver" | "sender">(customsView.dutiesPayer ?? "");
   const [incoterm, setIncoterm] = useState(customsView.incoterm ?? "");
-  const [declaredValue, setDeclaredValue] = useState(asInput(customsView.declaredValue ?? null));
-  const [currency, setCurrency] = useState(customsView.currency ?? "");
+  // The sender's country's currency in DHL's list is offered first and fills an empty draft.
+  const senderCurrency = dhlCountryCurrency(String(draft.shipper?.address?.countryCode ?? ""));
+  const [currency, setCurrency] = useState(() => (customsView.currency || senderCurrency).toUpperCase());
+  // Money fields keep the text as typed; they show the value with the reader's grouping once left.
+  const [declaredValue, setDeclaredValue] = useState(() => amountText(customsView.declaredValue ?? null, customsView.currency || senderCurrency, locale));
   const [exportReason, setExportReason] = useState(customsView.exportReasonType ?? "");
   const [shipmentType, setShipmentType] = useState<"" | "personal" | "commercial">(customsView.shipmentType ?? "");
   const [invoiceNumber, setInvoiceNumber] = useState(customsView.invoice?.number ?? "");
   const [invoiceDate, setInvoiceDate] = useState(customsView.invoice?.date ?? "");
   const [items, setItems] = useState<ItemInput[]>(() => (customsView.items ?? []).map((i: CustomsItem) => ({
-    description: i.description ?? "", quantity: asInput(i.quantity), quantityUnit: i.quantityUnit || "PCS", unitValue: asInput(i.unitValue),
+    description: i.description ?? "", quantity: asInput(i.quantity), quantityUnit: i.quantityUnit || "PCS", unitValue: amountText(i.unitValue, customsView.currency || senderCurrency, locale),
     hsCode: i.hsCode ?? "", manufacturerCountry: i.manufacturerCountry ?? "", netWeight: asInput(i.netWeight), grossWeight: asInput(i.grossWeight),
     merchantProductId: i.merchantProductId ?? "", manufacturerProductId: i.manufacturerProductId ?? "", standardProductId: i.standardProductId ?? "",
     ddsReference: i.ddsReference ?? "", taricDocumentCode: i.taricDocumentCode ?? "", standardProductIdAbsent: i.standardProductIdAbsent === true
@@ -237,6 +270,10 @@ export function ShipmentDraftDialog({
   // Another country, or Great Britain ↔ Northern Ireland (a BT postcode): DHL treats both as customs routes.
   const international = needsCustomsChoice(fromCountry, String(shipper.address?.postalCode ?? ""), recipient.countryCode, recipient.postalCode);
   const declaring = international && declarable === true;
+  // A server from before DHL-10 neither shows nor keeps a pickup on the draft: the choice is offered
+  // only when the draft comes back with its pickup field (null or the booking).
+  const pickupSupported = draft.pickup !== undefined;
+  const pickupTimesWrong = pickup.requested && /^\d{2}:\d{2}$/.test(plannedTime) && /^\d{2}:\d{2}$/.test(pickup.closeTime) && pickup.closeTime <= plannedTime;
 
   const change = <T,>(setter: (value: T) => void, { customs = false } = {}) => (value: T) => {
     setter(value);
@@ -248,18 +285,30 @@ export function ShipmentDraftDialog({
     () => DHL_COUNTRIES.map(([code]) => ({ code, name: dhlCountryName(code, locale) })).sort((a, b) => a.name.localeCompare(b.name, locale)),
     [locale]
   );
+  const phoneCountries = useMemo(() => countries.map(country => ({ ...country, calling: callingCodeFor(country.code) })).filter(country => country.calling), [countries]);
 
+  const amount = (raw: string) => readAmount(raw, currency, locale);
+  // DHL's collection hours for the chosen service on the shipping date (from "Show DHL services").
+  const chosenWindow = products?.outcome === "found" ? products.products.find(p => p.productCode === productCode)?.pickupWindow ?? null : null;
+  const pickupOutsideWindow = Boolean(pickup.requested && chosenWindow && (
+    (chosenWindow.latest && plannedTime > chosenWindow.latest) || (chosenWindow.earliest && pickup.closeTime < chosenWindow.earliest)
+  ));
   const lineTotalCents = items.reduce((sum, item) => {
     const quantity = asNumber(item.quantity);
-    const value = asNumber(item.unitValue);
+    const value = amount(item.unitValue).value;
     return quantity !== null && value !== null ? sum + Math.round(quantity * value * 100) : sum;
   }, 0);
-  const declaredCents = asNumber(declaredValue) === null ? null : Math.round((asNumber(declaredValue) as number) * 100);
+  const declaredAmount = amount(declaredValue).value;
+  const declaredCents = declaredAmount === null ? null : Math.round(declaredAmount * 100);
+  // MyDHL+'s summary under the lines: units beside the value.
+  const totalUnits = items.reduce((sum, item) => sum + (asNumber(item.quantity) ?? 0), 0);
+  const currencyList = useMemo(() => currencyChoices(fromCountry, currency), [fromCountry, currency]);
+  const mark = currency ? currencyMark(currency, locale) : "";
 
   function buildPatch(): ShipmentDraftPatch {
     const patch: ShipmentDraftPatch = {
       recipient: {
-        fullName: recipient.fullName, companyName: recipient.companyName, phone: recipient.phone, email: etsyOrder ? "" : recipient.email,
+        fullName: recipient.fullName, companyName: noCompany ? "" : recipient.companyName, phone: composePhone(phone.country, phone.national), email: etsyOrder ? "" : recipient.email,
         kind: recipient.kind,
         // The VAT number typed here replaces any VAT on the draft; other registrations stay as they were.
         registrationNumbers: [
@@ -274,6 +323,7 @@ export function ShipmentDraftDialog({
       pieces: pieces.map(p => ({ weight: asNumber(p.weight), length: asNumber(p.length), width: asNumber(p.width), height: asNumber(p.height) })),
       contentsDescription: contents,
       planned: { date: plannedDate, time: plannedTime },
+      pickup: { requested: pickup.requested, closeTime: pickup.closeTime, location: pickup.location, instructions: pickup.instructions },
       service: { productCode }
     };
     // Customs are sent only by someone who may declare them; the server refuses
@@ -283,14 +333,15 @@ export function ShipmentDraftDialog({
         declarable,
         dutiesPayer,
         incoterm,
-        declaredValue: asNumber(declaredValue),
+        declaredValue: amount(declaredValue).value,
         currency: currency.trim().toUpperCase(),
         exportReasonType: exportReason,
         shipmentType,
         invoice: { number: invoiceNumber, date: invoiceDate },
         items: items.map(item => ({
-          description: item.description, quantity: asNumber(item.quantity), quantityUnit: item.quantityUnit, unitValue: asNumber(item.unitValue),
-          hsCode: item.hsCode, manufacturerCountry: item.manufacturerCountry, netWeight: asNumber(item.netWeight), grossWeight: asNumber(item.grossWeight),
+          description: item.description, quantity: asNumber(item.quantity), quantityUnit: item.quantityUnit, unitValue: amount(item.unitValue).value,
+          // MyDHL+ asks for one weight; DHL takes either. A gross weight left empty is the net weight.
+          hsCode: item.hsCode, manufacturerCountry: item.manufacturerCountry, netWeight: asNumber(item.netWeight), grossWeight: asNumber(item.grossWeight) ?? asNumber(item.netWeight),
           merchantProductId: item.merchantProductId, manufacturerProductId: item.manufacturerProductId, standardProductId: item.standardProductId,
           ddsReference: item.ddsReference, taricDocumentCode: item.taricDocumentCode,
           standardProductIdAbsent: !item.standardProductId.trim() && item.standardProductIdAbsent
@@ -453,7 +504,42 @@ export function ShipmentDraftDialog({
     </select>
   );
 
-  const money = (cents: number) => `${(cents / 100).toFixed(2)}${currency ? ` ${currency.toUpperCase()}` : ""}`;
+  const money = (cents: number) => formatMoney(cents / 100, currency, locale);
+  const incotermLabel = (code: string) => (INCOTERM_NAMES[code] ? `${code} – ${t(INCOTERM_NAMES[code])}` : code);
+
+  // A new currency re-reads what was typed: "1.750" is 1750 in a currency with no decimals.
+  function changeCurrency(next: string) {
+    const reformat = (raw: string) => {
+      const read = readAmount(raw, currency, locale);
+      return read.value === null ? raw : amountText(read.value, next, locale);
+    };
+    setItems(current => current.map(item => ({ ...item, unitValue: reformat(item.unitValue) })));
+    setDeclaredValue(current => reformat(current));
+    change(setCurrency, { customs: true })(next);
+  }
+
+  // A money field: the currency's mark beside it, the text as typed, and the value regrouped once left.
+  const moneyInput = (value: string, onChange: (next: string) => void, testId: string) => {
+    const read = amount(value);
+    return (
+      <>
+        <span className="shipment-money">
+          {mark ? <span className="shipment-money-mark" aria-hidden="true">{mark}</span> : null}
+          <input
+            className="input"
+            inputMode="decimal"
+            value={value}
+            data-testid={testId}
+            aria-invalid={read.error ? true : undefined}
+            onChange={e => onChange(e.target.value)}
+            onBlur={() => { if (read.value !== null) onChange(amountText(read.value, currency, locale)); }}
+          />
+          {currency ? <span className="shipment-money-code">{currency}</span> : null}
+        </span>
+        {read.error ? <small className="shipment-error">{t(read.error)}</small> : null}
+      </>
+    );
+  };
 
   return (
     <div className="inventory-modal-backdrop" role="presentation">
@@ -502,10 +588,34 @@ export function ShipmentDraftDialog({
           <div className="inventory-form">
             <label className="inventory-field"><span>{t("Full name")}</span>
               <input className="input" value={recipient.fullName} onChange={e => change(setRecipient)({ ...recipient, fullName: e.target.value })} /></label>
-            <label className="inventory-field"><span>{t("Company (optional)")}</span>
-              <input className="input" value={recipient.companyName} onChange={e => change(setRecipient)({ ...recipient, companyName: e.target.value })} /></label>
-            <label className="inventory-field"><span>{t("Phone")}</span>
-              <input className="input" type="tel" value={recipient.phone} onChange={e => change(setRecipient)({ ...recipient, phone: e.target.value })} /></label>
+            <div className="inventory-field">
+              <label htmlFor={`company-${shipment.id}`}><span>{t("Company")}</span></label>
+              <input
+                id={`company-${shipment.id}`}
+                className="input"
+                value={noCompany ? recipient.fullName : recipient.companyName}
+                disabled={noCompany}
+                placeholder={noCompany ? "" : t("Company name")}
+                onChange={e => change(setRecipient)({ ...recipient, companyName: e.target.value })}
+              />
+              <label className="inventory-check shipment-inline-check">
+                <input type="checkbox" checked={noCompany} onChange={e => change(setNoCompany)(e.target.checked)} />
+                {t("Not a company: use the recipient's name")}
+              </label>
+            </div>
+            <div className="inventory-field">
+              <label htmlFor={`phone-${shipment.id}`}><span>{t("Phone")}</span></label>
+              <div className="shipment-phone">
+                <select className="input" value={phone.country} aria-label={t("Country code")} onChange={e => change(setPhone)({ ...phone, country: e.target.value })}>
+                  <option value="">{t("Code…")}</option>
+                  {phoneCountries.map(country => <option key={country.code} value={country.code}>{`${country.name} +${country.calling}`}</option>)}
+                </select>
+                <input id={`phone-${shipment.id}`} className="input" type="tel" inputMode="tel" value={phone.national} onChange={e => change(setPhone)({ ...phone, national: e.target.value })} />
+              </div>
+              {composePhone(phone.country, phone.national) ? (
+                <small className="shipment-muted" data-testid="phone-for-dhl">{t("DHL gets:")} <code className="shipment-mono" dir="ltr">{composePhone(phone.country, phone.national)}</code></small>
+              ) : null}
+            </div>
             {etsyOrder ? (
               <p className="inventory-field shipment-muted" data-etsy-compliance="dhl-email" role="note">{t(ETSY_DHL_EMAIL_NOTE)}</p>
             ) : (
@@ -523,7 +633,12 @@ export function ShipmentDraftDialog({
             <label className="inventory-field"><span>{t("State or province code (optional)")}</span>
               <input className="input" value={recipient.provinceCode} onChange={e => change(setRecipient)({ ...recipient, provinceCode: e.target.value })} /></label>
             <label className="inventory-field"><span>{t("Country")}</span>
-              {countrySelect(recipient.countryCode, code => { change(setRecipient)({ ...recipient, countryCode: code }); setProducts(null); }, t("Country"))}</label>
+              {countrySelect(recipient.countryCode, code => {
+                change(setRecipient)({ ...recipient, countryCode: code });
+                // The phone's code follows the country until someone picks another one for it.
+                if (!phone.country || phone.country === recipient.countryCode) setPhone(current => ({ ...current, country: code }));
+                setProducts(null);
+              }, t("Country"))}</label>
             <label className="inventory-field"><span>{t("Recipient type")}</span>
               <select className="input" value={recipient.kind} onChange={e => change(setRecipient, { customs: true })({ ...recipient, kind: e.target.value as "" | "business" | "consumer" })}>
                 <option value="">{t("Automatic (from the details above)")}</option>
@@ -533,6 +648,7 @@ export function ShipmentDraftDialog({
             <label className="inventory-field"><span>{t("Recipient's VAT number (businesses only)")}</span>
               <input className="input" value={recipient.vat} onChange={e => change(setRecipient, { customs: true })({ ...recipient, vat: e.target.value })} /></label>
           </div>
+          <p className="shipment-muted">{t("DHL needs a company name on every label. For a private person it is their own name, as in MyDHL+.")}</p>
           {recipientKindNote ? <p className="shipment-muted" data-testid="recipient-kind-note">{recipientKindNote}</p> : null}
         </section>
 
@@ -601,10 +717,10 @@ export function ShipmentDraftDialog({
                         {can.overrideIncoterm ? (
                           <select className="input" value={incoterm} onChange={e => change(setIncoterm, { customs: true })(e.target.value)}>
                             <option value="">{t("Choose…")}</option>
-                            {DHL_INCOTERMS.map(code => <option key={code} value={code}>{code}</option>)}
+                            {DHL_INCOTERMS.map(code => <option key={code} value={code}>{incotermLabel(code)}</option>)}
                           </select>
                         ) : (
-                          <input className="input" value={incoterm || "—"} readOnly />
+                          <input className="input" value={incoterm ? incotermLabel(incoterm) : "—"} readOnly />
                         )}
                       </label>
                       <label className="inventory-field"><span>{t("Shipment type")}</span>
@@ -620,8 +736,13 @@ export function ShipmentDraftDialog({
                           {EXPORT_REASONS.map(reason => <option key={reason.value} value={reason.value}>{t(reason.label)}</option>)}
                         </select>
                       </label>
-                      <label className="inventory-field"><span>{t("Currency (3 letters)")}</span>
-                        <input className="input" maxLength={3} value={currency} onChange={e => change(setCurrency, { customs: true })(e.target.value.toUpperCase())} placeholder="GBP" /></label>
+                      <label className="inventory-field"><span>{t("Currency")}</span>
+                        <select className="input" value={currency} onChange={e => changeCurrency(e.target.value)} data-testid="customs-currency">
+                          <option value="">{t("Choose…")}</option>
+                          {currencyList.map(code => <option key={code} value={code}>{`${code} · ${currencyName(code, locale)}`}</option>)}
+                        </select>
+                        {senderCurrency && currency === senderCurrency ? <small className="shipment-muted">{t("From the sender's country. Change it if the invoice is in another currency.")}</small> : null}
+                      </label>
                       <label className="inventory-field"><span>{t("Invoice number")}</span>
                         <input className="input" value={invoiceNumber} onChange={e => change(setInvoiceNumber, { customs: true })(e.target.value)} placeholder={orderReference} /></label>
                       <label className="inventory-field"><span>{t("Invoice date")}</span>
@@ -649,7 +770,7 @@ export function ShipmentDraftDialog({
                             {QUANTITY_UNITS.map(unit => <option key={unit.value} value={unit.value}>{t(unit.label)}</option>)}
                           </select></label>
                         <label className="inventory-field"><span>{t("Value of one")}</span>
-                          <input className="input" type="number" min="0" step="any" inputMode="decimal" value={item.unitValue} onChange={e => updateItem(index, "unitValue", e.target.value)} /></label>
+                          {moneyInput(item.unitValue, value => updateItem(index, "unitValue", value), `unit-value-${index}`)}</label>
                         <label className="inventory-field"><span>{t("HS code")}</span>
                           <input className="input" value={item.hsCode} onChange={e => updateItem(index, "hsCode", e.target.value)} placeholder="9114.30" /></label>
                         <label className="inventory-field"><span>{t("Made in")}</span>
@@ -657,9 +778,12 @@ export function ShipmentDraftDialog({
                         <label className="inventory-field"><span>{t("Net weight (kg)")}</span>
                           <input className="input" type="number" min="0" step="any" inputMode="decimal" value={item.netWeight} onChange={e => updateItem(index, "netWeight", e.target.value)} /></label>
                         <label className="inventory-field"><span>{t("Gross weight (kg)")}</span>
-                          <input className="input" type="number" min="0" step="any" inputMode="decimal" value={item.grossWeight} onChange={e => updateItem(index, "grossWeight", e.target.value)} /></label>
+                          <input className="input" type="number" min="0" step="any" inputMode="decimal" value={item.grossWeight} placeholder={item.netWeight} onChange={e => updateItem(index, "grossWeight", e.target.value)} />
+                          {!item.grossWeight.trim() && item.netWeight.trim() ? <small className="shipment-muted">{t("Left empty, the net weight is used.")}</small> : null}</label>
                         <div className="shipment-subhead is-wide">{t("Product codes")}</div>
-                        {!productIdsRequired ? <p className="shipment-muted is-wide">{t("Needed on shipments to consumers in the EU from 1 November 2026. Optional here.")}</p> : null}
+                        {productIdsRequired
+                          ? <p className="shipment-muted is-wide" data-testid="product-codes-why">{t("* Required by EU customs: from 1 November 2026, every line of a consumer shipment into the EU needs at least your product code and the manufacturer's product code (EU rule 2026/1022). DHL asks for them on every such shipment, whatever its value. MyDHL+ shows the same fields without a star.")}</p>
+                          : <p className="shipment-muted is-wide">{t("Needed on shipments to consumers in the EU from 1 November 2026. Optional here.")}</p>}
                         {productIdSuggestions.length > 0 ? (
                           <label className="inventory-field is-wide"><span>{t("Copy codes from…")}</span>
                             <select className="input" value="" onChange={e => { const chosen = productIdSuggestions[Number(e.target.value)]; if (chosen) applySuggestion(index, chosen); }}>
@@ -668,11 +792,14 @@ export function ShipmentDraftDialog({
                             </select></label>
                         ) : null}
                         <label className="inventory-field"><span>{t("Your product code (SKU)")}{productIdsRequired ? " *" : ""}</span>
-                          <input className="input" value={item.merchantProductId} onChange={e => updateItem(index, "merchantProductId", e.target.value)} /></label>
+                          <input className="input" value={item.merchantProductId} onChange={e => updateItem(index, "merchantProductId", e.target.value)} />
+                          <small className="shipment-muted">{t("In MyDHL+: {name}").replace("{name}", "Merchant Product ID")}</small></label>
                         <label className="inventory-field"><span>{t("Manufacturer's product code")}{productIdsRequired ? " *" : ""}</span>
-                          <input className="input" value={item.manufacturerProductId} onChange={e => updateItem(index, "manufacturerProductId", e.target.value)} /></label>
+                          <input className="input" value={item.manufacturerProductId} onChange={e => updateItem(index, "manufacturerProductId", e.target.value)} />
+                          <small className="shipment-muted">{t("In MyDHL+: {name}").replace("{name}", "Non-standardized Manufacturer Product ID")}</small></label>
                         <label className="inventory-field"><span>{t("Barcode (GTIN/EAN/UPC), if any")}</span>
-                          <input className="input" value={item.standardProductId} inputMode="numeric" onChange={e => updateItem(index, "standardProductId", e.target.value)} /></label>
+                          <input className="input" value={item.standardProductId} inputMode="numeric" onChange={e => updateItem(index, "standardProductId", e.target.value)} />
+                          <small className="shipment-muted">{t("In MyDHL+: {name}").replace("{name}", "Standardized Manufacturer Product ID")}</small></label>
                         <label className="inventory-field shipment-check"><span>
                           <input type="checkbox" checked={item.standardProductIdAbsent && !item.standardProductId.trim()} disabled={Boolean(item.standardProductId.trim())} onChange={e => updateItem(index, "standardProductIdAbsent", e.target.checked)} />{" "}
                           {t("This product has no barcode (GTIN/EAN/UPC)")}</span></label>
@@ -680,9 +807,11 @@ export function ShipmentDraftDialog({
                           <summary>{t("EUDR references (only for goods the EU deforestation rules cover)")}</summary>
                           <div className="shipment-item-eudr-fields">
                           <label className="inventory-field"><span>{t("EUDR due-diligence reference (DDS)")}</span>
-                            <input className="input" value={item.ddsReference} onChange={e => updateItem(index, "ddsReference", e.target.value)} /></label>
+                            <input className="input" value={item.ddsReference} onChange={e => updateItem(index, "ddsReference", e.target.value)} />
+                            <small className="shipment-muted">{t("In MyDHL+: {name}").replace("{name}", "Due Diligence Statement Reference Number")}</small></label>
                           <label className="inventory-field"><span>{t("TARIC document code")}</span>
-                            <input className="input" value={item.taricDocumentCode} placeholder="Y129" onChange={e => updateItem(index, "taricDocumentCode", e.target.value.toUpperCase())} /></label>
+                            <input className="input" value={item.taricDocumentCode} placeholder="Y129" onChange={e => updateItem(index, "taricDocumentCode", e.target.value.toUpperCase())} />
+                            <small className="shipment-muted">{t("In MyDHL+: {name}").replace("{name}", "EUDR TARIC Document Code")}</small></label>
                           </div>
                         </details>
                         <button type="button" className="inventory-link inventory-link-danger" onClick={() => { setItems(current => current.filter((_, i) => i !== index)); setDirty(true); setCustomsChanged(true); }}>{t("Remove line")}</button>
@@ -691,11 +820,12 @@ export function ShipmentDraftDialog({
                     <button type="button" className="inventory-link" onClick={() => { setItems(current => [...current, emptyItem()]); setDirty(true); setCustomsChanged(true); }}>{t("+ Add a line")}</button>
 
                     <div className="shipment-total">
-                      <span>{t("Total of the lines")} <strong>{money(lineTotalCents)}</strong></span>
+                      <span>{t("Total units")} <strong>{totalUnits.toLocaleString(locale)}</strong></span>
+                      <span>{t("Total of the lines")} <strong data-testid="lines-total">{money(lineTotalCents)}</strong></span>
                       <label className="inventory-field"><span>{t("Declared value")}</span>
-                        <input className="input" type="number" min="0" step="any" inputMode="decimal" value={declaredValue} onChange={e => change(setDeclaredValue, { customs: true })(e.target.value)} /></label>
+                        {moneyInput(declaredValue, value => change(setDeclaredValue, { customs: true })(value), "declared-value")}</label>
                       {lineTotalCents > 0 && declaredCents !== lineTotalCents ? (
-                        <button type="button" className="inventory-link" onClick={() => change(setDeclaredValue, { customs: true })((lineTotalCents / 100).toFixed(2))}>{t("Use the total of the lines")}</button>
+                        <button type="button" className="inventory-link" onClick={() => change(setDeclaredValue, { customs: true })(amountText(lineTotalCents / 100, currency, locale))}>{t("Use the total of the lines")}</button>
                       ) : null}
                     </div>
                     {declaredCents !== null && lineTotalCents > 0 && declaredCents !== lineTotalCents ? (
@@ -727,9 +857,39 @@ export function ShipmentDraftDialog({
           <div className="inventory-form">
             <label className="inventory-field"><span>{t("Shipping date")}</span>
               <input className="input" type="date" value={plannedDate} onChange={e => { change(setPlannedDate)(e.target.value); setProducts(null); }} /></label>
-            <label className="inventory-field"><span>{t("Ready at")}</span>
+            <label className="inventory-field"><span>{pickup.requested ? t("Ready for collection at") : t("Ready at")}</span>
               <input className="input" type="time" value={plannedTime} onChange={e => change(setPlannedTime)(e.target.value)} /></label>
           </div>
+          {pickupSupported ? (
+            <div className="shipment-pickup" data-testid="pickup">
+              <label className="inventory-check">
+                <input type="checkbox" checked={pickup.requested} onChange={e => change(setPickup)({ ...pickup, requested: e.target.checked })} />
+                {t("Book a DHL courier to collect it")}
+              </label>
+              {pickup.requested ? (
+                <>
+                  <div className="inventory-form">
+                    <label className="inventory-field"><span>{t("Latest collection time")}</span>
+                      <input className="input" type="time" value={pickup.closeTime} aria-invalid={pickupTimesWrong ? true : undefined} onChange={e => change(setPickup)({ ...pickup, closeTime: e.target.value })} /></label>
+                    <label className="inventory-field"><span>{t("Where to collect it (optional)")}</span>
+                      <input className="input" maxLength={80} value={pickup.location} placeholder={t("Reception")} onChange={e => change(setPickup)({ ...pickup, location: e.target.value })} /></label>
+                    <label className="inventory-field is-wide"><span>{t("Note for the courier (optional)")}</span>
+                      <input className="input" maxLength={80} value={pickup.instructions} onChange={e => change(setPickup)({ ...pickup, instructions: e.target.value })} /></label>
+                  </div>
+                  {pickupTimesWrong ? <p className="shipment-error">{t("The latest collection time must be after the ready time.")}</p> : null}
+                  {chosenWindow ? (
+                    <p className="shipment-muted" data-testid="pickup-window">
+                      {t("DHL collects between {from} and {to} on this day.").replace("{from}", chosenWindow.earliest || "—").replace("{to}", chosenWindow.latest || "—")}
+                      {chosenWindow.cutoff ? ` ${t("For this service, the parcel must be handed over by {time}.").replace("{time}", chosenWindow.cutoff.slice(11, 16))}` : ""}
+                    </p>
+                  ) : (
+                    <p className="shipment-muted">{t("Show DHL's services for this parcel to see when DHL can collect on this day.")}</p>
+                  )}
+                  {pickupOutsideWindow ? <p className="shipment-note" data-tone="warn">{t("These times are outside DHL's collection hours for this day. DHL may move or refuse the pickup.")}</p> : null}
+                </>
+              ) : null}
+            </div>
+          ) : null}
           {draft.planned?.timeZone ? <p className="shipment-muted">{t("Times are in the sender's time zone:")} {draft.planned.timeZone}</p> : null}
           <div className="shipment-actions">
             <button type="button" className="inventory-link" disabled={Boolean(busy)} onClick={() => void showServices()}>
@@ -794,7 +954,16 @@ export function ShipmentDraftDialog({
               {t("Or create this shipment in MyDHL+ with the reference {reference}, then use “Find shipments made on MyDHL” on the order to link it.").replace("{reference}", orderReference)}
             </p>
           ) : null}
-          <p className="shipment-muted">{t("Creating the label sends this shipment to DHL once. No pickup is booked, and the order is not marked dispatched until DHL scans the parcel.")}</p>
+          {pickupSupported && pickup.requested ? (
+            <p className="shipment-muted" data-testid="create-with-pickup">
+              {t("Creating the label sends this shipment to DHL once and books a DHL courier for {date}, between {from} and {to}. The order is not marked dispatched until DHL scans the parcel.")
+                .replace("{date}", plannedDate ? new Date(`${plannedDate}T12:00:00Z`).toLocaleDateString(locale, { day: "numeric", month: "long", timeZone: "UTC" }) : "—")
+                .replace("{from}", plannedTime || "—")
+                .replace("{to}", pickup.closeTime || "—")}
+            </p>
+          ) : (
+            <p className="shipment-muted">{t("Creating the label sends this shipment to DHL once. No pickup is booked, and the order is not marked dispatched until DHL scans the parcel.")}</p>
+          )}
         </section>
 
         {error ? <p className="shipment-error">{error}</p> : null}

@@ -142,9 +142,13 @@ export type ShipmentDraftView = {
   contentsDescription?: string;
   service?: { productCode?: string };
   planned?: { date?: string; time?: string; gmtOffset?: string; timeZone?: string } | null;
+  /** A DHL courier booked with the label (DHL-10). Absent (undefined) from a server that cannot book one. */
+  pickup?: ShipmentPickupDraft | null;
   shipper?: ShipmentParty | null;
   customs: ShipmentCustomsView;
 };
+
+export type ShipmentPickupDraft = { requested?: boolean; closeTime?: string; location?: string; instructions?: string };
 
 export type ShipmentCreationState = "draft" | "in_progress" | "created" | "unknown" | "rejected" | "not_sent" | "invalid";
 
@@ -182,6 +186,8 @@ export type OrderShipment = {
   issues?: ShipmentIssue[];
   /** Names of the sender fields that differ from Settings now (editable drafts, preparers; server 22 Oct 2026+). Absent from older servers. */
   senderOutdated?: string[];
+  /** The DHL courier booked with the label, and DHL's dispatch confirmation number (DHL-10). */
+  pickup?: { date: string; readyTime: string; closeTime: string; dispatchConfirmationNumber: string } | null;
 };
 
 export type ShippingAbilities = {
@@ -202,6 +208,7 @@ export type ShipmentDraftPatch = {
   contentsDescription?: string;
   service?: { productCode: string };
   planned?: { date: string; time: string };
+  pickup?: ShipmentPickupDraft;
   customs?: Partial<Omit<ShipmentCustomsView, "confirmed">> & { items?: CustomsItem[] };
 };
 
@@ -235,6 +242,8 @@ export type ShipmentProduct = {
   totalTransitDays: number | null;
   /** DHL's price for the account (POST /rates); only sent to a member with financial info. */
   price?: { amount: number; currency: string; currencyType?: string };
+  /** When DHL can collect on the asked date: "HH:MM" earliest/latest, and the service's cut-off "YYYY-MM-DDTHH:MM" (DHL-10). */
+  pickupWindow?: { earliest: string; latest: string; cutoff: string };
 };
 
 export type ShipmentProductsResult = {
@@ -457,6 +466,9 @@ const ISSUE_MESSAGES: Record<string, string> = {
   customs_not_confirmed: "Confirm the customs declaration.",
   planned_date_invalid: "Choose a valid shipping date and time.",
   too_long: "One of the fields is longer than DHL accepts.",
+  pickup_close_time_missing: "Choose the latest time the DHL courier can collect the parcel.",
+  pickup_close_before_ready: "The latest collection time must be after the ready time.",
+  pickup_close_time_invalid: "Choose the latest collection time as hours and minutes.",
   account_missing: "The DHL account number is missing from the connection.",
   shipment_not_found: "This shipment could not be found."
 };
