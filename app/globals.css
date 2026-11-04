@@ -37718,6 +37718,87 @@ body[data-studio-theme="dark"] .inv-categories .btn-danger { color: #f87171; bor
 }
 
 html[data-studio-theme="dark"] .order-status-tile { background: rgba(255, 255, 255, 0.05); }
+
+/* Phone: the status strip folded to a two-line summary (owner, 3 Nov 2026 — at 375 × 812 the strip's tiles took 249 of
+   the header's 508 px and left the order 228 px). Line one: the steps as small bars, the current step and the delivery;
+   line two: paid · remaining. A tap opens the tiles; the chevron in the Production tile folds them again. The summary
+   and the chevron exist on every width but show only here, so a desktop never sees them. */
+.order-status-compact,
+.order-status-fold { display: none; }
+.order-status-compact {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 7px 11px;
+  gap: 3px;
+  grid-template-columns: minmax(0, 1fr);
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.order-status-compact__row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.order-status-compact__steps { flex: 0 0 auto; display: inline-flex; gap: 3px; }
+.order-status-compact__steps i { display: block; width: 14px; height: 5px; border-radius: 99px; background: rgba(23, 25, 35, 0.1); }
+.order-status-compact__steps i.is-done { background: #22c55e; }
+.order-status-compact__steps i.is-active { background: #f59e0b; }
+.order-status-compact__steps i.is-blocked { background: #ef4444; }
+.order-status-compact__stage {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.order-status-compact__stage.is-done { color: #15803d; }
+.order-status-compact__stage.is-active { color: #c2410c; }
+.order-status-compact__stage.is-blocked { color: #c0352b; }
+.order-status-compact__stage.is-next { color: var(--muted); }
+.order-status-compact__delivery { flex: 0 0 auto; font-size: 12.5px; font-weight: 850; white-space: nowrap; }
+.order-status-compact__delivery.tone-red { color: #c0352b; }
+.order-status-compact__delivery.tone-yellow { color: #b45309; }
+.order-status-compact__delivery.tone-green { color: #15803d; }
+.order-status-compact__delivery.tone-gray { color: var(--muted); }
+.order-status-compact__chevron { flex: 0 0 auto; width: 16px; height: 16px; color: var(--muted); }
+.order-status-compact__payment {
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.order-status-compact__payment .is-paid { color: #15803d; }
+.order-status-compact__payment .is-remaining { color: #c0352b; }
+.order-status-compact__payment .is-settled { color: var(--muted); }
+.order-status-fold {
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: -6px -6px -6px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.order-status-fold svg { width: 16px; height: 16px; }
+.order-status-compact:focus-visible,
+.order-status-fold:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+@media (max-width: 640px) {
+  .order-status-strip.is-folded > :not(.order-status-compact) { display: none; }
+  .order-status-strip.is-folded > .order-status-compact { display: grid; }
+  .order-status-strip.is-open .order-status-fold { display: inline-grid; }
+  .order-status-strip.is-open .order-status-tile.is-production .order-status-tile__head { justify-content: flex-start; align-items: center; }
+  .order-status-strip.is-open .order-status-tile.is-production .order-status-tile__label { margin-inline-end: auto; }
+}
+html[data-studio-theme="dark"] .order-status-compact { background: rgba(255, 255, 255, 0.05); }
+html[data-studio-theme="dark"] .order-status-compact__steps i:not(.is-done):not(.is-active):not(.is-blocked) { background: rgba(255, 255, 255, 0.12); }
 html[data-studio-theme="dark"] .order-stack-section { background: rgba(255, 255, 255, 0.04); }
 /* Filled glyphs (£, materials, repair) knock their mark out in --card-title-icon-cutout, which defaults to
    white: on the light chip of dark mode that drew a plain white disc. The cutout is the chip's own colour

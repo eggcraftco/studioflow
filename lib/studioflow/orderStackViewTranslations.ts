@@ -44,6 +44,18 @@ export const ORDER_STACK_VIEW_TRANSLATIONS: Record<string, Partial<Record<Studio
     "Español (Spanish)": "Expandir todo", "Português": "Expandir tudo", "Русский (Russian)": "Развернуть все",
     "日本語 (Japanese)": "すべて開く", "中文 (Chinese)": "全部展开", "العربية (Arabic)": "توسيع الكل", "हिन्दी (Hindi)": "सभी खोलें"
   },
+  "Show status details": {
+    "Türkçe": "Durum ayrıntılarını göster", "Deutsch": "Statusdetails anzeigen", "Français": "Afficher le détail du statut",
+    "Italiano": "Mostra i dettagli dello stato", "Español (Spanish)": "Mostrar los detalles del estado", "Português": "Mostrar os detalhes do estado",
+    "Русский (Russian)": "Показать подробности статуса", "日本語 (Japanese)": "ステータスの詳細を表示", "中文 (Chinese)": "显示状态详情",
+    "العربية (Arabic)": "إظهار تفاصيل الحالة", "हिन्दी (Hindi)": "स्थिति का विवरण दिखाएँ"
+  },
+  "Hide status details": {
+    "Türkçe": "Durum ayrıntılarını gizle", "Deutsch": "Statusdetails ausblenden", "Français": "Masquer le détail du statut",
+    "Italiano": "Nascondi i dettagli dello stato", "Español (Spanish)": "Ocultar los detalles del estado", "Português": "Ocultar os detalhes do estado",
+    "Русский (Russian)": "Скрыть подробности статуса", "日本語 (Japanese)": "ステータスの詳細を隠す", "中文 (Chinese)": "隐藏状态详情",
+    "العربية (Arabic)": "إخفاء تفاصيل الحالة", "हिन्दी (Hindi)": "स्थिति का विवरण छिपाएँ"
+  },
   "Collapse all": {
     "Türkçe": "Tümünü kapat", "Deutsch": "Alle einklappen", "Français": "Tout replier", "Italiano": "Comprimi tutto",
     "Español (Spanish)": "Contraer todo", "Português": "Recolher tudo", "Русский (Russian)": "Свернуть все",

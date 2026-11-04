@@ -211,6 +211,7 @@ const WORKSPACE_CARDS_LOCKED_STORAGE_KEY = "workspaceCardsLockedV1";
 const ORDER_HEADER_SHOW_DELIVERY_TIME_KEY = "orderDetailHeaderShowDeliveryTime";
 const ORDER_HEADER_SHOW_UPCOMING_SCHEDULE_KEY = "orderDetailHeaderShowUpcomingSchedule";
 const ORDER_HEADER_SHOW_ORDER_VALUE_KEY = "orderDetailHeaderShowOrderValue";
+const ORDER_STATUS_STRIP_OPEN_KEY = "orderDetailStatusStripOpenV1";
 
 function formatDate(date: Date | null, locale = "en-GB") {
   if (!date) return "-";
@@ -2311,6 +2312,8 @@ export function OrderDetailContent({
   const [headerShowDeliveryTime, setHeaderShowDeliveryTime] = useState(true);
   const [headerShowUpcomingSchedule, setHeaderShowUpcomingSchedule] = useState(true);
   const [headerShowOrderValue, setHeaderShowOrderValue] = useState(true);
+  // Phone: the status strip opens folded to its summary until the person opens it on this device (renderStatusStrip).
+  const [statusStripOpen, setStatusStripOpen] = useState(false);
   const [cardsLocked, setCardsLocked] = useState(false);
   const [layoutStatus, setLayoutStatus] = useState<string | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
@@ -2591,6 +2594,27 @@ export function OrderDetailContent({
       // Local preference persistence is best-effort.
     }
   }, [headerPreferencesLoaded, headerShowDeliveryTime, headerShowUpcomingSchedule, headerShowOrderValue]);
+
+  useEffect(() => {
+    try {
+      setStatusStripOpen(window.localStorage.getItem(ORDER_STATUS_STRIP_OPEN_KEY) === "true");
+    } catch {
+      // Unreadable storage: the strip stays folded.
+    }
+  }, []);
+
+  function changeStatusStripOpen(open: boolean) {
+    setStatusStripOpen(open);
+    try {
+      window.localStorage.setItem(ORDER_STATUS_STRIP_OPEN_KEY, String(open));
+    } catch {
+      // Local preference persistence is best-effort.
+    }
+    // The button that was pressed is hidden by the change; focus moves to the one that undoes it.
+    window.setTimeout(() => {
+      orderHeadRef.current?.querySelector<HTMLElement>(open ? "[data-order-status-fold]" : "[data-order-status-compact]")?.focus({ preventScroll: true });
+    }, 0);
+  }
 
   useEffect(() => {
     if (!headerDetailsMenuPosition) return;
@@ -10207,50 +10231,96 @@ export function OrderDetailContent({
         : steps.length > 0
           ? (stageTitle ? t(stageTitle) : t("Done"))
           : t("No steps yet");
+    // Up to four steps, as a row of segments: a coloured bar (done / current / still to come), the step's
+    // name and its own status under it — so every step reads on its own, nothing wraps under the row.
+    // More than four: the window slides to keep the current step in view, and a "+N" says what is hidden.
+    const doneCount = steps.filter(step => stripStepTone(step.value) === "done").length;
+    const currentIndex = current ? steps.indexOf(current) : steps.length;
+    const windowSize = 4;
+    const start = steps.length <= windowSize ? 0 : Math.max(0, Math.min(currentIndex - 1, steps.length - windowSize));
+    const shown = steps.slice(start, start + windowSize);
+    const hiddenCount = steps.length - shown.length;
+    // The order's blocker (Production board) holds up the current step: red, whatever its value.
+    const currentHeld = !resolved.delivered && Boolean(resolved.blocker) && Boolean(current);
+    const segmentTone = (step: (typeof steps)[number]) =>
+      resolved.delivered ? "done" : currentHeld && step === current ? "blocked" : stripStepTone(step.value);
+    const deliveryLabel = localizedDeliveryLabel(summaryDeliveryLabel(order), t, detailLanguage);
+    const summaryStage = current
+      ? `${t(current.title)} · ${currentHeld ? t("Blocked") : t(current.value)}`
+      : productionNote;
+    const summaryTone = resolved.delivered ? "done" : current ? segmentTone(current) : steps.length > 0 ? "done" : "next";
     return (
-      <div className="order-status-strip" data-order-status-strip="">
-        {(() => {
-          // Up to four steps, as a row of segments: a coloured bar (done / current / still to come), the step's
-          // name and its own status under it — so every step reads on its own, nothing wraps under the row.
-          // More than four: the window slides to keep the current step in view, and a "+N" says what is hidden.
-          const doneCount = steps.filter(step => stripStepTone(step.value) === "done").length;
-          const currentIndex = current ? steps.indexOf(current) : steps.length;
-          const windowSize = 4;
-          const start = steps.length <= windowSize ? 0 : Math.max(0, Math.min(currentIndex - 1, steps.length - windowSize));
-          const shown = steps.slice(start, start + windowSize);
-          const hiddenCount = steps.length - shown.length;
-          return (
-            <div className="order-status-tile is-production" data-stage={resolved.stageId}>
-              <div className="order-status-tile__head">
-                <span className="order-status-tile__label">{t("Production")}</span>
-                {steps.length > 0 ? <span className="order-status-tile__count">{resolved.delivered ? t("Delivered") : `${doneCount}/${steps.length}`}</span> : null}
-              </div>
-              {steps.length === 0 ? (
-                <span className="order-status-tile__note">{productionNote}</span>
-              ) : (
-                <div className="order-status-segments" style={{ gridTemplateColumns: `repeat(${shown.length}, minmax(0, 1fr))${hiddenCount > 0 ? " auto" : ""}` }}>
-                  {shown.map(step => {
-                    // The order's blocker (Production board) holds up the current step: red, whatever its value.
-                    const held = !resolved.delivered && Boolean(resolved.blocker) && step === current;
-                    const tone = resolved.delivered ? "done" : held ? "blocked" : stripStepTone(step.value);
-                    return (
-                      <div key={step.id || step.title} className={`order-status-segment is-${tone}`} title={`${t(step.title)} · ${t(step.value)}`}>
-                        <i aria-hidden="true" />
-                        <b>{t(step.title)}</b>
-                        <small>{held ? t("Blocked") : t(step.value)}</small>
-                      </div>
-                    );
-                  })}
-                  {hiddenCount > 0 ? <span className="order-status-segments__more">+{hiddenCount}</span> : null}
-                </div>
-              )}
+      <div className={statusStripOpen ? "order-status-strip is-open" : "order-status-strip is-folded"} data-order-status-strip="">
+        {/* Phone (owner, 3 Nov 2026: "the top takes so much room I cannot see the order"): the strip opens folded
+            into this two-line summary — the current step, the delivery and the payment — and a tap opens the tiles
+            below it; the chevron in the Production tile folds them again. Wider screens never show it (CSS), and the
+            choice is kept on this device. */}
+        <button
+          type="button"
+          className="order-status-compact"
+          aria-expanded={false}
+          aria-label={[t("Show status details"), summaryStage, headerShowDeliveryTime ? deliveryLabel : ""].filter(Boolean).join(" · ")}
+          title={t("Show status details")}
+          data-order-status-compact=""
+          onClick={() => changeStatusStripOpen(true)}
+        >
+          <span className="order-status-compact__row">
+            {shown.length > 0 ? (
+              <span className="order-status-compact__steps" aria-hidden="true">
+                {shown.map(step => <i key={step.id || step.title} className={`is-${segmentTone(step)}`} />)}
+              </span>
+            ) : null}
+            <span className={`order-status-compact__stage is-${summaryTone}`}>{summaryStage}</span>
+            {headerShowDeliveryTime ? <span className={`order-status-compact__delivery tone-${deliveryTone}`}>{deliveryLabel}</span> : null}
+            <svg className="order-status-compact__chevron" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          </span>
+          {canSeeFinance ? (
+            <span className="order-status-compact__payment">
+              <span className="is-paid">{t("Paid")} {orderValueMoney(order.paidAmount, hideNumbers)}</span>
+              <span aria-hidden="true"> · </span>
+              <span className={remaining > 0 ? "is-remaining" : "is-settled"}>{t("Remaining")} {orderValueMoney(remaining, hideNumbers)}</span>
+            </span>
+          ) : null}
+        </button>
+        <div className="order-status-tile is-production" data-stage={resolved.stageId}>
+          <div className="order-status-tile__head">
+            <span className="order-status-tile__label">{t("Production")}</span>
+            {steps.length > 0 ? <span className="order-status-tile__count">{resolved.delivered ? t("Delivered") : `${doneCount}/${steps.length}`}</span> : null}
+            <button
+              type="button"
+              className="order-status-fold"
+              aria-expanded={true}
+              aria-label={t("Hide status details")}
+              title={t("Hide status details")}
+              data-order-status-fold=""
+              onClick={() => changeStatusStripOpen(false)}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </button>
+          </div>
+          {steps.length === 0 ? (
+            <span className="order-status-tile__note">{productionNote}</span>
+          ) : (
+            <div className="order-status-segments" style={{ gridTemplateColumns: `repeat(${shown.length}, minmax(0, 1fr))${hiddenCount > 0 ? " auto" : ""}` }}>
+              {shown.map(step => {
+                const held = currentHeld && step === current;
+                const tone = segmentTone(step);
+                return (
+                  <div key={step.id || step.title} className={`order-status-segment is-${tone}`} title={`${t(step.title)} · ${t(step.value)}`}>
+                    <i aria-hidden="true" />
+                    <b>{t(step.title)}</b>
+                    <small>{held ? t("Blocked") : t(step.value)}</small>
+                  </div>
+                );
+              })}
+              {hiddenCount > 0 ? <span className="order-status-segments__more">+{hiddenCount}</span> : null}
             </div>
-          );
-        })()}
+          )}
+        </div>
         {headerShowDeliveryTime ? (
           <div className={`order-status-tile is-delivery tone-${deliveryTone}`}>
             <span className="order-status-tile__label">{t("Delivery")}</span>
-            <strong className="order-status-tile__value">{localizedDeliveryLabel(summaryDeliveryLabel(order), t, detailLanguage)}</strong>
+            <strong className="order-status-tile__value">{deliveryLabel}</strong>
             <span className="order-status-tile__note">{order.dueDate ? `${t("Due")} ${formatShortDate(order.dueDate)}` : t("No due date")}</span>
           </div>
         ) : null}
