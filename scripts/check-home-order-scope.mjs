@@ -109,15 +109,17 @@ const ctx = (shape) => ({ id: WS, name: "Check", ownerUid: "owner-uid", roleLabe
 
 function refusedByRules(shapeName, q) {
   const has = (field, value) => q.filters.some(([f, op, v]) => f === field && op === "==" && v === value);
+  // MULTI-ASSIGN (4 Nov 2026): the rules also let a restricted member list the orders whose assigneeUids holds them.
+  const listed = (value) => q.filters.some(([f, op, v]) => f === "assigneeUids" && op === "array-contains" && v === value);
   const restricted = shapeName === "workflow" || shapeName === "assigned";
   if (q.path === "siparisler") {
     if (shapeName === "workflow") return "siparisler is refused to Workflow Only";
-    if (restricted && !has("assignedToUid", UID)) return "siparisler without assignedToUid == me";
+    if (restricted && !has("assignedToUid", UID) && !listed(UID)) return "siparisler without assignedToUid == me";
     if (!has("companyId", WS)) return "siparisler without companyId == ws";
     return "";
   }
   if (q.path === `companies/${WS}/workflowOrders`) {
-    return shapeName === "workflow" && has("assignedToUid", UID) ? "" : "workflowOrders outside Workflow Only's own";
+    return shapeName === "workflow" && (has("assignedToUid", UID) || listed(UID)) ? "" : "workflowOrders outside Workflow Only's own";
   }
   if (q.path === "musteriler") return has("companyId", WS) ? "" : "musteriler without companyId == ws";
   return "";
@@ -162,7 +164,7 @@ for (const [loaderName, loader] of Object.entries(LOADERS)) {
       expect(`${loaderName} as ${shapeName}: the same queries as before (unchanged)`, queries, WHOLE[loaderName]);
     } else {
       const own = queries.filter((q) => q.path === "siparisler" || q.path.endsWith("/workflowOrders"));
-      expect(`${loaderName} as ${shapeName}: reads orders, only its own`, own.length > 0 && own.every((q) => q.filters.some(([f, , v]) => f === "assignedToUid" && v === UID)), true);
+      expect(`${loaderName} as ${shapeName}: reads orders, only its own`, own.length > 0 && own.every((q) => q.filters.some(([f, , v]) => (f === "assignedToUid" || f === "assigneeUids") && v === UID)), true);
     }
   }
 }

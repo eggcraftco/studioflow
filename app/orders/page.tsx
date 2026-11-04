@@ -85,6 +85,7 @@ import {
 } from "@/lib/studioflow/orderListView";
 import { OrderDetailContent } from "./OrderDetailContent";
 import { projectAssigneeOptions } from "@/lib/studioflow/projectAssignees";
+import { assigneeDetailsPatch, isOrderAssignee, orderAssigneeUids, toggledAssigneeUids } from "@/lib/studioflow/orderAssignees";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
 import {
   getFirstProjectGuideState,
@@ -993,13 +994,18 @@ export default function OrdersPage() {
 
   function assigneeNameForOrder(order: OrderListItem) {
     const member = assigneeForOrder(order);
-    return assigneeDisplayName(member) || displayNameFromEmail(order.assignedToEmail || "");
+    const first = assigneeDisplayName(member) || displayNameFromEmail(order.assignedToEmail || "");
+    // MULTI-ASSIGN (4 Nov 2026): "Alex +2" when more people are on the order.
+    const others = orderAssigneeUids(order).length - 1;
+    return first && others > 0 ? `${first} +${others}` : first;
   }
 
   function assigneePhotoForOrder(order: OrderListItem) {
     return assigneeForOrder(order)?.photoURL || "";
   }
 
+  // MULTI-ASSIGN (4 Nov 2026): a member is ticked on or off the order (the menu stays open for the next
+  // tick); Unassigned takes everybody off. What each person may do there comes from their own role.
   async function assignOrderFromMenu(order: OrderListItem, member: TeamMemberDetail | null) {
     if (!workspace || !user) return;
     const uid = user.uid;
@@ -1009,21 +1015,28 @@ export default function OrdersPage() {
       return;
     }
 
-    const assignedToUid = member?.id ?? "";
-    const assignedToEmail = member?.email ?? "";
-    setOrderContextMenu(null);
+    const adding = Boolean(member && !isOrderAssignee(order, member.id));
+    const nextUids = member ? toggledAssigneeUids(order, member.id) : [];
+    const emailFor = (assigneeUid: string) => teamMembers.find(item => item.id === assigneeUid)?.email
+      ?? (assigneeUid === order.assignedToUid ? order.assignedToEmail : "")
+      ?? "";
+    const details = assigneeDetailsPatch(nextUids, emailFor);
+    const { assignedToUid, assignedToEmail, assigneeUids } = details;
+    if (!member) setOrderContextMenu(null);
     setOrderActionError(null);
-    setOrderActionStatus(member ? `Assigning project to ${assigneeDisplayName(member)}...` : "Clearing project assignment...");
+    setOrderActionStatus(member
+      ? `${adding ? "Assigning project to" : "Removing"} ${assigneeDisplayName(member)}...`
+      : "Clearing project assignment...");
 
-    setOrders(current => current.map(item => item.id === order.id ? { ...item, assignedToUid, assignedToEmail } : item));
-    setSelectedOrder(current => current?.id === order.id ? { ...current, assignedToUid, assignedToEmail } : current);
+    setOrders(current => current.map(item => item.id === order.id ? { ...item, assignedToUid, assignedToEmail, assigneeUids } : item));
+    setSelectedOrder(current => current?.id === order.id ? { ...current, assignedToUid, assignedToEmail, assigneeUids } : current);
 
     try {
       await updateOrderFromWeb(workspace, {
         orderId: order.id,
-        details: { assignedToUid, assignedToEmail }
+        details
       });
-      setOrderActionStatus(member ? "Project assigned." : "Project assignment cleared.");
+      setOrderActionStatus(assigneeUids.length > 0 ? "Project assigned." : "Project assignment cleared.");
     } catch (assignError) {
       setOrderActionStatus(null);
       setOrderActionError(assignError instanceof Error ? assignError.message : "Could not update project assignment.");
@@ -1464,7 +1477,7 @@ export default function OrdersPage() {
                     role="menuitem"
                     type="button"
                     className="order-list-context-row"
-                    disabled={!contextOrder.assignedToUid}
+                    disabled={orderAssigneeUids(contextOrder).length === 0}
                     onClick={() => void assignOrderFromMenu(contextOrder, null)}
                   >
                     <span aria-hidden="true">○</span>
@@ -1479,12 +1492,13 @@ export default function OrdersPage() {
                     .map(member => (
                       <button
                         key={member.id}
-                        role="menuitem"
+                        role="menuitemcheckbox"
+                        aria-checked={isOrderAssignee(contextOrder, member.id)}
                         type="button"
                         className="order-list-context-row"
                         onClick={() => void assignOrderFromMenu(contextOrder, member)}
                       >
-                        <span aria-hidden="true">{contextOrder.assignedToUid === member.id ? "✓" : initialsForMember(member)}</span>
+                        <span aria-hidden="true">{isOrderAssignee(contextOrder, member.id) ? "✓" : initialsForMember(member)}</span>
                         {assigneeDisplayName(member)}
                       </button>
                     ))}

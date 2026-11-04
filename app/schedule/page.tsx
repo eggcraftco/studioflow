@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactElement, type WheelEvent as ReactWheelEvent } from "react";
+import { isOrderAssignee, orderAssigneeUids } from "@/lib/studioflow/orderAssignees";
 import { useRouter, usePathname } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { CardIconGlyph, CardTitle } from "@/components/CardTitle";
@@ -320,9 +321,12 @@ function assigneeLabelForOrder(order: ScheduleOrderItem, members: TeamMemberDeta
   const email = order.assignedToEmail.trim();
   if (!email && !order.assignedToUid.trim()) return "";
   const member = members.find(m => m.id === order.assignedToUid || m.email.toLowerCase() === email.toLowerCase());
-  if (member) return teamMemberName(member);
+  // MULTI-ASSIGN (4 Nov 2026): "Alex +2" when more people are on the order.
+  const others = orderAssigneeUids(order).length - 1;
+  const more = others > 0 ? ` +${others}` : "";
+  if (member) return teamMemberName(member) + more;
   const name = email.split("@")[0] || email;
-  return name.replace(/[._]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+  return name.replace(/[._]/g, " ").replace(/\b\w/g, c => c.toUpperCase()) + more;
 }
 
 function scheduleCalendarTitle(order: ScheduleOrderItem) {
@@ -423,12 +427,17 @@ async function loadOrdersForView(teamMode: boolean, workspace: WorkspaceContext,
 function teamMembersFromItems(items: ScheduleOrderItem[]): TeamMemberDetail[] {
   const seen = new Map<string, TeamMemberDetail>();
   for (const item of items) {
-    const id = item.assignedToUid.trim();
-    if (!id || seen.has(id)) continue;
-    const name = "assignedToName" in item ? String((item as { assignedToName?: string }).assignedToName || "") : "";
-    seen.set(id, {
-      id, email: "", displayName: name, photoURL: "", role: "member", effectiveRole: "member", roleLabel: "",
-      access: {} as TeamMemberDetail["access"], addedAt: null, isOwner: false, suspended: false, suspendedReason: "", suspendedAt: null
+    // MULTI-ASSIGN (4 Nov 2026): every person on the row, with the name the server sent for them.
+    const ids = orderAssigneeUids(item);
+    const names = "assigneeNames" in item ? (item as { assigneeNames?: string[] }).assigneeNames ?? [] : [];
+    ids.forEach((id, index) => {
+      if (!id || seen.has(id)) return;
+      const name = names[index]
+        || (id === item.assignedToUid && "assignedToName" in item ? String((item as { assignedToName?: string }).assignedToName || "") : "");
+      seen.set(id, {
+        id, email: "", displayName: name, photoURL: "", role: "member", effectiveRole: "member", roleLabel: "",
+        access: {} as TeamMemberDetail["access"], addedAt: null, isOwner: false, suspended: false, suspendedReason: "", suspendedAt: null
+      });
     });
   }
   return [...seen.values()];
@@ -1031,15 +1040,16 @@ export default function SchedulePage() {
   };
   const teamPlanActive = workspace?.billingPlan === "team_monthly";
   const visibleTeamMembers = teamMembers.filter(member => !hiddenMemberIds.has(member.id));
-  const ordersForMember = (memberId: string) => visibleOrders.filter(order => (order.assignedToUid || "").trim() === memberId);
-  const teamUnassignedOrders = visibleOrders.filter(order => !(order.assignedToUid || "").trim());
+  // MULTI-ASSIGN (4 Nov 2026): an order sits in the lane of everyone on it.
+  const ordersForMember = (memberId: string) => visibleOrders.filter(order => isOrderAssignee(order, memberId));
+  const teamUnassignedOrders = visibleOrders.filter(order => orderAssigneeUids(order).length === 0);
   const teamUpcomingOrders = orders
     .filter(order => !orderIsClosed(order))
     .slice()
     .sort((lhs, rhs) => orderDueDate(lhs).getTime() - orderDueDate(rhs).getTime())
     .slice(0, 7);
-  const memberActiveCount = (memberId: string) => orders.filter(order => (order.assignedToUid || "").trim() === memberId && !orderIsClosed(order)).length;
-  const memberLateCount = (memberId: string) => orders.filter(order => (order.assignedToUid || "").trim() === memberId && orderIsLate(order)).length;
+  const memberActiveCount = (memberId: string) => orders.filter(order => isOrderAssignee(order, memberId) && !orderIsClosed(order)).length;
+  const memberLateCount = (memberId: string) => orders.filter(order => isOrderAssignee(order, memberId) && orderIsLate(order)).length;
   const teamMaxActive = Math.max(1, ...teamMembers.map(member => memberActiveCount(member.id)));
   const teamTotalActive = teamMembers.reduce((sum, member) => sum + memberActiveCount(member.id), 0);
 

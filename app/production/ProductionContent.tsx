@@ -18,6 +18,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type RefObject } from "react";
+import { isOrderAssignee, orderAssigneeUids } from "@/lib/studioflow/orderAssignees";
 import { useRouter } from "next/navigation";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -218,10 +219,11 @@ export function ProductionContent({
           .toLowerCase();
         if (!haystack.includes(query)) return false;
       }
+      // MULTI-ASSIGN (4 Nov 2026): a person's filter shows every order they are on, not only those naming them first.
       if (assigneeFilter) {
         if (assigneeFilter === "unassigned") {
-          if (order.assignedToUid) return false;
-        } else if (order.assignedToUid !== assigneeFilter) return false;
+          if (orderAssigneeUids(order).length > 0) return false;
+        } else if (!isOrderAssignee(order, assigneeFilter)) return false;
       }
       if (priorityFilter && (order.priority || "Normal") !== priorityFilter) return false;
       if (dueFilter) {
@@ -301,7 +303,9 @@ export function ProductionContent({
   function assigneeName(order: ScheduleOrderItem) {
     if (!order.assignedToUid) return t("Unassigned");
     const member = memberById.get(order.assignedToUid);
-    return member?.displayName || member?.email || order.assignedToEmail || t("Unassigned");
+    const first = member?.displayName || member?.email || order.assignedToEmail || t("Unassigned");
+    const others = orderAssigneeUids(order).length - 1;
+    return others > 0 ? `${first} +${others}` : first;
   }
 
   const applyStage = useCallback(async (orderId: string, stageId: string, blocker: ProductionBlocker | null) => {
@@ -785,11 +789,14 @@ function ProductionWorkloadView({
     const buckets = new Map<string, { name: string; cards: ProductionCard[] }>();
     buckets.set("", { name: t("Unassigned"), cards: [] });
     team.forEach(member => buckets.set(member.id, { name: member.displayName || member.email, cards: [] }));
+    // MULTI-ASSIGN (4 Nov 2026): a card counts in the row of everyone on it.
     live.forEach(card => {
-      const key = card.order.assignedToUid || "";
-      const bucket = buckets.get(key) ?? { name: card.order.assignedToEmail || t("Unassigned"), cards: [] };
-      bucket.cards.push(card);
-      buckets.set(key, bucket);
+      const keys = orderAssigneeUids(card.order);
+      for (const key of keys.length > 0 ? keys : [""]) {
+        const bucket = buckets.get(key) ?? { name: (key === card.order.assignedToUid ? card.order.assignedToEmail : "") || t("Unassigned"), cards: [] };
+        bucket.cards.push(card);
+        buckets.set(key, bucket);
+      }
     });
     return [...buckets.entries()]
       .filter(([key, bucket]) => bucket.cards.length > 0 || key !== "")

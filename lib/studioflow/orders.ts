@@ -76,6 +76,8 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     invoiceNote?: string;
     assignedToUid?: string;
     assignedToEmail?: string;
+    /** MULTI-ASSIGN (4 Nov 2026): the whole list, first person first; the server mirrors it into assignedToUid. */
+    assigneeUids?: string[];
     watchRef?: string;
     designLink?: string;
     emailAddress?: string;

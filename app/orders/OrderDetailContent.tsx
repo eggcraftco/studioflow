@@ -111,6 +111,7 @@ import {
 } from "@/lib/studioflow/cardLayouts";
 import { orderActionCardVisible, visibleActionCardsFor } from "@/lib/studioflow/orderActionCards";
 import { projectAssigneeOptions } from "@/lib/studioflow/projectAssignees";
+import { assigneeDetailsPatch, isOrderAssignee, orderAssigneeUids, toggledAssigneeUids } from "@/lib/studioflow/orderAssignees";
 import {
   loadWorkspaceBlockHeadings,
   saveWorkspaceBlockHeadings,
@@ -5123,25 +5124,32 @@ export function OrderDetailContent({
     const member = teamMembers.find(item => assignedUid && item.id === assignedUid)
       ?? teamMembers.find(item => assignedEmail && item.email.trim().toLowerCase() === assignedEmail)
       ?? null;
-    if (member) return member.displayName.trim() || member.email.trim() || member.id;
-    return order.assignedToEmail?.trim() || assignedUid;
-  }, [order.assignedToUid, order.assignedToEmail, teamMembers]);
+    const first = member
+      ? member.displayName.trim() || member.email.trim() || member.id
+      : order.assignedToEmail?.trim() || assignedUid;
+    // MULTI-ASSIGN (4 Nov 2026): "Alex +2" when more people are on the order.
+    const others = orderAssigneeUids(order).length - 1;
+    return others > 0 ? `${first} +${others}` : first;
+  }, [order, teamMembers]);
 
+  // MULTI-ASSIGN (4 Nov 2026): a member is ticked on or off (the menu stays open); Unassigned clears everybody.
   async function assignProjectToMember(member: TeamMemberDetail | null) {
     if (!canAssignProjects) {
       setOrderActionError("Your workspace role cannot assign projects.");
       return;
     }
-    const assignedToUid = member?.id ?? "";
-    const assignedToEmail = member?.email ?? "";
-    setAssignProjectMenuOpen(false);
+    const nextUids = member ? toggledAssigneeUids(order, member.id) : [];
+    const details = assigneeDetailsPatch(nextUids, assigneeUid => teamMembers.find(item => item.id === assigneeUid)?.email
+      ?? (assigneeUid === order.assignedToUid ? order.assignedToEmail : "")
+      ?? "");
+    if (!member) setAssignProjectMenuOpen(false);
     setOrderActionError(null);
     setSavingAssignment(true);
-    onOptimisticOrderPatch?.({ assignedToUid, assignedToEmail });
+    onOptimisticOrderPatch?.({ assignedToUid: details.assignedToUid, assignedToEmail: details.assignedToEmail, assigneeUids: details.assigneeUids });
     try {
       await updateOrderFromWeb(workspace, {
         orderId: order.id,
-        details: { assignedToUid, assignedToEmail }
+        details
       });
     } catch (assignFailure) {
       await onReloadOrder();
@@ -10924,18 +10932,21 @@ export function OrderDetailContent({
                   <div className="order-actions-menu-section-title">{t("Assign Project")}</div>
                   <button
                     type="button"
-                    disabled={!order.assignedToUid && !order.assignedToEmail}
+                    disabled={orderAssigneeUids(order).length === 0 && !order.assignedToEmail}
                     onClick={() => void assignProjectToMember(null)}
                   >
-                    <span aria-hidden="true">{!order.assignedToUid && !order.assignedToEmail ? "✓" : "○"}</span>
+                    <span aria-hidden="true">{orderAssigneeUids(order).length === 0 && !order.assignedToEmail ? "✓" : "○"}</span>
                     {t("Unassigned")}
                   </button>
                   {assignableMembers.map(member => {
-                    const isCurrent = order.assignedToUid?.trim() === member.id;
+                    const isCurrent = isOrderAssignee(order, member.id);
                     return (
                       <button
                         key={member.id}
                         type="button"
+                        role="menuitemcheckbox"
+                        aria-checked={isCurrent}
+                        disabled={savingAssignment}
                         onClick={() => void assignProjectToMember(member)}
                       >
                         <span aria-hidden="true">{isCurrent ? "✓" : "○"}</span>
@@ -13680,6 +13691,7 @@ export function pdfPreviewSampleOrder(): OrderDetail {
     commerce: null,
     assignedToUid: "",
     assignedToEmail: "",
+    assigneeUids: [],
     customerName: "Alex Carter",
     designName: "Engraved Signet Ring",
     designLink: "",

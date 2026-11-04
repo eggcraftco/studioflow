@@ -36,6 +36,7 @@ import { productionWorkIsLive, type ProductionStage } from "@/lib/studioflow/pro
 import type { HeadingItem } from "@/lib/studioflow/blockHeadings";
 import { compareOrdersTieBreak, orderIsCancelled, wooStoreFieldsFrom, type FilterableOrder } from "@/lib/studioflow/orderFilters";
 import { isEtsyOrder } from "@/lib/studioflow/etsyOrder";
+import { assigneeUidsFromData, orderAssigneeUids } from "@/lib/studioflow/orderAssignees";
 
 export type JoinedWorkspaceOption = {
   id: string;
@@ -379,6 +380,8 @@ export type OrderListItem = {
   projectNumber: number;
   assignedToUid: string;
   assignedToEmail: string;
+  /** MULTI-ASSIGN (4 Nov 2026): everyone on the order, first person first (orderAssignees.ts). */
+  assigneeUids: string[];
   customerName: string;
   designName: string;
   watchRef: string;
@@ -418,6 +421,8 @@ export type ScheduleOrderItem = {
   projectNumber: number;
   assignedToUid: string;
   assignedToEmail: string;
+  /** MULTI-ASSIGN (4 Nov 2026): everyone on the order, first person first (orderAssignees.ts). */
+  assigneeUids: string[];
   customerName: string;
   designName: string;
   watchRef: string;
@@ -686,6 +691,8 @@ export type OrderDetail = {
   companyId: string;
   assignedToUid: string;
   assignedToEmail: string;
+  /** MULTI-ASSIGN (4 Nov 2026): everyone on the order, first person first (orderAssignees.ts). */
+  assigneeUids: string[];
   customerName: string;
   designName: string;
   designLink: string;
@@ -1035,13 +1042,15 @@ export function workspaceAssignedProjectsOnly(access: WorkspaceMemberAccess | un
 }
 
 export function orderIsAssignedToCurrentUser(
-  order: { assignedToUid?: string; assignedToEmail?: string },
+  order: { assignedToUid?: string; assignedToEmail?: string; assigneeUids?: string[] },
   user: { uid?: string; email?: string | null } | null | undefined
 ) {
   const uid = user?.uid?.trim() ?? "";
   const email = user?.email?.trim().toLowerCase() ?? "";
   const assignedUid = order.assignedToUid?.trim() ?? "";
   const assignedEmail = order.assignedToEmail?.trim().toLowerCase() ?? "";
+  // MULTI-ASSIGN (4 Nov 2026): anyone on the list, not only the first person.
+  if (uid && orderAssigneeUids(order).includes(uid)) return true;
   return Boolean((uid && assignedUid === uid) || (email && assignedEmail === email));
 }
 
@@ -1459,7 +1468,7 @@ export async function loadDashboardCounts(
 async function loadAssignedDashboardCounts(companyId: string, workspace: WorkspaceContext | null | undefined, uid: string, production?: DashboardProductionContext | null): Promise<DashboardCounts> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
   const [ordersSnapshot, customerCount] = await Promise.all([
-    getDocs(workspaceOrderQuery(companyId, workspace, uid)),
+    getWorkspaceOrderDocs(companyId, workspace, uid),
     workspaceAccessAllows(workspace?.memberAccess, "customers")
       ? getCountFromServer(query(collection(db, "musteriler"), where("companyId", "==", companyId))).then(snapshot => snapshot.data().count)
       : Promise.resolve(0)
@@ -1614,9 +1623,9 @@ export async function loadDashboardFinanceOrders(companyId: string, workspace?: 
   // Only the orders this member may read (usesAssignedOrderScope above).
   const assignedScope = usesAssignedOrderScope(workspace, uid);
   if (assignedScope) await ensureWorkflowAssignedOrderViews(companyId, workspace);
-  const snapshot = await getDocs(assignedScope
-    ? workspaceOrderQuery(companyId, workspace, uid)
-    : query(collection(db, "siparisler"), where("companyId", "==", companyId)));
+  const snapshot = await (assignedScope
+    ? getWorkspaceOrderDocs(companyId, workspace, uid)
+    : getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId))));
   return snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     return {
@@ -1948,6 +1957,38 @@ function workspaceOrderCollection(companyId: string, workspace?: WorkspaceContex
     : collection(db, "siparisler");
 }
 
+// MULTI-ASSIGN (4 Nov 2026): a member limited to their own work reads the orders naming them first
+// (assignedToUid — older orders and apps) AND those listing them anywhere (assigneeUids). The first query
+// is the one the rules have always allowed and must succeed; the list query is added when the rules and
+// index for it are live, and a refusal of it only means "no extra orders yet".
+function workspaceOrderQueries(companyId: string, workspace?: WorkspaceContext | null, uid = "") {
+  const member = uid.trim();
+  const first = workspaceOrderQuery(companyId, workspace, uid);
+  if (!member) return [first];
+  if (isWorkflowAssignedView(workspace)) {
+    return [first, query(workspaceOrderCollection(companyId, workspace), where("assigneeUids", "array-contains", member))];
+  }
+  if (requiresAssignedToSelfFilter(workspace)) {
+    return [first, query(
+      workspaceOrderCollection(companyId, workspace),
+      where("companyId", "==", companyId),
+      where("assigneeUids", "array-contains", member)
+    )];
+  }
+  return [first];
+}
+
+async function getWorkspaceOrderDocs(companyId: string, workspace?: WorkspaceContext | null, uid = "") {
+  const [first, ...more] = workspaceOrderQueries(companyId, workspace, uid);
+  const firstSnapshot = await getDocs(first);
+  if (more.length === 0) return firstSnapshot;
+  const extra = await Promise.all(more.map(listQuery => getDocs(listQuery).catch(() => null)));
+  const byId = new Map(firstSnapshot.docs.map(orderDocument => [orderDocument.id, orderDocument]));
+  for (const snapshot of extra) for (const orderDocument of snapshot?.docs ?? []) if (!byId.has(orderDocument.id)) byId.set(orderDocument.id, orderDocument);
+  const docs = [...byId.values()];
+  return { docs, size: docs.length };
+}
+
 function workspaceOrderQuery(companyId: string, workspace?: WorkspaceContext | null, uid = "") {
   if (isWorkflowAssignedView(workspace) && uid.trim()) {
     return query(workspaceOrderCollection(companyId, workspace), where("assignedToUid", "==", uid.trim()));
@@ -1994,7 +2035,7 @@ export async function loadOrderListsWithTrash(
   // filters and Smart sorting read fields no Firestore query can (notes, custom
   // fields, free-text statuses, due dates), so the list pages the filtered
   // result in memory (orderListView.ts) instead of paging the query.
-  const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
+  const snapshot = await getWorkspaceOrderDocs(companyId, workspace, uid);
   const orders: OrderListItem[] = [];
   const trashed: OrderListItem[] = [];
   for (const orderDocument of snapshot.docs) {
@@ -2025,6 +2066,7 @@ function orderListItemFromDocument(orderDocument: QueryDocumentSnapshot<Document
       id: orderDocument.id,
       assignedToUid: stringValue(data.assignedToUid, ""),
       assignedToEmail: stringValue(data.assignedToEmail, ""),
+      assigneeUids: orderAssigneeUids({ assignedToUid: stringValue(data.assignedToUid, ""), assigneeUids: assigneeUidsFromData(data.assigneeUids) }),
       customerName: stringValue(data.customerName, "New Project"),
       designName: stringValue(data.designName, "Untitled design"),
       watchRef: stringValue(data.watchRef, ""),
@@ -2081,7 +2123,7 @@ function orderSourceFieldsFrom(data: DocumentData): { commerceProvider: string; 
 
 export async function loadScheduleOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<ScheduleOrderItem[]> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
-  const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
+  const snapshot = await getWorkspaceOrderDocs(companyId, workspace, uid);
   const orders = snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     const paymentDate = dateValue(data.paymentDate);
@@ -2094,6 +2136,7 @@ export async function loadScheduleOrders(companyId: string, workspace?: Workspac
       id: orderDocument.id,
       assignedToUid: stringValue(data.assignedToUid, ""),
       assignedToEmail: stringValue(data.assignedToEmail, ""),
+      assigneeUids: orderAssigneeUids({ assignedToUid: stringValue(data.assignedToUid, ""), assigneeUids: assigneeUidsFromData(data.assigneeUids) }),
       customerName: stringValue(data.customerName, "New Project"),
       designName: stringValue(data.designName, "Untitled design"),
       watchRef: stringValue(data.watchRef, ""),
@@ -2142,7 +2185,7 @@ export async function loadScheduleOrders(companyId: string, workspace?: Workspac
 
 export async function loadWorkspaceOrderOptions(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<OrderOptionItem[]> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
-  const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
+  const snapshot = await getWorkspaceOrderDocs(companyId, workspace, uid);
   const orders = snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     return {
@@ -2243,9 +2286,9 @@ export async function loadWorkspaceCustomers(companyId: string, workspace?: Work
   if (assignedScope) await ensureWorkflowAssignedOrderViews(companyId, workspace);
   const [customersSnapshot, ordersSnapshot] = await Promise.all([
     getDocs(query(collection(db, "musteriler"), where("companyId", "==", companyId))),
-    getDocs(assignedScope
-      ? workspaceOrderQuery(companyId, workspace, uid)
-      : query(collection(db, "siparisler"), where("companyId", "==", companyId)))
+    (assignedScope
+      ? getWorkspaceOrderDocs(companyId, workspace, uid)
+      : getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId))))
   ]);
 
   const orders = ordersSnapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
@@ -2496,7 +2539,7 @@ function mapClientFiles(value: unknown): ClientFileDetail[] {
 
 export async function loadWorkspaceClientFiles(companyId: string, includeCloudAccess = false, workspace?: WorkspaceContext | null, uid = ""): Promise<ClientFileListItem[]> {
   await ensureWorkflowAssignedOrderViews(companyId, workspace);
-  const snapshot = await getDocs(workspaceOrderQuery(companyId, workspace, uid));
+  const snapshot = await getWorkspaceOrderDocs(companyId, workspace, uid);
   const files = snapshot.docs.flatMap(orderDocument => {
     const data = orderDocument.data();
     const orderId = orderDocument.id;
@@ -2723,6 +2766,7 @@ function mapOrderDetailSnapshot(
     companyId: orderCompanyId,
     assignedToUid: stringValue(data.assignedToUid, ""),
     assignedToEmail: stringValue(data.assignedToEmail, ""),
+    assigneeUids: orderAssigneeUids({ assignedToUid: stringValue(data.assignedToUid, ""), assigneeUids: assigneeUidsFromData(data.assigneeUids) }),
     customerName: stringValue(data.customerName, "New Project"),
     designName: stringValue(data.designName, "Untitled design"),
     designLink: stringValue(data.designLink, ""),
@@ -3001,11 +3045,12 @@ export async function loadTeamAccessData(workspace: WorkspaceContext): Promise<T
 // functions/index.js `exports.listTeamScheduleItems`.
 export const TEAM_SCHEDULE_CALLABLE = "listTeamScheduleItems";
 
-export type TeamScheduleItem = ScheduleOrderItem & { assignedToName: string };
+export type TeamScheduleItem = ScheduleOrderItem & { assignedToName: string; assigneeNames: string[] };
 
 type TeamScheduleItemPayload = {
   orderId?: string; projectNumber?: number; designName?: string; customerName?: string;
-  assignedToUid?: string; assignedToName?: string; paymentDate?: string | null; deliveryTime?: number;
+  assignedToUid?: string; assignedToName?: string; assigneeUids?: string[]; assigneeNames?: string[];
+  paymentDate?: string | null; deliveryTime?: number;
   dueDate?: string | null; status?: string; designStatus?: string; productionStageOverride?: string;
   isDelivered?: boolean; isDispatched?: boolean;
 };
@@ -3029,6 +3074,9 @@ export async function loadTeamScheduleItems(companyId: string, range?: { from: D
     assignedToUid: String(item.assignedToUid ?? ""),
     assignedToName: String(item.assignedToName ?? ""),
     assignedToEmail: "",
+    // MULTI-ASSIGN (4 Nov 2026): a server without the list sends only the first person.
+    assigneeUids: orderAssigneeUids({ assignedToUid: String(item.assignedToUid ?? ""), assigneeUids: assigneeUidsFromData(item.assigneeUids) }),
+    assigneeNames: Array.isArray(item.assigneeNames) ? item.assigneeNames.map(name => String(name ?? "")) : [String(item.assignedToName ?? "")],
     customerName: typeof item.customerName === "string" ? item.customerName : "",
     designName: String(item.designName ?? ""),
     watchRef: "",

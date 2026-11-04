@@ -87,7 +87,8 @@ const schedule = read("app/schedule/page.tsx");
 ok("Team Schedule total uses the new label", schedule.includes(`<span>{t("${LABEL}")}</span><strong>{teamTotalActive}</strong>`));
 ok("the old label is gone from the page", !schedule.includes('t("Total active work")'));
 ok("the count is unchanged", schedule.includes("const teamTotalActive = teamMembers.reduce((sum, member) => sum + memberActiveCount(member.id), 0);")
-  && schedule.includes("const memberActiveCount = (memberId: string) => orders.filter(order => (order.assignedToUid || \"\").trim() === memberId && !orderIsClosed(order)).length;"));
+  // MULTI-ASSIGN (4 Nov 2026): a member's count is every active order they are on, not only those naming them first.
+  && schedule.includes("const memberActiveCount = (memberId: string) => orders.filter(order => isOrderAssignee(order, memberId) && !orderIsClosed(order)).length;"));
 const tables = ["language", ...new Set([...read("lib/studioflow/language.ts").matchAll(/from "\.\/(\w+)"/g)].map((m) => m[1]))];
 for (const name of tables) {
   if (fs.existsSync(path.join(root, `lib/studioflow/${name}.ts`))) compile(`lib/studioflow/${name}.ts`, name);

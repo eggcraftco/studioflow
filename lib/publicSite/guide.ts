@@ -495,6 +495,31 @@ const TREE_EN: GuideNode[] = [
         ]
       },
       {
+        id: "orders-assign-people",
+        title: "Assigning an order to several people",
+        blocks: [
+          { kind: "para", text: "An order can be assigned to more than one person. Everyone on it works with their own role from Team Access, so one person can see the prices and payments while another only sees the job." },
+          { kind: "sub", text: "Add or remove people" },
+          { kind: "bullets", items: [
+            "Open the order and use the Assigned to button in its header, or right-click the order in the list (on a phone, press and hold it) and use Assign Project. Tick each person you want; tick a person again to take them off. Unassigned takes everybody off.",
+            "The first person in the list is shown first everywhere (Assigned to Alex +2). The order shows in Team Schedule and on the Production board for everyone on it.",
+            "Only the workspace owner and members with Change Project Assignments can change who is on an order. At most 10 people can be on one order.",
+            "Each person you add gets a notification that they were added to the order."
+          ] },
+          { kind: "sub", text: "Who sees prices" },
+          { kind: "bullets", items: [
+            "What a person can do on the order comes from their role in Team Access, not from the order. A role with Financial Info off does not see prices or payments; a role with Assigned Projects Only sees only the orders they are on.",
+            "For someone who must never receive prices at all, use the Workflow Only role: their app gets a copy of the order without any money in it.",
+            "A role with Financial Info off cannot change prices or payments; the screens hide them."
+          ] },
+          { kind: "sub", text: "Older app versions" },
+          { kind: "bullets", items: [
+            "Someone using an older iPhone, iPad, Mac or Android app sees an order only if they are the first person on it, until they update. The web app always shows it.",
+            "Picking a single person in an older app replaces only the first person; everyone else stays on the order."
+          ] }
+        ]
+      },
+      {
         id: "card-worktime",
         title: "Work Time card",
         blocks: [
@@ -2224,6 +2249,31 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Overdue filtresi bitiş tarihini geçen görevleri öne çıkarır; böylece hiçbir şey kaçmaz.",
             "Rolünüz salt-görüntülemeyse görevleri görebilir ama düzenleyemezsiniz."
+          ] }
+        ]
+      },
+      {
+        id: "orders-assign-people",
+        title: "Bir siparişi birden çok kişiye atama",
+        blocks: [
+          { kind: "para", text: "Bir sipariş birden çok kişiye atanabilir. Siparişteki herkes Ekip Erişimi'ndeki kendi rolüyle çalışır: biri fiyatları ve ödemeleri görürken diğeri yalnız işi görebilir." },
+          { kind: "sub", text: "Kişi ekleme ya da çıkarma" },
+          { kind: "bullets", items: [
+            "Siparişi açın ve başlıktaki Atanan düğmesini kullanın ya da listede siparişe sağ tıklayıp (telefonda basılı tutup) Projeyi Ata'yı seçin. İstediğiniz her kişiyi işaretleyin; çıkarmak için işareti kaldırın. Atanmamış herkesi çıkarır.",
+            "Listedeki ilk kişi her yerde önce gösterilir (Atanan Alex +2). Sipariş, Ekip Planı'nda ve Üretim panosunda siparişteki herkesin satırında görünür.",
+            "Siparişteki kişileri yalnız çalışma alanı sahibi ve Proje Atamalarını Değiştir yetkisi olan üyeler değiştirebilir. Bir siparişte en çok 10 kişi olabilir.",
+            "Eklediğiniz her kişiye siparişe eklendiğini bildiren bir bildirim gider."
+          ] },
+          { kind: "sub", text: "Fiyatları kim görür" },
+          { kind: "bullets", items: [
+            "Kişinin siparişte neler yapabileceği siparişten değil, Ekip Erişimi'ndeki rolünden gelir. Finansal Bilgiler kapalı bir rol fiyatları ve ödemeleri görmez; Sadece Atanan Projeler açık bir rol yalnız içinde olduğu siparişleri görür.",
+            "Fiyatların hiç ulaşmaması gereken biri için Sadece İş Akışı rolünü kullanın: uygulamasına siparişin parasız bir kopyası gelir.",
+            "Finansal Bilgiler kapalı bir rol fiyatları ve ödemeleri değiştiremez; ekranlar onları gizler."
+          ] },
+          { kind: "sub", text: "Eski uygulama sürümleri" },
+          { kind: "bullets", items: [
+            "iPhone, iPad, Mac ya da Android uygulamasının eski bir sürümünü kullanan kişi, güncelleyene kadar siparişi yalnız listede ilk sıradaysa görür. Web uygulaması her zaman gösterir.",
+            "Eski bir uygulamada tek bir kişi seçmek yalnız ilk kişiyi değiştirir; diğerleri siparişte kalır."
           ] }
         ]
       },
