@@ -67,6 +67,12 @@ const nextConfig: NextConfig = {
   env: { NEXT_PUBLIC_NV_BUILD_ID: NV_BUILD_ID, NEXT_PUBLIC_FIREBASE_EMULATOR: NV_FIREBASE_EMULATOR },
   // "x-powered-by: Next.js" tells an attacker which framework to look up.
   poweredByHeader: false,
+  // <title>, description, canonical, robots and hreflang in the first <head> for every visitor. Next 15.2+ streams
+  // them into <body> for any user agent outside its short bot list — Googlebot itself (only "Google-…" tools are
+  // on it) and the AI crawlers robots.ts welcomes — so the HTML a crawler reads before JavaScript had its
+  // canonical and hreflang outside <head> (live 4 Nov 2026). The public pages' metadata reads no data, so
+  // resolving it before the head is sent costs nothing.
+  htmlLimitedBots: /.*/,
   async rewrites() {
     return [
       {

@@ -10,8 +10,9 @@
 //    reciprocal hreflang set (12 languages + x-default → English) as every other version and as the sitemap.
 // 4. The sitemap lists every version once, nothing more; robots.txt still blocks /guide and nothing localized.
 // 5. The FAQ's structured data is built from exactly the faq.qN keys the FAQ page shows.
-// 6. The wiring: middleware (header + /en redirect, no country lookup), <html lang>, the locale-aware Link on
-//    the public pages, the footer's language links, and the address helpers themselves.
+// 6. The wiring: middleware (header + /en redirect, no country lookup), <html lang>, metadata in the first <head>
+//    for Googlebot too (next.config htmlLimitedBots), the locale-aware Link on the public pages, the footer's
+//    language links, and the address helpers themselves.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -179,6 +180,7 @@ const middleware = read("middleware.ts");
 check(/PUBLIC_LOCALE_HEADER/.test(middleware) && /requestHeaders\.delete\(PUBLIC_LOCALE_HEADER\)/.test(middleware), "middleware: sets the language header, drops a client-sent one");
 check(/\^\\\/en\(\\\/\.\*\)\?\$/.test(middleware) && /NextResponse\.redirect\(url, 308\)/.test(middleware), "middleware: /en and /en/… → 308 to the English address");
 check(!/geo|x-vercel-ip-country|cf-ipcountry|accept-language/i.test(middleware), "middleware: no country or Accept-Language redirect");
+check(/^\s*htmlLimitedBots: \/\.\*\/,/m.test(read("next.config.ts")), "next.config: metadata in <head> for every user agent, Googlebot included");
 check(/PUBLIC_LOCALE_HEADER/.test(read("app/layout.tsx")) && /lang=\{publicLocale\?\.htmlLang \?\? "en"\}/.test(read("app/layout.tsx")), "<html lang> follows the language address");
 for (const f of ["components/PublicMarketing.tsx", "app/integrations/IntegrationsDirectory.tsx", "app/integrations/amazon/AmazonSellerPage.tsx",
   "app/integrations/shopify/ShopifyHelpPage.tsx", "app/integrations/claude/ClaudeHelpPage.tsx"]) {
