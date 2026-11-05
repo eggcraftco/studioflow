@@ -30,6 +30,11 @@
 //   kept as it is until a weight of one item is typed. S7 — a line can start from the order or its
 //   held inventory (description + codes only) and is then ticked as checked; the EUDR TARIC code
 //   is picked from HMRC's list.
+// - DHL S4 (5 Nov 2026, after DHL's test environment showed validateDataOnly makes nothing):
+//   "Check with DHL" asks DHL to check the details as the label would send them, without a label,
+//   a waybill or a courier (checkOrderShipmentWithDhl; the courier is never asked, nothing is
+//   stored). Its answer says "DHL check passed", never "label created", and is dropped as soon as
+//   anything is edited.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
@@ -42,6 +47,7 @@ import { EUDR_TARIC_CODES, isEudrTaricCode } from "@/lib/studioflow/dhlEudr";
 import {
   EXPORT_REASONS,
   QUANTITY_UNITS,
+  checkOrderShipmentWithDhl,
   checkShipmentDutiesPaid,
   confirmOrderShipmentCustoms,
   createOrderShipment,
@@ -53,6 +59,7 @@ import {
   shipmentIssueMessage,
   shippingErrorMessage,
   type CustomsItem,
+  type DhlCheckResult,
   type OrderShipment,
   type ProductIdSuggestion,
   type ShipmentDraftPatch,
@@ -244,6 +251,9 @@ export function ShipmentDraftDialog({
   // Once DHL may have the shipment (no answer) or is still making it, this dialog
   // sends nothing more: the order's card carries the search from there.
   const [locked, setLocked] = useState(false);
+  // S4: DHL's answer to "Check with DHL" — only for the details as they were checked.
+  const [dhlCheck, setDhlCheck] = useState<DhlCheckResult | null>(null);
+  useEffect(() => { if (dirty) setDhlCheck(null); }, [dirty]);
   const dialogRef = useRef<HTMLDivElement | null>(null);
 
   // Focus moves into the dialog as it opens, so Escape and Tab work from the start.
@@ -456,6 +466,42 @@ export function ShipmentDraftDialog({
       setMessage(t("The sender details from Settings are now on this shipment."));
     });
   }
+
+  // S4: DHL checks the details; nothing is created at DHL or stored in NivaDesk, the courier is never asked.
+  async function checkWithDhl() {
+    await guard("dhlcheck", async () => {
+      setDhlCheck(null);
+      const pending = await persist();
+      if (pending.length) {
+        setMessage(t("DHL was not asked: the shipment is not complete yet."));
+        return;
+      }
+      const result = await checkOrderShipmentWithDhl(companyId, orderId, shipment.id);
+      if (result.outcome === "invalid" && result.sentToDhl === false) {
+        takeIssues(result.issues ?? result.problems ?? []);
+        setMessage(t("DHL was not asked: the shipment is not complete yet."));
+        return;
+      }
+      setDhlCheck(result);
+    });
+  }
+
+  // What DHL's answer to the check says, in the screen's words.
+  const dhlCheckView = (result: DhlCheckResult): { tone: "ok" | "warn" | "error"; text: string } => {
+    if (result.outcome === "valid") return { tone: "ok", text: t("DHL check passed: DHL accepted these details. This is not a label: nothing was created at DHL.") };
+    if (result.outcome === "invalid") {
+      const details = (result.dhl?.additionalDetails ?? []).join(" · ");
+      return { tone: "error", text: `${t("DHL found problems in these details. Nothing was created.")} ${result.dhl?.detail ?? ""}${details ? ` (${details})` : ""}`.trim() };
+    }
+    if (result.outcome === "made_something") {
+      const made = result.made ?? {};
+      const numbers = [made.shipmentTrackingNumber, ...(made.packageTrackingNumbers ?? []), made.dispatchConfirmationNumber].filter(Boolean).join(", ");
+      return { tone: "error", text: t("DHL's answer to the check carried a shipment or pickup number ({numbers}). NivaDesk saved nothing. Look in MyDHL+ before you create a label, and contact NivaDesk support.").replace("{numbers}", numbers || "—") };
+    }
+    if (result.reason === "check_off") return { tone: "warn", text: t("The DHL check is switched off at the moment. You can still create the label.") };
+    if (result.reason === "auth") return { tone: "error", text: t("DHL did not accept the connection's API key for the check. An owner can check it in Settings ▸ Integrations ▸ DHL Express.") };
+    return { tone: "warn", text: t("The DHL check could not be done just now. Nothing was created. You can try again, or create the label.") };
+  };
 
   async function create() {
     await guard("create", async () => {
@@ -1056,6 +1102,18 @@ export function ShipmentDraftDialog({
               {t("Or create this shipment in MyDHL+ with the reference {reference}, then use “Find shipments made on MyDHL” on the order to link it.").replace("{reference}", orderReference)}
             </p>
           ) : null}
+          <p className="shipment-muted" data-testid="dhl-check-explain">{t("Check with DHL asks DHL to check these details without creating anything: no label, no waybill and no courier.")}</p>
+          {dhlCheck && !dirty ? (() => {
+            const view = dhlCheckView(dhlCheck);
+            return (
+              <div className="shipment-banner" data-tone={view.tone} data-testid="dhl-check-result" data-outcome={dhlCheck.outcome} role="status">
+                <span>{view.text}</span>
+                {dhlCheck.outcome === "valid" && pickupSupported && pickup.requested ? (
+                  <span className="shipment-muted" data-testid="dhl-check-courier">{t("The courier is not part of this check. It is booked only when the label is created.")}</span>
+                ) : null}
+              </div>
+            );
+          })() : null}
           {pickupSupported && pickup.requested ? (
             <p className="shipment-muted" data-testid="create-with-pickup">
               {t("Creating the label sends this shipment to DHL once and books a DHL courier for {date}, between {from} and {to}. The order is not marked dispatched until DHL scans the parcel.")
@@ -1086,6 +1144,9 @@ export function ShipmentDraftDialog({
           <span className="shipment-actions">
             <button type="button" className="inventory-secondary" disabled={Boolean(busy) || locked} onClick={() => void save()}>
               {busy === "save" ? t("Saving…") : t("Save draft")}
+            </button>
+            <button type="button" className="inventory-secondary" data-testid="dhl-check-button" disabled={Boolean(busy) || locked || (!dirty && issues.length > 0)} onClick={() => void checkWithDhl()}>
+              {busy === "dhlcheck" ? t("Checking with DHL…") : t("Check with DHL")}
             </button>
             <button type="button" className="button" disabled={Boolean(busy) || locked || (!dirty && issues.length > 0)} onClick={() => void create()}>
               {busy === "create" ? t("Sending to DHL…") : t("Create DHL label")}

@@ -235,6 +235,21 @@ export type CreateShipmentResult = {
   reason?: string;
 };
 
+// "Check with DHL" (S4, functions/shipping/service.js checkShipment): DHL's own check of the draft
+// (validateDataOnly). Never a label, never a waybill, never a courier, never stored.
+export type DhlCheckResult = {
+  outcome: "valid" | "invalid" | "unavailable" | "made_something";
+  shipmentId: string;
+  /** Always false: the courier is never asked of DHL in a check. */
+  courierChecked: false;
+  sentToDhl?: boolean;
+  reason?: "check_off" | "unproven_version" | "auth" | "not_sent" | "no_answer" | "not_supported";
+  issues?: ShipmentIssue[];
+  problems?: ShipmentIssue[];
+  dhl?: { status: number; title?: string; detail?: string; additionalDetails?: string[] };
+  made?: { shipmentTrackingNumber?: string; packageTrackingNumbers?: string[]; documents?: number; dispatchConfirmationNumber?: string };
+};
+
 export type ReconcileResult = {
   outcome: "linked" | "none" | "several" | "error" | "conflict" | "not_needed";
   trackingNumber?: string;
@@ -339,6 +354,13 @@ export async function createOrderShipment(companyId: string, orderId: string, sh
   return withWebSyncStatus(
     async () => (await call<Record<string, unknown>, CreateShipmentResult>("createOrderShipment")({ companyId, orderId, shipmentId, acknowledgeSecondLabelRisk })).data,
     "Sending to DHL…"
+  );
+}
+
+export async function checkOrderShipmentWithDhl(companyId: string, orderId: string, shipmentId: string): Promise<DhlCheckResult> {
+  return withWebSyncStatus(
+    async () => (await call<Record<string, unknown>, DhlCheckResult>("checkOrderShipmentWithDhl")({ companyId, orderId, shipmentId })).data,
+    "Checking with DHL…"
   );
 }
 

@@ -33912,6 +33912,10 @@ body[data-studio-theme="dark"] .settings-ticket-thread { background: var(--setti
   background: rgba(127,127,127,0.1);
 }
 .shipment-banner[data-tone="warn"] { background: rgba(217,119,6,0.14); color: #d97706; }
+/* DHL S4: the answer to "Check with DHL" — passed (green) or DHL found problems (red). */
+.shipment-banner[data-tone="ok"] { background: rgba(22,163,74,0.14); color: #15803d; }
+.shipment-banner[data-tone="error"] { background: rgba(220,38,38,0.12); color: #dc2626; }
+.shipment-banner[data-testid="dhl-check-result"] { flex-direction: column; align-items: flex-start; }
 .shipment-section { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--app-border, rgba(0,0,0,0.1)); }
 .shipment-section h3 { margin: 0; font-size: 14px; font-weight: 800; }
 .shipment-subhead { font-size: 12px; font-weight: 800; opacity: 0.8; margin-top: 4px; }
