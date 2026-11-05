@@ -17,7 +17,12 @@ export type PrivacyPolicySection = {
 // and 10 (AI assistants: ChatGPT and Claude) were approved by the owner and
 // published on 17 October 2026. 18 October 2026: section 10 names the separate
 // ChatGPT and Claude cards in Settings › Integrations (owner-approved).
-export const PRIVACY_POLICY_LAST_UPDATED = "30 October 2026";
+// NIVADESK_HUKUK.md H-06 (owner approved 5 Nov 2026, separately from the v2
+// rewrite): section 1 names the Information Commission and section 19 says how
+// to complain to us (acknowledged within 30 days) or straight to the regulator.
+// RELEASE: this must be the day the change actually goes live — never earlier.
+// scripts/check-legal-h06-h07.mts --publish-date "<d Month yyyy>" checks it.
+export const PRIVACY_POLICY_LAST_UPDATED = "5 November 2026";
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -25,9 +30,9 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     paragraphs: [
       "NivaDesk is operated by:",
       "EGGCRAFT LIMITED\nRegistered in England and Wales, company number 16566512\nVAT number GB 514512621\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
-      "EGGCRAFT LIMITED is registered with the UK Information Commissioner's Office (ICO), registration reference ZC019612.",
+      "EGGCRAFT LIMITED is registered with the UK's data protection regulator, the Information Commission (formerly the Information Commissioner's Office, ICO), registration reference ZC019612.",
       "Email: contact@nivadesk.co.uk",
-      "For privacy-related questions, data requests, or account deletion requests, please contact us by email."
+      "For privacy-related questions, data requests, complaints, or account deletion requests, please contact us by email."
     ]
   },
   {
@@ -551,15 +556,16 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "request data portability;",
       "withdraw consent where processing is based on consent;",
       "opt out of marketing communications;",
-      "lodge a complaint with a data protection authority."
+      "complain to us, and to a data protection authority."
     ],
     subsections: [
       {
         title: "",
         paragraphs: [
-          "If you are in the UK, you can contact the Information Commissioner's Office at ico.org.uk.",
           "To exercise your rights, contact us at: contact@nivadesk.co.uk",
-          "We may ask for information to verify your identity before responding to a request."
+          "We may ask for information to verify your identity before responding to a request.",
+          "Complaints. If you are concerned about how we handle your personal data, you can complain to us at contact@nivadesk.co.uk; you do not need to be signed in or have an account. We will acknowledge your complaint within 30 days, investigate it, keep you informed of progress and tell you the outcome without undue delay.",
+          "You may also complain to the UK's data protection regulator, the Information Commission (ico.org.uk, telephone 0303 123 1113), at any time; you do not have to complete our complaints process first. If the EU GDPR applies, you may also complain to a competent supervisory authority, including where you habitually live or work, or where you believe an infringement occurred."
         ]
       }
     ]

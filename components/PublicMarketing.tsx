@@ -44,54 +44,65 @@ import {
   getPrivacyPolicyLastUpdatedLabel,
   getPrivacyPolicySections,
   PRIVACY_POLICY_LAST_UPDATED,
+  PRIVACY_POLICY_SECTIONS,
   type PrivacyPolicySection,
   type PrivacyPolicySubsection
 } from "@/lib/publicSite/privacyPolicy";
 import {
   getTermsPolicyLastUpdatedLabel,
   getTermsPolicySections,
-  TERMS_POLICY_LAST_UPDATED
+  TERMS_POLICY_LAST_UPDATED,
+  TERMS_POLICY_SECTIONS
 } from "@/lib/publicSite/termsPolicy";
 import {
   COOKIE_POLICY_LAST_UPDATED,
+  COOKIE_POLICY_SECTIONS,
   getCookiePolicyLastUpdatedLabel,
   getCookiePolicySections
 } from "@/lib/publicSite/cookiePolicy";
 import {
   ACCOUNT_DELETION_POLICY_LAST_UPDATED,
+  ACCOUNT_DELETION_POLICY_SECTIONS,
   getAccountDeletionPolicyLastUpdatedLabel,
   getAccountDeletionPolicySections
 } from "@/lib/publicSite/accountDeletionPolicy";
 import {
   getRefundCancellationPolicyLastUpdatedLabel,
   getRefundCancellationPolicySections,
-  REFUND_CANCELLATION_POLICY_LAST_UPDATED
+  REFUND_CANCELLATION_POLICY_LAST_UPDATED,
+  REFUND_CANCELLATION_POLICY_SECTIONS
 } from "@/lib/publicSite/refundCancellationPolicy";
 import {
   getSecurityOverviewLastUpdatedLabel,
   getSecurityOverviewSections,
-  SECURITY_OVERVIEW_LAST_UPDATED
+  SECURITY_OVERVIEW_LAST_UPDATED,
+  SECURITY_OVERVIEW_SECTIONS
 } from "@/lib/publicSite/securityOverview";
 import {
   getSubprocessorsLastUpdatedLabel,
   getSubprocessorsSections,
-  SUBPROCESSORS_LAST_UPDATED
+  SUBPROCESSORS_LAST_UPDATED,
+  SUBPROCESSORS_SECTIONS
 } from "@/lib/publicSite/subprocessors";
 import {
   DATA_PROCESSING_AGREEMENT_LAST_UPDATED,
+  DATA_PROCESSING_AGREEMENT_SECTIONS,
   getDataProcessingAgreementLastUpdatedLabel,
   getDataProcessingAgreementSections
 } from "@/lib/publicSite/dataProcessingAgreement";
 import {
   ACCEPTABLE_USE_POLICY_LAST_UPDATED,
+  ACCEPTABLE_USE_POLICY_SECTIONS,
   getAcceptableUsePolicyLastUpdatedLabel,
   getAcceptableUsePolicySections
 } from "@/lib/publicSite/acceptableUsePolicy";
 import {
   getSupportContactLastUpdatedLabel,
   getSupportContactSections,
-  SUPPORT_CONTACT_LAST_UPDATED
+  SUPPORT_CONTACT_LAST_UPDATED,
+  SUPPORT_CONTACT_SECTIONS
 } from "@/lib/publicSite/supportContact";
+import { getLegalLanguageNotice } from "@/lib/publicSite/legalLanguageNotice";
 import {
   createStripeCheckoutSession,
   type StripeBillingItemKey
@@ -4341,17 +4352,27 @@ function PublicLegalSubsection({ subsection }: { subsection: PrivacyPolicySubsec
   );
 }
 
-function PublicLegalLanguageNotice({ language }: { language: StudioLanguage }) {
+// NIVADESK_HUKUK.md H-07: every legal page tells a non-English reader, in their language, that the English text
+// governs — `translated` when the page below is a translated summary, otherwise that it is shown in English.
+// H-06: the Privacy page adds how to complain (to us, or to the Information Commission at any time).
+// Copy and its English source: lib/publicSite/legalLanguageNotice.ts.
+function PublicLegalLanguageNotice({
+  language,
+  translated,
+  complaints = false
+}: {
+  language: StudioLanguage;
+  translated: boolean;
+  complaints?: boolean;
+}) {
   if (language === "English") return null;
+  const notice = getLegalLanguageNotice(language);
 
   return (
     <article className="public-card public-legal-card">
-      <h2>Legal document language</h2>
-      <p>
-        The current authoritative version of this legal document is provided in English.
-        The public site navigation may be displayed in your selected language, but the legal
-        terms below remain in English until reviewed translations are available.
-      </p>
+      <h2>{notice.title}</h2>
+      <p>{translated ? notice.summary : notice.english}</p>
+      {complaints ? <p>{notice.complaints}</p> : null}
     </article>
   );
 }
@@ -4396,7 +4417,11 @@ function PublicPrivacyPageContent() {
 
       <section className="public-section">
         <div className="public-shell public-legal-document">
-          <PublicLegalLanguageNotice language={language} />
+          <PublicLegalLanguageNotice
+            language={language}
+            translated={privacyPolicySections !== PRIVACY_POLICY_SECTIONS}
+            complaints
+          />
           {privacyPolicySections.map(section => (
             <PublicLegalSection key={section.title} section={section} />
           ))}
@@ -4433,7 +4458,7 @@ function PublicTermsPageContent() {
 
       <section className="public-section">
         <div className="public-shell public-legal-document">
-          <PublicLegalLanguageNotice language={language} />
+          <PublicLegalLanguageNotice language={language} translated={termsPolicySections !== TERMS_POLICY_SECTIONS} />
           {termsPolicySections.map(section => (
             <PublicLegalSection key={section.title} section={section} />
           ))}
@@ -4470,6 +4495,7 @@ function PublicCookiePageContent() {
 
       <section className="public-section">
         <div className="public-shell public-legal-document">
+          <PublicLegalLanguageNotice language={language} translated={cookiePolicySections !== COOKIE_POLICY_SECTIONS} />
           {cookiePolicySections.map(section => (
             <PublicLegalSection key={section.title} section={section} />
           ))}
@@ -4506,6 +4532,7 @@ function PublicAccountDeletionPageContent() {
 
       <section className="public-section">
         <div className="public-shell public-legal-document">
+          <PublicLegalLanguageNotice language={language} translated={accountDeletionPolicySections !== ACCOUNT_DELETION_POLICY_SECTIONS} />
           {accountDeletionPolicySections.map(section => (
             <PublicLegalSection key={section.title} section={section} />
           ))}
@@ -4542,7 +4569,10 @@ function PublicRefundCancellationPageContent() {
 
       <section className="public-section">
         <div className="public-shell public-legal-document">
-          <PublicLegalLanguageNotice language={language} />
+          <PublicLegalLanguageNotice
+            language={language}
+            translated={refundCancellationPolicySections !== REFUND_CANCELLATION_POLICY_SECTIONS}
+          />
           {refundCancellationPolicySections.map(section => (
             <PublicLegalSection key={section.title} section={section} />
           ))}
@@ -4876,6 +4906,7 @@ function PublicSecurityPageContent() {
 
       <section className="public-section">
         <div className="public-shell public-legal-document">
+          <PublicLegalLanguageNotice language={language} translated={securityOverviewSections !== SECURITY_OVERVIEW_SECTIONS} />
           {securityOverviewSections.map(section => (
             <PublicLegalSection key={section.title} section={section} />
           ))}
@@ -4912,6 +4943,7 @@ function PublicSubprocessorsPageContent() {
 
       <section className="public-section">
         <div className="public-shell public-legal-document">
+          <PublicLegalLanguageNotice language={language} translated={subprocessorsSections !== SUBPROCESSORS_SECTIONS} />
           {subprocessorsSections.map(section => (
             <PublicLegalSection key={section.title} section={section} />
           ))}
@@ -4948,6 +4980,7 @@ function PublicDataProcessingAgreementPageContent() {
 
       <section className="public-section">
         <div className="public-shell public-legal-document">
+          <PublicLegalLanguageNotice language={language} translated={dataProcessingAgreementSections !== DATA_PROCESSING_AGREEMENT_SECTIONS} />
           {dataProcessingAgreementSections.map(section => (
             <PublicLegalSection key={section.title} section={section} />
           ))}
@@ -4984,6 +5017,7 @@ function PublicAcceptableUsePageContent() {
 
       <section className="public-section">
         <div className="public-shell public-legal-document">
+          <PublicLegalLanguageNotice language={language} translated={acceptableUsePolicySections !== ACCEPTABLE_USE_POLICY_SECTIONS} />
           {acceptableUsePolicySections.map(section => (
             <PublicLegalSection key={section.title} section={section} />
           ))}
@@ -5020,6 +5054,7 @@ function PublicContactPageContent() {
 
       <section className="public-section">
         <div className="public-shell public-legal-document">
+          <PublicLegalLanguageNotice language={language} translated={supportContactSections !== SUPPORT_CONTACT_SECTIONS} />
           {supportContactSections.map(section => (
             <PublicLegalSection key={section.title} section={section} />
           ))}
