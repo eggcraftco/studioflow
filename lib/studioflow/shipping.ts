@@ -85,8 +85,17 @@ export type CustomsItem = {
   standardProductIdAbsent?: boolean;
   /** EUDR due-diligence statement (DDS / CDDS / SDI) reference: DHL "DDS". */
   ddsReference?: string;
-  /** TARIC document code (EUDR), e.g. Y129: DHL "TAR". */
+  /** TARIC document code (EUDR), e.g. Y129: DHL "TAR". From the list since S7 (lib/studioflow/dhlEudr.ts). */
   taricDocumentCode?: string;
+  // DHL S2–S7 (5 Nov 2026, server functions/shipping/draft.js + tariff.js). Absent on a server from before.
+  /** S6: the weight of ONE item; the server multiplies it by the quantity into netWeight / grossWeight. */
+  unitNetWeight?: number | null;
+  unitGrossWeight?: number | null;
+  /** S5: the official tariff's answer for this line's HS code (server-only; never sent back). */
+  hsTariff?: { code: string; tariff: "uk" | "xi"; outcome: "found" | "not_found" | "unavailable"; description?: string; declarable?: boolean; checkedAtMs?: number };
+  /** S7: where the description and codes were copied from; such a line is checked line by line. */
+  prefillSource?: "order_line" | "order_watch_ref" | "inventory_item";
+  lineChecked?: boolean;
 };
 
 /** What the server says this draft's lines need (DHL-8). */
@@ -112,6 +121,8 @@ export type ShipmentProductIdsView = {
 export type ProductIdSuggestion = {
   source: "order_line" | "order_watch_ref" | "inventory_item";
   label: string;
+  /** S7: a description to start the line from (the person checks it); absent on older servers. */
+  description?: string;
   ownership?: "business" | "customer";
   merchantProductId?: string;
   manufacturerProductId?: string;
@@ -459,7 +470,12 @@ const ISSUE_MESSAGES: Record<string, string> = {
   item_pid_placeholder: "A product code cannot be a placeholder such as N/A, TBC or 0.",
   item_standard_pid_invalid: "The barcode (GTIN/EAN/UPC) has a wrong check digit. Correct it or leave it empty.",
   item_dds_reference_invalid: "The EUDR due-diligence reference can contain only letters and digits.",
-  item_taric_code_invalid: "The TARIC document code is one letter and three digits, for example Y129.",
+  item_taric_code_invalid: "Choose the EUDR TARIC document code from the list.",
+  // DHL S2–S7 (5 Nov 2026): functions/shipping/draft.js + productIds.js.
+  item_dds_reference_missing: "A C code needs its reference number in the EUDR due-diligence reference (DDS) field on the same line.",
+  items_weight_over_parcels: "The lines weigh more than the parcels. Check each line's weight of one item and the parcel weights.",
+  item_hs_code_not_in_tariff: "This HS code is not in the official tariff. Check it on the UK Trade Tariff.",
+  item_prefill_unchecked: "This line was filled from the order or the inventory. Tick that you checked its description, HS code, origin and weight.",
   eu_b2c_use_mydhl_plus: "Shipments to consumers in the EU are created in MyDHL+ for now. Use this order's reference there; NivaDesk finds the shipment on the order.",
   eu_product_ids_not_supported: "NivaDesk cannot create DHL shipments to consumers in the EU yet (EU product identifier rule).",
   line_reference_type_invalid: "One of the product codes cannot be sent to DHL.",

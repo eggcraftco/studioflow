@@ -39,7 +39,7 @@ expect("self-check: an unknown code falls back", shipmentIssueMessage({ code: "n
 const DIALOG_WORDS = [
   "Product codes", "Your product code (SKU)", "Manufacturer's product code", "Barcode (GTIN/EAN/UPC), if any",
   "EUDR references (only for goods the EU deforestation rules cover)", "EUDR due-diligence reference (DDS)", "TARIC document code",
-  "Copy codes from…", "Order line", "Watch reference on the order", "Held for this order",
+  "Fill this line from…", "Order line", "Watch reference on the order", "Held for this order",
   "This shipment goes to a consumer in the EU: from 1 November 2026 every line needs your product code and the manufacturer's product code. If you made the item, the manufacturer's code is your own model code. One code per product variant, never an order or batch number.",
   "Needed on shipments to consumers in the EU from 1 November 2026. Optional here.",
   // r2: business or consumer, no barcode (Y081), line-named refusals with the MyDHL+ path

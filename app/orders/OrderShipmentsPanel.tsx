@@ -329,6 +329,10 @@ export function OrderShipmentsPanel({
                       ? <span>{t("Pickup number")} <strong className="shipment-mono">{shipment.pickup.dispatchConfirmationNumber}</strong></span>
                       // DHL's answer was lost (the shipment was found by its reference): the courier may be booked.
                       : <span className="shipment-muted">{t("DHL's pickup number did not come back. Check the pickup in MyDHL+ before booking another.")}</span>}
+                    {/* S3 (5 Nov 2026): cancelling is DHL's, with this number; NivaDesk has no courier cancellation. */}
+                    {shipment.pickup.dispatchConfirmationNumber
+                      ? <span className="shipment-muted" data-testid="pickup-cancel-path">{t("NivaDesk cannot cancel this courier. To cancel it, use this pickup number in MyDHL+ or contact DHL Express customer service.")}</span>
+                      : null}
                   </div>
                 ) : null}
 

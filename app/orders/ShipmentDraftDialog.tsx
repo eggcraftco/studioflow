@@ -21,6 +21,15 @@
 //   list, the sender's country's first, and amounts show its mark and the reader's
 //   grouping; a courier can be booked with the label, with the latest collection
 //   time; incoterms carry their names.
+// - DHL S2–S7 (5 Nov 2026, the owner's decisions before the first real shipment):
+//   S3 — NivaDesk cannot cancel a courier: said beside the courier box before it is ticked, and on
+//   the order card with the pickup number (no cancel button). S5 — the HS code's entry in the
+//   official tariff is shown under the field once saved (the server looks it up); nothing fills or
+//   confirms a code. S6 — the person types the weight of ONE item; the line's total DHL gets is
+//   shown (3 × 0.120 = 0.360 kg) and worked out again by the server; an older app's line total is
+//   kept as it is until a weight of one item is typed. S7 — a line can start from the order or its
+//   held inventory (description + codes only) and is then ticked as checked; the EUDR TARIC code
+//   is picked from HMRC's list.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
@@ -28,6 +37,8 @@ import { DHL_COUNTRIES, dhlCountryName } from "@/lib/studioflow/dhlCountries";
 import { currencyChoices, currencyMark, currencyName, dhlCountryCurrency } from "@/lib/studioflow/dhlCurrencies";
 import { callingCodeFor, composePhone, splitPhone } from "@/lib/studioflow/dhlPhone";
 import { amountText, formatMoney, readAmount } from "@/lib/studioflow/customsAmount";
+import { customsLineWeights, kgText, lineWeightKg, tariffAnswerFor, weightGrams } from "@/lib/studioflow/dhlLineWeight";
+import { EUDR_TARIC_CODES, isEudrTaricCode } from "@/lib/studioflow/dhlEudr";
 import {
   EXPORT_REASONS,
   QUANTITY_UNITS,
@@ -56,7 +67,12 @@ import { ETSY_DHL_EMAIL_NOTE } from "@/lib/studioflow/etsyOrder";
 type PieceInput = { weight: string; length: string; width: string; height: string };
 type ItemInput = {
   description: string; quantity: string; quantityUnit: string; unitValue: string;
-  hsCode: string; manufacturerCountry: string; netWeight: string; grossWeight: string;
+  hsCode: string; manufacturerCountry: string;
+  // S6: the weight of ONE item as typed. netWeight / grossWeight hold a line TOTAL saved earlier
+  // (an older app, or a server from before S6): sent back unchanged until a unit weight is typed.
+  unitNetWeight: string; unitGrossWeight: string; netWeight: string; grossWeight: string;
+  // S5: the server's tariff answer as read (never sent back). S7: where the line was filled from.
+  hsTariff: CustomsItem["hsTariff"] | null; prefillSource: "" | NonNullable<CustomsItem["prefillSource"]>; lineChecked: boolean;
   // Product identifiers (DHL-8): sent as typed; the server checks and keeps them.
   merchantProductId: string; manufacturerProductId: string; standardProductId: string;
   ddsReference: string; taricDocumentCode: string;
@@ -89,7 +105,8 @@ const asNumber = (value: string) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 const emptyItem = (): ItemInput => ({
-  description: "", quantity: "1", quantityUnit: "PCS", unitValue: "", hsCode: "", manufacturerCountry: "", netWeight: "", grossWeight: "",
+  description: "", quantity: "1", quantityUnit: "PCS", unitValue: "", hsCode: "", manufacturerCountry: "",
+  unitNetWeight: "", unitGrossWeight: "", netWeight: "", grossWeight: "", hsTariff: null, prefillSource: "", lineChecked: false,
   merchantProductId: "", manufacturerProductId: "", standardProductId: "", ddsReference: "", taricDocumentCode: "", standardProductIdAbsent: false
 });
 // How the server read the recipient (functions/shipping/productIds.js recipientKind), for the hint under the choice.
@@ -187,7 +204,11 @@ export function ShipmentDraftDialog({
   const [invoiceDate, setInvoiceDate] = useState(customsView.invoice?.date ?? "");
   const [items, setItems] = useState<ItemInput[]>(() => (customsView.items ?? []).map((i: CustomsItem) => ({
     description: i.description ?? "", quantity: asInput(i.quantity), quantityUnit: i.quantityUnit || "PCS", unitValue: amountText(i.unitValue, customsView.currency || senderCurrency, locale),
-    hsCode: i.hsCode ?? "", manufacturerCountry: i.manufacturerCountry ?? "", netWeight: asInput(i.netWeight), grossWeight: asInput(i.grossWeight),
+    hsCode: i.hsCode ?? "", manufacturerCountry: i.manufacturerCountry ?? "",
+    unitNetWeight: asInput(i.unitNetWeight), unitGrossWeight: asInput(i.unitGrossWeight),
+    // A line with a unit weight shows only that; a line saved as a total keeps the total aside.
+    netWeight: typeof i.unitNetWeight === "number" ? "" : asInput(i.netWeight), grossWeight: typeof i.unitNetWeight === "number" ? "" : asInput(i.grossWeight),
+    hsTariff: i.hsTariff ?? null, prefillSource: i.prefillSource ?? "", lineChecked: i.lineChecked === true,
     merchantProductId: i.merchantProductId ?? "", manufacturerProductId: i.manufacturerProductId ?? "", standardProductId: i.standardProductId ?? "",
     ddsReference: i.ddsReference ?? "", taricDocumentCode: i.taricDocumentCode ?? "", standardProductIdAbsent: i.standardProductIdAbsent === true
   })));
@@ -302,8 +323,20 @@ export function ShipmentDraftDialog({
   const declaredCents = declaredAmount === null ? null : Math.round(declaredAmount * 100);
   // MyDHL+'s summary under the lines: units beside the value.
   const totalUnits = items.reduce((sum, item) => sum + (asNumber(item.quantity) ?? 0), 0);
+  // S6: the lines' net weight (as DHL will get it) against the parcels', in grams.
+  const linesNetGrams = items.reduce((sum, item) => {
+    const net = customsLineWeights(item).netWeight;
+    return sum + (typeof net === "number" && net > 0 ? weightGrams(net) : 0);
+  }, 0);
+  const parcelsGrams = pieces.reduce((sum, piece) => {
+    const weight = asNumber(piece.weight);
+    return sum + (weight !== null && weight > 0 ? weightGrams(weight) : 0);
+  }, 0);
   const currencyList = useMemo(() => currencyChoices(fromCountry, currency), [fromCountry, currency]);
   const mark = currency ? currencyMark(currency, locale) : "";
+
+  // S6: what a line says about its weight (lib/studioflow/dhlLineWeight.ts customsLineWeights).
+  const lineWeights = (item: ItemInput) => customsLineWeights(item);
 
   function buildPatch(): ShipmentDraftPatch {
     const patch: ShipmentDraftPatch = {
@@ -340,11 +373,12 @@ export function ShipmentDraftDialog({
         invoice: { number: invoiceNumber, date: invoiceDate },
         items: items.map(item => ({
           description: item.description, quantity: asNumber(item.quantity), quantityUnit: item.quantityUnit, unitValue: amount(item.unitValue).value,
-          // MyDHL+ asks for one weight; DHL takes either. A gross weight left empty is the net weight.
-          hsCode: item.hsCode, manufacturerCountry: item.manufacturerCountry, netWeight: asNumber(item.netWeight), grossWeight: asNumber(item.grossWeight) ?? asNumber(item.netWeight),
+          hsCode: item.hsCode, manufacturerCountry: item.manufacturerCountry,
+          ...lineWeights(item),
           merchantProductId: item.merchantProductId, manufacturerProductId: item.manufacturerProductId, standardProductId: item.standardProductId,
           ddsReference: item.ddsReference, taricDocumentCode: item.taricDocumentCode,
-          standardProductIdAbsent: !item.standardProductId.trim() && item.standardProductIdAbsent
+          standardProductIdAbsent: !item.standardProductId.trim() && item.standardProductIdAbsent,
+          ...(item.prefillSource ? { prefillSource: item.prefillSource, lineChecked: item.lineChecked } : {})
         }))
       };
     }
@@ -474,11 +508,22 @@ export function ShipmentDraftDialog({
     setDirty(true);
     setCustomsChanged(true);
   };
-  // A code from the order or its held inventory, copied onto one line; the person decides which line.
+  // S7: a line started from the order or its held inventory — the description and the codes only.
+  // The HS code, origin and weight stay the person's; the line is then ticked as checked.
   const applySuggestion = (index: number, suggestion: ProductIdSuggestion) => {
-    if (suggestion.merchantProductId) updateItem(index, "merchantProductId", suggestion.merchantProductId);
-    if (suggestion.manufacturerProductId) updateItem(index, "manufacturerProductId", suggestion.manufacturerProductId);
+    setItems(current => current.map((item, i) => (i === index ? {
+      ...item,
+      ...(suggestion.description ? { description: suggestion.description } : {}),
+      ...(suggestion.merchantProductId ? { merchantProductId: suggestion.merchantProductId } : {}),
+      ...(suggestion.manufacturerProductId ? { manufacturerProductId: suggestion.manufacturerProductId } : {}),
+      prefillSource: suggestion.source,
+      lineChecked: false
+    } : item)));
+    setDirty(true);
+    setCustomsChanged(true);
   };
+  // S5: the tariff's answer for the code as typed now (lib/studioflow/dhlLineWeight.ts tariffAnswerFor).
+  const tariffFor = (item: ItemInput) => tariffAnswerFor(item.hsCode, item.hsTariff, fromCountry);
   // An issue on one customs line names that line ("Line 2 (Strap): …"); the server sends line and description.
   const issueText = (issue: ShipmentIssue) => {
     const line = Number(issue.detail?.line);
@@ -772,20 +817,50 @@ export function ShipmentDraftDialog({
                         <label className="inventory-field"><span>{t("Value of one")}</span>
                           {moneyInput(item.unitValue, value => updateItem(index, "unitValue", value), `unit-value-${index}`)}</label>
                         <label className="inventory-field"><span>{t("HS code")}</span>
-                          <input className="input" value={item.hsCode} onChange={e => updateItem(index, "hsCode", e.target.value)} placeholder="9114.30" /></label>
+                          <input className="input" value={item.hsCode} onChange={e => updateItem(index, "hsCode", e.target.value)} placeholder="9114.30" />
+                          {(() => {
+                            // S5: the official tariff's entry for this code, for the person to read; never a verdict on the goods.
+                            if (!item.hsCode.trim()) return null;
+                            const answer = tariffFor(item);
+                            if (!answer) return <small className="shipment-muted" data-testid={`hs-tariff-${index}`}>{t("Saving looks the code up in the official tariff.")}</small>;
+                            if (answer.outcome === "found") {
+                              return (
+                                <small className="shipment-muted" data-testid={`hs-tariff-${index}`} data-outcome="found">
+                                  {t(answer.tariff === "xi" ? "Northern Ireland tariff: {description}" : "UK tariff: {description}").replace("{description}", answer.description ?? "")}
+                                  {answer.declarable === false ? ` ${t("More detailed codes exist under this one. UK export declarations use an 8-digit commodity code.")}` : ""}
+                                </small>
+                              );
+                            }
+                            if (answer.outcome === "not_found") return <small className="shipment-error" data-testid={`hs-tariff-${index}`} data-outcome="not_found">{t("This HS code is not in the official tariff. Check it on the UK Trade Tariff.")}</small>;
+                            return <small className="shipment-muted" data-testid={`hs-tariff-${index}`} data-outcome="unavailable">{t("The tariff could not be checked just now. Check this code yourself on the UK Trade Tariff.")}</small>;
+                          })()}</label>
                         <label className="inventory-field"><span>{t("Made in")}</span>
                           {countrySelect(item.manufacturerCountry, code => updateItem(index, "manufacturerCountry", code), t("Made in"))}</label>
-                        <label className="inventory-field"><span>{t("Net weight (kg)")}</span>
-                          <input className="input" type="number" min="0" step="any" inputMode="decimal" value={item.netWeight} onChange={e => updateItem(index, "netWeight", e.target.value)} /></label>
-                        <label className="inventory-field"><span>{t("Gross weight (kg)")}</span>
-                          <input className="input" type="number" min="0" step="any" inputMode="decimal" value={item.grossWeight} placeholder={item.netWeight} onChange={e => updateItem(index, "grossWeight", e.target.value)} />
-                          {!item.grossWeight.trim() && item.netWeight.trim() ? <small className="shipment-muted">{t("Left empty, the net weight is used.")}</small> : null}</label>
+                        <label className="inventory-field"><span>{t("Net weight of one item (kg)")}</span>
+                          <input className="input" type="number" min="0" step="any" inputMode="decimal" value={item.unitNetWeight} data-testid={`unit-net-weight-${index}`} onChange={e => updateItem(index, "unitNetWeight", e.target.value)} /></label>
+                        <label className="inventory-field"><span>{t("Gross weight of one item (kg)")}</span>
+                          <input className="input" type="number" min="0" step="any" inputMode="decimal" value={item.unitGrossWeight} placeholder={item.unitNetWeight} onChange={e => updateItem(index, "unitGrossWeight", e.target.value)} />
+                          {!item.unitGrossWeight.trim() && item.unitNetWeight.trim() ? <small className="shipment-muted">{t("Left empty, the net weight is used.")}</small> : null}</label>
+                        {(() => {
+                          // S6: what DHL gets for this line, as the server works it out.
+                          const quantity = asNumber(item.quantity);
+                          const unit = asNumber(item.unitNetWeight);
+                          const total = lineWeightKg(quantity, unit);
+                          if (total !== null && quantity !== null && unit !== null) {
+                            return <p className="shipment-muted is-wide" data-testid={`line-weight-${index}`}>{t("Line total sent to DHL: {quantity} × {unit} kg = {total} kg").replace("{quantity}", quantity.toLocaleString(locale)).replace("{unit}", kgText(unit, locale)).replace("{total}", kgText(total, locale))}</p>;
+                          }
+                          const saved = asNumber(item.netWeight);
+                          if (!item.unitNetWeight.trim() && saved !== null) {
+                            return <p className="shipment-note is-wide" data-testid={`line-weight-legacy-${index}`}>{t("Saved earlier as the line's total: {total} kg. Type the weight of one item to replace it.").replace("{total}", kgText(saved, locale))}</p>;
+                          }
+                          return null;
+                        })()}
                         <div className="shipment-subhead is-wide">{t("Product codes")}</div>
                         {productIdsRequired
                           ? <p className="shipment-muted is-wide" data-testid="product-codes-why">{t("* Required by EU customs: from 1 November 2026, every line of a consumer shipment into the EU needs at least your product code and the manufacturer's product code (EU rule 2026/1022). DHL asks for them on every such shipment, whatever its value. MyDHL+ shows the same fields without a star.")}</p>
                           : <p className="shipment-muted is-wide">{t("Needed on shipments to consumers in the EU from 1 November 2026. Optional here.")}</p>}
                         {productIdSuggestions.length > 0 ? (
-                          <label className="inventory-field is-wide"><span>{t("Copy codes from…")}</span>
+                          <label className="inventory-field is-wide"><span>{t("Fill this line from…")}</span>
                             <select className="input" value="" onChange={e => { const chosen = productIdSuggestions[Number(e.target.value)]; if (chosen) applySuggestion(index, chosen); }}>
                               <option value="">{t("Choose…")}</option>
                               {productIdSuggestions.map((suggestion, i) => <option key={i} value={i}>{suggestionLabel(suggestion)}</option>)}
@@ -810,14 +885,39 @@ export function ShipmentDraftDialog({
                             <input className="input" value={item.ddsReference} onChange={e => updateItem(index, "ddsReference", e.target.value)} />
                             <small className="shipment-muted">{t("In MyDHL+: {name}").replace("{name}", "Due Diligence Statement Reference Number")}</small></label>
                           <label className="inventory-field"><span>{t("TARIC document code")}</span>
-                            <input className="input" value={item.taricDocumentCode} placeholder="Y129" onChange={e => updateItem(index, "taricDocumentCode", e.target.value.toUpperCase())} />
+                            {/* S7: HMRC's EUDR list, not free text; a code saved earlier that is not in it stays visible until changed. */}
+                            <select className="input" value={item.taricDocumentCode} data-testid={`eudr-taric-${index}`} onChange={e => updateItem(index, "taricDocumentCode", e.target.value)}>
+                              <option value="">—</option>
+                              {item.taricDocumentCode && !isEudrTaricCode(item.taricDocumentCode) ? <option value={item.taricDocumentCode}>{item.taricDocumentCode}</option> : null}
+                              {EUDR_TARIC_CODES.map(([code, name]) => <option key={code} value={code}>{`${code} – ${name}`}</option>)}
+                            </select>
                             <small className="shipment-muted">{t("In MyDHL+: {name}").replace("{name}", "EUDR TARIC Document Code")}</small></label>
                           </div>
                         </details>
+                        {item.prefillSource ? (
+                          // S7: a filled line is checked line by line before the shipment can go (the server asks for this tick).
+                          <div className="is-wide" data-testid={`line-check-${index}`}>
+                            <p className="shipment-muted">{t("Description and product codes copied from: {source}. Check them. The HS code, origin and weight are not copied.").replace("{source}", t(SUGGESTION_SOURCE[item.prefillSource] ?? item.prefillSource))}</p>
+                            <label className="inventory-check">
+                              <input type="checkbox" checked={item.lineChecked} onChange={e => updateItem(index, "lineChecked", e.target.checked)} />
+                              {t("I checked this line: description, HS code, origin and weight")}
+                            </label>
+                          </div>
+                        ) : null}
                         <button type="button" className="inventory-link inventory-link-danger" onClick={() => { setItems(current => current.filter((_, i) => i !== index)); setDirty(true); setCustomsChanged(true); }}>{t("Remove line")}</button>
                       </div>
                     ))}
                     <button type="button" className="inventory-link" onClick={() => { setItems(current => [...current, emptyItem()]); setDirty(true); setCustomsChanged(true); }}>{t("+ Add a line")}</button>
+                    {linesNetGrams > 0 && parcelsGrams > 0 ? (
+                      <p className={linesNetGrams > parcelsGrams ? "shipment-error" : "shipment-muted"} data-testid="weights-total">
+                        {t("Net weight of all lines: {lines} kg. Parcels: {parcels} kg.").replace("{lines}", kgText(linesNetGrams / 1000, locale)).replace("{parcels}", kgText(parcelsGrams / 1000, locale))}
+                        {linesNetGrams > parcelsGrams ? ` ${t("The lines weigh more than the parcels. Check each line's weight of one item and the parcel weights.")}` : ""}
+                      </p>
+                    ) : null}
+                    <p className="shipment-muted" data-testid="hs-code-rule">
+                      {t("NivaDesk never fills in or confirms an HS code for you. If you are not sure of a code, HMRC can give a binding Advance Tariff Ruling.")}{" "}
+                      <a className="inventory-link" href="https://www.trade-tariff.service.gov.uk/find_commodity" target="_blank" rel="noopener noreferrer">{t("Find a commodity code on the UK Trade Tariff")}</a>
+                    </p>
 
                     <div className="shipment-total">
                       <span>{t("Total units")} <strong>{totalUnits.toLocaleString(locale)}</strong></span>
@@ -866,6 +966,8 @@ export function ShipmentDraftDialog({
                 <input type="checkbox" checked={pickup.requested} onChange={e => change(setPickup)({ ...pickup, requested: e.target.checked })} />
                 {t("Book a DHL courier to collect it")}
               </label>
+              {/* S3: said before anyone books — NivaDesk has no courier cancellation (DHL's API has one; not built until proven on DHL's test system). */}
+              <p className="shipment-note" data-testid="pickup-cancel-note">{t("NivaDesk cannot cancel a DHL courier booking. To cancel it, use the pickup number in MyDHL+ or contact DHL Express customer service. Cancelling the order in NivaDesk cancels neither the courier nor the label.")}</p>
               {pickup.requested ? (
                 <>
                   <div className="inventory-form">
