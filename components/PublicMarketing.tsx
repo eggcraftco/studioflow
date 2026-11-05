@@ -4354,7 +4354,7 @@ function PublicLegalSubsection({ subsection }: { subsection: PrivacyPolicySubsec
 
 // NIVADESK_HUKUK.md H-07: every legal page tells a non-English reader, in their language, that the English text
 // governs — `translated` when the page below is a translated summary, otherwise that it is shown in English.
-// H-06: the Privacy page adds how to complain (to us, or to the Information Commission at any time).
+// H-06: the Privacy page adds how to complain (to us, or to the Information Commission, which may ask whether it was raised with us first).
 // Copy and its English source: lib/publicSite/legalLanguageNotice.ts.
 function PublicLegalLanguageNotice({
   language,

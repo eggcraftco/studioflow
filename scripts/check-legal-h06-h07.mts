@@ -53,7 +53,11 @@ ok("privacy: right to complain to us is listed (section 19)", privacyEn.includes
 ok("privacy: how to complain to us (contact@nivadesk.co.uk, no account needed)", /you can complain to us at contact@nivadesk\.co\.uk; you do not need to be signed in or have an account/.test(privacyEn));
 ok("privacy: acknowledgement within 30 days", /acknowledge your complaint within 30 days/.test(privacyEn));
 ok("privacy: investigation, progress updates and outcome without undue delay", /investigate it, keep you informed of progress and tell you the outcome without undue delay/.test(privacyEn));
-ok("privacy: the Information Commission directly, at any time", /complain to the UK's data protection regulator, the Information Commission \(ico\.org\.uk[^)]*\), at any time; you do not have to complete our complaints process first/.test(privacyEn));
+// Owner's neutral sentence (5 Nov 2026), verbatim; the earlier "at any time; you do not have to complete our complaints
+// process first" was replaced because the regulator may decline a complaint not first raised with the controller.
+const OWNER_REGULATOR_SENTENCE = "You can also complain to the Information Commission (ico.org.uk). The regulator may ask whether you have raised your concerns with us first.";
+ok("privacy: the owner's neutral regulator sentence, verbatim (section 19)", privacyEn.includes(OWNER_REGULATOR_SENTENCE));
+ok("privacy: no \"at any time\" / \"do not have to complete our complaints process\" promise about the regulator", !/do not have to complete our complaints process|Information Commission[^.]{0,80}at any time/.test(privacyEn));
 ok("privacy: no \"contact us first\" precondition", !/(contact|complain to|write to) us first|must (first )?(contact|complain to) us/i.test(privacyEn));
 ok("privacy: 30 days is not promised as a resolution time", !/(resolve|outcome|decision)[^.]{0,40}within 30 days/i.test(privacyEn));
 for (const language of SUPPORTED_STUDIO_LANGUAGES) {
@@ -108,13 +112,18 @@ if (noticeModule) {
   const en = noticeModule.LEGAL_LANGUAGE_NOTICE_EN;
   ok("notice (English source): a translated page says it is a summary for convenience and English governs", /summary translation provided for convenience\. The English version is the current, governing text/.test(en.summary));
   ok("notice (English source): an English-only page says the English version governs", /The English version is the current, governing text/.test(en.english));
-  ok("notice (English source): complaints — us, 30-day acknowledgement, Information Commission at any time", /contact@nivadesk\.co\.uk/.test(en.complaints) && /acknowledge complaints within 30 days/.test(en.complaints) && /Information Commission \(ico\.org\.uk\), at any time/.test(en.complaints));
+  ok("notice (English source): English governing never overrides mandatory rights (both notices)", /This does not affect any mandatory rights you have under applicable law/.test(en.english) && /subject to any mandatory rights you have under applicable law/.test(en.summary));
+  ok("notice (English source): complaints — us, 30-day acknowledgement, the owner's regulator sentence", /contact@nivadesk\.co\.uk/.test(en.complaints) && /acknowledge complaints within 30 days/.test(en.complaints) && en.complaints.includes(OWNER_REGULATOR_SENTENCE));
+  // "at any time" in each language, as it stood in 77c05c702 — none may remain in the complaint line.
+  const ANY_TIME = ["at any time", "Dilediğiniz zaman", "jederzeit", "à tout moment", "in qualsiasi momento", "en cualquier momento", "a qualquer momento", "в любое время", "いつでも", "随时", "في أي وقت", "किसी भी समय"];
   for (const language of SUPPORTED_STUDIO_LANGUAGES) {
     if (language === "English") continue;
     const copy = noticeModule.getLegalLanguageNotice(language);
     const translated = copy !== en && copy.title !== en.title && copy.english !== en.english && copy.summary !== en.summary && copy.complaints !== en.complaints;
     ok(`notice (${language}): translated, not the English source`, translated && copy.title && copy.english && copy.summary && copy.complaints);
     ok(`notice (${language}): complaint line keeps the address, 30 days and the regulator's name`, copy.complaints.includes("contact@nivadesk.co.uk") && /30/.test(copy.complaints) && copy.complaints.includes("Information Commission") && copy.complaints.includes("ico.org.uk") && !copy.complaints.includes("Commissioner"));
+    ok(`notice (${language}): no "at any time" about the regulator in the complaint line`, !ANY_TIME.some((w) => copy.complaints.includes(w)));
+    ok(`notice (${language}): the English-text notice carries the mandatory-rights sentence`, copy.english.split(/[.。।]\s*/).filter(Boolean).length >= 4);
   }
 }
 
