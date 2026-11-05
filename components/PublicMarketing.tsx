@@ -13,8 +13,6 @@ import { SiteVisitBeacon } from "@/components/SiteVisitBeacon";
 import { PublicHomeTour } from "@/components/PublicHomeTour";
 import { PublicLanguageLinks } from "@/components/PublicLanguageLinks";
 import { clearLandingAttribution, getLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
-import { GoogleAdsTag } from "@/components/GoogleAdsTag";
-import { fireGoogleAdsSignupConversion } from "@/lib/googleAds";
 import { AuthProviderButtons } from "@/components/AuthProviders";
 import {
   PLAN_ENTITLEMENTS,
@@ -1284,7 +1282,6 @@ function PublicShellContent({ children }: { children: ReactNode }) {
   return (
     <div className={`public-site public-cream ${PUBLIC_FONT_CLASSES}`} dir={dir}>
       <SiteVisitBeacon />
-      <GoogleAdsTag />
       <a href="#public-main" className="public-skip-link">{t("nav.skipToContent")}</a>
       <PublicHeader />
       <main id="public-main">{children}</main>
@@ -3785,7 +3782,6 @@ function PublicSignupPageContent() {
       // from it, then clear the marker so it is counted at most once.
       if (getLandingAttribution() !== null) {
         trackLandingEvent("custom_order_landing_signup_completed");
-        fireGoogleAdsSignupConversion();
         clearLandingAttribution();
       }
       {
@@ -3819,7 +3815,6 @@ function PublicSignupPageContent() {
     const newAccount = Number.isFinite(created) && Date.now() - created < 10 * 60 * 1000;
     if (newAccount && getLandingAttribution() !== null) {
       trackLandingEvent("custom_order_landing_signup_completed");
-      fireGoogleAdsSignupConversion();
       clearLandingAttribution();
     }
     router.replace(safeNextFromLocation("/orders"));

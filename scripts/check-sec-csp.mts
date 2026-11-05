@@ -57,6 +57,7 @@ if (cspMod) {
   ok("base-uri 'self'", directive(prod, "base-uri").join(" ") === "'self'");
   ok("no report-uri / report-to (nothing new is collected)", !/report-uri|report-to/.test(prod));
   ok("no loopback hosts in production", !/127\.0\.0\.1|localhost/.test(prod));
+  ok("no advertising hosts (H-01, 5 Nov 2026: the Google Ads tag was removed)", !/googletagmanager|googleadservices|doubleclick|google-analytics/.test(prod));
   const dev = cspMod.buildContentSecurityPolicy({ nonce: "n", dev: true }) as string;
   ok("dev: 'unsafe-eval' (React refresh) and loopback websocket", directive(dev, "script-src").includes("'unsafe-eval'") && directive(dev, "connect-src").includes("ws://127.0.0.1:*"));
   const emu = cspMod.buildContentSecurityPolicy({ nonce: "n", emulator: true }) as string;

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { parseLandingCampaign, parseLandingSource, setLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
-import { GoogleAdsTag } from "@/components/GoogleAdsTag";
 import { ChatGPTAppShowcase, PublicHeader } from "@/components/PublicMarketing";
 
 // Click-to-play demo video: only the poster image loads until the visitor
@@ -173,7 +172,6 @@ export function CustomOrderLanding() {
 
   return (
     <div className="lp">
-      <GoogleAdsTag />
       <PublicHeader hideLanguage />
 
       <main>

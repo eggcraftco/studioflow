@@ -14,11 +14,13 @@
 // Hosts, and why each one is here:
 //   script   gstatic (reCAPTCHA for App Check, the push worker's Firebase
 //            scripts), www.google.com (reCAPTCHA api.js), apis.google.com
-//            (Firebase Auth popup helper), googletagmanager (Google Ads tag on
-//            the public site), connect.facebook.net (Meta sign-up SDK)
+//            (Firebase Auth popup helper), connect.facebook.net (Meta sign-up
+//            SDK). No advertising tag: the Google Ads tag was removed on 5 Nov
+//            2026 (legal register H-01), so googletagmanager, google-analytics,
+//            doubleclick and googleadservices are not allowed anywhere.
 //   connect  Firestore, Identity Toolkit, Secure Token, Functions
 //            (cloudfunctions.net + gen2 run.app, europe-west2), Storage, App
-//            Check, Installations + FCM (web push), reCAPTCHA, the Ads/Meta
+//            Check, Installations + FCM (web push), reCAPTCHA, the Meta
 //            beacons
 //   frame    reCAPTCHA, the Firebase Auth helper iframe (authDomain), Storage
 //            (file previews), this site's own /f/ pages, Meta's dialogs
@@ -53,7 +55,7 @@ export function buildContentSecurityPolicy({ nonce, dev = false, authDomain, emu
     ["script-src", [
       "'self'", `'nonce-${nonce}'`,
       "https://www.gstatic.com", "https://www.google.com", "https://apis.google.com",
-      "https://www.googletagmanager.com", "https://connect.facebook.net",
+      "https://connect.facebook.net",
       ...(dev ? ["'unsafe-eval'"] : [])
     ]],
     // Inline style attributes are everywhere in this app (React style={...}).
@@ -77,10 +79,6 @@ export function buildContentSecurityPolicy({ nonce, dev = false, authDomain, emu
       "https://www.google.com",
       "https://www.gstatic.com",
       "https://apis.google.com",
-      "https://www.googletagmanager.com",
-      "https://*.google-analytics.com",
-      "https://*.doubleclick.net",
-      "https://www.googleadservices.com",
       "https://*.facebook.com",
       ...(auth ? [auth] : []),
       ...local
