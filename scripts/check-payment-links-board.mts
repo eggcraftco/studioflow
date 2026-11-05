@@ -150,6 +150,34 @@ for (const [name, mutant] of mergeMutants) {
 const mergeReal = mergeProblems(ordersPage);
 expect("a merged order leaves the Orders list at once and does not come back from an older read", mergeReal.length === 0, mergeReal.join("; "));
 
+// ---- 6. owner decision 9.9 (5 Nov 2026): nothing promises an automatic match -------------------------------------
+// A link made without an order is never put on an existing order by itself (the server keeps the payment on an order
+// of its own and names the payer's unpaid orders). So the form says only that an order opens, the row's candidates
+// ask a person to merge, and no word on the screen or in the board's dictionary promises "their one unpaid order".
+const boardWords = read("lib/studioflow/paymentLinksBoardTranslations.ts");
+function promiseProblems(source: string, words: string): string[] {
+  const out: string[] = [];
+  const note = region(source, '<p id="standalone-link-form-note"', "</p>");
+  if (!/: t\("When the customer pays, NivaDesk opens the order with the details they enter\."\)\}/.test(note)) out.push("the order-less note does not say an order opens");
+  const promise = /added to (their|the customer's) unpaid order if|if they have exactly one/i;
+  if (promise.test(source)) out.push("the panel promises the payer's one unpaid order");
+  if (promise.test(words)) out.push("the board's dictionary still carries the promise");
+  if (!/t\("This customer also has an unpaid order\. If this payment was for it, merge the two orders in Orders\."\)/.test(source)) out.push("the candidates do not ask a person to merge");
+  return out;
+}
+const SL29_NOTE = "When the customer pays, the payment is added to their unpaid order if they have exactly one; otherwise NivaDesk opens a new order with the details they enter.";
+const promiseMutants: Array<[string, string, string]> = [
+  ["the 4 Nov note comes back", panel.replace('t("When the customer pays, NivaDesk opens the order with the details they enter.")', `t("${SL29_NOTE}")`), boardWords],
+  ["the dictionary keeps the promise", panel, `${boardWords}\n  "${SL29_NOTE}": [],\n`],
+  ["the candidates lose the merge advice", panel.replace("If this payment was for it, merge the two orders in Orders.", "It was added there."), boardWords],
+];
+for (const [name, source, words] of promiseMutants) {
+  const problems = source === panel && words === boardWords ? [] : promiseProblems(source, words);
+  expect(`9.9 rules catch the mutant: ${name}`, problems.length > 0, "the mutant did not apply, or passed");
+}
+const promiseReal = promiseProblems(panel, boardWords);
+expect("9.9: the screen promises no automatic match (an order opens; a person merges)", promiseReal.length === 0, promiseReal.join("; "));
+
 // ---- 4. twelve languages ----------------------------------------------------------------------------------------
 const LANGS = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
 const used = new Set([...panel.matchAll(/\bt\("([^"]+)"\)/g)].map((m) => m[1]));

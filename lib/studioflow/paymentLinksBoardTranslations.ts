@@ -102,19 +102,6 @@ const ROWS: Record<string, string[]> = {
     "لا يزال على هذا العميل مبلغ في طلب. أضف الرابط إليه ليُحتسب الدفع هناك بدل فتح طلب ثانٍ.",
     "इस ग्राहक का एक ऑर्डर अभी बकाया है। लिंक उसी में जोड़ें, ताकि भुगतान दूसरा ऑर्डर खोलने के बजाय वहीं गिना जाए।"
   ],
-  "When the customer pays, the payment is added to their unpaid order if they have exactly one; otherwise NivaDesk opens a new order with the details they enter.": [
-    "Müşteri ödediğinde, tek bir ödenmemiş siparişi varsa ödeme ona eklenir; yoksa NivaDesk girdiği bilgilerle yeni bir sipariş açar.",
-    "Wenn der Kunde zahlt, wird die Zahlung seinem offenen Auftrag hinzugefügt, falls er genau einen hat; sonst legt NivaDesk mit seinen Angaben einen neuen Auftrag an.",
-    "Quand le client paie, le paiement est ajouté à sa commande impayée s'il en a exactement une ; sinon NivaDesk ouvre une nouvelle commande avec les informations saisies.",
-    "Quando il cliente paga, il pagamento viene aggiunto al suo ordine non pagato se ne ha esattamente uno; altrimenti NivaDesk apre un nuovo ordine con i dati inseriti.",
-    "Cuando el cliente pague, el pago se añadirá a su pedido sin pagar si tiene exactamente uno; si no, NivaDesk abrirá un pedido nuevo con los datos que introduzca.",
-    "Quando o cliente pagar, o pagamento é adicionado à sua encomenda por pagar se tiver exatamente uma; caso contrário, o NivaDesk abre uma nova encomenda com os dados indicados.",
-    "Когда клиент оплатит, платёж добавится к его неоплаченному заказу, если такой заказ ровно один; иначе NivaDesk откроет новый заказ с введёнными данными.",
-    "お客様が支払うと、未払いの注文がちょうど1件ならその注文に追加されます。そうでなければ、入力された情報で NivaDesk が新しい注文を作成します。",
-    "客户付款时，如果该客户恰好有一个未付款订单，付款会计入该订单；否则 NivaDesk 会用客户填写的信息新建订单。",
-    "عندما يدفع العميل، تُضاف الدفعة إلى طلبه غير المدفوع إن كان لديه طلب واحد فقط؛ وإلا يفتح NivaDesk طلبًا جديدًا بالبيانات التي يدخلها.",
-    "ग्राहक के भुगतान करने पर, अगर उसका ठीक एक अवैतनिक ऑर्डर है तो भुगतान उसमें जुड़ जाता है; नहीं तो NivaDesk दर्ज विवरणों से नया ऑर्डर खोलता है।"
-  ],
   "Payment received": [
     "Ödeme alındı", "Zahlung erhalten", "Paiement reçu", "Pagamento ricevuto", "Pago recibido", "Pagamento recebido", "Платёж получен",
     "支払いを受け取りました", "已收到付款", "تم استلام الدفعة", "भुगतान प्राप्त हुआ"

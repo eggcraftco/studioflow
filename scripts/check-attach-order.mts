@@ -136,7 +136,7 @@ function panelProblems(panel: string): string[] {
   for (const word of ["Customer name (optional)", "Customer email (optional)", "Ask for phone number", "Ask for delivery address"]) {
     if (!detailsPart.includes(`t("${word}")`)) out.push(`the order-less details lost: ${word}`);
   }
-  if (!/standaloneOrderId !== ""\s*\? t\("The payment is added to this order\. Your customer sees only the name you typed above, not the order\."\)\s*: t\("When the customer pays, the payment is added to their unpaid order if they have exactly one; otherwise NivaDesk opens a new order with the details they enter\."\)/.test(form)) out.push("the note does not say what an attached link does");
+  if (!/standaloneOrderId !== ""\s*\? t\("The payment is added to this order\. Your customer sees only the name you typed above, not the order\."\)\s*: t\("When the customer pays, NivaDesk opens the order with the details they enter\."\)/.test(form)) out.push("the note does not say what an attached link does");
   // The figures: read from the server, the amount pre-filled only while empty, a failed read drops the choice.
   if (!/httpsCallable<[^>]*>\(functions, "listOrderPaymentRequests"\);\s*info\(\{ companyId, orderId: standaloneOrderId \}\)/.test(panel)) out.push("the order's figures are not read from the server");
   if (!/setStandaloneAmount\(\(current\) => current \|\| minorToInputText\(next\.headroomMinor, next\.currency, locale\)\)/.test(panel)) out.push("the amount is pre-filled over what was typed");
@@ -168,7 +168,7 @@ const panelMutants: Array<[string, string]> = [
   ["the choice survives", panelSource.replace('setStandaloneOrderId(""); setStandalonePurpose("remaining_balance"); setAttachInfo(null);', "setAttachInfo(null);")],
   ["the details shown when attached", panelSource.replace("                {t(\"Purpose\")}\n                <select className={s.input} value={standalonePurpose}", "                {t(\"Customer name (optional)\")}\n                <select className={s.input} value={standalonePurpose}")],
   ["no typed name on a row", panelSource.replace("return row.title || row.orderName || (reference ?", "return row.orderName || (reference ?")],
-  ["the note unchanged", panelSource.replace('? t("The payment is added to this order. Your customer sees only the name you typed above, not the order.")', '? t("When the customer pays, the payment is added to their unpaid order if they have exactly one; otherwise NivaDesk opens a new order with the details they enter.")')],
+  ["the note unchanged", panelSource.replace('? t("The payment is added to this order. Your customer sees only the name you typed above, not the order.")', '? t("When the customer pays, NivaDesk opens the order with the details they enter.")')],
   ["the order's figures not shown", panelSource.replace('${t("Still to pay")}: ${formatMinor(attachInfo.outstandingMinor, attachInfo.currency)} · ${t("Not yet asked for")}: ${formatMinor(attachInfo.headroomMinor, attachInfo.currency)}', "")],
 ];
 for (const [name, mutant] of panelMutants) {

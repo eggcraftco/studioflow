@@ -432,8 +432,8 @@ const ORDER_LABEL_KEYS = ["What the customer is buying (optional)", "Shown on th
   // SL-28: the order-less form attaches its link to an order.
   "Add to an order (optional)", "No order (a new one opens when it is paid)",
   "The payment is added to this order. Your customer sees only the name you typed above, not the order.",
-  // 4 Nov 2026 (SL-29): the form's note now says the payer's open order comes first (a board key); this row stays
-  // in its block for the screens that still say it.
+  // The order-less form's note. 4 Nov 2026 (SL-29) it promised the payer's one open order; the owner's decision 9.9
+  // (5 Nov 2026) took that back — a link made without an order is never put on an order by itself — so it is this row again.
   "When the customer pays, NivaDesk opens the order with the details they enter."];
 // The reference design's own words (4 Nov 2026) live in lib/studioflow/paymentLinksBoardTranslations.ts and are
 // checked by check-payment-links-board.mts; they are not this block's.

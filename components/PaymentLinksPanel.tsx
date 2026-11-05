@@ -77,7 +77,8 @@ export type PaymentLinkRow = {
   orderReference?: string;
   /**
    * SL-29..SL-31 (4 Nov 2026), all optional (an older server sends none): the payment was added to the payer's
-   * open order; the payer's open orders it may have been for, when none could be chosen; the order's own name,
+   * open order (never sent since the owner's decision 9.9, 5 Nov 2026: a link made without an order is never put
+   * on an order by itself); the payer's unpaid orders it may have been for, for a person to merge; the order's own name,
    * whether it is in the Trash, and — when the link's order was merged into another — the order it came from
    * (`orderId` is then the order the money lives on).
    */
@@ -806,7 +807,7 @@ export default function PaymentLinksPanel({
           <p id="standalone-link-form-note" className={s.formNote}>
             {standaloneOrderId !== ""
               ? t("The payment is added to this order. Your customer sees only the name you typed above, not the order.")
-              : t("When the customer pays, the payment is added to their unpaid order if they have exactly one; otherwise NivaDesk opens a new order with the details they enter.")}
+              : t("When the customer pays, NivaDesk opens the order with the details they enter.")}
           </p>
           <button
             type="button" className={s.primary}
