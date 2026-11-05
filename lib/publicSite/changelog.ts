@@ -62,9 +62,43 @@ export function isLatestForPlatform(entry: ChangelogEntry, list: ChangelogEntry[
   return list.find((item) => item.platformKey === entry.platformKey) === entry;
 }
 
-export const CHANGELOG_LAST_UPDATED = "2 November 2026";
+export const CHANGELOG_LAST_UPDATED = "5 November 2026";
 
 export const CHANGELOG: ChangelogEntry[] = [
+  // 2.4.1 (Apple) — from the App Store "What's New" that was entered (en-GB; ~/Developer/nivadesk-deploy-2026-11-05/store-2.4.1/README.md,
+  // identical for iOS and macOS) for native-2.4.1-candidate-2026-11-01 @5336c2245, build 35. Read 5 Nov 2026: App Store Connect
+  // MAC_OS 2.4.1 READY_FOR_SALE (it was WAITING_FOR_REVIEW at 11:20Z the same day), iOS 2.4.1 still WAITING_FOR_REVIEW.
+  // Once iOS 2.4.1 is released, change `platform` to "iPhone, iPad & Mac" and add the iPhone/iPad release day to `highlight` —
+  // keep version and anchor (#apple-2.4.1) as they are.
+  {
+    version: "2.4.1",
+    platformKey: "apple",
+    platform: "Mac",
+    date: "5 November 2026",
+    highlight: "A security update for the app's database connection, plus confirming online bookings in the app. Released to the Mac App Store on 5 November 2026.",
+    changes: [
+      { tag: "fixed", text: "Security update: the app's connection to its database now includes Google's latest Firebase security fix, which removes the certificates of a compromised certificate authority from the list the app trusts. We recommend updating on every iPhone, iPad and Mac you use." },
+      { tag: "new", text: "Online booking: requests from your booking page show their status in Calendar, and you can confirm or decline them in the app, with an optional message to the customer." },
+      { tag: "improved", text: "NivaDesk help: your conversation is kept on this device for 7 days, so you can pick it up again later." },
+      { tag: "fixed", text: "Smaller fixes and translations." },
+    ],
+  },
+  // 2.4.1 (Android) — from the Play notes that were entered (~/Developer/nivadesk-deploy-2026-11-05/store-2.4.1/play-notes-2.4.1.txt,
+  // en-GB) for vc23 (5336c2245). Play Console notification "app update published" 5 Nov 2026 and the public Play page
+  // "Updated on 5 Nov 2026", version 2.4.1 (managed publishing off, full rollout). No security line: the Firebase CA fix
+  // concerns the Apple SDK only.
+  {
+    version: "2.4.1",
+    platformKey: "android",
+    platform: "Android",
+    date: "5 November 2026",
+    highlight: "Confirm or decline online bookings in the app. Released on Google Play on 5 November 2026.",
+    changes: [
+      { tag: "new", text: "Online booking: requests from your booking page show their status in Calendar, and you can confirm or decline them in the app, with an optional message to the customer." },
+      { tag: "improved", text: "NivaDesk help: your conversation is kept on this device for 7 days." },
+      { tag: "fixed", text: "Smaller fixes and translations." },
+    ],
+  },
   // 2.4 (Apple, iPhone & iPad) — from the App Store "What's New" that was entered, read back from the public App Store
   // record (itunes lookup, gb + us, 4 Nov 2026: version 2.4, currentVersionReleaseDate 2026-11-02T21:39:46Z; same text as
   // ~/Developer/nivadesk-deploy-2026-11-01/store-2.4/notes-2.4.md en-GB) for native-2.4-release-2026-11-01, build 34.
