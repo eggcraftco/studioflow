@@ -972,14 +972,14 @@ const TREE_EN: GuideNode[] = [
         "A file you share with a customer opens on your own domain when you have one set up in Settings ▸ Customer Portal Domain — the address bar shows your domain, the NivaDesk name is dropped, and the file itself is still loaded straight from storage, never through our servers."
       ] },
       { kind: "sub", text: "Downloading several files at once (Download selected as a ZIP)" },
-      { kind: "para", text: "Tick several files and download them as one ZIP — on the web, on Mac, iPhone and iPad, and on Android. Files kept in your own Google Drive, OneDrive, Dropbox or Box come in the same ZIP." },
+      { kind: "para", text: "Tick several files and download them as one ZIP — on the web, on Mac, iPhone and iPad, and on Android. Files kept in your own Google Drive, OneDrive, Dropbox or Box come in the same ZIP. Download all (ZIP) and each order's ZIP button work the same way." },
       { kind: "bullets", items: [
         "Web: Files ▸ Client & Orders or any library view — tick the files (or Select all), then press Download selected (ZIP). Mac, iPhone, iPad and Android: press Select, tick the files, then Download (ZIP). An order's Client Files card has the same Select ▸ Download (ZIP).",
         "Where it goes: the web browser saves the ZIP to your Downloads; the Mac asks where to save it; iPhone and iPad open the share sheet (Save to Files keeps it, or send it by Mail or AirDrop); Android saves it to Downloads with a notification.",
         "Up to 500 files and 2 GB in one ZIP — for more, select fewer and download in parts. Files from one order sit side by side; files from several orders get one folder per order, named like the order (Order 1042 - customer). Two files with the same name become name (2).",
         "Only files you are allowed to see are included. A file the safety scan is still checking, or has held back, is left out, and the ZIP lists what was left out in NOT INCLUDED.txt.",
         "The download link works once and for five minutes only; if it runs out, press Download again.",
-        "Download all (ZIP) and each order's ZIP button still download everything at once."
+        "Download all (ZIP) and each order's ZIP button follow the same rules: files the safety scan has not cleared are listed in NOT INCLUDED.txt, files in your own cloud are included, and a member who sees only their assigned projects gets just those orders. Up to 2,000 files and 2 GB — for more, download order by order or select the files."
       ] }
     ]
   },
@@ -2659,14 +2659,14 @@ const TREE_TR: GuideNode[] = [
         "Müşteriyle paylaştığınız bir dosya, Settings ▸ Customer Portal Domain'de kendi alan adınız kuruluysa o alan adında açılır — adres çubuğunda sizin alan adınız görünür, NivaDesk adı kalkar, ve dosyanın kendisi sunucularımızdan geçmeden doğrudan depodan yüklenir."
       ] },
       { kind: "sub", text: "Birden fazla dosyayı birlikte indirme (Seçilenleri ZIP olarak indir)" },
-      { kind: "para", text: "Birkaç dosyayı işaretleyip tek bir ZIP olarak indirin — web'de, Mac, iPhone ve iPad'de ve Android'de. Kendi Google Drive, OneDrive, Dropbox veya Box'ınızda tutulan dosyalar da aynı ZIP'e girer." },
+      { kind: "para", text: "Birkaç dosyayı işaretleyip tek bir ZIP olarak indirin — web'de, Mac, iPhone ve iPad'de ve Android'de. Kendi Google Drive, OneDrive, Dropbox veya Box'ınızda tutulan dosyalar da aynı ZIP'e girer. Tümünü indir (ZIP) ve her siparişin ZIP düğmesi de aynı şekilde çalışır." },
       { kind: "bullets", items: [
         "Web: Dosyalar ▸ Client & Orders ya da herhangi bir kütüphane görünümü — dosyaları işaretleyin (veya Tümünü seç), ardından Seçilenleri indir (ZIP) düğmesine basın. Mac, iPhone, iPad ve Android: Seç'e basın, dosyaları işaretleyin, sonra İndir (ZIP). Bir siparişin Client Files kartında da aynı Seç ▸ İndir (ZIP) vardır.",
         "Nereye iner: web tarayıcısı ZIP'i İndirilenler'e kaydeder; Mac nereye kaydedeceğinizi sorar; iPhone ve iPad paylaşım sayfasını açar (Dosyalar'a Kaydet ile saklayın ya da Mail veya AirDrop ile gönderin); Android İndirilenler'e kaydeder ve bildirim gösterir.",
         "Bir ZIP'te en fazla 500 dosya ve 2 GB — daha fazlası için daha az seçip parça parça indirin. Tek siparişin dosyaları yan yana durur; birkaç siparişten gelen dosyalar sipariş başına bir klasöre, siparişin adıyla (Order 1042 - müşteri) girer. Aynı adlı iki dosya ad (2) olur.",
         "Yalnız görme izniniz olan dosyalar eklenir. Güvenlik taramasının hâlâ kontrol ettiği ya da durdurduğu bir dosya alınmaz; ZIP alınmayanları NOT INCLUDED.txt dosyasında listeler.",
         "İndirme bağlantısı yalnız bir kez ve beş dakika çalışır; süresi dolarsa İndir'e yeniden basın.",
-        "Tümünü indir (ZIP) ve her siparişin ZIP düğmesi hâlâ her şeyi tek seferde indirir."
+        "Tümünü indir (ZIP) ve her siparişin ZIP düğmesi aynı kurallarla çalışır: güvenlik taramasından geçmemiş dosyalar NOT INCLUDED.txt dosyasında listelenir, kendi bulutunuzdaki dosyalar da girer, yalnız kendisine atanan projeleri gören üye yalnız o siparişleri alır. En fazla 2.000 dosya ve 2 GB — daha fazlası için sipariş sipariş ya da dosyaları seçerek indirin."
       ] }
     ]
   },

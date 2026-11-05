@@ -1,7 +1,7 @@
 import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { getDownloadURL, ref } from "firebase/storage";
-import { auth, db, functions, storage } from "@/lib/firebase/client";
+import { db, functions, storage } from "@/lib/firebase/client";
 import { requireWorkspacePlanAction } from "@/lib/studioflow/planActions";
 import { normalizeWorkspaceRole, type ClientFileDetail, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { withWebSyncStatus } from "@/lib/studioflow/syncStatus";
@@ -9,41 +9,6 @@ import { type UploadPolicyStamp, uploadPolicyMetadata } from "@/lib/studioflow/u
 import { browserUploadDeps } from "@/lib/studioflow/storageUploadDeps";
 import { newUploadSlot, type UploadScanState, type UploadSlot } from "@/lib/studioflow/uploadProgress";
 import { awaitScanVerdict, throwIfCancelled, transferTracked, type TrackedUploadHooks } from "@/lib/studioflow/uploadRunner";
-
-const DOWNLOAD_ZIP_ENDPOINT = "https://europe-west2-eggcraft-studio.cloudfunctions.net/downloadClientFilesZip";
-
-/**
- * Downloads a ZIP of client files. scope "order" zips a single order's files;
- * "workspace" zips every order's files. Triggers a browser download.
- */
-export async function downloadClientFilesZip(params: {
-  workspaceId: string;
-  scope: "workspace" | "order";
-  orderId?: string;
-}) {
-  const user = auth.currentUser;
-  if (!user) throw new Error("You must be signed in to download files.");
-  const token = await user.getIdToken();
-  const url = new URL(DOWNLOAD_ZIP_ENDPOINT);
-  url.searchParams.set("companyId", params.workspaceId);
-  url.searchParams.set("scope", params.scope);
-  if (params.scope === "order" && params.orderId) url.searchParams.set("orderId", params.orderId);
-
-  const response = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
-  if (!response.ok) {
-    const message = await response.text().catch(() => "");
-    throw new Error(message || "Could not prepare the download.");
-  }
-  const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = params.scope === "order" ? "order-files.zip" : "workspace-files.zip";
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-}
 
 /** One ticked file: an order's attachment, or a library record. */
 export type FilesDownloadItem =
@@ -57,39 +22,44 @@ export type FilesDownloadOutcome = {
   skipped: { fileName: string; reason: string }[];
 };
 
-/** What the server's refusal means, as a sentence the page translates. */
-export function filesDownloadProblem(error: unknown): string {
+/** Download all (ZIP) or one order's ZIP. */
+export type FilesDownloadScope = { scope: "workspace" } | { scope: "order"; orderId: string };
+
+/**
+ * What the server's refusal means, as a sentence the page translates.
+ * `whole` is a "Download all" or an order's "ZIP", where nobody selected anything.
+ */
+export function filesDownloadProblem(error: unknown, { whole = false }: { whole?: boolean } = {}): string {
   const details = (error as { details?: { reason?: string; skipped?: { reason?: string }[] } } | null)?.details;
   const reason = details?.reason ?? "";
+  if (reason === "too_many_files" || (whole && reason === "too_large")) {
+    return "There are too many files for one ZIP. Download them order by order, or select the files you need.";
+  }
   if (reason === "too_large") return "The selection is larger than 2 GB. Select fewer files and download them in parts.";
   if (reason === "too_many") return "Select at most 500 files at a time.";
+  if (reason === "rate_limited") return "Too many downloads in a short time. Wait a little and try again.";
   if (reason === "nothing_to_download") {
-    return (details?.skipped ?? []).some(row => row.reason === "being_checked")
-      ? "Some files are still being checked by the safety scan. Try again in a minute."
-      : "None of the selected files can be downloaded right now.";
+    if ((details?.skipped ?? []).some(row => row.reason === "being_checked")) {
+      return "Some files are still being checked by the safety scan. Try again in a minute.";
+    }
+    return whole ? "There are no files here that can be downloaded right now." : "None of the selected files can be downloaded right now.";
   }
   return "Could not download files.";
 }
 
 /**
- * "Download selected (ZIP)" (4 Nov 2026). The server decides, per file, what
- * this member may have and what the safety scan has cleared, and answers with
- * a single-use link that lives five minutes. The link is opened as a plain
- * navigation, so the browser streams the ZIP to disk itself — a 2 GB
- * selection never has to fit in this tab's memory, which the older
- * fetch-then-blob ZIP above needs.
+ * Asks the server for a single-use link (five minutes) and opens it as a plain
+ * navigation, so the browser streams the ZIP to disk itself — a 2 GB download
+ * never has to fit in this tab's memory.
  */
-export async function downloadSelectedFilesZip(params: {
-  workspaceId: string;
-  items: FilesDownloadItem[];
-}): Promise<FilesDownloadOutcome> {
+async function openPreparedDownload(request: { companyId: string; items?: FilesDownloadItem[]; scope?: string; orderId?: string }): Promise<FilesDownloadOutcome> {
   const prepare = httpsCallable<
-    { companyId: string; items: FilesDownloadItem[] },
+    typeof request,
     FilesDownloadOutcome & { ok: boolean; url: string; expiresAtMs: number }
   >(functions, "prepareFilesDownload");
   // Not through withWebSyncStatus: nothing is being saved, and "Saved to cloud."
   // after a download would say something untrue.
-  const result = await prepare({ companyId: params.workspaceId, items: params.items });
+  const result = await prepare(request);
   const data = result.data;
   const anchor = document.createElement("a");
   anchor.href = data.url;
@@ -99,6 +69,39 @@ export async function downloadSelectedFilesZip(params: {
   anchor.click();
   anchor.remove();
   return { count: data.count, totalBytes: data.totalBytes, zipName: data.zipName, skipped: data.skipped ?? [] };
+}
+
+/**
+ * "Download all (ZIP)" and an order's "ZIP" (5 Nov 2026). The server lists the
+ * files itself, with the rules a selection has: a member on the assigned-
+ * projects scope gets the orders assigned to them, files the safety scan has
+ * not cleared are left out and named in NOT INCLUDED.txt, and Drive / OneDrive /
+ * Dropbox / Box files are included. Until now this went to the old
+ * downloadClientFilesZip endpoint, which fetched the whole ZIP into memory.
+ */
+export async function downloadClientFilesZip(params: { workspaceId: string } & FilesDownloadScope): Promise<FilesDownloadOutcome> {
+  return openPreparedDownload(params.scope === "order"
+    ? { companyId: params.workspaceId, scope: "order", orderId: params.orderId }
+    : { companyId: params.workspaceId, scope: "workspace" });
+}
+
+/**
+ * "Download selected (ZIP)" (4 Nov 2026). The server decides, per file, what
+ * this member may have and what the safety scan has cleared.
+ */
+export async function downloadSelectedFilesZip(params: {
+  workspaceId: string;
+  items: FilesDownloadItem[];
+}): Promise<FilesDownloadOutcome> {
+  return openPreparedDownload({ companyId: params.workspaceId, items: params.items });
+}
+
+/** "The download has started: 4 files. 1 files were left out…", built from translated parts. */
+export function filesDownloadStartedText(outcome: FilesDownloadOutcome, t: (text: string) => string): string {
+  return t("The download has started: {count} files.").replace("{count}", String(outcome.count)) +
+    (outcome.skipped.length > 0
+      ? " " + t("{count} files were left out. The list is in NOT INCLUDED.txt inside the ZIP.").replace("{count}", String(outcome.skipped.length))
+      : "");
 }
 
 const ALLOWED_CLIENT_FILE_EXTENSIONS = new Set(["pdf", "jpg", "jpeg", "png", "heic", "heif", "webp", "psd", "psb", "zip"]);

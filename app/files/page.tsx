@@ -21,6 +21,7 @@ import {
   downloadClientFilesZip,
   downloadSelectedFilesZip,
   filesDownloadProblem,
+  filesDownloadStartedText,
   isClientFileImage,
   renameClientFileForOrder,
   uploadClientFileForOrder,
@@ -322,10 +323,10 @@ export default function FilesPage() {
     setActionStatus(null);
     setDownloadingAll(true);
     try {
-      await downloadClientFilesZip({ workspaceId: workspace.id, scope: "workspace" });
-      setActionStatus("Download started.");
+      const outcome = await downloadClientFilesZip({ workspaceId: workspace.id, scope: "workspace" });
+      setActionStatus(filesDownloadStartedText(outcome, t));
     } catch (downloadError) {
-      setActionError(downloadError instanceof Error ? downloadError.message : "Could not download files.");
+      setActionError(filesDownloadProblem(downloadError, { whole: true }));
     } finally {
       setDownloadingAll(false);
     }
@@ -337,10 +338,10 @@ export default function FilesPage() {
     setActionStatus(null);
     setDownloadingOrderId(orderId);
     try {
-      await downloadClientFilesZip({ workspaceId: workspace.id, scope: "order", orderId });
-      setActionStatus("Download started.");
+      const outcome = await downloadClientFilesZip({ workspaceId: workspace.id, scope: "order", orderId });
+      setActionStatus(filesDownloadStartedText(outcome, t));
     } catch (downloadError) {
-      setActionError(downloadError instanceof Error ? downloadError.message : "Could not download files.");
+      setActionError(filesDownloadProblem(downloadError, { whole: true }));
     } finally {
       setDownloadingOrderId(null);
     }
@@ -361,12 +362,7 @@ export default function FilesPage() {
         workspaceId: workspace.id,
         items: chosen.map(file => ({ orderId: file.orderId, fileId: file.fileId }))
       });
-      setActionStatus(
-        t("The download has started: {count} files.").replace("{count}", String(outcome.count)) +
-          (outcome.skipped.length > 0
-            ? " " + t("{count} files were left out. The list is in NOT INCLUDED.txt inside the ZIP.").replace("{count}", String(outcome.skipped.length))
-            : "")
-      );
+      setActionStatus(filesDownloadStartedText(outcome, t));
     } catch (downloadError) {
       setActionError(filesDownloadProblem(downloadError));
     } finally {

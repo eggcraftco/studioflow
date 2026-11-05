@@ -53,6 +53,8 @@ import {
   clientFileTypeLabel,
   deleteClientFileForOrder,
   downloadClientFilesZip,
+  filesDownloadProblem,
+  filesDownloadStartedText,
   isClientFileImage,
   renameClientFileForOrder,
   uploadClientFileForOrder
@@ -2187,10 +2189,10 @@ export function OrderDetailContent({
     setFileActionStatus(null);
     setDownloadingOrderFiles(true);
     try {
-      await downloadClientFilesZip({ workspaceId: workspace.id, scope: "order", orderId: order.id });
-      setFileActionStatus("Download started.");
+      const outcome = await downloadClientFilesZip({ workspaceId: workspace.id, scope: "order", orderId: order.id });
+      setFileActionStatus(filesDownloadStartedText(outcome, t));
     } catch (downloadError) {
-      setFileActionError(downloadError instanceof Error ? downloadError.message : "Could not download files.");
+      setFileActionError(filesDownloadProblem(downloadError, { whole: true }));
     } finally {
       setDownloadingOrderFiles(false);
     }
