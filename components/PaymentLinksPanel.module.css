@@ -338,6 +338,10 @@
   border-top: 0;
 }
 
+.table td:first-child {
+  min-width: 260px;
+}
+
 .num {
   text-align: right !important;
   font-variant-numeric: tabular-nums;
@@ -557,6 +561,7 @@
 }
 
 @media (max-width: 760px) {
+  .head { padding: 0 4px; }
   .title { font-size: 22px; }
   .headActions { width: 100%; }
   .headActions > * { flex: 1 1 auto; justify-content: center; }
@@ -582,7 +587,7 @@
     padding: 10px 0;
     text-align: right;
   }
-  .table td:first-child { display: block; border-top: 0; text-align: left; }
+  .table td:first-child { display: block; border-top: 0; text-align: left; min-width: 0; }
   .table td[data-label]:not(:first-child)::before {
     content: attr(data-label);
     color: var(--muted);

@@ -290,7 +290,9 @@ export default function PaymentLinksPanel({
       setRows(null);
       setError(messageForError(e));
     }
-  }, [companyId, t]);
+    // Only the workspace decides what is read: `t` is a new function on every render of the page, and having it here
+    // read the whole list again each time Banking re-rendered (twelve reads for three page loads on the rig).
+  }, [companyId]);
 
   useEffect(() => { void load(); }, [load]);
 
