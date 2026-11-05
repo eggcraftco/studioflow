@@ -15,7 +15,7 @@ export const SUBPROCESSORS_SECTIONS: PrivacyPolicySection[] = [
   {
     title: "1. Who we are",
     paragraphs: [
-      "NivaDesk is operated by EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom.",
+      "NivaDesk is operated by EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom.",
       "For privacy, data protection, or subprocessors questions, contact us at: contact@nivadesk.co.uk."
     ]
   },
@@ -173,7 +173,7 @@ export const SUBPROCESSORS_SECTIONS: PrivacyPolicySection[] = [
     paragraphs: [
       "If you have questions about this Subprocessors page, our providers, or how NivaDesk processes data, please contact:",
       "EGGCRAFT LIMITED",
-      "141 Randolph Avenue",
+      "141d Randolph Avenue",
       "London",
       "W9 1DN",
       "United Kingdom",
@@ -227,7 +227,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "İletişim"
     ],
     sectionSummaries: [
-      "NivaDesk, EGGCRAFT LIMITED tarafından 141 Randolph Avenue, London, W9 1DN, United Kingdom adresinden işletilir. Privacy, data protection veya subprocessors soruları için contact@nivadesk.co.uk adresinden ulaşabilirsiniz.",
+      "NivaDesk, EGGCRAFT LIMITED tarafından 141d Randolph Avenue, London, W9 1DN, United Kingdom adresinden işletilir. Privacy, data protection veya subprocessors soruları için contact@nivadesk.co.uk adresinden ulaşabilirsiniz.",
       "Subprocessor, NivaDesk'in müşterilere hizmet sunmasına yardımcı olmak için NivaDesk adına personal data işleyebilen üçüncü taraf servis sağlayıcıdır. Örneğin cloud infrastructure, authentication, payments veya email providers kullanılabilir.",
       "Makul güvenlik, reliability ve privacy standartlarını destekleyen trusted providers kullanmayı hedefleriz. Subprocessorların verileri yalnızca bize hizmet sunmak için gerekli amaçlarla işlemesine izin veririz; personal data satmayız ve workspace content'i reklam için kullanmayız.",
       "Kullanılan servise göre account data, workspace data, uploaded files metadata, payment/subscription information, technical data ve communication data gibi sınırlı veri kategorileri işlenebilir.",
@@ -239,7 +239,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Bazı subprocessors verileri UK veya EEA dışında işleyebilir. Gerekli olduğunda adequacy decisions, standard contractual clauses, UK International Data Transfer Agreement veya diğer lawful transfer mechanisms kullanılır.",
       "NivaDesk hizmet geliştikçe subprocessors ekleyebilir, değiştirebilir veya kaldırabilir. Material değişikliklerde bu sayfa güncellenir; DPA olan business customers ek bildirim haklarına sahip olabilir.",
       "Customers, NivaDesk'e ekledikleri personal data için gerekli haklara sahip olduklarından ve kendi client/customer/supplier/employee verileri için gerekli privacy notices veya consents sağladıklarından sorumludur.",
-      "Bu sayfa, providers veya NivaDesk'in data processing'i hakkında sorular için EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ya da contact@nivadesk.co.uk üzerinden bize ulaşabilirsiniz."
+      "Bu sayfa, providers veya NivaDesk'in data processing'i hakkında sorular için EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom ya da contact@nivadesk.co.uk üzerinden bize ulaşabilirsiniz."
     ]
   },
   Deutsch: {
@@ -265,7 +265,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Kontakt"
     ],
     sectionSummaries: [
-      "NivaDesk wird von EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom betrieben. Für Datenschutz- oder Subprozessorfragen kontaktiere contact@nivadesk.co.uk.",
+      "NivaDesk wird von EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom betrieben. Für Datenschutz- oder Subprozessorfragen kontaktiere contact@nivadesk.co.uk.",
       "Ein Subprozessor ist ein Drittanbieter, der personenbezogene Daten im Auftrag von NivaDesk verarbeitet, um den Dienst bereitzustellen, etwa Cloud-Infrastruktur, Authentifizierung, Zahlungen oder E-Mail.",
       "Wir wollen vertrauenswürdige Anbieter mit angemessener Sicherheit, Zuverlässigkeit und Datenschutz verwenden. Daten dürfen nur für benötigte Dienste verarbeitet werden; wir verkaufen keine personenbezogenen Daten und nutzen Workspace-Inhalte nicht für Werbung.",
       "Je nach Dienst können Konto-, Workspace-, Datei-Metadaten, Zahlungs- und Abodaten, technische Daten sowie Kommunikationsdaten verarbeitet werden.",
@@ -277,7 +277,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Einige Subprozessoren können Daten außerhalb des UK oder EEA verarbeiten. Wo nötig nutzen wir geeignete Schutzmaßnahmen wie Angemessenheitsbeschlüsse, SCCs oder das UK IDTA.",
       "NivaDesk kann Subprozessoren hinzufügen, ersetzen oder entfernen. Diese Seite wird bei wesentlichen Änderungen aktualisiert; Business-Kunden mit DPA können zusätzliche Benachrichtigungsrechte haben.",
       "Kunden sind verantwortlich dafür, welche personenbezogenen Daten sie hinzufügen und ob sie die nötigen Rechte, Hinweise oder Einwilligungen für eigene Kunden, Lieferanten, Mitarbeiter oder Dritte haben.",
-      "Für Fragen zu Subprozessoren oder Datenverarbeitung kontaktiere EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oder contact@nivadesk.co.uk."
+      "Für Fragen zu Subprozessoren oder Datenverarbeitung kontaktiere EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom oder contact@nivadesk.co.uk."
     ]
   },
   Français: {
@@ -303,7 +303,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Contact"
     ],
     sectionSummaries: [
-      "NivaDesk est exploité par EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Pour les questions privacy, data protection ou subprocessors, contactez contact@nivadesk.co.uk.",
+      "NivaDesk est exploité par EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom. Pour les questions privacy, data protection ou subprocessors, contactez contact@nivadesk.co.uk.",
       "Un subprocessor est un prestataire tiers qui peut traiter des données personnelles pour NivaDesk afin de fournir le service, par exemple cloud infrastructure, authentification, paiements ou e-mail.",
       "Nous visons des prestataires fiables avec des standards raisonnables de sécurité, fiabilité et confidentialité. Les données ne doivent être traitées que pour fournir les services nécessaires; nous ne vendons pas les données et n'utilisons pas le workspace content pour la publicité.",
       "Selon le service, les données traitées peuvent inclure account data, workspace data, metadata de fichiers, paiement/abonnement, données techniques et communications.",
@@ -315,7 +315,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Certains subprocessors peuvent traiter des données hors du Royaume-Uni ou de l'EEE. Si nécessaire, nous utilisons des garanties appropriées comme décisions d'adéquation, SCCs, UK IDTA ou autres mécanismes légaux.",
       "NivaDesk peut ajouter, remplacer ou supprimer des subprocessors. Cette page sera mise à jour lors de changements matériels; les clients business avec DPA peuvent avoir des droits de notification supplémentaires.",
       "Les clients décident quelles données personnelles ils ajoutent à NivaDesk et doivent disposer des droits, notices ou consentements requis pour leurs propres clients, fournisseurs, employés ou tiers.",
-      "Pour toute question sur cette page, nos prestataires ou le traitement des données, contactez EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
+      "Pour toute question sur cette page, nos prestataires ou le traitement des données, contactez EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   Italiano: {
@@ -341,7 +341,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Contatti"
     ],
     sectionSummaries: [
-      "NivaDesk è gestito da EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Per privacy, protezione dati o subprocessor contatta contact@nivadesk.co.uk.",
+      "NivaDesk è gestito da EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom. Per privacy, protezione dati o subprocessor contatta contact@nivadesk.co.uk.",
       "Un subprocessor è un fornitore terzo che può trattare dati personali per conto di NivaDesk per aiutarci a fornire il servizio, ad esempio cloud infrastructure, autenticazione, pagamenti o email.",
       "Usiamo provider affidabili con standard ragionevoli di sicurezza, affidabilità e privacy. I dati sono trattati solo per i servizi necessari; non vendiamo dati personali e non usiamo workspace content per pubblicità.",
       "A seconda del servizio, possono essere trattati account data, workspace data, metadata dei file, informazioni pagamento/abbonamento, technical data e communication data.",
@@ -353,7 +353,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Alcuni subprocessor possono trattare dati fuori da UK o EEA. Dove richiesto usiamo garanzie appropriate come adequacy decisions, SCCs, UK IDTA o altri meccanismi legali.",
       "NivaDesk può aggiungere, sostituire o rimuovere subprocessor. Questa pagina sarà aggiornata per modifiche materiali; clienti business con DPA possono avere ulteriori diritti di notifica.",
       "I clienti sono responsabili dei dati personali che aggiungono a NivaDesk e dei diritti, informative o consensi necessari per clienti, fornitori, dipendenti o altri terzi.",
-      "Per domande su questa pagina, provider o data processing, contatta EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oppure contact@nivadesk.co.uk."
+      "Per domande su questa pagina, provider o data processing, contatta EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom oppure contact@nivadesk.co.uk."
     ]
   },
   "Español (Spanish)": {
@@ -379,7 +379,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Contacto"
     ],
     sectionSummaries: [
-      "NivaDesk es operado por EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Para privacidad, protección de datos o subprocesadores contacta a contact@nivadesk.co.uk.",
+      "NivaDesk es operado por EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom. Para privacidad, protección de datos o subprocesadores contacta a contact@nivadesk.co.uk.",
       "Un subprocesador es un proveedor tercero que puede procesar datos personales en nombre de NivaDesk para prestar el servicio, como cloud infrastructure, autenticación, pagos o email.",
       "Buscamos proveedores confiables con estándares razonables de seguridad, fiabilidad y privacidad. Solo procesan datos para los servicios necesarios; no vendemos datos personales ni usamos workspace content para publicidad.",
       "Según el servicio, pueden procesarse account data, workspace data, metadata de archivos, información de pago/suscripción, technical data y communication data.",
@@ -391,7 +391,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Algunos subprocesadores pueden procesar datos fuera de UK o EEA. Cuando sea necesario usamos garantías como adequacy decisions, SCCs, UK IDTA u otros mecanismos legales.",
       "NivaDesk puede añadir, reemplazar o eliminar subprocesadores. Actualizaremos esta página ante cambios materiales; clientes business con DPA pueden tener derechos adicionales de notificación.",
       "Los clientes son responsables de los datos personales que añaden a NivaDesk y de contar con derechos, avisos o consentimientos necesarios para sus propios clientes, proveedores, empleados o terceros.",
-      "Para preguntas sobre esta página, proveedores o procesamiento de datos, contacta a EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
+      "Para preguntas sobre esta página, proveedores o procesamiento de datos, contacta a EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
     ]
   },
   Português: {
@@ -417,7 +417,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Contacto"
     ],
     sectionSummaries: [
-      "A NivaDesk é operada pela EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Para privacidade, proteção de dados ou subprocessadores contacte contact@nivadesk.co.uk.",
+      "A NivaDesk é operada pela EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom. Para privacidade, proteção de dados ou subprocessadores contacte contact@nivadesk.co.uk.",
       "Um subprocessador é um fornecedor terceiro que pode tratar dados pessoais em nome da NivaDesk para ajudar a prestar o serviço, como cloud infrastructure, autenticação, pagamentos ou email.",
       "Procuramos fornecedores confiáveis com segurança, fiabilidade e privacidade razoáveis. Só tratam dados para os serviços necessários; não vendemos dados pessoais nem usamos workspace content para publicidade.",
       "Conforme o serviço, podem ser tratados account data, workspace data, metadata de ficheiros, informação de pagamento/subscrição, technical data e communication data.",
@@ -429,7 +429,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Alguns subprocessadores podem tratar dados fora do UK ou EEA. Quando necessário usamos safeguards como adequacy decisions, SCCs, UK IDTA ou outros mecanismos legais.",
       "A NivaDesk pode adicionar, substituir ou remover subprocessadores. Esta página será atualizada em mudanças materiais; clientes business com DPA podem ter direitos adicionais de notificação.",
       "Clientes são responsáveis pelos dados pessoais que adicionam à NivaDesk e por terem direitos, avisos ou consentimentos necessários para clientes, fornecedores, empregados ou terceiros.",
-      "Para perguntas sobre esta página, fornecedores ou tratamento de dados, contacte EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
+      "Para perguntas sobre esta página, fornecedores ou tratamento de dados, contacte EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   "Русский (Russian)": {
@@ -455,7 +455,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Контакты"
     ],
     sectionSummaries: [
-      "NivaDesk управляется EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. По вопросам privacy, data protection или subprocessors пишите на contact@nivadesk.co.uk.",
+      "NivaDesk управляется EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom. По вопросам privacy, data protection или subprocessors пишите на contact@nivadesk.co.uk.",
       "Subprocessor: сторонний provider, который может обрабатывать personal data от имени NivaDesk, чтобы помогать предоставлять сервис, например cloud infrastructure, authentication, payments или email.",
       "Мы стремимся использовать trusted providers с разумными security, reliability и privacy standards. Данные обрабатываются только для нужных services; мы не продаем personal data и не используем workspace content для рекламы.",
       "В зависимости от сервиса могут обрабатываться account data, workspace data, file metadata, payment/subscription information, technical data и communication data.",
@@ -467,7 +467,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Некоторые subprocessors могут обрабатывать данные за пределами UK или EEA. Где требуется, мы используем safeguards вроде adequacy decisions, SCCs, UK IDTA или других lawful mechanisms.",
       "NivaDesk может добавлять, заменять или удалять subprocessors. Эта страница обновляется при material changes; business customers с DPA могут иметь дополнительные notification rights.",
       "Клиенты отвечают за personal data, добавляемые в NivaDesk, и за rights, notices или consents для своих clients, suppliers, employees или third parties.",
-      "По вопросам этой страницы, providers или data processing свяжитесь с EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom или contact@nivadesk.co.uk."
+      "По вопросам этой страницы, providers или data processing свяжитесь с EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom или contact@nivadesk.co.uk."
     ]
   },
   "日本語 (Japanese)": {
@@ -493,7 +493,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "お問い合わせ"
     ],
     sectionSummaries: [
-      "NivaDesk は EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom が運営します。privacy、data protection、subprocessors に関する質問は contact@nivadesk.co.uk へご連絡ください。",
+      "NivaDesk は EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom が運営します。privacy、data protection、subprocessors に関する質問は contact@nivadesk.co.uk へご連絡ください。",
       "Subprocessor は、NivaDesk がサービス提供のために personal data を委託処理する第三者 provider です。例として cloud infrastructure、authentication、payments、email providers があります。",
       "当社は合理的な security、reliability、privacy standards を支援する trusted providers を利用することを目指します。personal data は必要なサービス目的のみに処理され、販売や workspace content の広告利用はしません。",
       "サービスに応じて account data、workspace data、uploaded file metadata、payment/subscription information、technical data、communication data が処理される場合があります。",
@@ -505,7 +505,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "一部 subprocessors は UK または EEA 外でデータを処理する場合があります。必要な場合、adequacy decisions、SCCs、UK IDTA などの safeguards を利用します。",
       "NivaDesk は subprocessors を追加、置換、削除する場合があります。material changes がある場合このページを更新し、DPA のある business customers には追加通知権がある場合があります。",
       "顧客は NivaDesk に追加する personal data と、自身の clients、suppliers、employees、third parties に必要な rights、notices、consents について責任を負います。",
-      "このページ、providers、data processing については EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom または contact@nivadesk.co.uk までご連絡ください。"
+      "このページ、providers、data processing については EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom または contact@nivadesk.co.uk までご連絡ください。"
     ]
   },
   "中文 (Chinese)": {
@@ -531,7 +531,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "联系我们"
     ],
     sectionSummaries: [
-      "NivaDesk 由 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 运营。隐私、数据保护或 subprocessors 问题请联系 contact@nivadesk.co.uk。",
+      "NivaDesk 由 EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom 运营。隐私、数据保护或 subprocessors 问题请联系 contact@nivadesk.co.uk。",
       "Subprocessor 是代表 NivaDesk 处理 personal data 以帮助提供服务的第三方 provider，例如 cloud infrastructure、authentication、payments 或 email providers。",
       "我们目标是使用具备合理安全、可靠性和隐私标准的 trusted providers。数据仅为提供必要服务而处理；我们不出售 personal data，也不将 workspace content 用于广告。",
       "根据服务不同，可能处理 account data、workspace data、uploaded files metadata、payment/subscription information、technical data 和 communication data。",
@@ -543,7 +543,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "部分 subprocessors 可能在 UK 或 EEA 之外处理数据。需要时，我们使用 adequacy decisions、SCCs、UK IDTA 或其他 lawful transfer mechanisms。",
       "NivaDesk 可能添加、替换或移除 subprocessors。重大变更时会更新本页面；有 DPA 的 business customers 可能享有额外通知权。",
       "客户负责决定添加到 NivaDesk 的 personal data，并确保对自身 clients、customers、suppliers、employees 或 third parties 具备必要 rights、notices 或 consents。",
-      "如对本页面、providers 或 data processing 有疑问，请联系 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 或 contact@nivadesk.co.uk。"
+      "如对本页面、providers 或 data processing 有疑问，请联系 EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom 或 contact@nivadesk.co.uk。"
     ]
   },
   "العربية (Arabic)": {
@@ -569,7 +569,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "التواصل"
     ],
     sectionSummaries: [
-      "تدير EGGCRAFT LIMITED خدمة NivaDesk من 141 Randolph Avenue, London, W9 1DN, United Kingdom. لأسئلة الخصوصية أو حماية البيانات أو subprocessors تواصل عبر contact@nivadesk.co.uk.",
+      "تدير EGGCRAFT LIMITED خدمة NivaDesk من 141d Randolph Avenue, London, W9 1DN, United Kingdom. لأسئلة الخصوصية أو حماية البيانات أو subprocessors تواصل عبر contact@nivadesk.co.uk.",
       "Subprocessor هو مزود خدمة خارجي قد يعالج personal data نيابة عن NivaDesk لمساعدتنا في تقديم الخدمة، مثل cloud infrastructure أو authentication أو payments أو email providers.",
       "نهدف إلى استخدام trusted providers يدعمون security وreliability وprivacy standards معقولة. نعالج البيانات فقط للأغراض اللازمة، ولا نبيع personal data أو نستخدم workspace content للإعلانات.",
       "حسب الخدمة، قد تعالج فئات محدودة مثل account data وworkspace data وuploaded file metadata وpayment/subscription information وtechnical data وcommunication data.",
@@ -581,7 +581,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "قد يعالج بعض subprocessors البيانات خارج UK أو EEA. عند الحاجة نستخدم safeguards مثل adequacy decisions أو SCCs أو UK IDTA أو آليات قانونية أخرى.",
       "قد تضيف NivaDesk أو تستبدل أو تزيل subprocessors. سنحدث هذه الصفحة عند تغييرات جوهرية؛ قد يكون لدى business customers مع DPA حقوق إشعار إضافية.",
       "يتحمل العملاء مسؤولية personal data التي يضيفونها إلى NivaDesk وضمان الحقوق والإشعارات أو الموافقات اللازمة لعملائهم أو مورديهم أو موظفيهم أو أطرافهم الثالثة.",
-      "للأسئلة حول هذه الصفحة أو providers أو data processing، تواصل مع EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom أو contact@nivadesk.co.uk."
+      "للأسئلة حول هذه الصفحة أو providers أو data processing، تواصل مع EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom أو contact@nivadesk.co.uk."
     ]
   },
   "हिन्दी (Hindi)": {
@@ -607,7 +607,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "Contact"
     ],
     sectionSummaries: [
-      "NivaDesk EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom द्वारा संचालित है। Privacy, data protection या subprocessors questions के लिए contact@nivadesk.co.uk पर संपर्क करें।",
+      "NivaDesk EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom द्वारा संचालित है। Privacy, data protection या subprocessors questions के लिए contact@nivadesk.co.uk पर संपर्क करें।",
       "Subprocessor एक third-party service provider है जो NivaDesk की ओर से personal data process कर सकता है ताकि service provide की जा सके, जैसे cloud infrastructure, authentication, payments या email providers।",
       "हम reasonable security, reliability और privacy standards support करने वाले trusted providers use करना चाहते हैं। Data केवल required services के लिए process होता है; हम personal data बेचते नहीं और workspace content advertising के लिए use नहीं करते।",
       "Service के अनुसार account data, workspace data, uploaded files metadata, payment/subscription information, technical data और communication data process हो सकते हैं।",
@@ -619,7 +619,7 @@ const SUBPROCESSORS_DRAFTS: Partial<Record<StudioLanguage, LocalizedSubprocessor
       "कुछ subprocessors UK या EEA के बाहर data process कर सकते हैं। Required होने पर हम adequacy decisions, SCCs, UK IDTA या other lawful transfer mechanisms use करते हैं।",
       "NivaDesk service develop होने पर subprocessors add, replace या remove कर सकता है। Material changes पर यह page update होगा; DPA वाले business customers को extra notification rights हो सकते हैं।",
       "Customers NivaDesk में जो personal data add करते हैं उसके लिए responsible हैं और अपने clients, suppliers, employees या third parties के लिए required notices, rights या consents सुनिश्चित करने होंगे।",
-      "इस page, providers या data processing पर questions के लिए EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom या contact@nivadesk.co.uk पर संपर्क करें।"
+      "इस page, providers या data processing पर questions के लिए EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom या contact@nivadesk.co.uk पर संपर्क करें।"
     ]
   }
 };

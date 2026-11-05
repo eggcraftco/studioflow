@@ -230,7 +230,7 @@ export const SECURITY_OVERVIEW_SECTIONS: PrivacyPolicySection[] = [
     paragraphs: [
       "If you have any questions about this Security Overview or want to report a security concern, please contact:",
       "EGGCRAFT LIMITED",
-      "141 Randolph Avenue",
+      "141d Randolph Avenue",
       "London",
       "W9 1DN",
       "United Kingdom",
@@ -306,7 +306,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Uygun olduğunda kullanıcılar business data export veya account deletion talep edebilir. Paid plan bittiğinde veya iptal edildiğinde mevcut verilerin export'u teknik ve yasal olarak mümkün olduğu ölçüde desteklenir.",
       "Hiçbir sistem tamamen güvenli garanti edilemez. İnternet aktarımı, cihaz compromise, weak passwords, phishing, shared accounts, malware, user error veya third-party issues güvenlik riski oluşturabilir.",
       "Bu özet Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy ve uygulanabilir olduğunda DPA, Subprocessors ve Acceptable Use Policy ile birlikte okunmalıdır.",
-      "Güvenlik soruları veya concern report için EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ya da contact@nivadesk.co.uk üzerinden bize ulaşabilirsiniz."
+      "Güvenlik soruları veya concern report için EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom ya da contact@nivadesk.co.uk üzerinden bize ulaşabilirsiniz."
     ]
   },
   Deutsch: {
@@ -354,7 +354,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Datenexport und Kontolöschung können je nach Rolle, Berechtigung, Plan und Technik verfügbar sein. Auch nach Ablauf eines Plans streben wir Export bestehender Geschäftsdaten an, soweit möglich.",
       "Kein System ist garantiert vollständig sicher. Übertragung, kompromittierte Geräte, schwache Passwörter, Phishing, geteilte Konten, Malware, Nutzerfehler oder Drittanbieterprobleme schaffen Risiken.",
       "Diese Übersicht sollte mit Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy und ggf. DPA, Subprocessors und Acceptable Use Policy gelesen werden.",
-      "Für Sicherheitsfragen oder Meldungen kontaktiere EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oder contact@nivadesk.co.uk."
+      "Für Sicherheitsfragen oder Meldungen kontaktiere EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom oder contact@nivadesk.co.uk."
     ]
   },
   Français: {
@@ -402,7 +402,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "L'export et la suppression de compte peuvent dépendre du rôle, des permissions, du plan et de la disponibilité technique. Nous visons l'export des données existantes même après expiration quand c'est possible.",
       "Aucun système ne peut être totalement sécurisé. Transmission internet, appareil compromis, mots de passe faibles, phishing, comptes partagés, malware, erreur utilisateur ou tiers peuvent créer des risques.",
       "Cet aperçu doit être lu avec Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy et, le cas échéant, DPA, Subprocessors et Acceptable Use Policy.",
-      "Pour toute question ou signalement sécurité, contactez EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
+      "Pour toute question ou signalement sécurité, contactez EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   Italiano: {
@@ -450,7 +450,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Export e account deletion possono dipendere da ruolo, permessi, piano e disponibilità tecnica. Cerchiamo di permettere export dei dati esistenti anche dopo scadenza del piano quando possibile.",
       "Nessun sistema può essere garantito completamente sicuro. Trasmissione internet, device compromise, password deboli, phishing, account condivisi, malware, errore umano o terze parti possono creare rischi.",
       "Questa panoramica va letta con Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy e, se applicabili, DPA, Subprocessors e Acceptable Use Policy.",
-      "Per domande o segnalazioni di sicurezza, contatta EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oppure contact@nivadesk.co.uk."
+      "Per domande o segnalazioni di sicurezza, contatta EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom oppure contact@nivadesk.co.uk."
     ]
   },
   "Español (Spanish)": {
@@ -498,7 +498,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "La exportación y eliminación de cuenta pueden depender de rol, permisos, plan y disponibilidad técnica. Buscamos permitir export de datos existentes incluso tras expirar un plan cuando sea posible.",
       "Ningún sistema puede garantizar seguridad total. Transmisión por internet, dispositivos comprometidos, contraseñas débiles, phishing, cuentas compartidas, malware, errores de usuario o terceros pueden crear riesgos.",
       "Este resumen debe leerse junto con Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy y, cuando aplique, DPA, Subprocessors y Acceptable Use Policy.",
-      "Para preguntas o reportes de seguridad, contacta a EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
+      "Para preguntas o reportes de seguridad, contacta a EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
     ]
   },
   Português: {
@@ -546,7 +546,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Exportação e eliminação de conta podem depender de role, permissões, plano e disponibilidade técnica. Procuramos permitir export de dados existentes mesmo após expiração de plano quando possível.",
       "Nenhum sistema pode garantir segurança total. Transmissão internet, dispositivos comprometidos, passwords fracas, phishing, contas partilhadas, malware, erro humano ou terceiros podem criar riscos.",
       "Este resumo deve ser lido com Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy e, se aplicável, DPA, Subprocessors e Acceptable Use Policy.",
-      "Para questões ou reportes de segurança contacte EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
+      "Para questões ou reportes de segurança contacte EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   "Русский (Russian)": {
@@ -594,7 +594,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Data export и account deletion зависят от role, permissions, plan и technical availability. Мы стремимся поддерживать export existing business data даже после окончания paid plan, где возможно.",
       "Ни одна система не гарантирует полную безопасность. Internet transmission, compromised devices, weak passwords, phishing, shared accounts, malware, user error или third-party issues создают риски.",
       "Этот обзор следует читать вместе с Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy и при необходимости DPA, Subprocessors и Acceptable Use Policy.",
-      "Для вопросов или сообщений о безопасности свяжитесь с EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom или contact@nivadesk.co.uk."
+      "Для вопросов или сообщений о безопасности свяжитесь с EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom или contact@nivadesk.co.uk."
     ]
   },
   "日本語 (Japanese)": {
@@ -642,7 +642,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "data export と account deletion は role、permissions、plan、technical availability に依存します。paid plan 終了後も可能な範囲で existing business data export を支援します。",
       "完全な安全を保証できるシステムはありません。internet transmission、device compromise、weak passwords、phishing、shared accounts、malware、user error、third-party issues はリスクです。",
       "この概要は Privacy Policy、Terms of Service、Cookie Policy、Account Deletion Policy、Refund & Cancellation Policy、および必要に応じて DPA、Subprocessors、Acceptable Use Policy と併せて読むべきです。",
-      "セキュリティに関する質問や報告は、EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom または contact@nivadesk.co.uk までご連絡ください。"
+      "セキュリティに関する質問や報告は、EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom または contact@nivadesk.co.uk までご連絡ください。"
     ]
   },
   "中文 (Chinese)": {
@@ -690,7 +690,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "data export 和 account deletion 取决于 role、permissions、plan 和 technical availability。即使 paid plan 到期，我们也尽力允许导出现有业务数据。",
       "没有系统可保证完全安全。internet transmission、device compromise、weak passwords、phishing、shared accounts、malware、user error 或 third-party issues 都可能带来风险。",
       "本概览应与 Privacy Policy、Terms of Service、Cookie Policy、Account Deletion Policy、Refund & Cancellation Policy 以及适用的 DPA、Subprocessors、Acceptable Use Policy 一起阅读。",
-      "如有安全问题或报告，请联系 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 或 contact@nivadesk.co.uk。"
+      "如有安全问题或报告，请联系 EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom 或 contact@nivadesk.co.uk。"
     ]
   },
   "العربية (Arabic)": {
@@ -738,7 +738,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "يعتمد data export وaccount deletion على role وpermissions وplan وtechnical availability. نسعى للسماح بتصدير البيانات الحالية حتى بعد انتهاء paid plan حيث يمكن ذلك.",
       "لا يمكن ضمان أمان أي نظام بالكامل. internet transmission وdevice compromise وweak passwords وphishing وshared accounts وmalware وuser error وthird-party issues قد تخلق مخاطر.",
       "يجب قراءة هذا الملخص مع Privacy Policy وTerms of Service وCookie Policy وAccount Deletion Policy وRefund & Cancellation Policy، وعند التطبيق DPA وSubprocessors وAcceptable Use Policy.",
-      "للأسئلة أو تقارير الأمان، تواصل مع EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom أو contact@nivadesk.co.uk."
+      "للأسئلة أو تقارير الأمان، تواصل مع EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom أو contact@nivadesk.co.uk."
     ]
   },
   "हिन्दी (Hindi)": {
@@ -786,7 +786,7 @@ const SECURITY_OVERVIEW_DRAFTS: Partial<Record<StudioLanguage, LocalizedSecurity
       "Data export और account deletion role, permissions, plan और technical availability पर depend कर सकते हैं। Paid plan expire/cancel होने पर भी technically और legally possible हो तो existing business data export support करने का लक्ष्य है।",
       "कोई system completely secure guarantee नहीं हो सकता। Internet transmission, device compromise, weak passwords, phishing, shared accounts, malware, user error या third-party issues risk बना सकते हैं।",
       "यह overview Privacy Policy, Terms of Service, Cookie Policy, Account Deletion Policy, Refund & Cancellation Policy और जहाँ applicable हो DPA, Subprocessors, Acceptable Use Policy के साथ पढ़ा जाना चाहिए।",
-      "Security questions या concerns के लिए EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom या contact@nivadesk.co.uk पर संपर्क करें।"
+      "Security questions या concerns के लिए EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom या contact@nivadesk.co.uk पर संपर्क करें।"
     ]
   }
 };

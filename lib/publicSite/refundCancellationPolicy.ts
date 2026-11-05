@@ -15,7 +15,7 @@ export const REFUND_CANCELLATION_POLICY_SECTIONS: PrivacyPolicySection[] = [
     title: "1. Who we are",
     paragraphs: [
       "EGGCRAFT LIMITED",
-      "141 Randolph Avenue",
+      "141d Randolph Avenue",
       "London",
       "W9 1DN",
       "United Kingdom",
@@ -187,7 +187,7 @@ export const REFUND_CANCELLATION_POLICY_SECTIONS: PrivacyPolicySection[] = [
     paragraphs: [
       "For billing, cancellation, refund, or subscription questions, contact:",
       "EGGCRAFT LIMITED",
-      "141 Randolph Avenue",
+      "141d Randolph Avenue",
       "London",
       "W9 1DN",
       "United Kingdom",
@@ -248,7 +248,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "İletişim"
     ],
     sectionSummaries: [
-      "NivaDesk, EGGCRAFT LIMITED tarafından 141 Randolph Avenue, London, W9 1DN, United Kingdom adresinden işletilir. Faturalama, iptal, iade veya abonelik soruları için contact@nivadesk.co.uk adresinden bize ulaşabilirsiniz.",
+      "NivaDesk, EGGCRAFT LIMITED tarafından 141d Randolph Avenue, London, W9 1DN, United Kingdom adresinden işletilir. Faturalama, iptal, iade veya abonelik soruları için contact@nivadesk.co.uk adresinden bize ulaşabilirsiniz.",
       "Bu politika ücretsiz erişim, denemeler, aylık ve yıllık abonelikler, lifetime planlar, team planlar, depolama add-on'ları ve sunabileceğimiz diğer ücretli özellikler için geçerlidir. Plan limitleri ve özellikleri fiyatlandırma sayfasında, uygulamada veya checkout sırasında gösterilir.",
       "İptal, yenileme ve iade süreçleri satın alma kanalına göre değişir. Apple App Store satın alımları genellikle Apple, Google Play satın alımları Google, web satın alımları ise NivaDesk veya Stripe gibi ödeme sağlayıcıları tarafından yönetilir.",
       "Ücretli abonelikler, yenileme tarihinden önce iptal edilmedikçe fatura döneminin sonunda otomatik yenilenebilir. Ödeme başarısız olursa ödemeyi yeniden deneyebilir, ücretli özellikleri sınırlayabilir, hesabı downgrade edebilir, erişimi askıya alabilir veya aboneliği iptal edebiliriz.",
@@ -267,7 +267,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Bir ücretin hatalı olduğunu düşünüyorsanız önce bizimle iletişime geçin. Chargeback veya ödeme uyuşmazlığı açılırsa inceleme süresince ilgili hesabı sınırlayabilir veya askıya alabiliriz; başarılı chargeback paid access'i iptal veya downgrade edebilir.",
       "Fiyatları, plan özelliklerini, faturalama şartlarını, iade kurallarını veya bu politikayı zaman zaman değiştirebiliriz. Gerekli olduğunda aktif ücretli kullanıcılara önemli değişiklikler için bildirim yaparız.",
       "Bu politika geçerli tüketici koruma hukukundan doğan haklarınızı sınırlamaz. UK, EU veya zorunlu tüketici hakları tanıyan başka bir bölgede tüketiciyseniz bu haklar geçerli kalır.",
-      "Faturalama, iptal, iade veya abonelik soruları için EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ya da contact@nivadesk.co.uk üzerinden bize ulaşabilirsiniz."
+      "Faturalama, iptal, iade veya abonelik soruları için EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom ya da contact@nivadesk.co.uk üzerinden bize ulaşabilirsiniz."
     ]
   },
   Deutsch: {
@@ -300,7 +300,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Kontakt"
     ],
     sectionSummaries: [
-      "NivaDesk wird von EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom betrieben. Für Abrechnung, Kündigung, Rückerstattung oder Abos kontaktiere contact@nivadesk.co.uk.",
+      "NivaDesk wird von EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom betrieben. Für Abrechnung, Kündigung, Rückerstattung oder Abos kontaktiere contact@nivadesk.co.uk.",
       "Diese Richtlinie gilt für kostenlosen Zugriff, Testphasen, Monats- und Jahresabos, Lifetime-Pläne, Team-Pläne, Speicher-Add-ons und andere bezahlte Funktionen. Limits und Funktionen werden auf der Preisseite, in der App oder beim Checkout angezeigt.",
       "Kündigung, Verlängerung und Rückerstattung hängen davon ab, wo du gekauft hast. Apple verwaltet meist App Store Käufe, Google meist Google Play Käufe, Webkäufe können von uns oder Stripe verwaltet werden.",
       "Bezahlte Abos können automatisch verlängert werden, wenn sie nicht vor dem Verlängerungsdatum gekündigt werden. Bei fehlgeschlagener Zahlung können wir erneut abbuchen, Funktionen beschränken, downgraden, Zugriff aussetzen oder kündigen.",
@@ -319,7 +319,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Wenn eine Abbuchung falsch erscheint, kontaktiere uns bitte zuerst. Bei Chargebacks oder Zahlungsstreitigkeiten können wir das Konto während der Prüfung beschränken; erfolgreiche Chargebacks können bezahlten Zugriff kündigen oder downgraden.",
       "Wir können Preise, Planfunktionen, Abrechnungsbedingungen, Rückerstattungsregeln oder diese Richtlinie ändern. Wo erforderlich, informieren wir aktive bezahlte Nutzer über wesentliche Änderungen.",
       "Diese Richtlinie beschränkt keine zwingenden Verbraucherrechte. Verbraucher im UK, in der EU oder anderen Rechtsordnungen behalten gesetzliche Rechte.",
-      "Für Abrechnung, Kündigung, Rückerstattung oder Abos kontaktiere EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oder contact@nivadesk.co.uk."
+      "Für Abrechnung, Kündigung, Rückerstattung oder Abos kontaktiere EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom oder contact@nivadesk.co.uk."
     ]
   },
   Français: {
@@ -352,7 +352,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Contact"
     ],
     sectionSummaries: [
-      "NivaDesk est exploité par EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Pour la facturation, les annulations, remboursements ou abonnements, contactez contact@nivadesk.co.uk.",
+      "NivaDesk est exploité par EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom. Pour la facturation, les annulations, remboursements ou abonnements, contactez contact@nivadesk.co.uk.",
       "Cette politique couvre l'accès gratuit, les essais, abonnements mensuels ou annuels, plans lifetime, plans d'équipe, add-ons de stockage et autres fonctions payantes. Les limites et fonctions sont affichées sur la page de tarifs, dans l'app ou au checkout.",
       "Les annulations, renouvellements et remboursements dépendent du lieu d'achat. Apple gère généralement les achats App Store, Google les achats Google Play, et les achats web peuvent être gérés par nous ou par Stripe.",
       "Les abonnements payants peuvent se renouveler automatiquement sauf annulation avant la date de renouvellement. En cas d'échec de paiement, nous pouvons réessayer, limiter des fonctions, downgrader, suspendre l'accès ou annuler.",
@@ -371,7 +371,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Si une charge semble incorrecte, contactez-nous d'abord. En cas de chargeback ou litige, nous pouvons limiter le compte pendant l'examen; un chargeback accepté peut annuler ou downgrader l'accès payant.",
       "Nous pouvons modifier prix, fonctions de plan, conditions de facturation, règles de remboursement ou cette politique. Si nécessaire, nous prévenons les utilisateurs payants actifs des changements importants.",
       "Cette politique ne limite pas les droits impératifs de protection des consommateurs. Les droits des consommateurs au UK, dans l'UE ou ailleurs continuent de s'appliquer.",
-      "Pour la facturation, les annulations, remboursements ou abonnements, contactez EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
+      "Pour la facturation, les annulations, remboursements ou abonnements, contactez EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   Italiano: {
@@ -404,7 +404,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Contatti"
     ],
     sectionSummaries: [
-      "NivaDesk è gestito da EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Per domande su fatturazione, cancellazioni, rimborsi o abbonamenti contatta contact@nivadesk.co.uk.",
+      "NivaDesk è gestito da EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom. Per domande su fatturazione, cancellazioni, rimborsi o abbonamenti contatta contact@nivadesk.co.uk.",
       "Questa informativa copre accesso gratuito, prove, abbonamenti mensili o annuali, lifetime plan, team plan, add-on di archiviazione e altre funzionalità a pagamento. Limiti e funzioni sono mostrati nella pagina prezzi, nell'app o al checkout.",
       "Cancellazioni, rinnovi e rimborsi dipendono dal canale di acquisto. Apple gestisce di solito App Store, Google gestisce Google Play, mentre gli acquisti web possono essere gestiti da noi o da Stripe.",
       "Gli abbonamenti a pagamento possono rinnovarsi automaticamente se non cancellati prima della data di rinnovo. Se il pagamento fallisce, possiamo riprovare, limitare funzioni, effettuare downgrade, sospendere accesso o cancellare l'abbonamento.",
@@ -423,7 +423,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Se pensi che un addebito sia errato, contattaci prima. In caso di chargeback o contestazione possiamo limitare l'account durante la revisione; un chargeback riuscito può annullare o downgradare l'accesso pagato.",
       "Possiamo modificare prezzi, funzioni dei piani, termini di fatturazione, regole di rimborso o questa informativa. Dove richiesto, avviseremo gli utenti paganti attivi di modifiche sostanziali.",
       "Questa informativa non limita diritti obbligatori di tutela dei consumatori. I diritti dei consumatori in UK, UE o altre giurisdizioni restano validi.",
-      "Per domande su fatturazione, cancellazioni, rimborsi o abbonamenti contatta EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oppure contact@nivadesk.co.uk."
+      "Per domande su fatturazione, cancellazioni, rimborsi o abbonamenti contatta EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom oppure contact@nivadesk.co.uk."
     ]
   },
   "Español (Spanish)": {
@@ -456,7 +456,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Contacto"
     ],
     sectionSummaries: [
-      "NivaDesk es operado por EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Para facturación, cancelaciones, reembolsos o suscripciones contacta a contact@nivadesk.co.uk.",
+      "NivaDesk es operado por EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom. Para facturación, cancelaciones, reembolsos o suscripciones contacta a contact@nivadesk.co.uk.",
       "Esta política cubre acceso gratuito, pruebas, suscripciones mensuales o anuales, planes lifetime, planes de equipo, add-ons de almacenamiento y otras funciones pagas. Los límites y funciones se muestran en precios, la app o checkout.",
       "La cancelación, renovación y reembolso dependen del lugar de compra. Apple suele gestionar App Store, Google suele gestionar Google Play, y las compras web pueden gestionarse por nosotros o Stripe.",
       "Las suscripciones pagas pueden renovarse automáticamente salvo cancelación antes de la fecha de renovación. Si falla el pago, podemos reintentar, limitar funciones, bajar de plan, suspender acceso o cancelar.",
@@ -475,7 +475,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Si crees que un cargo es incorrecto, contáctanos primero. Si abres chargeback o disputa, podemos limitar la cuenta mientras se revisa; si prospera, el acceso pagado puede cancelarse o downgradearse.",
       "Podemos cambiar precios, funciones, términos de facturación, reglas de reembolso o esta política. Cuando sea necesario, avisaremos a usuarios pagos activos de cambios materiales.",
       "Esta política no limita derechos obligatorios de protección al consumidor. Si eres consumidor en UK, UE u otra jurisdicción, esos derechos siguen aplicando.",
-      "Para facturación, cancelaciones, reembolsos o suscripciones contacta a EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
+      "Para facturación, cancelaciones, reembolsos o suscripciones contacta a EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
     ]
   },
   Português: {
@@ -508,7 +508,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Contacto"
     ],
     sectionSummaries: [
-      "A NivaDesk é operada pela EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. Para faturação, cancelamentos, reembolsos ou subscrições contacte contact@nivadesk.co.uk.",
+      "A NivaDesk é operada pela EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom. Para faturação, cancelamentos, reembolsos ou subscrições contacte contact@nivadesk.co.uk.",
       "Esta política cobre acesso gratuito, testes, subscrições mensais ou anuais, planos lifetime, planos de equipa, add-ons de armazenamento e outras funcionalidades pagas. Limites e recursos são mostrados nos preços, app ou checkout.",
       "Cancelamentos, renovações e reembolsos dependem do local de compra. Apple gere normalmente App Store, Google gere Google Play, e compras web podem ser geridas por nós ou Stripe.",
       "Subscrições pagas podem renovar automaticamente se não forem canceladas antes da renovação. Se o pagamento falhar, podemos tentar novamente, limitar recursos, fazer downgrade, suspender acesso ou cancelar.",
@@ -527,7 +527,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Se uma cobrança parecer incorreta, contacte-nos primeiro. Em chargeback ou disputa, podemos limitar a conta durante análise; se for aceite, o acesso pago pode ser cancelado ou downgraded.",
       "Podemos alterar preços, recursos, termos de faturação, regras de reembolso ou esta política. Quando necessário, avisaremos utilizadores pagos ativos sobre alterações materiais.",
       "Esta política não limita direitos obrigatórios do consumidor. Consumidores no UK, UE ou outra jurisdição mantêm esses direitos.",
-      "Para faturação, cancelamentos, reembolsos ou subscrições contacte EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
+      "Para faturação, cancelamentos, reembolsos ou subscrições contacte EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   "Русский (Russian)": {
@@ -560,7 +560,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Контакты"
     ],
     sectionSummaries: [
-      "NivaDesk управляется EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom. По вопросам billing, отмены, возвратов или подписок пишите на contact@nivadesk.co.uk.",
+      "NivaDesk управляется EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom. По вопросам billing, отмены, возвратов или подписок пишите на contact@nivadesk.co.uk.",
       "Политика охватывает бесплатный доступ, trials, месячные и годовые подписки, lifetime планы, team планы, storage add-ons и другие платные функции. Лимиты и функции показываются на pricing page, в app или checkout.",
       "Отмена, продление и возврат зависят от места покупки. Apple обычно управляет App Store, Google управляет Google Play, а web purchases могут управляться нами или Stripe.",
       "Платные подписки могут продлеваться автоматически, если не отменены до даты продления. При неудачном платеже мы можем повторить списание, ограничить функции, downgrade, suspend access или cancel.",
@@ -579,7 +579,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Если списание кажется неверным, сначала свяжитесь с нами. При chargeback или dispute мы можем ограничить аккаунт во время review; successful chargeback может cancel или downgrade paid access.",
       "Мы можем менять prices, plan features, billing terms, refund rules или эту policy. Когда нужно, мы уведомим active paid users о material changes.",
       "Эта policy не ограничивает обязательные consumer protection rights. Права потребителей в UK, EU или другой юрисдикции продолжают действовать.",
-      "По вопросам billing, отмены, возвратов или подписок свяжитесь с EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom или contact@nivadesk.co.uk."
+      "По вопросам billing, отмены, возвратов или подписок свяжитесь с EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom или contact@nivadesk.co.uk."
     ]
   },
   "日本語 (Japanese)": {
@@ -612,7 +612,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "お問い合わせ"
     ],
     sectionSummaries: [
-      "NivaDesk は EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom が運営します。請求、キャンセル、返金、サブスクリプションについては contact@nivadesk.co.uk へご連絡ください。",
+      "NivaDesk は EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom が運営します。請求、キャンセル、返金、サブスクリプションについては contact@nivadesk.co.uk へご連絡ください。",
       "このポリシーは無料アクセス、トライアル、月額・年額サブスクリプション、lifetime プラン、team プラン、ストレージ add-on、その他有料機能に適用されます。制限と機能は料金ページ、アプリ、checkout に表示されます。",
       "キャンセル、更新、返金は購入場所により異なります。Apple は通常 App Store、Google は Google Play、Web 購入は当社または Stripe などが管理します。",
       "有料サブスクリプションは更新日前にキャンセルしない限り自動更新される場合があります。支払い失敗時は再試行、機能制限、ダウングレード、アクセス停止、キャンセルを行う場合があります。",
@@ -631,7 +631,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "請求が誤っていると思う場合は、まず当社へご連絡ください。chargeback や dispute 中はアカウントを制限することがあり、成立した場合 paid access がキャンセルまたはダウングレードされることがあります。",
       "価格、プラン機能、請求条件、返金ルール、またはこのポリシーを変更する場合があります。必要な場合、重要な変更は有料ユーザーに通知します。",
       "このポリシーは適用される消費者保護法上の権利を制限しません。UK、EU、その他地域の強制的な消費者権利は引き続き適用されます。",
-      "請求、キャンセル、返金、サブスクリプションについては EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom または contact@nivadesk.co.uk へご連絡ください。"
+      "請求、キャンセル、返金、サブスクリプションについては EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom または contact@nivadesk.co.uk へご連絡ください。"
     ]
   },
   "中文 (Chinese)": {
@@ -664,7 +664,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "联系我们"
     ],
     sectionSummaries: [
-      "NivaDesk 由 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 运营。计费、取消、退款或订阅问题请联系 contact@nivadesk.co.uk。",
+      "NivaDesk 由 EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom 运营。计费、取消、退款或订阅问题请联系 contact@nivadesk.co.uk。",
       "本政策适用于免费访问、试用、月度或年度订阅、lifetime 计划、团队计划、存储 add-ons 和其他付费功能。限制和功能会在价格页、应用或 checkout 中显示。",
       "取消、续订和退款取决于购买渠道。Apple 通常管理 App Store 购买，Google 管理 Google Play 购买，Web 购买可由我们或 Stripe 等提供商管理。",
       "付费订阅可能在每个计费周期结束时自动续订，除非在续订日前取消。付款失败时，我们可重试、限制功能、降级账户、暂停访问或取消订阅。",
@@ -683,7 +683,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "如果认为收费有误，请先联系我们。发起 chargeback 或付款争议时，我们可在审查期间限制相关账户；成功 chargeback 可能取消或降级付费访问。",
       "我们可能不时更改价格、计划功能、计费条款、退款规则或本政策。需要时，我们会向活跃付费用户通知重大变更。",
       "本政策不限制适用消费者保护法赋予你的权利。UK、EU 或其他地区的强制性消费者权利继续适用。",
-      "计费、取消、退款或订阅问题，请联系 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 或 contact@nivadesk.co.uk。"
+      "计费、取消、退款或订阅问题，请联系 EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom 或 contact@nivadesk.co.uk。"
     ]
   },
   "العربية (Arabic)": {
@@ -716,7 +716,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "التواصل"
     ],
     sectionSummaries: [
-      "تدير EGGCRAFT LIMITED خدمة NivaDesk من 141 Randolph Avenue, London, W9 1DN, United Kingdom. لأسئلة الفوترة أو الإلغاء أو الاسترداد أو الاشتراكات، تواصل عبر contact@nivadesk.co.uk.",
+      "تدير EGGCRAFT LIMITED خدمة NivaDesk من 141d Randolph Avenue, London, W9 1DN, United Kingdom. لأسئلة الفوترة أو الإلغاء أو الاسترداد أو الاشتراكات، تواصل عبر contact@nivadesk.co.uk.",
       "تنطبق هذه السياسة على الوصول المجاني والتجارب والاشتراكات الشهرية أو السنوية وخطط lifetime وخطط الفريق وإضافات التخزين والميزات المدفوعة الأخرى. تظهر الحدود والميزات في صفحة الأسعار أو التطبيق أو checkout.",
       "تعتمد طريقة الإلغاء والتجديد والاسترداد على مكان الشراء. Apple تدير عادة مشتريات App Store، وGoogle تدير Google Play، ومشتريات الويب قد نديرها نحن أو Stripe.",
       "قد تتجدد الاشتراكات المدفوعة تلقائياً ما لم تُلغ قبل تاريخ التجديد. إذا فشل الدفع، قد نعيد المحاولة أو نحد الميزات أو نخفض الخطة أو نعلق الوصول أو نلغي الاشتراك.",
@@ -735,7 +735,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "إذا اعتقدت أن هناك رسماً خاطئاً، تواصل معنا أولاً. عند chargeback أو نزاع دفع، قد نقيد الحساب أثناء المراجعة؛ وإذا نجح النزاع قد يُلغى الوصول المدفوع أو يخفض.",
       "قد نغير الأسعار أو ميزات الخطط أو شروط الفوترة أو قواعد الاسترداد أو هذه السياسة. عند الحاجة، سنبلغ المستخدمين المدفوعين النشطين بالتغييرات الجوهرية.",
       "لا تحد هذه السياسة من أي حقوق إلزامية لديك بموجب قوانين حماية المستهلك. تستمر حقوق المستهلك في UK أو EU أو أي ولاية أخرى في التطبيق.",
-      "لأسئلة الفوترة أو الإلغاء أو الاسترداد أو الاشتراكات، تواصل مع EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom أو contact@nivadesk.co.uk."
+      "لأسئلة الفوترة أو الإلغاء أو الاسترداد أو الاشتراكات، تواصل مع EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom أو contact@nivadesk.co.uk."
     ]
   },
   "हिन्दी (Hindi)": {
@@ -768,7 +768,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "Contact"
     ],
     sectionSummaries: [
-      "NivaDesk EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom द्वारा संचालित है। Billing, cancellation, refund या subscription questions के लिए contact@nivadesk.co.uk पर संपर्क करें।",
+      "NivaDesk EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom द्वारा संचालित है। Billing, cancellation, refund या subscription questions के लिए contact@nivadesk.co.uk पर संपर्क करें।",
       "यह policy free access, trials, monthly/annual subscriptions, lifetime plans, team plans, storage add-ons और other paid features पर लागू होती है। Limits और features pricing page, app या checkout में दिखाए जाएंगे।",
       "Cancel, renew और refund की प्रक्रिया purchase platform पर निर्भर करती है। Apple App Store purchases सामान्यतः Apple, Google Play purchases Google, और web purchases हम या Stripe जैसे provider manage कर सकते हैं।",
       "Paid subscriptions renewal date से पहले cancel न होने पर automatically renew हो सकती हैं। Payment fail होने पर हम retry, paid features limit, account downgrade, access suspend या subscription cancel कर सकते हैं।",
@@ -787,7 +787,7 @@ const REFUND_CANCELLATION_POLICY_DRAFTS: Partial<Record<StudioLanguage, Localize
       "यदि charge incorrect लगे तो पहले हमसे संपर्क करें। Chargeback या payment dispute होने पर review के दौरान account suspend/limit हो सकता है; successful chargeback paid access cancel या downgrade कर सकता है।",
       "हम prices, plan features, billing terms, refund rules या इस policy को समय-समय पर बदल सकते हैं। Required होने पर active paid users को material changes की notice देंगे।",
       "यह policy applicable consumer protection law से मिलने वाले rights को limit नहीं करती। UK, EU या अन्य jurisdictions में mandatory consumer rights लागू रहेंगे।",
-      "Billing, cancellation, refund या subscription questions के लिए EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom या contact@nivadesk.co.uk पर संपर्क करें।"
+      "Billing, cancellation, refund या subscription questions के लिए EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom या contact@nivadesk.co.uk पर संपर्क करें।"
     ]
   }
 };

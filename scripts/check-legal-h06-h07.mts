@@ -157,6 +157,22 @@ for (const [name, shownVar, englishConst] of pages) {
 }
 ok("PublicPrivacyPageContent: the notice includes how to complain", /<PublicLegalLanguageNotice[\s\S]{0,160}complaints\s*\n?\s*\/>/.test(body("PublicPrivacyPageContent")));
 
+// ---------- Registered office (owner, 5 Nov 2026): Companies House 16566512 = "141d Randolph Avenue, London, W9 1DN" ----------
+{
+  const scan: string[] = [];
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) { if (e.name !== "node_modules") walk(full); }
+      else if (/\.(ts|tsx)$/.test(e.name)) scan.push(full);
+    }
+  };
+  for (const d of ["lib", "components", "app"]) if (fs.existsSync(path.join(root, d))) walk(path.join(root, d));
+  const stale = scan.filter((f) => /141 Randolph/.test(fs.readFileSync(f, "utf8"))).map((f) => path.relative(root, f));
+  ok(`company address: no "141 Randolph" without the "d" anywhere in lib/components/app${stale.length ? " — found in: " + stale.join(", ") : ""}`, stale.length === 0);
+  ok("company address: the privacy policy shows \"141d Randolph Avenue\"", privacyEn.includes("141d Randolph Avenue"));
+}
+
 if (failures.length) {
   console.error(`legal-h06-h07: ${checks - failures.length}/${checks} passed\n` + failures.map(f => `  FAIL ${f}`).join("\n"));
   process.exit(1);

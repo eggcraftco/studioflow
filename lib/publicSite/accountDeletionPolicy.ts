@@ -161,7 +161,7 @@ export const ACCOUNT_DELETION_POLICY_SECTIONS: PrivacyPolicySection[] = [
     paragraphs: [
       "For account deletion requests or questions about this policy, please contact:",
       "EGGCRAFT LIMITED",
-      "141 Randolph Avenue",
+      "141d Randolph Avenue",
       "London",
       "W9 1DN",
       "United Kingdom",
@@ -250,7 +250,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "NivaDesk hesabınızı silmek, Apple App Store, Google Play, Stripe veya başka bir ödeme sağlayıcısı tarafından yönetilen abonelikleri otomatik olarak iptal etmeyebilir. Aboneliği satın aldığınız platformdan iptal etmek sizin sorumluluğunuzdedir.",
       "Güvenlik için hesabı silmeden önce yeniden giriş yapmanızı, e-posta ile onay vermenizi veya kimliğinizi doğrulayacak ek bilgi sağlamanızı isteyebiliriz. Yetkiyi doğrulayamazsak talebi reddedebilir veya geciktirebiliriz.",
       "Dolandırıcılık, kötüye kullanım, güvenlik olayı, hukuki talep veya Kullanım Şartları ihlalini tespit etmek, önlemek veya araştırmak için silmeyi geciktirebilir ya da reddedebiliriz. Kanun, mahkeme kararı, vergi, muhasebe, düzenleyici gereklilikler veya meşru iş ihtiyaçları nedeniyle bazı bilgileri saklayabiliriz.",
-      "Hesap silme talepleri veya bu politika hakkında sorular için EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ya da contact@nivadesk.co.uk üzerinden bize ulaşabilirsiniz."
+      "Hesap silme talepleri veya bu politika hakkında sorular için EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom ya da contact@nivadesk.co.uk üzerinden bize ulaşabilirsiniz."
     ]
   },
   Deutsch: {
@@ -306,7 +306,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "Kontolöschung kündigt nicht automatisch Abos, die über Apple App Store, Google Play, Stripe oder andere Anbieter verwaltet werden. Du musst dein Abo über die Kaufplattform kündigen.",
       "Zur Sicherheit können wir erneutes Einloggen, E-Mail-Bestätigung oder zusätzliche Informationen verlangen. Wenn wir die Berechtigung nicht verifizieren können, können wir die Löschung verzögern oder ablehnen.",
       "Wir können Löschung verzögern oder verweigern, um Betrug, Missbrauch, Sicherheitsvorfälle, Rechtsansprüche oder Verstöße gegen die Nutzungsbedingungen zu erkennen, zu verhindern oder zu untersuchen, und Informationen aufbewahren, wenn Gesetz, Gericht, Steuern, Buchhaltung oder legitime Geschäftsgründe dies erfordern.",
-      "Für Löschanträge oder Fragen kontaktiere EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oder contact@nivadesk.co.uk."
+      "Für Löschanträge oder Fragen kontaktiere EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom oder contact@nivadesk.co.uk."
     ]
   },
   Français: {
@@ -362,7 +362,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "Supprimer votre compte NivaDesk n'annule pas automatiquement les abonnements gérés par l'App Store, Google Play, Stripe ou un autre fournisseur. Vous devez annuler l'abonnement sur la plateforme où vous l'avez acheté.",
       "Pour votre sécurité, nous pouvons demander une nouvelle connexion, une confirmation par e-mail ou des informations supplémentaires. Si nous ne pouvons pas vérifier l'autorisation, nous pouvons refuser ou retarder la demande.",
       "Nous pouvons retarder ou refuser la suppression pour détecter, prévenir ou enquêter sur la fraude, les abus, les incidents de sécurité, les réclamations légales ou les violations des Conditions, et conserver certaines informations si la loi, un tribunal, les taxes, la comptabilité, la réglementation ou des intérêts légitimes l'exigent.",
-      "Pour les demandes de suppression ou questions sur cette politique, contactez EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
+      "Pour les demandes de suppression ou questions sur cette politique, contactez EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   Italiano: {
@@ -418,7 +418,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "La cancellazione dell'account NivaDesk non annulla automaticamente abbonamenti gestiti da App Store, Google Play, Stripe o altri provider. Devi annullare l'abbonamento sulla piattaforma di acquisto.",
       "Per sicurezza possiamo richiedere un nuovo login, conferma via email o informazioni aggiuntive. Se non possiamo verificare l'autorizzazione, possiamo rifiutare o ritardare la richiesta.",
       "Possiamo ritardare o rifiutare la cancellazione per rilevare, prevenire o indagare frodi, abusi, incidenti di sicurezza, reclami legali o violazioni dei Termini, e conservare dati quando richiesto da legge, tribunali, tasse, contabilità, regolamenti o legittime esigenze aziendali.",
-      "Per richieste di cancellazione o domande su questa informativa, contatta EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom oppure contact@nivadesk.co.uk."
+      "Per richieste di cancellazione o domande su questa informativa, contatta EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom oppure contact@nivadesk.co.uk."
     ]
   },
   "Español (Spanish)": {
@@ -474,7 +474,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "Eliminar tu cuenta de NivaDesk no cancela automáticamente suscripciones gestionadas por App Store, Google Play, Stripe u otro proveedor. Debes cancelar la suscripción en la plataforma donde la compraste.",
       "Por seguridad podemos requerir que inicies sesión de nuevo, confirmes por email o proporciones información adicional. Si no podemos verificar la autorización, podemos rechazar o retrasar la solicitud.",
       "Podemos retrasar o rechazar la eliminación para detectar, prevenir o investigar fraude, abuso, incidentes de seguridad, reclamaciones legales o infracciones de los Términos, y conservar información cuando lo exijan la ley, tribunales, impuestos, contabilidad, regulación o intereses empresariales legítimos.",
-      "Para solicitudes de eliminación o preguntas sobre esta política, contacta con EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
+      "Para solicitudes de eliminación o preguntas sobre esta política, contacta con EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom o contact@nivadesk.co.uk."
     ]
   },
   Português: {
@@ -530,7 +530,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "Eliminar a conta NivaDesk não cancela automaticamente subscrições geridas pela App Store, Google Play, Stripe ou outro fornecedor. Deve cancelar a subscrição na plataforma onde a comprou.",
       "Por segurança, podemos pedir novo login, confirmação por email ou informação adicional. Se não conseguirmos verificar autorização, podemos recusar ou atrasar o pedido.",
       "Podemos atrasar ou recusar a eliminação para detetar, prevenir ou investigar fraude, abuso, incidentes de segurança, reclamações legais ou violações dos Termos, e conservar dados quando exigido por lei, tribunal, impostos, contabilidade, regulação ou interesses legítimos.",
-      "Para pedidos de eliminação ou perguntas sobre esta política, contacte EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
+      "Para pedidos de eliminação ou perguntas sobre esta política, contacte EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom ou contact@nivadesk.co.uk."
     ]
   },
   "Русский (Russian)": {
@@ -586,7 +586,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "Удаление аккаунта NivaDesk не отменяет автоматически подписки, управляемые App Store, Google Play, Stripe или другим провайдером. Вы должны отменить подписку на платформе покупки.",
       "Для безопасности мы можем потребовать повторный вход, подтверждение по email или дополнительную информацию. Если мы не можем проверить полномочия, запрос может быть отклонен или задержан.",
       "Мы можем задержать или отказать в удалении для выявления, предотвращения или расследования fraud, abuse, security incidents, legal claims или нарушений Terms, а также сохранять данные, если это требуется законом, судом, налогами, бухгалтерией, регуляторами или законными бизнес-интересами.",
-      "По вопросам удаления аккаунта или этой политики свяжитесь с EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom или contact@nivadesk.co.uk."
+      "По вопросам удаления аккаунта или этой политики свяжитесь с EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom или contact@nivadesk.co.uk."
     ]
   },
   "日本語 (Japanese)": {
@@ -642,7 +642,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "NivaDesk アカウントを削除しても、App Store、Google Play、Stripe、その他プロバイダーが管理するサブスクリプションは自動的に解約されません。購入したプラットフォームで解約する責任があります。",
       "安全のため、再ログイン、メール確認、追加情報を求める場合があります。権限を確認できない場合、リクエストを拒否または遅延することがあります。",
       "不正、悪用、セキュリティ事故、法的請求、利用規約違反を検知、防止、調査するため、削除を遅延または拒否する場合があります。また、法律、裁判所、税務、会計、規制、正当な事業上の必要性により情報を保持する場合があります。",
-      "アカウント削除の依頼またはこのポリシーに関する質問は、EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom または contact@nivadesk.co.uk までご連絡ください。"
+      "アカウント削除の依頼またはこのポリシーに関する質問は、EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom または contact@nivadesk.co.uk までご連絡ください。"
     ]
   },
   "中文 (Chinese)": {
@@ -698,7 +698,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "删除 NivaDesk 账户不会自动取消由 App Store、Google Play、Stripe 或其他支付提供商管理的订阅。你需要在购买订阅的平台上自行取消。",
       "出于安全考虑，我们可能要求你重新登录、通过邮件确认或提供额外信息。如果无法验证请求人有权删除账户或 workspace，我们可能拒绝或延迟请求。",
       "为检测、防止或调查欺诈、滥用、安全事件、法律主张或违反服务条款的行为，我们可能延迟或拒绝删除；也可能因法律、法院、税务、会计、监管或合法业务需要保留信息。",
-      "如需请求删除账户或咨询本政策，请联系 EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom 或 contact@nivadesk.co.uk。"
+      "如需请求删除账户或咨询本政策，请联系 EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom 或 contact@nivadesk.co.uk。"
     ]
   },
   "العربية (Arabic)": {
@@ -754,7 +754,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "حذف حساب NivaDesk لا يلغي تلقائياً الاشتراكات التي تديرها App Store أو Google Play أو Stripe أو مزود آخر. أنت مسؤول عن إلغاء الاشتراك من المنصة التي اشتريته منها.",
       "لأسباب أمنية، قد نطلب تسجيل الدخول مرة أخرى أو تأكيداً عبر البريد أو معلومات إضافية. إذا لم نتمكن من التحقق من التفويض، فقد نرفض الطلب أو نؤخره.",
       "قد نؤخر أو نرفض الحذف لاكتشاف أو منع أو التحقيق في الاحتيال أو إساءة الاستخدام أو الحوادث الأمنية أو المطالبات القانونية أو انتهاكات الشروط، وقد نحتفظ بالمعلومات إذا تطلب القانون أو المحكمة أو الضرائب أو المحاسبة أو التنظيم أو المصالح التجارية المشروعة ذلك.",
-      "لطلبات حذف الحساب أو الأسئلة حول هذه السياسة، تواصل مع EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom أو contact@nivadesk.co.uk."
+      "لطلبات حذف الحساب أو الأسئلة حول هذه السياسة، تواصل مع EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom أو contact@nivadesk.co.uk."
     ]
   },
   "हिन्दी (Hindi)": {
@@ -810,7 +810,7 @@ const ACCOUNT_DELETION_DRAFTS: Partial<Record<StudioLanguage, LocalizedDeletionD
       "NivaDesk account delete करने से Apple App Store, Google Play, Stripe या किसी दूसरे provider द्वारा managed subscriptions automatically cancel नहीं होते। Subscription उस platform पर cancel करना आपकी जिम्मेदारी है जहाँ आपने खरीदा था।",
       "Security के लिए हम दोबारा login, email confirmation या additional information मांग सकते हैं। यदि authorization verify नहीं हो पाती, तो request reject या delay हो सकती है।",
       "Fraud, abuse, security incidents, legal claims या Terms violations detect, prevent या investigate करने के लिए हम deletion delay या refuse कर सकते हैं, और law, court order, tax, accounting, regulatory requirements या legitimate business needs के कारण information retain कर सकते हैं।",
-      "Account deletion requests या इस policy पर questions के लिए EGGCRAFT LIMITED, 141 Randolph Avenue, London, W9 1DN, United Kingdom या contact@nivadesk.co.uk पर संपर्क करें।"
+      "Account deletion requests या इस policy पर questions के लिए EGGCRAFT LIMITED, 141d Randolph Avenue, London, W9 1DN, United Kingdom या contact@nivadesk.co.uk पर संपर्क करें।"
     ]
   }
 };

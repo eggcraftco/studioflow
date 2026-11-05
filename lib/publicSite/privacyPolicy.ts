@@ -32,7 +32,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     title: "1. Who we are",
     paragraphs: [
       "NivaDesk is operated by:",
-      "EGGCRAFT LIMITED\nRegistered in England and Wales, company number 16566512\nVAT number GB 514512621\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+      "EGGCRAFT LIMITED\nRegistered in England and Wales, company number 16566512\nVAT number GB 514512621\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
       "EGGCRAFT LIMITED is registered with the UK's data protection regulator, the Information Commission (formerly the Information Commissioner's Office, ICO), registration reference ZC019612.",
       "Email: contact@nivadesk.co.uk",
       "For privacy-related questions, data requests, complaints, or account deletion requests, please contact us by email."
@@ -599,7 +599,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
     title: "23. Contact us",
     paragraphs: [
       "If you have questions about this Privacy Policy, your personal data, or your rights, please contact:",
-      "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+      "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
       "Email: contact@nivadesk.co.uk"
     ]
   }
@@ -613,7 +613,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         title: "1. Кто мы",
         paragraphs: [
           "NivaDesk управляется компанией:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk",
           "По вопросам конфиденциальности, запросам данных или удалению аккаунта свяжитесь с нами по email."
         ]
@@ -702,7 +702,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         title: "22. Контакты",
         paragraphs: [
           "Если у вас есть вопросы об этой Политике, ваших данных или правах, свяжитесь с нами:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk"
         ]
       }
@@ -715,7 +715,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         title: "1. 運営者",
         paragraphs: [
           "NivaDesk は以下により運営されています。",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk",
           "プライバシーに関する質問、データ請求、アカウント削除請求はメールでお問い合わせください。"
         ]
@@ -804,7 +804,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         title: "22. お問い合わせ",
         paragraphs: [
           "本ポリシー、個人データ、権利について質問がある場合はお問い合わせください。",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk"
         ]
       }
@@ -817,7 +817,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         title: "1. 我们是谁",
         paragraphs: [
           "NivaDesk 由以下公司运营：",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk",
           "如有隐私问题、数据请求或账户删除请求，请通过电子邮件联系我们。"
         ]
@@ -906,7 +906,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         title: "22. 联系我们",
         paragraphs: [
           "如果您对本政策、个人数据或您的权利有疑问，请联系：",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk"
         ]
       }
@@ -919,7 +919,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         title: "1. من نحن",
         paragraphs: [
           "يتم تشغيل NivaDesk بواسطة:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "البريد الإلكتروني: contact@nivadesk.co.uk",
           "لأسئلة الخصوصية أو طلبات البيانات أو حذف الحساب، يرجى التواصل معنا عبر البريد الإلكتروني."
         ]
@@ -1008,7 +1008,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         title: "22. اتصل بنا",
         paragraphs: [
           "إذا كانت لديك أسئلة حول هذه السياسة أو بياناتك أو حقوقك، يرجى التواصل مع:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk"
         ]
       }
@@ -1021,7 +1021,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         title: "1. हम कौन हैं",
         paragraphs: [
           "NivaDesk का संचालन इस कंपनी द्वारा किया जाता है:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk",
           "गोपनीयता प्रश्न, डेटा अनुरोध या अकाउंट हटाने के अनुरोध के लिए कृपया हमें ईमेल करें।"
         ]
@@ -1110,7 +1110,7 @@ const EXTRA_LOCALIZED_PRIVACY_POLICIES = {
         title: "22. Contact us",
         paragraphs: [
           "यदि इस Policy, आपके data या rights के बारे में प्रश्न हैं, तो contact करें:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk"
         ]
       }
@@ -1123,7 +1123,7 @@ const PRIVACY_POLICY_SECTIONS_TR: PrivacyPolicySection[] = [
     title: "1. Biz kimiz",
     paragraphs: [
       "NivaDesk şu şirket tarafından işletilir:",
-      "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+      "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
       "Email: contact@nivadesk.co.uk",
       "Gizlilikle ilgili sorular, veri talepleri veya hesap silme talepleri için lütfen bizimle e-posta yoluyla iletişime geçin."
     ]
@@ -1542,7 +1542,7 @@ const PRIVACY_POLICY_SECTIONS_TR: PrivacyPolicySection[] = [
     title: "22. Bizimle iletişime geçin",
     paragraphs: [
       "Bu Gizlilik Politikası, kişisel verileriniz veya haklarınız hakkında sorularınız varsa lütfen iletişime geçin:",
-      "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+      "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
       "Email: contact@nivadesk.co.uk"
     ]
   }
@@ -1566,7 +1566,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         title: "1. Wer wir sind",
         paragraphs: [
           "NivaDesk wird betrieben von:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "E-Mail: contact@nivadesk.co.uk",
           "Für Datenschutzfragen, Datenanfragen oder Anfragen zur Kontolöschung kontaktieren Sie uns bitte per E-Mail."
         ]
@@ -1655,7 +1655,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         title: "22. Kontakt",
         paragraphs: [
           "Wenn Sie Fragen zu dieser Datenschutzerklärung, Ihren personenbezogenen Daten oder Ihren Rechten haben, kontaktieren Sie uns bitte:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "E-Mail: contact@nivadesk.co.uk"
         ]
       }
@@ -1668,7 +1668,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         title: "1. Qui sommes-nous",
         paragraphs: [
           "NivaDesk est exploité par :",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "E-mail : contact@nivadesk.co.uk",
           "Pour toute question relative à la confidentialité, demande de données ou demande de suppression de compte, contactez-nous par e-mail."
         ]
@@ -1757,7 +1757,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         title: "22. Nous contacter",
         paragraphs: [
           "Pour toute question sur cette Politique, vos données ou vos droits, contactez :",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "E-mail : contact@nivadesk.co.uk"
         ]
       }
@@ -1770,7 +1770,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         title: "1. Chi siamo",
         paragraphs: [
           "NivaDesk è gestito da:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk",
           "Per domande sulla privacy, richieste relative ai dati o cancellazione dell'account, contattaci via email."
         ]
@@ -1859,7 +1859,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         title: "22. Contatti",
         paragraphs: [
           "Per domande su questa Informativa, sui dati personali o sui tuoi diritti, contatta:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk"
         ]
       }
@@ -1872,7 +1872,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         title: "1. Quiénes somos",
         paragraphs: [
           "NivaDesk es operado por:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk",
           "Para preguntas de privacidad, solicitudes de datos o eliminación de cuenta, contáctanos por email."
         ]
@@ -1961,7 +1961,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         title: "22. Contacto",
         paragraphs: [
           "Si tienes preguntas sobre esta Política, tus datos personales o tus derechos, contacta:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk"
         ]
       }
@@ -1974,7 +1974,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         title: "1. Quem somos",
         paragraphs: [
           "A NivaDesk é operada por:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk",
           "Para perguntas de privacidade, pedidos de dados ou eliminação de conta, contacte-nos por email."
         ]
@@ -2063,7 +2063,7 @@ const LOCALIZED_PRIVACY_POLICIES: Partial<Record<StudioLanguage, LocalizedPrivac
         title: "22. Contacto",
         paragraphs: [
           "Se tiver perguntas sobre esta Política, os seus dados ou direitos, contacte:",
-          "EGGCRAFT LIMITED\n141 Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
+          "EGGCRAFT LIMITED\n141d Randolph Avenue\nLondon\nW9 1DN\nUnited Kingdom",
           "Email: contact@nivadesk.co.uk"
         ]
       }
