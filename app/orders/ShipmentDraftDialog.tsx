@@ -35,6 +35,10 @@
 //   a waybill or a courier (checkOrderShipmentWithDhl; the courier is never asked, nothing is
 //   stored). Its answer says "DHL check passed", never "label created", and is dropped as soon as
 //   anything is edited.
+// - MyDHL+ draft (owner, 3 + 5 Nov 2026): DHL's API cannot save a draft in MyDHL+, so "Download for MyDHL+"
+//   saves the draft and downloads it as a file for MyDHL+'s own "Upload a Shipment File"
+//   (lib/studioflow/mydhlUploadFile.ts). There it is an unsent shipment to edit, save for later or label.
+//   NivaDesk sends nothing to DHL for it.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
@@ -70,6 +74,7 @@ import {
 } from "@/lib/studioflow/shipping";
 import { senderFromProfile, senderWarningLabels } from "@/lib/studioflow/shippingSender";
 import { ETSY_DHL_EMAIL_NOTE } from "@/lib/studioflow/etsyOrder";
+import { myDhlUploadCsv, myDhlUploadExtraLines, myDhlUploadFileName } from "@/lib/studioflow/mydhlUploadFile";
 
 type PieceInput = { weight: string; length: string; width: string; height: string };
 type ItemInput = {
@@ -483,6 +488,29 @@ export function ShipmentDraftDialog({
         return;
       }
       setDhlCheck(result);
+    });
+  }
+
+  // MyDHL+ draft: save, then the same draft as a file for MyDHL+ ▸ Ship ▸ Upload a Shipment File. Nothing goes to DHL.
+  async function downloadForMyDhl() {
+    await guard("mydhlfile", async () => {
+      await persist();
+      const fileName = myDhlUploadFileName(orderReference, shipment.sequence);
+      const draftNow = buildPatch();
+      const extraLines = myDhlUploadExtraLines(draftNow);
+      const url = URL.createObjectURL(new Blob([myDhlUploadCsv({ orderReference, draft: draftNow })], { type: "text/csv;charset=utf-8" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setMessage([
+        t("The file for MyDHL+ was downloaded: {file}. Upload it in MyDHL+ ▸ Ship ▸ Upload a Shipment File.").replace("{file}", fileName),
+        // MyDHL+'s upload takes one customs line per shipment (lib/studioflow/mydhlUploadFile.ts).
+        extraLines > 0 ? t("MyDHL+'s upload takes one customs line per shipment, so the file carries the first line. Add the other {count} customs lines in MyDHL+ before you print the label.").replace("{count}", String(extraLines)) : ""
+      ].filter(Boolean).join(" "));
     });
   }
 
@@ -1102,6 +1130,12 @@ export function ShipmentDraftDialog({
               {t("Or create this shipment in MyDHL+ with the reference {reference}, then use “Find shipments made on MyDHL” on the order to link it.").replace("{reference}", orderReference)}
             </p>
           ) : null}
+          <p className="shipment-muted" data-testid="mydhl-file-explain">
+            {t("Download for MyDHL+ saves this draft and downloads it as a file for MyDHL+ ▸ Ship ▸ Upload a Shipment File (upload option “NivaDesk”). In MyDHL+ it becomes an unsent shipment under Manage Shipments, which you can edit, save for later or label there. NivaDesk sends nothing to DHL.")}{" "}
+            <button type="button" className="inventory-link" data-testid="mydhl-file-button" disabled={Boolean(busy) || locked} onClick={() => void downloadForMyDhl()}>
+              {busy === "mydhlfile" ? t("Preparing…") : t("Download for MyDHL+")}
+            </button>
+          </p>
           <p className="shipment-muted" data-testid="dhl-check-explain">{t("Check with DHL asks DHL to check these details without creating anything: no label, no waybill and no courier.")}</p>
           {dhlCheck && !dirty ? (() => {
             const view = dhlCheckView(dhlCheck);

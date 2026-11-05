@@ -1378,6 +1378,11 @@ const TREE_EN: GuideNode[] = [
             "[Web] Check with DHL saves the draft and asks DHL to check the details exactly as the label would send them, without creating anything: no label, no waybill and no courier. NivaDesk's own list of missing items comes first: while it shows something, nothing goes to DHL.",
             "[Web] DHL check passed means DHL accepted the details at that moment. It is not a label: the label is made only with Create DHL label, and DHL checks again then. If DHL finds problems, the form shows DHL's own reasons and nothing is created. Any change to the form clears the answer, so check again after editing.",
             "[Web] The courier is never part of the check: a courier you ticked is booked only when the label is created. Nothing from the check is saved in NivaDesk."
+          ] },
+          { kind: "sub", text: "A draft in MyDHL+: Download for MyDHL+" },
+          { kind: "bullets", items: [
+            "[Web] DHL's API cannot save a draft in MyDHL+, so Download for MyDHL+ saves the draft and downloads it as a file for MyDHL+ ▸ Ship ▸ Upload a Shipment File. Uploaded there with the upload option NivaDesk, the shipment waits unsent in MyDHL+ ▸ Manage Shipments, where you can edit it, save it for later or print its label. NivaDesk sends nothing to DHL, and a label made in MyDHL+ carries the order's NVD reference, so Find shipments made on MyDHL links it. The file carries one customs line (MyDHL+ takes one per shipment): add any other lines in MyDHL+ before printing.",
+            "[Web] First time on a MyDHL+ login: in Upload a Shipment File choose Upload My File and Map to DHL Fields, take the shipper from your address book and pick your account, tick File contains column headers, choose UTF-8, upload the file, then for each column pick the DHL field with the same name as its header and save the scheme as NivaDesk. After that, choose Select an Available Mapping Option ▸ NivaDesk."
           ] }
         ]
       },
@@ -3093,6 +3098,11 @@ const TREE_TR: GuideNode[] = [
             "[Web] DHL ile kontrol et, taslağı kaydeder ve bilgileri etiketin göndereceği şekliyle, hiçbir şey oluşturmadan DHL'e kontrol ettirir: etiket, konşimento ve kurye yok. Önce NivaDesk'in eksikler listesi gelir: orada bir şey görünürken DHL'e hiçbir şey gitmez.",
             "[Web] DHL kontrolü geçti, DHL'in bilgileri o an kabul ettiği anlamına gelir. Bu bir etiket değildir: etiket yalnız DHL etiketi oluştur ile yapılır ve DHL o zaman yeniden kontrol eder. DHL sorun bulursa form DHL'in kendi gerekçelerini gösterir ve hiçbir şey oluşturulmaz. Formdaki her değişiklik yanıtı siler; düzenledikten sonra yeniden kontrol edin.",
             "[Web] Kurye hiçbir zaman kontrole dahil değildir: işaretlediğiniz kurye yalnız etiket oluşturulurken çağrılır. Kontrolden NivaDesk'e hiçbir şey kaydedilmez."
+          ] },
+          { kind: "sub", text: "MyDHL+'ta taslak: MyDHL+ için indir" },
+          { kind: "bullets", items: [
+            "[Web] DHL'in API'si MyDHL+'a taslak kaydedemez; bu yüzden MyDHL+ için indir taslağı kaydeder ve MyDHL+ ▸ Ship ▸ Upload a Shipment File için bir dosya olarak indirir. Orada NivaDesk yükleme seçeneğiyle yüklenen gönderi, MyDHL+ ▸ Manage Shipments'ta gönderilmemiş olarak bekler; orada düzenleyebilir, sonraya saklayabilir ya da etiketini basabilirsiniz. NivaDesk DHL'e hiçbir şey göndermez; MyDHL+'ta basılan etiket siparişin NVD referansını taşır, MyDHL'de açılmış gönderileri bul onu siparişe bağlar. Dosyada tek gümrük satırı vardır (MyDHL+ gönderi başına bir satır alır): diğer satırları basmadan önce MyDHL+'ta ekleyin.",
+            "[Web] Bir MyDHL+ girişinde ilk kez: Upload a Shipment File'da Upload My File and Map to DHL Fields'i seçin, göndericiyi adres defterinizden alın ve hesabınızı seçin, File contains column headers'ı işaretleyin, UTF-8'i seçin, dosyayı yükleyin; sonra her sütun için başlığıyla aynı adlı DHL alanını seçin ve şemayı NivaDesk adıyla kaydedin. Bundan sonra Select an Available Mapping Option ▸ NivaDesk'i seçin."
           ] }
         ]
       },
