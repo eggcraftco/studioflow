@@ -1320,7 +1320,7 @@ const TREE_EN: GuideNode[] = [
         id: "set-dhl",
         title: "DHL Express",
         blocks: [
-          { kind: "para", text: "Prepare DHL Express shipments straight from your orders: see the DHL services for the parcel's route, create the label, add the commercial invoice where customs needs one (including between Great Britain and Northern Ireland) and follow the tracking. Each business connects its own DHL Express account and MyDHL API access, so DHL bills you directly. NivaDesk does not book courier pickups." },
+          { kind: "para", text: "Prepare DHL Express shipments straight from your orders: see the DHL services for the parcel's route, create the label, add the commercial invoice where customs needs one (including between Great Britain and Northern Ireland), book a DHL courier with the label if you want one, and follow the tracking. Each business connects its own DHL Express account and MyDHL API access, so DHL bills you directly. NivaDesk cannot cancel a courier booking: cancel it in MyDHL+ or with DHL Express customer service, quoting its pickup number. Customs lines take the weight of one item, and each HS code is looked up in the official UK tariff; NivaDesk never fills in or confirms an HS code for you." },
           { kind: "sub", text: "Getting a MyDHL API key from DHL" },
           { kind: "bullets", items: [
             "You need MyDHL API access for your own DHL Express account. On the MyDHL API page of developer.dhl.com choose Get Access and fill in DHL's form with your DHL Express account number (Open the MyDHL API page in the DHL Express settings links there).",
@@ -1347,9 +1347,31 @@ const TREE_EN: GuideNode[] = [
           { kind: "bullets", items: [
             "Prices for the services are shown to people who can see finances.",
             "Refresh tracking fetches the latest status; it also refreshes about every hour. Statuses run from Draft and Label created to In transit, In customs, Out for delivery and Delivered.",
-            "A label is not a dispatch: you still hand the parcel to DHL or book the pickup with DHL yourself.",
+            "A label is not a dispatch: the order is marked dispatched only when DHL scans the parcel. Without a courier booked with the label, hand the parcel to DHL yourself.",
             "Needs a check means NivaDesk could not confirm whether DHL created the shipment; Find shipments made on MyDHL or Search DHL again settles it before anything is created twice.",
             "Declaring goods and the commercial invoice need finance access. A DHL label cannot be created for an eBay order."
+          ] },
+          { kind: "sub", text: "Booking a DHL courier, and the three cancellations" },
+          { kind: "bullets", items: [
+            "[Web] Tick Book a DHL courier to collect it to book the courier with the label: the ready time, the Latest collection time, where to collect it and a note. Show DHL services for this parcel shows DHL's collection hours for the chosen service; after the label the order's card shows DHL's pickup number.",
+            "NivaDesk cannot cancel a courier booking. To cancel it, use the pickup number in MyDHL+ or contact DHL Express customer service. The form says this beside the courier box, before you book.",
+            "Three cancellations are separate. Cancelling the order in NivaDesk stops only its tracking and cancels neither the label nor the courier. A DHL label cannot be cancelled through DHL's API: ask DHL about a label you will not use. A courier is cancelled in MyDHL+ or with DHL, with its pickup number; this can affect other parcels in the same DHL collection.",
+            "If DHL's pickup number did not come back, check the pickup in MyDHL+ before booking another one."
+          ] },
+          { kind: "sub", text: "Customs lines: weight of one item, HS code and filling a line from the order" },
+          { kind: "bullets", items: [
+            "[Web] Type the weight of one item, as in MyDHL+ (Net weight of one item, Gross weight of one item). NivaDesk multiplies it by the quantity and DHL gets the line's total; the line shows it, for example 3 × 0.120 kg = 0.360 kg. No weight is ever filled in as 0 or 1 kg.",
+            "The lines' net weight cannot be more than the parcels' weight: the shipment stops and says why before anything goes to DHL.",
+            "Saving looks each HS code up in the official UK tariff (the Northern Ireland tariff for a sender there) and shows its description under the code. A code the tariff does not have stops the shipment until you correct it. NivaDesk never fills in or confirms a code: check it on the UK Trade Tariff, or ask HMRC for a binding Advance Tariff Ruling.",
+            "[Web] Fill this line from… copies the description and product codes from the order or the inventory held for it; the HS code, origin and weight are never copied. Tick I checked this line: description, HS code, origin and weight before the shipment can go.",
+            "[Web] The EUDR TARIC document code is picked from HMRC's list; a C code needs its reference in the DDS field on the same line.",
+            "Consumer shipments into the EU need your product code and the manufacturer's product code on every line, whatever the value, plus the barcode or This product has no barcode.",
+            "Creating a label never changes your stock."
+          ] },
+          { kind: "sub", text: "The form beside MyDHL+: phone, company, currency, drafts" },
+          { kind: "bullets", items: [
+            "[Web] The recipient's phone has its country code beside it, and Company is the recipient's name unless you untick Not a company: use the recipient's name. The declared value's currency is picked from DHL's list, the sender's country's first; amounts show its mark and your own number format. Incoterms show their names (DAP – Delivered at Place).",
+            "Save draft keeps the shipment in NivaDesk to finish later. It is not saved into MyDHL+: DHL's API has no saved-shipment list. A shipment made in MyDHL+ with the order's reference can be linked with Find shipments made on MyDHL."
           ] }
         ]
       },
@@ -3007,7 +3029,7 @@ const TREE_TR: GuideNode[] = [
         id: "set-dhl",
         title: "DHL Express",
         blocks: [
-          { kind: "para", text: "DHL Express gönderilerini doğrudan siparişlerinizden hazırlayın: kolinin rotası için DHL servislerini görün, etiketi oluşturun, gümrüğün istediği yerde ticari faturayı ekleyin (Büyük Britanya ile Kuzey İrlanda arası dahil) ve takibi izleyin. Her işletme kendi DHL Express hesabını ve MyDHL API erişimini bağlar; böylece DHL size doğrudan fatura keser. NivaDesk kurye alımı (pickup) ayarlamaz." },
+          { kind: "para", text: "DHL Express gönderilerini doğrudan siparişlerinizden hazırlayın: kolinin rotası için DHL servislerini görün, etiketi oluşturun, gümrüğün istediği yerde ticari faturayı ekleyin (Büyük Britanya ile Kuzey İrlanda arası dahil), isterseniz etiketle birlikte DHL kuryesi çağırın ve takibi izleyin. Her işletme kendi DHL Express hesabını ve MyDHL API erişimini bağlar; böylece DHL size doğrudan fatura keser. NivaDesk kurye rezervasyonunu iptal edemez: alım numarasıyla MyDHL+'tan ya da DHL Express müşteri hizmetlerinden iptal edin. Gümrük satırlarına bir adedin ağırlığı yazılır ve her HS kodu resmî Birleşik Krallık tarifesinde aranır; NivaDesk HS kodunu sizin yerinize hiçbir zaman doldurmaz ya da onaylamaz." },
           { kind: "sub", text: "DHL'den MyDHL API anahtarı almak" },
           { kind: "bullets", items: [
             "Kendi DHL Express hesabınız için MyDHL API erişimi gerekir. developer.dhl.com'daki MyDHL API sayfasında Get Access'i seçin ve DHL'in formunu DHL Express hesap numaranızla doldurun (DHL Express ayarlarındaki MyDHL API sayfasını açın bağlantısı oraya götürür).",
@@ -3034,9 +3056,31 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Servislerin fiyatları finansı görebilen kişilere gösterilir.",
             "Takibi yenile en son durumu çeker; takip ayrıca yaklaşık saatte bir yenilenir. Durumlar Taslak ve Etiket oluşturuldu'dan Yolda, Gümrükte, Dağıtımda ve Teslim Edildi'ye ilerler.",
-            "Etiket, kargoya vermek demek değildir: koliyi yine DHL'e kendiniz teslim eder ya da alımı DHL'den kendiniz ayarlarsınız.",
+            "Etiket, kargoya vermek demek değildir: sipariş ancak DHL koliyi taradığında kargoya verildi olur. Etiketle kurye çağırmadıysanız koliyi DHL'e kendiniz teslim edin.",
             "Kontrol gerekiyor, NivaDesk'in DHL'in gönderiyi oluşturup oluşturmadığını doğrulayamadığı anlamına gelir; MyDHL'de açılmış gönderileri bul ya da DHL'de yeniden ara, bir şey iki kez oluşturulmadan önce durumu netleştirir.",
             "Eşya beyanı ve ticari fatura finans erişimi ister. eBay siparişi için DHL etiketi oluşturulamaz."
+          ] },
+          { kind: "sub", text: "DHL kuryesi çağırmak ve üç ayrı iptal" },
+          { kind: "bullets", items: [
+            "[Web] Kuryeyi etiketle birlikte çağırmak için Almaya DHL kuryesi çağır'ı işaretleyin: hazır olma saati, En geç alım saati, nereden alınacağı ve bir not. Bu koli için DHL servislerini göster, seçilen servisin DHL alım saatlerini gösterir; etiketten sonra siparişin kartında DHL'in alım numarası görünür.",
+            "NivaDesk kurye rezervasyonunu iptal edemez. İptal için alım numarasıyla MyDHL+'ı kullanın ya da DHL Express müşteri hizmetlerine başvurun. Form bunu kurye kutusunun yanında, rezervasyondan önce söyler.",
+            "Üç iptal birbirinden ayrıdır. Siparişi NivaDesk'te iptal etmek yalnız takibini durdurur; ne etiketi ne kuryeyi iptal eder. DHL etiketi DHL'in API'siyle iptal edilemez: kullanmayacağınız etiketi DHL'e sorun. Kurye alım numarasıyla MyDHL+'tan ya da DHL'den iptal edilir; bu, aynı DHL alımındaki başka kolileri de etkileyebilir.",
+            "DHL'in alım numarası gelmediyse başka bir kurye çağırmadan önce alımı MyDHL+'tan kontrol edin."
+          ] },
+          { kind: "sub", text: "Gümrük satırları: bir adedin ağırlığı, HS kodu ve satırı siparişten doldurmak" },
+          { kind: "bullets", items: [
+            "[Web] MyDHL+'taki gibi bir adedin ağırlığını yazın (Bir adedin net ağırlığı, Bir adedin brüt ağırlığı). NivaDesk bunu adetle çarpar ve DHL'e satırın toplamı gider; satır bunu gösterir, örneğin 3 × 0,120 kg = 0,360 kg. Hiçbir ağırlık 0 ya da 1 kg olarak kendiliğinden doldurulmaz.",
+            "Satırların net ağırlığı kolilerin ağırlığını geçemez: geçerse gönderi DHL'e bir şey gitmeden durur ve nedenini söyler.",
+            "Kaydettiğinizde her HS kodu resmî Birleşik Krallık tarifesinde (gönderici oradaysa Kuzey İrlanda tarifesinde) aranır ve tanımı kodun altında görünür. Tarifede olmayan kod siz düzeltene kadar gönderiyi durdurur. NivaDesk kodu hiçbir zaman doldurmaz ya da onaylamaz: kodu UK Trade Tariff'te kontrol edin ya da HMRC'den bağlayıcı bir Advance Tariff Ruling isteyin.",
+            "[Web] Bu satırı şuradan doldur… açıklamayı ve ürün kodlarını siparişten ya da ona ayrılmış envanterden kopyalar; HS kodu, köken ve ağırlık hiçbir zaman kopyalanmaz. Gönderi gitmeden önce Bu satırı kontrol ettim: açıklama, HS kodu, köken ve ağırlık kutusunu işaretleyin.",
+            "[Web] EUDR TARIC belge kodu HMRC'nin listesinden seçilir; C ile başlayan kodun referansı aynı satırdaki DDS alanına yazılır.",
+            "AB'ye tüketici gönderilerinde değeri ne olursa olsun her satırda sizin ürün kodunuz ve üreticinin ürün kodu, ayrıca barkod ya da Bu ürünün barkodu yok gerekir.",
+            "Etiket oluşturmak stokunuzu hiçbir zaman değiştirmez."
+          ] },
+          { kind: "sub", text: "MyDHL+ ile aynı form: telefon, şirket, para birimi, taslaklar" },
+          { kind: "bullets", items: [
+            "[Web] Alıcı telefonunun yanında ülke kodu var; Şirket, Şirket değil: alıcının adı kullanılsın kutusunu kaldırmadıkça alıcının adıdır. Beyan para birimi DHL'in listesinden seçilir, gönderici ülkesininki önce gelir; tutarlar onun işaretiyle ve sizin sayı biçiminizle görünür. Incoterm'ler adlarıyla görünür (DAP – Delivered at Place).",
+            "Taslağı kaydet gönderiyi sonra bitirmek üzere NivaDesk'te saklar. MyDHL+'a kaydedilmez: DHL'in API'sinde kayıtlı gönderi listesi yok. MyDHL+'ta siparişin referansıyla yapılan gönderi MyDHL'de açılmış gönderileri bul ile bağlanır."
           ] }
         ]
       },
