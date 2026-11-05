@@ -786,7 +786,8 @@ function BankPageContent() {
     // while orders were only ever linked to a bank line: a workspace with no
     // bank feed can still take card payments, and on that workspace the picker
     // would have stayed empty for ever.
-    if (!isOwner || !workspace || orderOptions !== null) return;
+    // Payment Links' pickers need them for anyone who may use the tab, not only the owner (4 Nov 2026).
+    if (!(isOwner || (tab === "payment-links" && paymentLinksOn)) || !workspace || orderOptions !== null) return;
     if (transactions.length === 0 && tab !== "payment-links") return;
     let cancelled = false;
     loadWorkspaceOrderOptions(companyId, workspace, user?.uid ?? "")
@@ -794,7 +795,7 @@ function BankPageContent() {
       .catch(() => { if (!cancelled) setOrderOptions([]); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOwner, workspace, companyId, transactions.length, tab]);
+  }, [isOwner, workspace, companyId, transactions.length, tab, paymentLinksOn]);
 
   async function linkToOrder(transaction: BankTransaction, orderId: string) {
     setBusy(`link-${transaction.id}`);

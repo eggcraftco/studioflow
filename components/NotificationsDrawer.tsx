@@ -266,6 +266,10 @@ export function NotificationsDrawer({
       router.push("/notes");
       if (typeof window !== "undefined") window.dispatchEvent(new Event("studio-notes-invites-refresh"));
       onClose();
+    } else if (route === "payment-links") {
+      // SL-30: a payment link was paid — Banking's Payment links, where the row (and its order) is.
+      router.push("/bank?tab=payment-links");
+      onClose();
     } else if (route === "order" || n.orderId.trim()) {
       // Landing on the order list and leaving the reader to find the order
       // again is not opening the notification.

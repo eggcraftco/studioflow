@@ -88,13 +88,45 @@ export function paymentLinksAccess(companyId: string): Promise<PaymentLinksAcces
   const known = availability.get(id);
   if (known) return known;
   const pending = getStripeConnection(id)
-    .then((view): PaymentLinksAccess => ({ available: view.configured === true, planAllowed: view.planAllowed }))
+    .then((view): PaymentLinksAccess => {
+      const answer = { available: view.configured === true, planAllowed: view.planAllowed };
+      rememberPaymentLinksAccess(id, answer);
+      return answer;
+    })
     .catch((): PaymentLinksAccess => {
       availability.delete(id);
       return { available: false, planAllowed: null };
     });
   availability.set(id, pending);
   return pending;
+}
+
+/**
+ * The server's last answer for this workspace, on this device (4 Nov 2026). Banking drew its Payment Links tab
+ * only once getStripePaymentConnection had answered — seconds on a cold start — so the tab, and the panel's
+ * buttons, appeared after everything else ("sonradan beliriyor"). The last answer is drawn at once and the server
+ * is still asked every time: a "no" removes the tab, a "yes" keeps it. Only the two booleans are kept, never an
+ * account or an amount. A failed read is not remembered (it is not an answer). Storage that refuses is ignored.
+ */
+const REMEMBERED_KEY = "nivadesk.paymentLinksAccess.v1:";
+export function rememberedPaymentLinksAccess(companyId: string): PaymentLinksAccess | null {
+  const id = String(companyId || "").trim();
+  if (!id || typeof window === "undefined") return null;
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(REMEMBERED_KEY + id) || "null") as { available?: unknown; planAllowed?: unknown } | null;
+    if (!raw || typeof raw.available !== "boolean") return null;
+    return { available: raw.available, planAllowed: typeof raw.planAllowed === "boolean" ? raw.planAllowed : null };
+  } catch {
+    return null;
+  }
+}
+function rememberPaymentLinksAccess(companyId: string, answer: PaymentLinksAccess) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(REMEMBERED_KEY + companyId, JSON.stringify({ available: answer.available, planAllowed: answer.planAllowed }));
+  } catch {
+    // Private mode or a full store: the tab simply waits for the server, as before.
+  }
 }
 export function paymentLinksAvailable(companyId: string): Promise<boolean> {
   return paymentLinksAccess(companyId).then((answer) => answer.available);

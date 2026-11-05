@@ -233,21 +233,20 @@ expect("the plan hook answers from the same read as the pilot gate",
 // ---- 2. Banking's panel, from source ------------------------------------------------------------------------
 function panelProblems(panel: string): string[] {
   const out: string[] = [];
-  const submit = region(panel, "const createStandalone = async () => {", "/** \"Order #1042\"");
+  const submit = region(panel, "const createStandalone = async () => {", "const cancel = async (row: PaymentLinkRow)");
   if (!submit) return ["no order-less submit"];
-  const buttons = region(panel, '<section style={{ display: "grid", gap: 14 }}>', "{standaloneNotice ?");
-  // The gate: Free (exactly false) first and with no button; the order-less form only on exactly true; otherwise
-  // today's single New payment link (the order picker).
-  const freeAt = buttons.indexOf("{planAllowed === false ? (");
-  const trueAt = buttons.indexOf(") : planAllowed === true ? (");
-  const elseAt = buttons.indexOf(") : (", trueAt + 1);
-  if (freeAt < 0 || trueAt < freeAt || elseAt < trueAt) out.push("the buttons are not gated false / true / not said");
-  const free = freeAt >= 0 && trueAt > freeAt ? buttons.slice(freeAt, trueAt) : "";
+  // The reference design (4 Nov 2026): the two buttons sit in the page header. The gate is the same: Free (exactly
+  // false) has no button and a note saying why and where the plans are; exactly true has the order-less New
+  // payment link beside "Link for an order"; a server that did not say has today's single button (the order picker).
+  const header = region(panel, "<header className={s.head}>", "</header>");
+  if (!/\{planAllowed === false \? null : \(/.test(header)) out.push("the buttons are not gated false / true / not said");
+  const free = region(panel, "{planAllowed === false ? (\n        // Free (SL-23)", ") : null}");
   if (/<button/.test(free) || !/t\("Stripe payments are part of the paid plans\."\)/.test(free) || !/href="\/settings\?section=plan-access"/.test(free)) out.push("Free shows a button, or does not say why and where the plans are");
-  const onTrue = trueAt >= 0 && elseAt > trueAt ? buttons.slice(trueAt, elseAt) : "";
-  if (!/openStandalone\(\)/.test(onTrue) || !/t\("New payment link"\)/.test(onTrue) || !/t\("Link for an order"\)/.test(onTrue)) out.push("on a paid plan there is no order-less New payment link beside the order one");
-  const notSaid = elseAt > 0 ? buttons.slice(elseAt) : "";
-  if (/openStandalone|Link for an order/.test(notSaid) || !/setCreateOpen\(\(open\) => !open\); setCreateError\(""\);/.test(notSaid) || !/t\("New payment link"\)/.test(notSaid)) out.push("an older server does not get today's button");
+  const secondary = region(header, "{planAllowed === true ? (", ") : null}");
+  if (!/t\("Link for an order"\)/.test(secondary)) out.push("on a paid plan there is no order-less New payment link beside the order one");
+  const primary = region(header, "ref={standaloneOpenerRef}", "</button>");
+  if (!/onClick=\{\(\) => \(planAllowed === true\s*\? \(standaloneOpen \? closeStandalone\(\) : openStandalone\(\)\)\s*: \(setCreateOpen\(\(open\) => !open\), setCreateError\(""\)\)\)\}/.test(primary)
+    || !/t\("New payment link"\)/.test(primary)) out.push("an older server does not get today's button");
   if ((panel.match(/openStandalone\(\)/g) || []).length !== 1) out.push("the order-less form opens from somewhere else");
   if (!/\{standaloneOpen && planAllowed === true \? \(/.test(panel)) out.push("the order-less form is not bound to planAllowed === true");
   if (!/\{createOpen && planAllowed !== false \? \(/.test(panel)) out.push("the order picker still opens on Free");
@@ -296,11 +295,11 @@ function panelProblems(panel: string): string[] {
     if (!new RegExp(`${field}: attempt\\.${field},`).test(submit.slice(Math.max(0, submit.indexOf("await createStandalonePaymentRequest("))))) out.push(`the call does not send the attempt's ${field}`);
   }
   if (!/await load\(\);\s*\} catch \(e\) \{/.test(submit)) out.push("the list is not read again after a new link");
-  // The list: the title, and the order once the paid link has opened one.
-  const cell = region(panel, "{isStandaloneRow(row) ? (", ") : onOpenOrder ? (");
-  if (!/\{row\.title \|\| t\("Payment"\)\}/.test(cell)) out.push("a standalone row does not show its title");
-  if (!/\{row\.orderId \? \(\s*onOpenOrder \? \(\s*<button type="button" onClick=\{\(\) => onOpenOrder\(row\.orderId\)\}/.test(cell)) out.push("a paid standalone row does not link to its order");
-  if (!/return reference \? t\("Order \{reference\}"\)\.replace\("\{reference\}", reference\) : t\("Open order"\);/.test(panel)) out.push("the order is not named Order #N");
+  // The list: the title, and the order once the paid link has opened one (or found the payer's, SL-29).
+  if (!/if \(isStandaloneRow\(row\)\) return row\.title \|\| t\("Payment"\);/.test(panel)) out.push("a standalone row does not show its title");
+  const cell = region(panel, "<div className={s.orderTitle}>{rowHeading(row)}</div>", "{row.addedToOrder ?");
+  if (!/\{row\.orderId \? \(\s*canOpenOrder \? \(\s*<button type="button" className=\{s\.linkButton\}[^>]*onClick=\{\(\) => onOpenOrder\?\.\(row\.orderId\)\}/.test(cell)) out.push("a paid standalone row does not link to its order");
+  if (!/\{reference \? t\("Order \{reference\}"\)\.replace\("\{reference\}", reference\) : t\("Open order"\)\}/.test(cell)) out.push("the order is not named Order #N");
   // Refunds are made from this panel since 31 Oct 2026, but by components/RefundPaymentDialog.tsx (check-refund-ui
   // pins it and which rows offer it): the panel itself never calls the refund or makes a refund id.
   if (/refundOrderPayment|clientRefundId|newClientRefundId/.test(panel)) out.push("the panel makes a refund itself instead of through RefundPaymentDialog");
@@ -308,7 +307,7 @@ function panelProblems(panel: string): string[] {
 }
 
 const panelMutants: Array<[string, string]> = [
-  ["the order-less form on a server that did not say", panelSource.replace(") : planAllowed === true ? (", ") : planAllowed !== false ? (")],
+  ["the order-less form on a server that did not say", panelSource.replace("onClick={() => (planAllowed === true\n                ? (standaloneOpen", "onClick={() => (planAllowed !== false\n                ? (standaloneOpen")],
   ["Free keeps a button", panelSource.replace('{t("Stripe payments are part of the paid plans.")}{" "}', '{t("Stripe payments are part of the paid plans.")}{" "}<button type="button">x</button>')],
   ["the order picker opens on Free", panelSource.replace("{createOpen && planAllowed !== false ? (", "{createOpen ? (")],
   ["no phone option", panelSource.replace('{t("Ask for phone number")}', "")],
@@ -323,7 +322,7 @@ const panelMutants: Array<[string, string]> = [
   ["Escape ignored", panelSource.replace('onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closeStandalone(); } }}', "")],
   ["Create before the currency is read", panelSource.replace('disabled={standaloneBusy || (standaloneOrderId !== "" ? attachInfo === null : standaloneCurrency === null)}', "disabled={standaloneBusy}")],
   ["a changed order keeps the id", panelSource.replace("\n    && a.orderId === b.orderId && a.purpose === b.purpose;", ";")],
-  ["no order link once paid", panelSource.replace("onClick={() => onOpenOrder(row.orderId)}\n                                style", "onClick={() => undefined}\n                                style")],
+  ["no order link once paid", panelSource.replace("style={{ fontSize: 13, marginTop: 3 }} onClick={() => onOpenOrder?.(row.orderId)}>", "style={{ fontSize: 13, marginTop: 3 }} onClick={() => undefined}>")],
 ];
 for (const [name, mutant] of panelMutants) {
   const problems = mutant === panelSource ? [] : panelProblems(mutant);
@@ -422,8 +421,8 @@ for (const lang of noteLangs) {
 const libBlock = region(libSource, "// ---- Order-less payment links", "// ---- Refunds from NivaDesk");
 const libKeys = [...libBlock.matchAll(/return "([^"]+)"/g)].map((m) => m[1]);
 const panelText = region(panelSource, "// ---- Order-less links (SL-24", "const cancel = async")
-  + region(panelSource, '<section style={{ display: "grid", gap: 14 }}>', "{createOpen && planAllowed !== false ? (")
-  + region(panelSource, "{isStandaloneRow(row) ? (", ") : onOpenOrder ? (");
+  + region(panelSource, "<header className={s.head}>", "{createOpen && planAllowed !== false ? (")
+  + region(panelSource, "<div className={s.orderTitle}>{rowHeading(row)}</div>", "{row.addedToOrder ?");
 const settingsText = region(settingsSource, "{planAllowed === false ? (", "<div style={{ display: \"flex\", gap: 8, flexWrap: \"wrap\", marginTop: 8 }}>");
 const screenKeys = [...(panelText + settingsText).matchAll(/\bt\("([^"]+)"\)/g)].map((m) => m[1]);
 // SL-27: the order link form's three sentences live in the order components, not in the regions read above
@@ -432,13 +431,21 @@ const ORDER_LABEL_KEYS = ["What the customer is buying (optional)", "Shown on th
   "Keep what the customer is buying to 120 characters or fewer.",
   // SL-28: the order-less form attaches its link to an order.
   "Add to an order (optional)", "No order (a new one opens when it is paid)",
-  "The payment is added to this order. Your customer sees only the name you typed above, not the order."];
-const keys = [...new Set([...libKeys, ...screenKeys, ...ORDER_LABEL_KEYS])];
+  "The payment is added to this order. Your customer sees only the name you typed above, not the order.",
+  // 4 Nov 2026 (SL-29): the form's note now says the payer's open order comes first (a board key); this row stays
+  // in its block for the screens that still say it.
+  "When the customer pays, NivaDesk opens the order with the details they enter."];
+// The reference design's own words (4 Nov 2026) live in lib/studioflow/paymentLinksBoardTranslations.ts and are
+// checked by check-payment-links-board.mts; they are not this block's.
+const BOARD_KEYS = new Set([...read("lib/studioflow/paymentLinksBoardTranslations.ts").matchAll(/^  "([^"]+)": \[/gm)].map((m) => m[1]));
+const keys = [...new Set([...libKeys, ...screenKeys, ...ORDER_LABEL_KEYS])].filter((key) => !BOARD_KEYS.has(key));
 expect("the new sentences were found (lib + panel + Settings)", libKeys.length >= 8 && screenKeys.length >= 20, `${libKeys.length} + ${screenKeys.length}`);
 const REUSED = new Set(["New payment link", "Amount", "Create link", "Creating…", "Close", "Open order", "See plans", "Payment",
   // SL-28: the order-less form's order part reuses the order card's words.
   "Loading…", "Purpose", "Deposit", "Instalment", "Remaining balance", "Still to pay", "Not yet asked for",
-  "Sign in again to see payment links.", "That payment link cannot be created."]);
+  "Sign in again to see payment links.", "That payment link cannot be created.",
+  // The reference design (4 Nov 2026): the page title and the pickers' search reuse rows other screens keep.
+  "Payment links", "Search orders"]);
 const tableFiles = readdirSync(path.join(webRoot, "lib/studioflow")).filter((f) => /\.ts$/.test(f)).map((f) => read(`lib/studioflow/${f}`)).join("\n");
 const lines = languageSource.split("\n");
 const rowOf = (source: string[], key: string): Record<string, string> | null => {

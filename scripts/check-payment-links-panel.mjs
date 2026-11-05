@@ -46,7 +46,7 @@ try {
   const unexpected = diagnostics
     .split("\n")
     .filter((line) => /error TS\d+:/.test(line))
-    .filter((line) => !(/error TS2307:/.test(line) && /'(@\/lib\/[^']+|@\/components\/RefundPaymentDialog|firebase\/[a-z]+|react\/[a-z-]+|react)'/.test(line)));
+    .filter((line) => !(/error TS2307:/.test(line) && /'(@\/lib\/[^']+|@\/components\/RefundPaymentDialog|firebase\/[a-z]+|react\/[a-z-]+|react|\.\/PaymentLinksPanel\.module\.css)'/.test(line)));
   if (unexpected.length) {
     console.log("FAIL tsc reported something other than the expected unresolved imports:");
     for (const line of unexpected) console.log("   " + line);
@@ -96,11 +96,13 @@ try {
     "",
   ].join("\n"));
 
+  // The reference design's stylesheet (4 Nov 2026): class names only, nothing these two decisions read.
+  writeFileSync(path.join(outDir, "css-stub.js"), "export default new Proxy({}, { get: (_, key) => String(key) });\n");
   const compiled = path.join(outDir, "PaymentLinksPanel.js");
   writeFileSync(compiled, readFileSync(compiled, "utf8").replace(
     /from ['"](react\/jsx-runtime|react|firebase\/[a-z]+|@\/lib\/[^'"]+|@\/components\/RefundPaymentDialog)['"]/g,
     "from './io-stub.js'",
-  ));
+  ).replace(/from ['"]\.\/PaymentLinksPanel\.module\.css['"]/g, "from './css-stub.js'"));
 
   const { tabForStatus, formatMinor } = await import(pathToFileURL(compiled).href);
 

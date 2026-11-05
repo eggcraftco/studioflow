@@ -25,6 +25,7 @@ import { ORDER_DELIVERY_ADDRESS_TRANSLATIONS } from "./orderDeliveryAddressTrans
 import { SECURITY_FIX_TRANSLATIONS } from "./securityFixTranslations";
 import { CALENDAR_TRANSLATIONS } from "./calendarTranslations";
 import { ONLINE_BOOKING_TRANSLATIONS } from "./onlineBookingTranslations";
+import { PAYMENT_LINKS_BOARD_TRANSLATIONS } from "./paymentLinksBoardTranslations";
 import { APP_HELP_HISTORY_TRANSLATIONS } from "./appHelpHistoryTranslations";
 import { STORAGE_TRANSLATIONS } from "./storageTranslations";
 import { ACCOUNTING_POSTING_TRANSLATIONS } from "./accountingPostingTranslations";
@@ -9536,6 +9537,8 @@ mergeMissingIntoTranslations(LANGUAGE_AUDIT_TRANSLATIONS);
 // "Download selected (ZIP)" on the Files page (4 Nov 2026). Gaps only, so "Could not download files." keeps any
 // wording another table already gives it.
 mergeMissingIntoTranslations(FILES_BULK_DOWNLOAD_TRANSLATIONS);
+// Payment links in the owner's reference design + "Payment received" (4 Nov 2026). Gaps only.
+mergeMissingIntoTranslations(PAYMENT_LINKS_BOARD_TRANSLATIONS);
 
 /** Every source text the merged table carries (scripts/i18n-gap-report.ts lists unused ones). */
 export function studioTranslationKeys(): string[] {

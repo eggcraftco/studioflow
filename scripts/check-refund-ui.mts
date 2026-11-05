@@ -345,7 +345,8 @@ function panelProblems(panel: string): string[] {
   return out;
 }
 const panelMutants: Array<[string, string]> = [
-  ["panel action not gated", panelSource.replace("row.canRefund === true && (row.refundableMinor ?? 0) > 0 ? (\n                      <button", "(row.refundableMinor ?? 0) > 0 ? (\n                      <button")],
+  // 4 Nov 2026: the reference design moved the button deeper; the mutant follows it by pattern, not by indentation.
+  ["panel action not gated", panelSource.replace(/row\.canRefund === true && \(row\.refundableMinor \?\? 0\) > 0 \? \(\n(\s*)<button/, "(row.refundableMinor ?? 0) > 0 ? (\n$1<button")],
   ["panel action on a truthy canRefund", panelSource.replace("row.canRefund === true &&", "row.canRefund &&")],
   ["panel action on open rows too", panelSource.replace('{tabForStatus(row.publicStatus) !== "open" && row.canRefund', "{row.canRefund")],
   ["pressable while refunding", panelSource.replace('disabled={refunding || busyId !== ""}\n', "")],

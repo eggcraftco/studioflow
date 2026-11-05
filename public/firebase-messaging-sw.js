@@ -41,6 +41,9 @@ self.addEventListener("notificationclick", (event) => {
   } else if (data.route === "notes" || data.inviteId || data.noteId) {
     // A note invitation or share: Notes lists the waiting invitations first.
     targetUrl = "/notes";
+  } else if (data.route === "payment-links") {
+    // A payment link was paid (SL-30): Banking's Payment links.
+    targetUrl = "/bank?tab=payment-links";
   } else if (data.threadId) targetUrl = "/messages";
   else if (data.ticketId) targetUrl = "/settings?section=support";
   else if (data.orderId) {

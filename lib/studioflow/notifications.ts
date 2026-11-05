@@ -53,6 +53,8 @@ export type StudioActivityNotification = {
   createdAtMillis: number;
   /** integration_orders_held: the server's params.count (held-notify-i18n); 0 on an older row. */
   heldCount?: number;
+  /** payment_received (SL-30, 4 Nov 2026): the figures the reader's own language says the row with. */
+  paymentNotice?: { amountMinor: number; currency: string; label: string; projectNumber: number } | null;
 };
 
 function tsMillis(value: unknown): number {
@@ -96,6 +98,15 @@ function heldCountOf(data: Record<string, unknown>): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
+function paymentNoticeOf(data: Record<string, unknown>): StudioActivityNotification["paymentNotice"] {
+  if (str(data.type) !== "payment_received") return null;
+  const params = (data.params && typeof data.params === "object") ? data.params as Record<string, unknown> : {};
+  const amountMinor = Number(params.amountMinor);
+  if (!Number.isFinite(amountMinor) || amountMinor <= 0) return null;
+  const projectNumber = Number(params.projectNumber);
+  return { amountMinor, currency: str(params.currency), label: str(params.label), projectNumber: Number.isFinite(projectNumber) && projectNumber > 0 ? projectNumber : 0 };
+}
+
 function notificationFromDoc(id: string, data: Record<string, unknown>): StudioActivityNotification {
   return {
     id,
@@ -128,6 +139,7 @@ function notificationFromDoc(id: string, data: Record<string, unknown>): StudioA
     dismissedByMillis: millisMap(data.dismissedBy),
     createdAtMillis: tsMillis(data.createdAt),
     heldCount: heldCountOf(data),
+    paymentNotice: paymentNoticeOf(data),
   };
 }
 

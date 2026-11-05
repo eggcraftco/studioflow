@@ -162,6 +162,12 @@ export default function OrdersPage() {
   const { user, loading, language: liveLanguage } = useAuth();
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
   const [orders, setOrders] = useState<OrderListItem[]>([]);
+  // Orders merged away in this tab (4 Nov 2026). The owner merged two orders and the merged one stayed on the list until
+  // the page was reloaded: every list read here replaces the whole list, and a read that started before the merge
+  // finished (a refresh after an edit, the requested-order fetch of a link like Banking's "Order #101") still had the
+  // merged order alive and put it back. An id merged here stays off the live list whatever an older read says; it
+  // comes back only if it is restored from the Trash.
+  const [mergedAwayIds, setMergedAwayIds] = useState<Set<string>>(() => new Set());
   // Store orders the plan had no room for. They are parked server-side rather
   // than dropped, so the owner needs somewhere to see and claim them — a
   // notification they already dismissed is not that place.
@@ -441,12 +447,12 @@ export default function OrdersPage() {
 
   const canSeeFinance = useMemo(() => workspace ? workspaceAccessAllows(workspace.memberAccess, "financialInfo") : false, [workspace]);
   const canSeeAdvancedFinance = Boolean(workspace?.entitlements.features.financial_advanced && canSeeFinance);
-  const visibleOrders = useMemo(
-    () => workspace && workspaceAssignedProjectsOnly(workspace.memberAccess)
-      ? orders.filter(order => orderIsAssignedToCurrentUser(order, user))
-      : orders,
-    [orders, user, workspace]
-  );
+  const visibleOrders = useMemo(() => {
+    const live = mergedAwayIds.size ? orders.filter(order => !mergedAwayIds.has(order.id)) : orders;
+    return workspace && workspaceAssignedProjectsOnly(workspace.memberAccess)
+      ? live.filter(order => orderIsAssignedToCurrentUser(order, user))
+      : live;
+  }, [mergedAwayIds, orders, user, workspace]);
   // GN-11: the Trash arrives with the list (one read, above). It used to be read
   // again on every quick-filter click — the whole order scope each time — and is
   // now refreshed only when the person opens the Trash itself.
@@ -823,7 +829,15 @@ export default function OrdersPage() {
     try {
       const result = await mergeOrders(workspace, primaryId, sourceIds);
       const mergedSet = new Set(sourceIds);
+      setMergedAwayIds(current => new Set([...current, ...sourceIds]));
       setOrders(current => current.filter(order => !mergedSet.has(order.id)));
+      // A merged order that was open (or named by the address, e.g. ?orderId= from Banking) gives way to the one it
+      // was merged into; otherwise the link would open it again.
+      setSelectedOrder(current => (current && mergedSet.has(current.id) ? null : current));
+      if (mergedSet.has(requestedOrderIdRef.current)) {
+        setRequestedOrderId(primaryId);
+        router.replace(`/orders?orderId=${encodeURIComponent(primaryId)}`);
+      }
       setSelectedOrderIds(new Set());
       lastSelectedOrderIdRef.current = null;
       setMergeModalOpen(false);
@@ -952,6 +966,12 @@ export default function OrdersPage() {
     setOrderActionError(null);
     setOrderActionStatus("Restoring order...");
     setDeletedOrders(current => current.filter(item => item.id !== order.id));
+    setMergedAwayIds(current => {
+      if (!current.has(order.id)) return current;
+      const next = new Set(current);
+      next.delete(order.id);
+      return next;
+    });
     try {
       await restoreOrderFromWeb(workspace, order.id);
       setOrderActionStatus("Order restored.");

@@ -461,6 +461,10 @@ export type OrderOptionItem = {
   paymentDate: Date | null;
   /** Came from Etsy (lib/studioflow/etsyOrder.ts): NivaDesk sends its buyer nothing (Etsy API Terms). */
   isEtsy?: boolean;
+  /** Payment links (4 Nov 2026): the order's number, what it still owes and its email, for the link pickers. */
+  projectNumber?: number;
+  remainingAmount?: number;
+  emailAddress?: string;
 };
 
 export type CustomerOrderFile = {
@@ -2152,7 +2156,10 @@ export async function loadWorkspaceOrderOptions(companyId: string, workspace?: W
         etsySource: data.etsySource,
         commerce: data.commerce && typeof data.commerce === "object" ? data.commerce as { provider?: string } : null,
         customFields: data.customFields && typeof data.customFields === "object" ? data.customFields as Record<string, string> : null
-      })
+      }),
+      projectNumber: numberValue(data.projectNumber, 0),
+      remainingAmount: numberValue(data.remainingAmount, 0),
+      emailAddress: stringValue(data.emailAddress, "")
     };
   });
 

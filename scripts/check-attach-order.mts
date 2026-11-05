@@ -116,13 +116,15 @@ const region = (source: string, from: string, to: string): string => {
 function panelProblems(panel: string): string[] {
   const out: string[] = [];
   const form = region(panel, '<div\n          id="standalone-link-form"', ") : null}\n\n      {createOpen");
-  const submit = region(panel, "const createStandalone = async () => {", "/** \"Order #1042\"");
+  const submit = region(panel, "const createStandalone = async () => {", "const cancel = async (row: PaymentLinkRow)");
   if (!form || !submit) return ["no order-less form or submit"];
   // The picker: optional, only when the page gives orders, the order's name as the order form shows it.
   if (!/\{orders !== undefined \? \(/.test(form)) out.push("the order picker shows although the page gave no orders");
   if (!/value=\{standaloneOrderId\}[\s\S]*?data-attach-order/.test(form)) out.push("no order picker bound to standaloneOrderId");
   if (!/<option value="">\{orders === null \? t\("Loading…"\) : t\("No order \(a new one opens when it is paid\)"\)\}<\/option>/.test(form)) out.push("the first choice is not 'no order'");
-  if (!/\{\[order\.customerName, order\.designName\]\.filter\(Boolean\)\.join\(" — "\) \|\| order\.id\}/.test(form)) out.push("the orders are not named as the order form names them");
+  // 4 Nov 2026: both pickers name an order the same way, through one helper (number · names · still to pay).
+  if (!/const name = \[order\.customerName, order\.designName\]\.filter\(Boolean\)\.join\(" — "\) \|\| order\.id;/.test(panel)
+    || !/\{orderOptionLabel\(order\)\}/.test(form)) out.push("the orders are not named as the order form names them");
   // Chosen: Purpose + the order's figures; not chosen: the customer's details. Never both.
   const attachedAt = form.indexOf('{standaloneOrderId !== "" ? (');
   const elseAt = form.indexOf(") : (", attachedAt + 1);
@@ -134,7 +136,7 @@ function panelProblems(panel: string): string[] {
   for (const word of ["Customer name (optional)", "Customer email (optional)", "Ask for phone number", "Ask for delivery address"]) {
     if (!detailsPart.includes(`t("${word}")`)) out.push(`the order-less details lost: ${word}`);
   }
-  if (!/standaloneOrderId !== ""\s*\? t\("The payment is added to this order\. Your customer sees only the name you typed above, not the order\."\)\s*: t\("When the customer pays, NivaDesk opens the order with the details they enter\."\)/.test(form)) out.push("the note does not say what an attached link does");
+  if (!/standaloneOrderId !== ""\s*\? t\("The payment is added to this order\. Your customer sees only the name you typed above, not the order\."\)\s*: t\("When the customer pays, the payment is added to their unpaid order if they have exactly one; otherwise NivaDesk opens a new order with the details they enter\."\)/.test(form)) out.push("the note does not say what an attached link does");
   // The figures: read from the server, the amount pre-filled only while empty, a failed read drops the choice.
   if (!/httpsCallable<[^>]*>\(functions, "listOrderPaymentRequests"\);\s*info\(\{ companyId, orderId: standaloneOrderId \}\)/.test(panel)) out.push("the order's figures are not read from the server");
   if (!/setStandaloneAmount\(\(current\) => current \|\| minorToInputText\(next\.headroomMinor, next\.currency, locale\)\)/.test(panel)) out.push("the amount is pre-filled over what was typed");
@@ -149,8 +151,9 @@ function panelProblems(panel: string): string[] {
   // After success: the form is cleared, so the next link does not inherit the order.
   if (!/setStandaloneOrderId\(""\); setStandalonePurpose\("remaining_balance"\); setAttachInfo\(null\);/.test(submit)) out.push("the order choice survives a created link");
   // The list: the name that was typed, under the order.
-  if (!/const orderRowTitle = \(row: \{ title\?: string \}\) => \(row\.title\s*\? <div [^>]*>\{row\.title\}<\/div>\s*: null\);/.test(panel)) out.push("no helper showing an order row's typed name");
-  if ((panel.match(/\{orderRowTitle\(row\)\}/g) || []).length !== 2) out.push("an order row does not show its typed name in both of its forms");
+  // 4 Nov 2026: the typed name is the row's heading (before the order's own name and number), on every width.
+  if (!/return row\.title \|\| row\.orderName \|\| \(reference \?/.test(panel)) out.push("no helper showing an order row's typed name");
+  if ((panel.match(/\{rowHeading\(row\)\}/g) || []).length !== 1) out.push("an order row does not show its typed name in both of its forms");
   if (/dangerouslySetInnerHTML/.test(panel)) out.push("the panel renders HTML");
   return out;
 }
@@ -163,9 +166,9 @@ const panelMutants: Array<[string, string]> = [
   ["the amount over what was typed", panelSource.replace("setStandaloneAmount((current) => current || minorToInputText(", "setStandaloneAmount((current) => minorToInputText(")],
   ["a failed read keeps the choice", panelSource.replace('.catch((e) => { if (active) { setStandaloneOrderId(""); setStandaloneError(t(messageForError(e))); } });', ".catch(() => undefined);")],
   ["the choice survives", panelSource.replace('setStandaloneOrderId(""); setStandalonePurpose("remaining_balance"); setAttachInfo(null);', "setAttachInfo(null);")],
-  ["the details shown when attached", panelSource.replace("                {t(\"Purpose\")}\n                <select value={standalonePurpose}", "                {t(\"Customer name (optional)\")}\n                <select value={standalonePurpose}")],
-  ["no typed name on a row", panelSource.replace("                        {orderRowTitle(row)}\n                      </>", "                      </>")],
-  ["the note unchanged", panelSource.replace('? t("The payment is added to this order. Your customer sees only the name you typed above, not the order.")', '? t("When the customer pays, NivaDesk opens the order with the details they enter.")')],
+  ["the details shown when attached", panelSource.replace("                {t(\"Purpose\")}\n                <select className={s.input} value={standalonePurpose}", "                {t(\"Customer name (optional)\")}\n                <select className={s.input} value={standalonePurpose}")],
+  ["no typed name on a row", panelSource.replace("return row.title || row.orderName || (reference ?", "return row.orderName || (reference ?")],
+  ["the note unchanged", panelSource.replace('? t("The payment is added to this order. Your customer sees only the name you typed above, not the order.")', '? t("When the customer pays, the payment is added to their unpaid order if they have exactly one; otherwise NivaDesk opens a new order with the details they enter.")')],
   ["the order's figures not shown", panelSource.replace('${t("Still to pay")}: ${formatMinor(attachInfo.outstandingMinor, attachInfo.currency)} · ${t("Not yet asked for")}: ${formatMinor(attachInfo.headroomMinor, attachInfo.currency)}', "")],
 ];
 for (const [name, mutant] of panelMutants) {
