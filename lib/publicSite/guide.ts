@@ -1372,6 +1372,12 @@ const TREE_EN: GuideNode[] = [
           { kind: "bullets", items: [
             "[Web] The recipient's phone has its country code beside it, and Company is the recipient's name unless you untick Not a company: use the recipient's name. The declared value's currency is picked from DHL's list, the sender's country's first; amounts show its mark and your own number format. Incoterms show their names (DAP – Delivered at Place).",
             "Save draft keeps the shipment in NivaDesk to finish later. It is not saved into MyDHL+: DHL's API has no saved-shipment list. A shipment made in MyDHL+ with the order's reference can be linked with Find shipments made on MyDHL."
+          ] },
+          { kind: "sub", text: "Check with DHL before the label" },
+          { kind: "bullets", items: [
+            "[Web] Check with DHL saves the draft and asks DHL to check the details exactly as the label would send them, without creating anything: no label, no waybill and no courier. NivaDesk's own list of missing items comes first: while it shows something, nothing goes to DHL.",
+            "[Web] DHL check passed means DHL accepted the details at that moment. It is not a label: the label is made only with Create DHL label, and DHL checks again then. If DHL finds problems, the form shows DHL's own reasons and nothing is created. Any change to the form clears the answer, so check again after editing.",
+            "[Web] The courier is never part of the check: a courier you ticked is booked only when the label is created. Nothing from the check is saved in NivaDesk."
           ] }
         ]
       },
@@ -3081,6 +3087,12 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "[Web] Alıcı telefonunun yanında ülke kodu var; Şirket, Şirket değil: alıcının adı kullanılsın kutusunu kaldırmadıkça alıcının adıdır. Beyan para birimi DHL'in listesinden seçilir, gönderici ülkesininki önce gelir; tutarlar onun işaretiyle ve sizin sayı biçiminizle görünür. Incoterm'ler adlarıyla görünür (DAP – Delivered at Place).",
             "Taslağı kaydet gönderiyi sonra bitirmek üzere NivaDesk'te saklar. MyDHL+'a kaydedilmez: DHL'in API'sinde kayıtlı gönderi listesi yok. MyDHL+'ta siparişin referansıyla yapılan gönderi MyDHL'de açılmış gönderileri bul ile bağlanır."
+          ] },
+          { kind: "sub", text: "Etiketten önce DHL ile kontrol" },
+          { kind: "bullets", items: [
+            "[Web] DHL ile kontrol et, taslağı kaydeder ve bilgileri etiketin göndereceği şekliyle, hiçbir şey oluşturmadan DHL'e kontrol ettirir: etiket, konşimento ve kurye yok. Önce NivaDesk'in eksikler listesi gelir: orada bir şey görünürken DHL'e hiçbir şey gitmez.",
+            "[Web] DHL kontrolü geçti, DHL'in bilgileri o an kabul ettiği anlamına gelir. Bu bir etiket değildir: etiket yalnız DHL etiketi oluştur ile yapılır ve DHL o zaman yeniden kontrol eder. DHL sorun bulursa form DHL'in kendi gerekçelerini gösterir ve hiçbir şey oluşturulmaz. Formdaki her değişiklik yanıtı siler; düzenledikten sonra yeniden kontrol edin.",
+            "[Web] Kurye hiçbir zaman kontrole dahil değildir: işaretlediğiniz kurye yalnız etiket oluşturulurken çağrılır. Kontrolden NivaDesk'e hiçbir şey kaydedilmez."
           ] }
         ]
       },
