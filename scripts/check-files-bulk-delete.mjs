@@ -68,11 +68,14 @@ check("Türkçe probe: Delete selected → Seçilenleri sil", studioT("Delete se
 check("Türkçe probe: {count} selected → {count} seçili", studioT("{count} selected", "Türkçe") === "{count} seçili");
 check("English stays English", studioT("Delete selected", "English") === "Delete selected");
 
-// 2. Gating: every selection surface sits behind canDeleteClientFiles.
+// 2. Gating. Since "Download selected (ZIP)" (owner, 4 Nov 2026) ticking is offered to anyone who may download OR
+//    delete (canSelectFiles); the Delete button and its handler still sit behind canDeleteClientFiles.
 check("canDeleteClientFiles = manage + memberAccess.deleteClientFiles !== false", /const canDeleteClientFiles = Boolean\(canManageClientFiles && workspace\?\.memberAccess\?\.deleteClientFiles !== false\);/.test(page));
-check("row checkbox behind canDeleteClientFiles", /\{canDeleteClientFiles \? \(\s*<label className="client-file-select">/.test(page));
-check("per-order toggle behind canDeleteClientFiles", /\{canDeleteClientFiles \? \(\(\) => \{\s*const allSelected = group\.files\.every/.test(page));
-check("selection bar behind canDeleteClientFiles", /\{canDeleteClientFiles && \(selectedCount > 0 \|\| selectionFailures\.length > 0\) \? \(\s*<div className="files-selection-bar"/.test(page));
+check("canSelectFiles = download or delete", /const canSelectFiles = canUseClientFiles \|\| canDeleteClientFiles;/.test(page));
+check("row checkbox behind canSelectFiles", /\{canSelectFiles \? \(\s*<label className="client-file-select">/.test(page));
+check("per-order toggle behind canSelectFiles", /\{canSelectFiles \? \(\(\) => \{\s*const allSelected = group\.files\.every/.test(page));
+check("selection bar behind canSelectFiles", /\{canSelectFiles && \(selectedCount > 0 \|\| selectionFailures\.length > 0\) \? \(\s*<div className="files-selection-bar"/.test(page));
+check("Delete selected button behind canDeleteClientFiles", /\{canDeleteClientFiles \? \(\s*<button[\s\S]{0,400}?onClick=\{handleDeleteSelection\}/.test(page));
 check("handler refuses without canDeleteClientFiles", /async function handleDeleteSelection\(\) \{[\s\S]*?if \(!canDeleteClientFiles\) \{\s*setActionError\(/.test(page));
 
 // 3. Confirm before the call; per-row Delete and Delete all untouched; failures listed.

@@ -180,7 +180,10 @@ async function main() {
   check(/aria-label=\{t\("Select all in this order"\)\}/.test(files), "per-order select all kept");
   check(/runBulkSequentially\(/.test(library) && /trashLibraryFile\(workspace, file\.id\)/.test(library) && /restoreLibraryFile\(workspace, file\.id\)/.test(library), "library bulk trash / restore use the existing callables");
   check(!/runBulk\("share"|shareLibraryFileWithOrder\(workspace, file\.id/.test(library), "no bulk share (FIN-01 gap not widened)");
-  check(/const canTickRows = canEdit && \(inTrash \|\| canDelete\);/.test(library), "library ticking follows the single-file gates");
+  // Since "Download selected (ZIP)" (4 Nov 2026) anyone who sees the library may tick to download; the trash keeps
+  // canEdit (restore), and Move to trash / Delete permanently keep the single-file gates.
+  check(/const canTickRows = inTrash \? canEdit : true;/.test(library) && /const canTrashTicked = canEdit && canDelete;/.test(library), "library ticking: download for every viewer, trash keeps canEdit");
+  check(/\{canTrashTicked \? \(\s*<button[\s\S]{0,300}?runBulk\("trash"\)/.test(library) && /\{canDelete \? \(\s*<button[\s\S]{0,300}?runBulk\("delete"\)/.test(library), "library trash / permanent delete keep the single-file gates");
   check(/uploads\.enqueue\(dropped, \{ kind: "new" \}\)/.test(library), "library drop uses the library upload queue");
   check(/<NoteAvatarStack people=\{avatars\} \/>/.test(notes) && !/👥 \{t\("Shared"\)\}/.test(notes), "notes card draws the faces instead of the count line");
   check(/noteAvatarPeople\(note, members, user\.uid, user\.email \?\? ""\)/.test(notes), "faces come from the live note + members");
