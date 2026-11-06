@@ -1488,7 +1488,7 @@ export default function OrdersPage() {
                     isOwner: Boolean(workspace && normalizeWorkspaceRole(workspace.role) === "owner"),
                     email: user?.email,
                     displayName: user?.displayName
-                  })
+                  }, orderAssigneeUids(contextOrder))
                     .map(member => (
                       <button
                         key={member.id}
@@ -1500,6 +1500,7 @@ export default function OrdersPage() {
                       >
                         <span aria-hidden="true">{isOrderAssignee(contextOrder, member.id) ? "✓" : initialsForMember(member)}</span>
                         {assigneeDisplayName(member)}
+                        {member.suspended ? ` · ${t("No access")}` : ""}
                       </button>
                     ))}
                   <div className="order-list-context-divider" />
