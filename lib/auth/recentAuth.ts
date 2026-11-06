@@ -10,7 +10,9 @@
 // The server is still the real gate for who may do these things; this is the
 // browser half. Checking the ID token's auth_time on the server as well is the
 // server arm's step (it would also stop a call typed into DevTools).
-import { auth } from "@/lib/firebase/client";
+//
+// SessionAutoLock (root layout) imports the event name from here, so Firebase is imported only when the auth time is
+// read (site speed, 6 Nov 2026): a public page's first download has no Firebase in it.
 
 /** A sign-in this recent counts: no prompt. */
 export const RECENT_AUTH_WINDOW_MS = 5 * 60_000;
@@ -75,6 +77,7 @@ export async function ensureRecentAuthentication(
 
 /** The ID token's auth_time (last real sign-in or re-authentication), in ms. */
 async function currentAuthTime(): Promise<number> {
+  const { auth } = await import("@/lib/firebase/client");
   const user = auth.currentUser;
   if (!user) return Number.NaN;
   const result = await user.getIdTokenResult();

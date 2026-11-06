@@ -1,4 +1,4 @@
-import { normalizeStudioLanguage, type StudioLanguage } from "@/lib/studioflow/language";
+import { normalizeStudioLanguage, type StudioLanguage } from "@/lib/studioflow/languageCore";
 
 /**
  * Which way a language reads, and the BCP-47 tag that goes with it.
@@ -10,8 +10,9 @@ import { normalizeStudioLanguage, type StudioLanguage } from "@/lib/studioflow/l
  * globals.css never reached a single app screen.
  *
  * Its own module rather than a few more lines in language.ts: that file is
- * 2.1 MB of translation tables, and both the app shell and the public site's
- * provider need these two functions during render.
+ * megabytes of translation tables, and both the app shell and the public site's
+ * provider need these two functions during render (it reads languageCore, never
+ * the tables).
  */
 export const RTL_STUDIO_LANGUAGES: readonly StudioLanguage[] = ["العربية (Arabic)"];
 

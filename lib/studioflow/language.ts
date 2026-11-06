@@ -1,3 +1,5 @@
+import { SUPPORTED_STUDIO_LANGUAGES, normalizeStudioLanguage, type StudioLanguage } from "./languageCore";
+import { registerStudioTranslate } from "./studioTranslateRegistry";
 import { MAC_TRANSLATIONS } from "./macTranslations";
 import { SETTINGS_CONTENT_TRANSLATIONS } from "./settingsContentTranslations";
 import { SHIPPING_TRANSLATIONS } from "./shippingTranslations";
@@ -33,22 +35,10 @@ import { LANGUAGE_AUDIT_TRANSLATIONS } from "./languageAuditTranslations";
 
 import { SECOND_FACTOR_TRANSLATIONS } from "./secondFactorTranslations";
 
-export const SUPPORTED_STUDIO_LANGUAGES = [
-  "English",
-  "Türkçe",
-  "Deutsch",
-  "Français",
-  "Italiano",
-  "Español (Spanish)",
-  "Português",
-  "Русский (Russian)",
-  "日本語 (Japanese)",
-  "中文 (Chinese)",
-  "العربية (Arabic)",
-  "हिन्दी (Hindi)"
-] as const;
-
-export type StudioLanguage = (typeof SUPPORTED_STUDIO_LANGUAGES)[number];
+// The language list and the dictionary-free helpers moved to ./languageCore (a public page loads them without
+// this file's tables); every app import from here keeps working.
+export { SUPPORTED_STUDIO_LANGUAGES, normalizeStudioLanguage, studioLanguageForLocaleTag } from "./languageCore";
+export type { StudioLanguage } from "./languageCore";
 
 
 type TranslationTable = Record<string, Partial<Record<StudioLanguage, string>>>;
@@ -8032,35 +8022,6 @@ mergeIntoTranslations({
   "Existing projects could not be recalculated.": { "Deutsch": "Bestehende Projekte konnten nicht neu berechnet werden.", "Français": "Les projets existants n'ont pas pu être recalculés.", "Italiano": "Non è stato possibile ricalcolare i progetti esistenti.", "Español (Spanish)": "No se pudieron recalcular los proyectos existentes.", "Português": "Não foi possível recalcular os projetos existentes.", "Русский (Russian)": "Не удалось пересчитать существующие проекты.", "日本語 (Japanese)": "既存の案件を再計算できませんでした。", "中文 (Chinese)": "无法重新计算现有项目。", "العربية (Arabic)": "تعذّر إعادة حساب المشاريع الحالية.", "हिन्दी (Hindi)": "मौजूदा प्रोजेक्ट पुनर्गणित नहीं हो सके।" },
 } as Record<string, Partial<Record<StudioLanguage, string>>>);
 
-export function normalizeStudioLanguage(value: string | null | undefined): StudioLanguage {
-  const cleaned = String(value || "").trim();
-  return SUPPORTED_STUDIO_LANGUAGES.includes(cleaned as StudioLanguage) ? cleaned as StudioLanguage : "English";
-}
-
-/**
- * The app's supported language name best matching a BCP 47 locale tag (e.g.
- * navigator.language). Used as the default when neither the personal nor the
- * workspace language has been chosen yet, so a first visit opens in the
- * user's own language (a stored choice wins).
- */
-export function studioLanguageForLocaleTag(tag: string | null | undefined): StudioLanguage {
-  const code = String(tag || "").trim().toLowerCase().split("-")[0];
-  switch (code) {
-    case "tr": return "Türkçe";
-    case "de": return "Deutsch";
-    case "fr": return "Français";
-    case "it": return "Italiano";
-    case "es": return "Español (Spanish)";
-    case "pt": return "Português";
-    case "ru": return "Русский (Russian)";
-    case "ja": return "日本語 (Japanese)";
-    case "zh": return "中文 (Chinese)";
-    case "ar": return "العربية (Arabic)";
-    case "hi": return "हिन्दी (Hindi)";
-    default: return "English";
-  }
-}
-
 export function studioT(text: string, language: string | null | undefined) {
   const normalized = normalizeStudioLanguage(language);
   if (normalized === "English") return text;
@@ -9549,3 +9510,8 @@ export function studioTranslationKeys(): string[] {
 export function studioTranslationRow(text: string): Partial<Record<StudioLanguage, string>> | undefined {
   return TRANSLATIONS[text];
 }
+
+// The root layout's hosts (toast, two-step prompt, session lock) translate through lib/studioflow/useStudioT.ts, which
+// never imports this file: it learns studioT here once an app screen has loaded the dictionary, and loads it itself
+// only when it has something to show in another language.
+registerStudioTranslate(studioT);

@@ -1,12 +1,12 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { User } from "firebase/auth";
-import { onAuthStateChanged } from "firebase/auth";
-import { arrayUnion, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import { auth, clearFirestoreLocalCache, db, functions } from "@/lib/firebase/client";
-import { studioLanguageForLocaleTag } from "@/lib/studioflow/language";
+import { usePathname } from "next/navigation";
+// Firebase comes through lib/firebase/lazy.ts (one dynamic import), so it is not in a public page's first download.
+import { firebaseMayWait } from "@/lib/firebase/deferPolicy";
+import { firebaseKit, firebaseKitRequested, loadFirebaseKit, whenFirebaseKitLoaded } from "@/lib/firebase/lazy";
+import { studioLanguageForLocaleTag } from "@/lib/studioflow/languageCore";
 import { accessLost, accessWatchStep, mayReloadForAccess, memberAccessFingerprint } from "@/lib/studioflow/accessWatch";
 import { bootMark } from "@/lib/studioflow/bootTrace";
 
@@ -36,6 +36,7 @@ function reloadForAccessChange(companyId: string, lost = false) {
   // Removed or suspended: the cached copy of this workspace (shared notes included) goes first, so an offline
   // visit later cannot draw it. Best effort (another open tab can hold the cache); the reload happens either way.
   if (lost) {
+    const { clearFirestoreLocalCache } = firebaseKit();
     void clearFirestoreLocalCache().finally(() => window.location.reload());
     return;
   }
@@ -89,6 +90,7 @@ function cleanText(value: unknown) {
 }
 
 async function ensurePersonalWorkspace(currentUser: User) {
+  const { arrayUnion, db, doc, getDoc, serverTimestamp, setDoc } = firebaseKit();
   const uid = currentUser.uid;
   const email = currentUser.email ?? "";
   const displayName = currentUser.displayName ?? "";
@@ -227,8 +229,14 @@ async function startSignupTrialForProviderAccount(currentUser: User) {
   const emailName = email.endsWith("@privaterelay.appleid.com") ? "" : email.split("@")[0];
   // The server wants a name of two letters or more; Apple can sign someone in without one.
   const fullName = [currentUser.displayName ?? "", emailName].map(cleanText).find(name => name.length >= 2) || "Owner";
+  const { functions, httpsCallable } = firebaseKit();
   const initialise = httpsCallable<Record<string, string>, unknown>(functions, "initializeFreeDemoWorkspace");
   await initialise({ fullName, workspaceName: "My Studio", language: cachedLanguage() || browserDefaultLanguage() });
+}
+
+// A page that needs the session starts the download at once — before hydration, as the static import used to.
+if (typeof window !== "undefined" && !firebaseMayWait(window.location.pathname)) {
+  void loadFirebaseKit().catch(() => undefined);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -241,6 +249,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguage] = useState<string>("English");
   const [theme, setTheme] = useState<string>("System");
 
+  // Firebase (and App Check's reCAPTCHA with it) on demand: lib/firebase/deferPolicy.ts. On a marketing page on a
+  // device nobody has signed in on there is no session to restore, so "nobody is signed in" is known at once and
+  // Firebase loads only when something on the page needs it (lib/firebase/lazy.ts). Everywhere else it loads now.
+  const pathname = usePathname();
+  const [firebaseReady, setFirebaseReady] = useState(false);
+  const waitedForFirebase = useRef(false);
+  useEffect(() => whenFirebaseKitLoaded(() => setFirebaseReady(true)), []);
+  useEffect(() => {
+    if (firebaseReady) return;
+    if (!firebaseKitRequested() && firebaseMayWait(pathname)) {
+      waitedForFirebase.current = true;
+      bootMark("auth:deferred");
+      setLoading(false);
+      return;
+    }
+    // From a marketing page to one that needs the session (/login, /signup, the app): not known yet, again.
+    if (waitedForFirebase.current) {
+      waitedForFirebase.current = false;
+      setLoading(true);
+    }
+    loadFirebaseKit().catch(error => {
+      console.warn("[NivaDesk] Firebase could not be loaded.", error);
+      setLoading(false);
+    });
+  }, [pathname, firebaseReady]);
+
   // Live per-user language + theme sync. Language and theme are STRICTLY personal
   // for every role (owner included) — they live in the user's own
   // personalInterfaceSettings doc and never inherit the workspace-wide value, so a
@@ -250,6 +284,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // join request and the Cloud Function points them at the newly joined workspace).
   useEffect(() => {
     if (!user) { setLanguage(cachedLanguage() || browserDefaultLanguage()); setTheme("System"); return; }
+    const { db, doc, onSnapshot } = firebaseKit();
     // Paint in the language this device last saw, rather than in English, while
     // the personal settings snapshot is still on its way.
     const remembered = cachedLanguage();
@@ -325,6 +360,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   useEffect(() => {
+    if (!firebaseReady) return;
+    const { auth, onAuthStateChanged } = firebaseKit();
     let cancelled = false;
     let authRun = 0;
     bootMark("auth:wait");
@@ -386,7 +423,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       unsubscribe();
     };
-  }, []);
+  }, [firebaseReady]);
 
   const value = useMemo(() => ({ user, loading, language, theme }), [user, loading, language, theme]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

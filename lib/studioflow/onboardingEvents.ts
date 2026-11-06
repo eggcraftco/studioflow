@@ -6,8 +6,8 @@
 // or rolled back) switches it off for the rest of the tab. What may be sent is decided
 // in onboardingEventRules.ts; what may be stored, on the server.
 
-import { httpsCallable } from "firebase/functions";
-import { auth, functions } from "@/lib/firebase/client";
+// Firebase through lib/firebase/lazy.ts (public pages reach this through billingActions): no user before it is loaded.
+import { auth, functions, httpsCallable } from "@/lib/firebase/lazy";
 import { WEB_BUILD_ID } from "@/lib/studioflow/webBuild";
 import { inRecordingWindow, onboardingEventKey, type OnboardingEvent, type OnboardingEventName } from "@/lib/studioflow/onboardingEventRules";
 

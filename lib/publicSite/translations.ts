@@ -1291,6 +1291,8 @@ export const PUBLIC_SITE_EN = {
 } as const;
 
 export type PublicSiteTranslationKey = keyof typeof PUBLIC_SITE_EN;
+/** One language's public-site text (the browser gets one of these, never all twelve: lib/publicSite/i18n.tsx). */
+export type PublicSiteTextTable = Partial<Record<PublicSiteTranslationKey, string>>;
 
 type PublicSiteTranslationTable = Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>;
 
@@ -15783,7 +15785,10 @@ function mergeFill(
   return merged;
 }
 
-export const PUBLIC_SITE_TRANSLATIONS: PublicSiteTranslationTable = {
+// Built in one call marked pure, so a bundle that imports only PUBLIC_SITE_EN (the public site's provider, in the browser)
+// drops the eleven other tables and every batch above; the server and the check scripts still read the whole table.
+// (scripts/check-public-bundle.mts reads the built chunks: a top-level statement here that is not pure brings them back.)
+export const PUBLIC_SITE_TRANSLATIONS: PublicSiteTranslationTable = /*#__PURE__*/ (() => ({
   English: PUBLIC_SITE_EN,
   Türkçe: mergeFill("Türkçe", TURKISH_TRANSLATIONS),
   Deutsch: mergeFill("Deutsch", COMMON_TRANSLATIONS["Deutsch"]),
@@ -15796,4 +15801,4 @@ export const PUBLIC_SITE_TRANSLATIONS: PublicSiteTranslationTable = {
   "中文 (Chinese)": mergeFill("中文 (Chinese)", COMMON_TRANSLATIONS["中文 (Chinese)"]),
   "العربية (Arabic)": mergeFill("العربية (Arabic)", COMMON_TRANSLATIONS["العربية (Arabic)"]),
   "हिन्दी (Hindi)": mergeFill("हिन्दी (Hindi)", COMMON_TRANSLATIONS["हिन्दी (Hindi)"])
-};
+}))();

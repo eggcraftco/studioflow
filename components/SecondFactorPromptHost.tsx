@@ -4,20 +4,18 @@
 // or re-authentication (lib/auth/secondFactor.ts → withSecondFactor). Rendered
 // once at the app root. Reuses the session-lock dialog styles.
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { studioT } from "@/lib/studioflow/language";
-import {
-  registerSecondFactorPresenter,
-  type SecondFactorAnswer,
-  type SecondFactorRequest
-} from "@/lib/auth/secondFactor";
+import { useStudioT } from "@/lib/studioflow/useStudioT";
+import type { SecondFactorAnswer, SecondFactorRequest } from "@/lib/auth/secondFactor";
+// Registered when Firebase is loaded (lib/firebase/lazy.ts): a sign-in can only ask for the code after that.
+import { whenFirebaseKitLoaded, type FirebaseKit } from "@/lib/firebase/lazy";
 
 type Pending = { request: SecondFactorRequest; resolve: (answer: SecondFactorAnswer) => void };
 
 export function SecondFactorPromptHost() {
   const { language } = useAuth();
-  const t = useCallback((text: string) => studioT(text, language), [language]);
+  const t = useStudioT(language);
   const [pending, setPending] = useState<Pending | null>(null);
   const [code, setCode] = useState("");
   const [useRecovery, setUseRecovery] = useState(false);
@@ -25,15 +23,20 @@ export function SecondFactorPromptHost() {
   const pendingRef = useRef<Pending | null>(null);
 
   useEffect(() => {
-    registerSecondFactorPresenter(request => new Promise<SecondFactorAnswer>(resolve => {
-      const next = { request, resolve };
-      pendingRef.current = next;
-      setCode("");
-      setRecoveryEmail(request.email);
-      setPending(next);
-    }));
+    let registerSecondFactorPresenter: FirebaseKit["registerSecondFactorPresenter"] | null = null;
+    const cancel = whenFirebaseKitLoaded(kit => {
+      registerSecondFactorPresenter = kit.registerSecondFactorPresenter;
+      registerSecondFactorPresenter(request => new Promise<SecondFactorAnswer>(resolve => {
+        const next = { request, resolve };
+        pendingRef.current = next;
+        setCode("");
+        setRecoveryEmail(request.email);
+        setPending(next);
+      }));
+    });
     return () => {
-      registerSecondFactorPresenter(null);
+      cancel();
+      registerSecondFactorPresenter?.(null);
       pendingRef.current?.resolve({ kind: "cancel" });
     };
   }, []);
