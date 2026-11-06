@@ -1512,7 +1512,7 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
   };
   const syncedRecently = lastSync !== null && Date.now() - lastSync.getTime() < 12 * 60 * 60 * 1000;
   const initials = (name: string) => name.trim().split(/\s+/).slice(0, 2).map(word => word[0] ?? "").join("").toUpperCase() || "•";
-  const tileStyle: React.CSSProperties = { flex: "1 1 220px", maxWidth: 320, border: "1px solid rgba(120,120,140,0.18)", borderRadius: 12, padding: "14px 16px 8px" };
+  const tileStyle: React.CSSProperties = { flex: "1 1 220px", maxWidth: 320, border: "1px solid rgba(122,122,122,0.18)", borderRadius: 12, padding: "14px 16px 8px" };
 
   return (
     <section className="card app-card">
@@ -1580,8 +1580,8 @@ function BankSpendingCard({ transactions, lastSync, isOwner, t, hideNumbers, loc
           <p className="muted-copy" style={{ margin: "0 0 6px", fontSize: 12.5, fontWeight: 700 }}>{t("Recent activity")}</p>
           <div style={{ display: "flex", flexDirection: "column" }}>
             {summary.recent.map(item => (
-              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 4px", borderBottom: "1px solid rgba(120,120,140,0.14)" }}>
-                <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 999, background: "rgba(120,120,140,0.13)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
+              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 4px", borderBottom: "1px solid rgba(122,122,122,0.14)" }}>
+                <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 999, background: "rgba(122,122,122,0.13)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
                   {initials(item.counterparty || item.description)}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -1741,7 +1741,7 @@ function TaxSetAsideCard({ orders, settings, bankTransactions, isOwner, t, hideN
                 {remaining > 0.005 ? `${t("Still to hold")}: ${showMoney(remaining)}` : t("Fully covered")}
               </span>
             </div>
-            <div style={{ marginTop: 7, height: 7, borderRadius: 999, background: "rgba(120,120,140,0.16)", overflow: "hidden" }}>
+            <div style={{ marginTop: 7, height: 7, borderRadius: 999, background: "rgba(122,122,122,0.16)", overflow: "hidden" }}>
               <div style={{ width: `${paidShare}%`, height: "100%", borderRadius: 999, background: "#16a34a", transition: "width 0.25s ease" }} />
             </div>
           </div>
@@ -1933,7 +1933,7 @@ function ProfitChart({
           return (
             <g key={idx}>
               <line x1={padXLeft} x2={W - 8} y1={y} y2={y} />
-              <text x={W - 4} y={y + 4} textAnchor="end" fontSize="11" fill="#6b7280" fontWeight="700">
+              <text x={W - 4} y={y + 4} textAnchor="end" fontSize="11" fill="#727272" fontWeight="700">
                 {formatAxisCurrency(tick, symbol)}
               </text>
             </g>
@@ -1951,7 +1951,7 @@ function ProfitChart({
         ))}
         {/* X-axis labels */}
         {xLabelIndices.map((i) => (
-          <text key={i} x={xForIndex(i)} y={H + 16} textAnchor="middle" fontSize="11" fill="#6b7280" fontWeight="700">
+          <text key={i} x={xForIndex(i)} y={H + 16} textAnchor="middle" fontSize="11" fill="#727272" fontWeight="700">
             {current[i]?.label}
           </text>
         ))}
@@ -1963,7 +1963,7 @@ function ProfitChart({
               x2={xForIndex(hoverIdx)}
               y1={padY}
               y2={H - padY}
-              stroke="#9ca3af"
+              stroke="#a2a2a2"
               strokeWidth={1}
               strokeDasharray="4 4"
             />
@@ -1974,7 +1974,7 @@ function ProfitChart({
               <circle cx={xForIndex(hoverIdx)} cy={yForValue(twoBack[hoverIdx].value)} r={5} fill="#7c3aed" stroke="#fff" strokeWidth={2} />
             ) : null}
             {threeBack[hoverIdx] ? (
-              <circle cx={xForIndex(hoverIdx)} cy={yForValue(threeBack[hoverIdx].value)} r={5} fill="#6b7280" stroke="#fff" strokeWidth={2} />
+              <circle cx={xForIndex(hoverIdx)} cy={yForValue(threeBack[hoverIdx].value)} r={5} fill="#727272" stroke="#fff" strokeWidth={2} />
             ) : null}
             {bank[hoverIdx] ? (
               <circle cx={xForIndex(hoverIdx)} cy={yForValue(bank[hoverIdx].value)} r={5} fill="#dc2626" stroke="#fff" strokeWidth={2} />
@@ -1994,7 +1994,7 @@ function ProfitChart({
             transform: hoverPx.x > W - 190 ? "translateX(-100%)" : "none",
           }}
         >
-          <div style={{ fontSize: 11, fontWeight: 800, color: "#6b7280" }}>{current[hoverIdx].label}</div>
+          <div style={{ fontSize: 11, fontWeight: 800, color: "#727272" }}>{current[hoverIdx].label}</div>
           <div style={{ fontSize: 13, fontWeight: 800, color: "#16a34a", display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 999, background: "#16a34a" }} />
             {t("Net")}: {tooltipMoney(current[hoverIdx].value)}
@@ -2019,7 +2019,7 @@ function ProfitChart({
           ) : null}
           {threeBack[hoverIdx] ? (
             <div style={{ fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "#6b7280" }} />
+              <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "#727272" }} />
               {t("-3 Yrs")}: {tooltipMoney(threeBack[hoverIdx].value)}
             </div>
           ) : null}

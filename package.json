@@ -61,6 +61,7 @@
     "test:etsy-shipping-cost": "npx tsx scripts/check-etsy-shipping-cost.mts",
     "test:etsy-ui-1": "npx tsx scripts/check-etsy-ui-1.mts",
     "test:order-list-view": "npx tsx scripts/check-order-list-view.ts",
+    "test:mac-palette": "node scripts/check-mac-palette.mjs",
     "test:claude-mcp-route": "npx tsx scripts/check-claude-mcp-route.ts",
     "test:oauth-loopback": "node scripts/check-oauth-loopback-proxy.mts",
     "test:i18n-gaps": "npx tsx scripts/i18n-gap-report.ts --fail-on-placeholders",

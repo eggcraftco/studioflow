@@ -9,8 +9,8 @@ export default function ReviewDemoPage() {
   return (
     <main style={{
       minHeight: "100vh",
-      background: "linear-gradient(180deg, #f7f7f9 0%, #ececf1 100%)",
-      color: "#1d1d1f",
+      background: "linear-gradient(180deg, #f7f7f7 0%, #ececec 100%)",
+      color: "#1d1d1d",
       padding: "40px 18px",
       display: "flex",
       justifyContent: "center"
@@ -21,7 +21,7 @@ export default function ReviewDemoPage() {
         background: "rgba(255,255,255,0.96)",
         border: "1px solid rgba(0,0,0,0.08)",
         borderRadius: "28px",
-        boxShadow: "0 24px 80px rgba(15, 23, 42, 0.14)",
+        boxShadow: "0 24px 80px rgba(23, 23, 23, 0.14)",
         padding: "28px"
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "18px" }}>
@@ -34,7 +34,7 @@ export default function ReviewDemoPage() {
             <div style={{
               fontSize: "13px",
               fontWeight: 800,
-              color: "#6e6e73",
+              color: "#6e6e6e",
               letterSpacing: "0.5px",
               textTransform: "uppercase"
             }}>
@@ -47,7 +47,7 @@ export default function ReviewDemoPage() {
         </div>
 
         <p style={{
-          color: "#6e6e73",
+          color: "#6e6e6e",
           lineHeight: 1.6,
           marginTop: 0,
           maxWidth: "760px"
@@ -77,8 +77,8 @@ export default function ReviewDemoPage() {
           marginTop: "18px",
           padding: "16px",
           borderRadius: "16px",
-          background: "#f5f5f7",
-          color: "#424245",
+          background: "#f5f5f5",
+          color: "#424242",
           lineHeight: 1.55,
           fontSize: "14px"
         }}>

@@ -37,8 +37,8 @@ const card: React.CSSProperties = {
   background: "#fff",
   borderRadius: 20,
   padding: "30px 28px",
-  boxShadow: "0 24px 70px rgba(15, 23, 32, 0.14)",
-  color: "#171923",
+  boxShadow: "0 24px 70px rgba(22, 22, 22, 0.14)",
+  color: "#191919",
 };
 const muted: React.CSSProperties = { color: "#65706d", fontSize: 14, lineHeight: 1.5 };
 const buttonPrimary: React.CSSProperties = {
@@ -193,7 +193,7 @@ export default function ConnectShopifyPage() {
             {/* A Shopify merchant's plan is chosen and paid in Shopify (their
                 rule 1.2.1), so the next step is the NivaDesk app's Plans page
                 in their Shopify admin — never a checkout on this site. */}
-            <p style={{ ...muted, color: "#171923" }}>
+            <p style={{ ...muted, color: "#191919" }}>
               {done.endedWebsiteTrial && done.trialDays > 0
                 ? `Your free trial continues in Shopify: choose a plan in the NivaDesk app there, and your first ${done.trialDays} days are free.`
                 : done.trialDays > 0
@@ -283,7 +283,7 @@ export default function ConnectShopifyPage() {
                   border:
                     selected === workspace.id
                       ? "2px solid #214f4a"
-                      : "1px solid rgba(23, 25, 35, 0.14)",
+                      : "1px solid rgba(25, 25, 25, 0.14)",
                   cursor: workspace.isOwner ? "pointer" : "not-allowed",
                   opacity: workspace.isOwner ? 1 : 0.55,
                 }}

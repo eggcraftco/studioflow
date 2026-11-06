@@ -744,7 +744,7 @@ export default function MessagesPage() {
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               {unreadCount > 0 && <span className="badge-pill">{unreadCount}</span>}
               {canEditWorkspace && (
-                <button type="button" className="new-conv-btn" onClick={() => setSettingsDialogOpen(true)} title={t("Message settings")} style={{ background: "#6b7280" }}>⚙</button>
+                <button type="button" className="new-conv-btn" onClick={() => setSettingsDialogOpen(true)} title={t("Message settings")} style={{ background: "#727272" }}>⚙</button>
               )}
               {canCreateConversations && (workspaceSettings.directMessagesEnabled || workspaceSettings.groupConversationsEnabled) && (
                 <button type="button" className="new-conv-btn" onClick={() => setNewConvOpen(true)} title={t("New conversation")}>+</button>
@@ -846,14 +846,14 @@ export default function MessagesPage() {
                     <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder={t("Search messages…")} autoFocus style={{ flex: 1 }} />
                     {searchQuery.trim() && (() => {
                       const matches = items.filter((m) => !m.deletedForEveryone && m.text.toLowerCase().includes(searchQuery.trim().toLowerCase()));
-                      if (matches.length === 0) return <span style={{ fontSize: 12, color: "#9ca3af" }}>{t("No results")}</span>;
+                      if (matches.length === 0) return <span style={{ fontSize: 12, color: "#a2a2a2" }}>{t("No results")}</span>;
                       const goNext = () => { handleJumpToMessage(matches[matches.length - 1].id); };
                       const goPrev = () => { handleJumpToMessage(matches[0].id); };
                       return (
                         <>
-                          <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 700 }}>{t("Matches: {count}").replace("{count}", String(matches.length))}</span>
-                          <button type="button" onClick={goPrev} title={t("Oldest match")} style={{ background: "transparent", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 700 }}>↑</button>
-                          <button type="button" onClick={goNext} title={t("Latest match")} style={{ background: "transparent", border: "1px solid #e5e7eb", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 700 }}>↓</button>
+                          <span style={{ fontSize: 12, color: "#727272", fontWeight: 700 }}>{t("Matches: {count}").replace("{count}", String(matches.length))}</span>
+                          <button type="button" onClick={goPrev} title={t("Oldest match")} style={{ background: "transparent", border: "1px solid #e7e7e7", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 700 }}>↑</button>
+                          <button type="button" onClick={goNext} title={t("Latest match")} style={{ background: "transparent", border: "1px solid #e7e7e7", borderRadius: 6, padding: "2px 8px", cursor: "pointer", fontWeight: 700 }}>↓</button>
                         </>
                       );
                     })()}
@@ -1098,7 +1098,7 @@ function ConversationBody({
         <React.Fragment key={item.id}>
         {showDateSep && (
           <div style={{ display: "flex", justifyContent: "center", margin: "10px 0 4px" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#6b7280", background: "rgba(0,0,0,0.04)", padding: "3px 12px", borderRadius: 999 }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: "#727272", background: "rgba(0,0,0,0.04)", padding: "3px 12px", borderRadius: 999 }}>
               {formatDateSep(item.createdAtMillis)}
             </span>
           </div>
@@ -1375,10 +1375,10 @@ function LinkPreviewCard({ url }: { url: string }) {
       }}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={favicon} alt="" width={28} height={28} style={{ borderRadius: 6, background: "white", padding: 2, border: "1px solid #e5e7eb" }} />
+      <img src={favicon} alt="" width={28} height={28} style={{ borderRadius: 6, background: "white", padding: 2, border: "1px solid #e7e7e7" }} />
       <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)", lineHeight: 1.2 }}>{host}</span>
-        <span style={{ fontSize: 11, color: "#6b7280", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 280 }}>{url}</span>
+        <span style={{ fontSize: 11, color: "#727272", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 280 }}>{url}</span>
       </div>
     </a>
   );
@@ -1466,7 +1466,7 @@ function MessageBubble({
           <span className="bubble-sender" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             {item.senderPhotoURL ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.senderPhotoURL} alt="" width={20} height={20} style={{ borderRadius: "50%", objectFit: "cover", border: "1px solid #e5e7eb" }} />
+              <img src={item.senderPhotoURL} alt="" width={20} height={20} style={{ borderRadius: "50%", objectFit: "cover", border: "1px solid #e7e7e7" }} />
             ) : (
               <span style={{ width: 20, height: 20, borderRadius: "50%", background: `hsl(${hue}, 50%, 60%)`, color: "white", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800 }}>{initial}</span>
             )}
@@ -1523,7 +1523,7 @@ function MessageBubble({
               return (
                 <>
                   {parsed.forwardedFrom && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: "#6b7280", marginBottom: 4, fontStyle: "italic" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: "#727272", marginBottom: 4, fontStyle: "italic" }}>
                       <span>↪</span>
                       <span>{t("Forwarded from {name}").replace("{name}", parsed.forwardedFrom)}</span>
                     </div>
@@ -1543,7 +1543,7 @@ function MessageBubble({
           {formatTime(item.createdAtMillis)}
           {item.edited && !item.deletedForEveryone && <em> · {t("edited")}</em>}
           {isMine && totalReaderCount > 0 && (
-            <span title={t("Read by {count} of {total}").replace("{count}", String(readByCount)).replace("{total}", String(totalReaderCount))} style={{ marginLeft: 4, color: readByCount > 0 ? "#2D7BF4" : "#9ca3af", fontWeight: 700 }}>
+            <span title={t("Read by {count} of {total}").replace("{count}", String(readByCount)).replace("{total}", String(totalReaderCount))} style={{ marginLeft: 4, color: readByCount > 0 ? "#2D7BF4" : "#a2a2a2", fontWeight: 700 }}>
               {readByCount > 0 ? "✓✓" : "✓"}{readByCount > 0 && totalReaderCount > 1 ? ` ${readByCount}` : ""}
             </span>
           )}
@@ -1848,7 +1848,7 @@ function NewConversationDialog({
           </div>
         )}
         {groupMode && (
-          <input type="text" placeholder={t("Group title (optional)")} value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", marginBottom: 8, padding: 8, borderRadius: 6, border: "1px solid #d1d5db" }} />
+          <input type="text" placeholder={t("Group title (optional)")} value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: "100%", marginBottom: 8, padding: 8, borderRadius: 6, border: "1px solid #d5d5d5" }} />
         )}
         <div className="member-list">
           {teamMembers.map((m) => {
@@ -1894,7 +1894,7 @@ function NewConversationDialog({
               {t("Create")}
             </button>
           ) : (
-            <span style={{ color: "#6b7280", fontSize: 12 }}>{t("Select a person to start messaging.")}</span>
+            <span style={{ color: "#727272", fontSize: 12 }}>{t("Select a person to start messaging.")}</span>
           )}
         </div>
       </div>
@@ -1936,7 +1936,7 @@ function ThreadInfoDialog({
     <div className="dialog-backdrop" onClick={onClose}>
       <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
         <h3>{displayThreadTitle(thread, currentUid, teamMembers)}</h3>
-        <p style={{ color: "#6b7280", fontSize: 12, margin: 0 }}>{thread.memberUids.length} members</p>
+        <p style={{ color: "#727272", fontSize: 12, margin: 0 }}>{thread.memberUids.length} members</p>
         <div className="member-list" style={{ maxHeight: 240, marginTop: 12 }}>
           {thread.memberUids.map((uid) => {
             const m = teamMembers.find((x) => x.id === uid);
@@ -2020,7 +2020,7 @@ function RenameDialog({
     <div className="dialog-backdrop" onClick={onCancel}>
       <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
         <h3>{t("Rename group")}</h3>
-        <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #d1d5db" }} />
+        <input type="text" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #d5d5d5" }} />
         <div className="dialog-actions">
           <button type="button" onClick={onCancel}>{t("Cancel")}</button>
           <button type="button" className="primary" disabled={!title.trim()} onClick={() => onSave(title.trim())}>{t("Save")}</button>
@@ -2136,28 +2136,28 @@ function MessageSettingsDialog({
     <div className="dialog-backdrop" onClick={onCancel}>
       <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
         <h3>{t("Message settings (admin)")}</h3>
-        <p style={{ color: "#6b7280", fontSize: 12, margin: "4px 0 16px" }}>
+        <p style={{ color: "#727272", fontSize: 12, margin: "4px 0 16px" }}>
           {t("Control workspace-wide messaging permissions for the team.")}
         </p>
         <label className="setting-row">
           <input type="checkbox" checked={direct} onChange={(e) => setDirect(e.target.checked)} />
           <div>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{t("Allow Direct Messages")}</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>{t("Team members can start one-to-one conversations.")}</div>
+            <div style={{ fontSize: 11, color: "#727272" }}>{t("Team members can start one-to-one conversations.")}</div>
           </div>
         </label>
         <label className="setting-row">
           <input type="checkbox" checked={group} onChange={(e) => setGroup(e.target.checked)} />
           <div>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{t("Allow Group Conversations")}</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>{t("Team members can add people and create group chats.")}</div>
+            <div style={{ fontSize: 11, color: "#727272" }}>{t("Team members can add people and create group chats.")}</div>
           </div>
         </label>
         <label className="setting-row">
           <input type="checkbox" checked={attachments} onChange={(e) => setAttachments(e.target.checked)} />
           <div>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{t("Allow File & Image Sending")}</div>
-            <div style={{ fontSize: 11, color: "#6b7280" }}>{t("Team members can send images and files in Messages.")}</div>
+            <div style={{ fontSize: 11, color: "#727272" }}>{t("Team members can send images and files in Messages.")}</div>
           </div>
         </label>
         <div className="dialog-actions">
@@ -2291,7 +2291,7 @@ function MessagesStyles() {
       .thread-panel__header { display: flex; align-items: center; justify-content: space-between; padding: 16px; border-bottom: 1px solid var(--border); }
       .thread-panel__header h1 { margin: 0; font-size: 20px; font-weight: 800; color: var(--text); }
       .badge-pill { background: #ef4444; color: white; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
-      .thread-panel__empty { padding: 32px 16px; color: #6b7280; font-size: 13px; text-align: center; }
+      .thread-panel__empty { padding: 32px 16px; color: #727272; font-size: 13px; text-align: center; }
       .thread-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex: 1; }
       .thread-row { width: 100%; text-align: left; background: transparent; border: none; padding: 12px 14px; display: flex; gap: 10px; align-items: center; cursor: pointer; border-bottom: 1px solid var(--border); color: var(--text); }
       .thread-row:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
@@ -2300,16 +2300,16 @@ function MessagesStyles() {
       .thread-row__line { display: flex; align-items: center; gap: 6px; }
       .thread-row__title { flex: 1; font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .thread-row__title.unread { font-weight: 800; }
-      .thread-row__time { font-size: 11px; color: #6b7280; }
-      .thread-row__preview { flex: 1; font-size: 13px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .thread-row__time { font-size: 11px; color: #727272; }
+      .thread-row__preview { flex: 1; font-size: 13px; color: #727272; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .thread-row__preview.unread { color: var(--text); font-weight: 600; }
       .thread-row__dot { width: 8px; height: 8px; border-radius: 50%; background: #2563eb; }
       .avatar-circle { width: 40px; height: 40px; border-radius: 50%; background: rgba(37,99,235,0.15); color: #2563eb; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
       .conversation-panel { flex: 1; display: flex; flex-direction: column; background: var(--surface); color: var(--text); }
       .conversation-panel__header { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
       .conversation-panel__header h2 { margin: 0; font-size: 18px; font-weight: 800; color: var(--text); }
-      .conversation-panel__header p { margin: 2px 0 0; font-size: 12px; color: #6b7280; }
-      .conversation-panel__empty { flex: 1; display: flex; align-items: center; justify-content: center; color: #6b7280; }
+      .conversation-panel__header p { margin: 2px 0 0; font-size: 12px; color: #727272; }
+      .conversation-panel__empty { flex: 1; display: flex; align-items: center; justify-content: center; color: #727272; }
       .conversation-panel__body { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
       .conversation-error { background: #fee2e2; color: #991b1b; padding: 8px 16px; font-size: 12px; }
       .conversation-panel__footer { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
@@ -2320,27 +2320,27 @@ function MessagesStyles() {
       .reply-chip { display: flex; gap: 8px; align-items: center; background: rgba(37,99,235,0.08); padding: 6px 10px; border-radius: 8px; }
       .reply-chip__body { flex: 1; min-width: 0; }
       .reply-chip__title { font-size: 11px; font-weight: 700; color: #2563eb; }
-      .reply-chip__preview { font-size: 12px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .reply-chip__close { background: transparent; border: none; font-size: 20px; cursor: pointer; color: #6b7280; line-height: 1; }
+      .reply-chip__preview { font-size: 12px; color: #727272; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .reply-chip__close { background: transparent; border: none; font-size: 20px; cursor: pointer; color: #727272; line-height: 1; }
       .bubble-row { display: flex; flex-direction: column; }
       .bubble-row--left { align-items: flex-start; }
       .bubble-row--right { align-items: flex-end; }
-      .bubble-sender { font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 2px; padding-left: 4px; }
-      .bubble { position: relative; max-width: 65%; background: #f3f4f6; border-radius: 14px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+      .bubble-sender { font-size: 11px; font-weight: 600; color: #727272; margin-bottom: 2px; padding-left: 4px; }
+      .bubble { position: relative; max-width: 65%; background: #f4f4f4; border-radius: 14px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
       .bubble--mine { background: rgba(37,99,235,0.12); }
-      .bubble__text { font-size: 14px; color: #111827; white-space: pre-wrap; word-break: break-word; }
-      .bubble__deleted { color: #6b7280; font-size: 13px; }
+      .bubble__text { font-size: 14px; color: #181818; white-space: pre-wrap; word-break: break-word; }
+      .bubble__deleted { color: #727272; font-size: 13px; }
       .bubble__attachment img { max-width: 240px; max-height: 240px; border-radius: 8px; display: block; }
       .bubble__attachment a { font-size: 13px; font-weight: 600; color: #2563eb; text-decoration: none; }
-      .bubble__meta { font-size: 10px; color: #6b7280; }
-      .bubble__kebab { position: absolute; top: 4px; right: 4px; opacity: 0; background: rgba(255,255,255,0.85); border: none; border-radius: 4px; padding: 0 6px; cursor: pointer; color: #6b7280; line-height: 1.4; font-size: 16px; }
+      .bubble__meta { font-size: 10px; color: #727272; }
+      .bubble__kebab { position: absolute; top: 4px; right: 4px; opacity: 0; background: rgba(255,255,255,0.85); border: none; border-radius: 4px; padding: 0 6px; cursor: pointer; color: #727272; line-height: 1.4; font-size: 16px; }
       .bubble:hover .bubble__kebab { opacity: 1; }
       .bubble-menu { position: absolute; top: 28px; right: 4px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); display: flex; flex-direction: column; min-width: 160px; z-index: 10; }
       .bubble-menu button { background: transparent; border: none; text-align: left; padding: 8px 12px; font-size: 13px; cursor: pointer; }
-      .bubble-menu button:hover { background: #f3f4f6; }
+      .bubble-menu button:hover { background: #f4f4f4; }
       .reply-quote { background: rgba(0,0,0,0.04); border-left: 3px solid #2563eb; border-radius: 6px; padding: 4px 8px; }
       .reply-quote__sender { font-size: 11px; font-weight: 700; color: #2563eb; }
-      .reply-quote__preview { font-size: 12px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .reply-quote__preview { font-size: 12px; color: #727272; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .dialog-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
       .dialog-card { background: var(--surface); color: var(--text); border-radius: 14px; padding: 20px; min-width: 320px; max-width: 480px; }
       .dialog-card h3 { margin: 0 0 12px; font-size: 16px; font-weight: 800; }
@@ -2350,12 +2350,12 @@ function MessagesStyles() {
       .dialog-actions button.primary { background: #2563eb; color: white; border-color: #2563eb; }
       .dialog-actions button.danger { background: #dc2626; color: white; border-color: #dc2626; }
       .dialog-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
-      .pinned-bar { padding: 8px 16px; background: rgba(37,99,235,0.06); border-bottom: 1px solid #e5e7eb; display: flex; gap: 12px; align-items: center; overflow-x: auto; }
+      .pinned-bar { padding: 8px 16px; background: rgba(37,99,235,0.06); border-bottom: 1px solid #e7e7e7; display: flex; gap: 12px; align-items: center; overflow-x: auto; }
       .pinned-bar__title { font-size: 11px; font-weight: 700; color: #2563eb; flex-shrink: 0; }
       .pinned-bar__list { display: flex; gap: 6px; }
-      .pinned-chip { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 4px 8px; cursor: pointer; text-align: left; display: flex; flex-direction: column; max-width: 200px; }
+      .pinned-chip { background: white; border: 1px solid #e7e7e7; border-radius: 8px; padding: 4px 8px; cursor: pointer; text-align: left; display: flex; flex-direction: column; max-width: 200px; }
       .pinned-chip__sender { font-size: 10px; font-weight: 700; color: #2563eb; }
-      .pinned-chip__text { font-size: 11px; color: #111827; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .pinned-chip__text { font-size: 11px; color: #181818; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .bubble--highlight { animation: highlight 1.5s ease-out; }
       @keyframes highlight {
         0% { background: rgba(250,204,21,0.6); }
@@ -2364,49 +2364,49 @@ function MessagesStyles() {
       .reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
       .reaction-pill { display: inline-flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.06); border: none; border-radius: 12px; padding: 2px 8px; cursor: pointer; font-size: 12px; }
       .reaction-pill--mine { background: rgba(37,99,235,0.18); border: 1px solid #2563eb; }
-      .reaction-pill__count { font-size: 11px; color: #374151; }
-      .reaction-picker { position: absolute; top: 28px; right: 4px; background: white; border: 1px solid #e5e7eb; border-radius: 999px; padding: 4px 8px; display: flex; gap: 4px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); z-index: 11; }
+      .reaction-pill__count { font-size: 11px; color: #404040; }
+      .reaction-picker { position: absolute; top: 28px; right: 4px; background: white; border: 1px solid #e7e7e7; border-radius: 999px; padding: 4px 8px; display: flex; gap: 4px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); z-index: 11; }
       .reaction-picker button { background: transparent; border: none; cursor: pointer; font-size: 20px; padding: 4px; }
       .bubble__pin { margin-right: 4px; }
-      .composer__attach { background: transparent; border: 1px solid #d1d5db; border-radius: 10px; width: 40px; height: 40px; cursor: pointer; font-size: 18px; }
+      .composer__attach { background: transparent; border: 1px solid #d5d5d5; border-radius: 10px; width: 40px; height: 40px; cursor: pointer; font-size: 18px; }
       .composer__attach:disabled { opacity: 0.45; cursor: not-allowed; }
       .mention-picker { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 4px; box-shadow: 0 6px 24px rgba(0,0,0,0.08); display: flex; flex-direction: column; }
       .mention-picker button { display: flex; align-items: center; gap: 8px; background: transparent; border: none; padding: 6px 10px; cursor: pointer; text-align: left; border-radius: 6px; }
-      .mention-picker button:hover { background: #f3f4f6; }
+      .mention-picker button:hover { background: #f4f4f4; }
       .mention-picker__avatar { width: 24px; height: 24px; border-radius: 50%; background: rgba(37,99,235,0.15); color: #2563eb; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; }
       .mention-picker__name { font-size: 13px; font-weight: 600; }
-      .mention-picker__email { font-size: 11px; color: #6b7280; }
+      .mention-picker__email { font-size: 11px; color: #727272; }
       .new-conv-btn { width: 28px; height: 28px; border-radius: 50%; border: none; background: #2563eb; color: white; font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; }
       .header-actions { display: flex; gap: 4px; align-items: center; }
       .header-icon-btn { background: transparent; border: 1px solid transparent; border-radius: 8px; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text); }
-      .header-icon-btn:hover { background: #f3f4f6; }
+      .header-icon-btn:hover { background: #f4f4f4; }
       .header-icon-btn.active { background: rgba(37,99,235,0.12); border-color: rgba(37,99,235,0.3); color: #2563eb; }
       .header-menu { position: absolute; top: 36px; right: 0; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); display: flex; flex-direction: column; min-width: 200px; z-index: 20; }
       .header-menu button { background: transparent; border: none; text-align: left; padding: 8px 14px; font-size: 13px; cursor: pointer; }
-      .header-menu button:hover { background: #f3f4f6; }
+      .header-menu button:hover { background: #f4f4f4; }
       .search-bar { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
       .search-bar input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--panel); color: var(--text); }
       .filter-chips { display: flex; gap: 6px; }
-      .filter-chip { background: #f3f4f6; border: 1px solid transparent; border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+      .filter-chip { background: #f4f4f4; border: 1px solid transparent; border-radius: 999px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
       .filter-chip.active { background: rgba(37,99,235,0.12); border-color: #2563eb; color: #2563eb; font-weight: 600; }
-      .typing-indicator { padding: 4px 20px; font-size: 12px; color: #6b7280; font-style: italic; }
+      .typing-indicator { padding: 4px 20px; font-size: 12px; color: #727272; font-style: italic; }
       .archived-header { padding: 0; }
-      .archived-header button { width: 100%; background: transparent; border: none; padding: 8px 14px; text-align: left; font-size: 11px; font-weight: 700; color: #6b7280; cursor: pointer; }
-      .archived-header button:hover { background: #f9fafb; }
+      .archived-header button { width: 100%; background: transparent; border: none; padding: 8px 14px; text-align: left; font-size: 11px; font-weight: 700; color: #727272; cursor: pointer; }
+      .archived-header button:hover { background: #fafafa; }
       .thread-row__menu { position: absolute; top: 36px; right: 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 24px rgba(0,0,0,0.12); z-index: 10; }
       .thread-row__menu button { background: transparent; border: none; padding: 8px 14px; cursor: pointer; font-size: 13px; }
-      .thread-row__menu button:hover { background: #f3f4f6; }
+      .thread-row__menu button:hover { background: #f4f4f4; }
       .dialog-card--wide { min-width: 420px; max-width: 540px; }
       .dialog-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
-      .dialog-tabs button { background: #f3f4f6; border: none; border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+      .dialog-tabs button { background: #f4f4f4; border: none; border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
       .dialog-tabs button.active { background: rgba(37,99,235,0.12); color: #2563eb; font-weight: 600; }
       .member-list { max-height: 360px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; margin: 8px 0; }
       .member-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: transparent; border: none; border-radius: 6px; text-align: left; cursor: pointer; width: 100%; }
-      .member-row:hover { background: #f3f4f6; }
+      .member-row:hover { background: #f4f4f4; }
       .member-row.selected { background: rgba(37,99,235,0.08); }
       .member-row__avatar { width: 28px; height: 28px; border-radius: 50%; background: rgba(37,99,235,0.15); color: #2563eb; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
       .member-row__body { flex: 1; display: flex; flex-direction: column; }
-      .member-row__body small { font-size: 11px; color: #6b7280; }
+      .member-row__body small { font-size: 11px; color: #727272; }
       .setting-row { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; cursor: pointer; }
       .setting-row input[type="checkbox"] { width: 18px; height: 18px; margin-top: 2px; cursor: pointer; }
       @media (max-width: 768px) {

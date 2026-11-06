@@ -636,7 +636,7 @@ export default function NotesPage() {
         {isPhone && (
           <button
             onClick={() => setDrawerOpen(true)}
-            style={{ position: "absolute", top: 8, insetInlineStart: 8, zIndex: 50, background: "white", border: "1px solid #e5e7eb", borderRadius: 10, width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 18 }}
+            style={{ position: "absolute", top: 8, insetInlineStart: 8, zIndex: 50, background: "white", border: "1px solid #e7e7e7", borderRadius: 10, width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 18 }}
           >
             ☰
           </button>
@@ -666,7 +666,7 @@ export default function NotesPage() {
           <SideItem icon="docMagnifier" label={t("Project Notes")} active={topTab === "project"} onClick={() => { setTopTab("project"); if (isPhone) setDrawerOpen(false); }} />
           {allLabels.length > 0 && (
             <>
-              <div style={{ fontSize: 10, fontWeight: 800, color: "#9ca3af", padding: "10px 14px 4px" }}>{t("LABELS")}</div>
+              <div style={{ fontSize: 10, fontWeight: 800, color: "#a2a2a2", padding: "10px 14px 4px" }}>{t("LABELS")}</div>
               {allLabels.map((l) => (
                 <div key={l} style={{ position: "relative" }} className="notes-label-row">
                   <SideItem icon="tag" label={l} count={counts.labels[l] || 0} active={labelFilter === l} onClick={() => { setTopTab("personal"); setSection("notes"); setLabelFilter(l); if (isPhone) setDrawerOpen(false); }} />
@@ -687,23 +687,23 @@ export default function NotesPage() {
         {/* Selection action bar */}
         {selectedIds.size > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 12, padding: "10px 14px", marginBottom: 12 }}>
-            <button onClick={clearSelection} title={t("Cancel")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, fontWeight: 800, color: "#374151" }}>✕</button>
-            <span style={{ fontWeight: 700, color: "#374151" }}>{t("{count} selected").replace("{count}", String(selectedIds.size))}</span>
+            <button onClick={clearSelection} title={t("Cancel")} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, fontWeight: 800, color: "#404040" }}>✕</button>
+            <span style={{ fontWeight: 700, color: "#404040" }}>{t("{count} selected").replace("{count}", String(selectedIds.size))}</span>
             <div style={{ flex: 1 }} />
             {section === "trash" ? (
               <>
-                <button onClick={bulkRestoreFromTrash} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Restore to Notes")}</button>
-                <button onClick={bulkDeleteForever} style={{ background: "white", border: "1px solid #e5e7eb", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Delete forever")}</button>
+                <button onClick={bulkRestoreFromTrash} style={{ background: "white", border: "1px solid #e7e7e7", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Restore to Notes")}</button>
+                <button onClick={bulkDeleteForever} style={{ background: "white", border: "1px solid #e7e7e7", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Delete forever")}</button>
               </>
             ) : section === "archive" ? (
               <>
-                <button onClick={bulkUnarchive} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Unarchive")}</button>
-                <button onClick={bulkTrash} style={{ background: "white", border: "1px solid #e5e7eb", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Move to trash")}</button>
+                <button onClick={bulkUnarchive} style={{ background: "white", border: "1px solid #e7e7e7", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Unarchive")}</button>
+                <button onClick={bulkTrash} style={{ background: "white", border: "1px solid #e7e7e7", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Move to trash")}</button>
               </>
             ) : (
               <>
-                <button onClick={bulkArchive} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Archive")}</button>
-                <button onClick={bulkTrash} style={{ background: "white", border: "1px solid #e5e7eb", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Move to trash")}</button>
+                <button onClick={bulkArchive} style={{ background: "white", border: "1px solid #e7e7e7", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Archive")}</button>
+                <button onClick={bulkTrash} style={{ background: "white", border: "1px solid #e7e7e7", color: "#dc2626", borderRadius: 8, padding: "6px 14px", fontWeight: 700, cursor: "pointer" }}>{t("Move to trash")}</button>
               </>
             )}
           </div>
@@ -713,7 +713,7 @@ export default function NotesPage() {
         <div style={{ display: "flex", alignItems: "center", marginBottom: 16, paddingInlineStart: isPhone ? 56 : 0 }}>
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: isPhone ? 21 : 28, fontWeight: 800, margin: 0 }}>{topTab === "project" ? t("Project Notes") : (labelFilter ? `#${labelFilter}` : (section === "notes" ? t("Notes") : section === "reminders" ? t("Reminders") : section === "archive" ? t("Archive") : t("Trash")))}</h1>
-            <div style={{ fontSize: 13, color: "#6b7280" }}>{studioCountLabel(topTab === "project" ? projectNoteCount : visible.length, "note", language)}</div>
+            <div style={{ fontSize: 13, color: "#727272" }}>{studioCountLabel(topTab === "project" ? projectNoteCount : visible.length, "note", language)}</div>
           </div>
           <button
             onClick={() =>
@@ -759,7 +759,7 @@ export default function NotesPage() {
                   <button
                     key={l}
                     onClick={() => setLabelFilter(labelFilter === l ? null : l)}
-                    style={{ padding: "4px 12px", borderRadius: 999, border: "1px solid #e5e7eb", background: labelFilter === l ? "#2D7BF4" : "white", color: labelFilter === l ? "white" : "#374151", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
+                    style={{ padding: "4px 12px", borderRadius: 999, border: "1px solid #e7e7e7", background: labelFilter === l ? "#2D7BF4" : "white", color: labelFilter === l ? "white" : "#404040", fontSize: 11, fontWeight: 700, cursor: "pointer" }}
                   >
                     {l}
                   </button>
@@ -791,7 +791,7 @@ export default function NotesPage() {
               style={{
                 width: "100%",
                 padding: "10px 14px",
-                border: "1px solid #e5e7eb",
+                border: "1px solid #e7e7e7",
                 borderRadius: 10,
                 fontSize: 14,
                 marginBottom: 14,
@@ -806,12 +806,12 @@ export default function NotesPage() {
                   {invites.map((invite) => (
                     <div key={invite.inviteId} data-invite-id={invite.inviteId} style={{ background: "var(--surface)", border: "1px solid #93c5fd", borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
                       <div style={{ fontWeight: 800, fontSize: 15, overflowWrap: "anywhere" }}>{invite.title || t("Untitled note")}</div>
-                      <div style={{ fontSize: 12, color: "#6b7280" }}>{invite.sourceName || t("A teammate")} {t("invited you to collaborate on this note.")}</div>
+                      <div style={{ fontSize: 12, color: "#727272" }}>{invite.sourceName || t("A teammate")} {t("invited you to collaborate on this note.")}</div>
                       {(() => {
                         // Two people can share a name: the inviter's e-mail (members map first) tells them apart.
                         const from = members.find((member) => member.uid === invite.sourceUserId);
                         const identity = from ? noteMemberIdentity(from) : invite.sourceEmail;
-                        return identity ? <div data-invite-from={invite.sourceUserId} style={{ fontSize: 11, color: "#6b7280", overflowWrap: "anywhere" }}>{identity}</div> : null;
+                        return identity ? <div data-invite-from={invite.sourceUserId} style={{ fontSize: 11, color: "#727272", overflowWrap: "anywhere" }}>{identity}</div> : null;
                       })()}
                       {invite.preview.trim() && (
                         <div style={{ fontSize: 13, whiteSpace: "pre-wrap", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{notePreviewText(invite.preview, 240)}</div>
@@ -852,7 +852,7 @@ export default function NotesPage() {
                       {d.note.text.trim() && (
                         <div style={{ fontSize: 13, whiteSpace: "pre-wrap", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{notePreviewText(d.note.text, 400)}</div>
                       )}
-                      <div style={{ fontSize: 11, color: "#6b7280" }}>{new Date(d.savedAtMillis).toLocaleString()}</div>
+                      <div style={{ fontSize: 11, color: "#727272" }}>{new Date(d.savedAtMillis).toLocaleString()}</div>
                     </div>
                   ))}
                 </div>
@@ -869,7 +869,7 @@ export default function NotesPage() {
             {pinned.length > 0 && others.length > 0 && <SectionHeader title={t("OTHERS")} />}
             <NotesGrid notes={others} isReadOnly={readOnlyNote} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} avatarsFor={avatarsFor} />
             {visible.length === 0 && !(section === "reminders" && orderAlerts.length > 0) && (
-              <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>
+              <div style={{ textAlign: "center", padding: 60, color: "#727272" }}>
                 {search.trim()
                   ? t("No notes match your search.")
                   : section === "trash"
@@ -891,14 +891,14 @@ export default function NotesPage() {
                     <div
                       key={`${alert.orderId}-${index}`}
                       onClick={() => router.push(`/orders/${alert.orderId}`)}
-                      style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1px solid #e5e7eb", borderRadius: 12, padding: "10px 14px", cursor: "pointer" }}
+                      style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1px solid #e7e7e7", borderRadius: 12, padding: "10px 14px", cursor: "pointer" }}
                     >
                       <span style={{ fontSize: 15 }}>⏰</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{alert.title}</div>
                         <div style={{ fontSize: 11, color: "#2D7BF4", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⛓ {alert.orderLabel}</div>
                       </div>
-                      <div style={{ fontSize: 12, fontWeight: alert.dueMs < Date.now() ? 800 : 400, color: alert.dueMs < Date.now() ? "#dc2626" : "#6b7280", whiteSpace: "nowrap" }}>
+                      <div style={{ fontSize: 12, fontWeight: alert.dueMs < Date.now() ? 800 : 400, color: alert.dueMs < Date.now() ? "#dc2626" : "#727272", whiteSpace: "nowrap" }}>
                         {new Date(alert.dueMs).toLocaleDateString()}
                       </div>
                     </div>
@@ -957,7 +957,7 @@ function SideItem({ icon, label, active, onClick, count }: { icon: "lightbulb" |
         fontSize: 14,
         fontWeight: active ? 700 : 500,
         // Theme token: #374151 on the dark page was near-invisible (9 Oct).
-        color: active ? "#374151" : "var(--text)",
+        color: active ? "#404040" : "var(--text)",
         cursor: "pointer",
         textAlign: "left",
         marginBottom: 2,
@@ -968,7 +968,7 @@ function SideItem({ icon, label, active, onClick, count }: { icon: "lightbulb" |
       <SideIcon name={icon} />
       <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
       {count != null && count > 0 && (
-        <span style={{ fontSize: 11, fontWeight: 700, color: active ? "#92400e" : "#6b7280", background: active ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.05)", padding: "1px 8px", borderRadius: 999, minWidth: 20, textAlign: "center" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: active ? "#92400e" : "#727272", background: active ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.05)", padding: "1px 8px", borderRadius: 999, minWidth: 20, textAlign: "center" }}>
           {count}
         </span>
       )}
@@ -1091,7 +1091,7 @@ function IconBtn({ title, onClick, children }: { title: string; onClick: (e: Rea
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          color: "#374151",
+          color: "#404040",
         }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
@@ -1105,7 +1105,7 @@ function IconBtn({ title, onClick, children }: { title: string; onClick: (e: Rea
             bottom: "calc(100% + 6px)",
             left: "50%",
             transform: "translateX(-50%)",
-            background: "rgba(17, 24, 39, 0.94)",
+            background: "rgba(24, 24, 24, 0.94)",
             color: "white",
             fontSize: 11,
             fontWeight: 700,
@@ -1195,7 +1195,7 @@ function notesIsDark(): boolean {
 // editor). #6b7280 reads 4.8:1 on white but only ~3.4:1 on the dark panels,
 // under WCAG AA's 4.5:1; #9ca3af is ~6:1 there.
 function notesSectionHeadingColor(): string {
-  return notesIsDark() ? "#9ca3af" : "#6b7280";
+  return notesIsDark() ? "#a2a2a2" : "#727272";
 }
 
 /**
@@ -1386,7 +1386,7 @@ function NoteCard({
         position: "relative",
         background: colorForNote(note.colorName),
         borderRadius: 14,
-        border: isOver || isSelected ? "2px solid #2D7BF4" : `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "#e5e7eb"}`,
+        border: isOver || isSelected ? "2px solid #2D7BF4" : `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "#e7e7e7"}`,
         padding: 14,
         cursor: canDrag && !note.isPinned ? "grab" : "pointer",
         display: "flex",
@@ -1411,7 +1411,7 @@ function NoteCard({
             width: 24,
             height: 24,
             borderRadius: "50%",
-            background: isSelected ? "#2D7BF4" : "#111827",
+            background: isSelected ? "#2D7BF4" : "#181818",
             color: "white",
             border: "2px solid white",
             fontSize: 13,
@@ -1435,7 +1435,7 @@ function NoteCard({
         )}
         {!note.title && <div style={{ flex: 1 }} />}
         {(!isPhone || note.isPinned) && (
-          <span style={{ color: note.isPinned ? "#2D7BF4" : (isDark ? "#cbd5e1" : "#374151") }}>
+          <span style={{ color: note.isPinned ? "#2D7BF4" : (isDark ? "#d4d4d4" : "#404040") }}>
             <IconBtn
               title={note.isPinned ? t("Unpin") : t("Pin")}
               onClick={(e) => { e.stopPropagation(); onSave({ ...note, isPinned: !note.isPinned }); }}
@@ -1488,14 +1488,14 @@ function NoteCard({
       {note.labels.length > 0 && (
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
           {note.labels.map((l) => (
-            <span key={l} style={{ fontSize: 10, fontWeight: 700, background: isDark ? "rgba(255,255,255,0.1)" : "#f3f4f6", padding: "2px 8px", borderRadius: 999 }}>
+            <span key={l} style={{ fontSize: 10, fontWeight: 700, background: isDark ? "rgba(255,255,255,0.1)" : "#f4f4f4", padding: "2px 8px", borderRadius: 999 }}>
               {l}
             </span>
           ))}
         </div>
       )}
       {note.reminderDateMillis && (
-        <div style={{ fontSize: 11, color: note.reminderDateMillis < Date.now() ? "#dc2626" : "#6b7280", fontWeight: note.reminderDateMillis < Date.now() ? 800 : 400 }}>
+        <div style={{ fontSize: 11, color: note.reminderDateMillis < Date.now() ? "#dc2626" : "#727272", fontWeight: note.reminderDateMillis < Date.now() ? 800 : 400 }}>
           ⏰ {new Date(note.reminderDateMillis).toLocaleDateString()}
         </div>
       )}
@@ -1507,10 +1507,10 @@ function NoteCard({
         <div style={{ fontSize: 11, color: "#0e7a55", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>◉ {note.linkedCustomerName}</div>
       )}
       {note.visibility === "workspace" && (
-        <div style={{ fontSize: 10, color: "#6b7280", fontWeight: 700 }}>{"\u2302"} {t("Workspace")}</div>
+        <div style={{ fontSize: 10, color: "#727272", fontWeight: 700 }}>{"\u2302"} {t("Workspace")}</div>
       )}
       {readOnly && (
-        <div data-testid="note-card-read-only" style={{ fontSize: 10, color: "#6b7280", fontWeight: 800 }}>{t("Read only")}</div>
+        <div data-testid="note-card-read-only" style={{ fontSize: 10, color: "#727272", fontWeight: 800 }}>{t("Read only")}</div>
       )}
       {/* Bottom action row — Mac parity (not rendered at all on phones) */}
       <div
@@ -1532,13 +1532,13 @@ function NoteCard({
             <Icon name="palette" />
           </IconBtn>
           {colorOpen && (
-            <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: 32, left: 0, background: "white", border: "1px solid #e5e7eb", borderRadius: 10, padding: 6, display: "flex", gap: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 10 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: 32, left: 0, background: "white", border: "1px solid #e7e7e7", borderRadius: 10, padding: 6, display: "flex", gap: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 10 }}>
               {NOTE_COLORS.map((c) => (
                 <button
                   key={c}
                   onClick={() => { onSave({ ...note, colorName: c }); setColorOpen(false); }}
                   title={c}
-                  style={{ width: 22, height: 22, borderRadius: "50%", background: colorForNote(c), border: note.colorName === c ? "2px solid #2D7BF4" : "1px solid #e5e7eb", cursor: "pointer" }}
+                  style={{ width: 22, height: 22, borderRadius: "50%", background: colorForNote(c), border: note.colorName === c ? "2px solid #2D7BF4" : "1px solid #e7e7e7", cursor: "pointer" }}
                 />
               ))}
             </div>
@@ -1552,7 +1552,7 @@ function NoteCard({
             <Icon name="bell" />
           </IconBtn>
           {reminderOpen && (
-            <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: 32, left: 0, background: "white", border: "1px solid #e5e7eb", borderRadius: 10, padding: 8, display: "flex", flexDirection: "column", gap: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 10, minWidth: 160 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: 32, left: 0, background: "white", border: "1px solid #e7e7e7", borderRadius: 10, padding: 8, display: "flex", flexDirection: "column", gap: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 10, minWidth: 160 }}>
               <button onClick={() => { onSave({ ...note, reminderDateMillis: Date.now() + 24 * 60 * 60 * 1000 }); setReminderOpen(false); }} style={menuItemStyle}>{t("Tomorrow")}</button>
               <button onClick={() => { onSave({ ...note, reminderDateMillis: Date.now() + 7 * 24 * 60 * 60 * 1000 }); setReminderOpen(false); }} style={menuItemStyle}>{t("Next week")}</button>
               <input
@@ -1565,7 +1565,7 @@ function NoteCard({
                   onSave({ ...note, reminderDateMillis: picked.getTime() });
                   setReminderOpen(false);
                 }}
-                style={{ padding: 4, border: "1px solid #e5e7eb", borderRadius: 6, fontSize: 12 }}
+                style={{ padding: 4, border: "1px solid #e7e7e7", borderRadius: 6, fontSize: 12 }}
               />
               {note.reminderDateMillis && (
                 <button onClick={() => { onSave({ ...note, reminderDateMillis: null }); setReminderOpen(false); }} style={{ ...menuItemStyle, color: "#dc2626" }}>{t("Remove reminder")}</button>
@@ -1589,13 +1589,13 @@ function NoteCard({
             <Icon name="ellipsis" />
           </IconBtn>
           {menuOpen && (
-            <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: 32, right: 0, background: "white", border: "1px solid #e5e7eb", borderRadius: 10, padding: 4, display: "flex", flexDirection: "column", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 10, minWidth: 200 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: 32, right: 0, background: "white", border: "1px solid #e7e7e7", borderRadius: 10, padding: 4, display: "flex", flexDirection: "column", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 10, minWidth: 200 }}>
               <button onClick={() => { onDuplicate(note); setMenuOpen(false); }} style={menuItemStyle}>{t("Duplicate note")}</button>
               <button onClick={() => { onCopy(note); setMenuOpen(false); }} style={menuItemStyle}>{t("Copy note")}</button>
               {allLabels.length > 0 && (
                 <>
-                  <div style={{ borderTop: "1px solid #f3f4f6", margin: "4px 0" }} />
-                  <div style={{ fontSize: 10, fontWeight: 800, color: "#9ca3af", padding: "4px 10px" }}>{t("LABELS")}</div>
+                  <div style={{ borderTop: "1px solid #f4f4f4", margin: "4px 0" }} />
+                  <div style={{ fontSize: 10, fontWeight: 800, color: "#a2a2a2", padding: "4px 10px" }}>{t("LABELS")}</div>
                   {allLabels.map((l) => (
                     <button key={l} onClick={() => { onToggleLabel(note, l); }} style={menuItemStyle}>
                       {note.labels.includes(l) ? "✓ " : ""}{l}
@@ -1603,7 +1603,7 @@ function NoteCard({
                   ))}
                 </>
               )}
-              <div style={{ borderTop: "1px solid #f3f4f6", margin: "4px 0" }} />
+              <div style={{ borderTop: "1px solid #f4f4f4", margin: "4px 0" }} />
               {note.isDeleted ? (
                 <>
                   <button onClick={() => { onSave({ ...note, isDeleted: false }); setMenuOpen(false); }} style={menuItemStyle}>{t("Restore note")}</button>
@@ -2016,7 +2016,7 @@ function NoteEditor({
           return (
             <div data-testid="note-shared-by" style={{ fontSize: 12, color: "var(--text)", background: "rgba(45,123,244,0.06)", border: "1px solid rgba(45,123,244,0.25)", borderRadius: 10, padding: "8px 10px", marginBottom: 14 }}>
               <div style={{ fontWeight: 700 }}>{t("Shared with you by")} {ownerLabel}{owner ? ` · ${noteMemberIdentity(owner)}` : ""}</div>
-              <div style={{ color: "#6b7280", marginTop: 2 }}>{t("Only the owner sets the type and who sees this note.")}</div>
+              <div style={{ color: "#727272", marginTop: 2 }}>{t("Only the owner sets the type and who sees this note.")}</div>
             </div>
           );
         })()}
@@ -2091,7 +2091,7 @@ function NoteEditor({
               </button>
             ))}
             {visibility === "workspace" && (
-              <span style={{ fontSize: 11, color: "#6b7280" }}>{t("Every member gets an invite to this same note — one record, not copies.")}</span>
+              <span style={{ fontSize: 11, color: "#727272" }}>{t("Every member gets an invite to this same note — one record, not copies.")}</span>
             )}
           </div>
           {visibility === "only_me" && (noteCollaboratorUids(liveNote ?? note, members).length > 0 || ((liveNote ?? note).pendingCollaboratorUserIds ?? []).length > 0) && (
@@ -2152,7 +2152,7 @@ function NoteEditor({
         </div>
         </>)}
         {readOnly && (liveNote ?? note).reminderDateMillis != null && (
-          <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 14 }}>{t("Reminder")}: {new Date((liveNote ?? note).reminderDateMillis as number).toLocaleDateString()}</div>
+          <div style={{ fontSize: 12, color: "#727272", marginBottom: 14 }}>{t("Reminder")}: {new Date((liveNote ?? note).reminderDateMillis as number).toLocaleDateString()}</div>
         )}
 
         {(!readOnly || shownLinks.length > 0) && (
@@ -2193,7 +2193,7 @@ function NoteEditor({
             </span>
           )}
           {!upload && !readOnly && links.length > 0 && (
-            <span style={{ marginInlineStart: 10, fontSize: 11, color: "#6b7280" }}>
+            <span style={{ marginInlineStart: 10, fontSize: 11, color: "#727272" }}>
               {links.length} {t("attachment(s)")}
             </span>
           )}
@@ -2232,7 +2232,7 @@ function NoteEditor({
         {labels.length > 0 && (
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 14 }}>
             {labels.map((l) => (
-              <span key={l} style={{ fontSize: 11, background: "#f3f4f6", padding: "4px 10px", borderRadius: 999, cursor: "pointer" }} onClick={() => setLabels(labels.filter((x) => x !== l))}>
+              <span key={l} style={{ fontSize: 11, background: "#f4f4f4", padding: "4px 10px", borderRadius: 999, cursor: "pointer" }} onClick={() => setLabels(labels.filter((x) => x !== l))}>
                 {l} ×
               </span>
             ))}
@@ -2258,7 +2258,7 @@ function NoteEditor({
             <div key={key} data-collaborator={key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 10, marginBottom: 6 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</div>
-                {sub && <div style={{ fontSize: 11, color: "#6b7280" }}>{sub}</div>}
+                {sub && <div style={{ fontSize: 11, color: "#727272" }}>{sub}</div>}
               </div>
               {action && <button onClick={action.run} style={{ padding: "4px 10px", border: "1px solid var(--border)", background: "var(--surface)", borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>{action.label}</button>}
             </div>
@@ -2282,7 +2282,7 @@ function NoteEditor({
                 iOwnIt ? { label: t("Remove"), run: () => void onRemovePerson(live.id, "", email, false) } : undefined))}
               {iOwnIt ? (
                 <>
-                  <div style={{ fontSize: 12, color: "#6b7280", margin: "6px 0" }}>{t("Add people from your workspace")}</div>
+                  <div style={{ fontSize: 12, color: "#727272", margin: "6px 0" }}>{t("Add people from your workspace")}</div>
                   <input
                     type="search"
                     value={memberSearch}
@@ -2291,7 +2291,7 @@ function NoteEditor({
                     style={{ width: "100%", boxSizing: "border-box", padding: "6px 10px", border: "1px solid var(--border)", borderRadius: 6, marginBottom: 6 }}
                   />
                   {candidates.length === 0 ? (
-                    <div style={{ fontSize: 12, color: "#6b7280" }}>{t("No other members to add.")}</div>
+                    <div style={{ fontSize: 12, color: "#727272" }}>{t("No other members to add.")}</div>
                   ) : (
                     <div style={{ maxHeight: 180, overflowY: "auto" }}>
                       {candidates.map((member) => chip(`pick-${member.uid}`, noteMemberLabel(member), [member.isOwner ? t("Owner") : roleLabel(member.role) === "Unknown" ? "" : t(roleLabel(member.role)), noteMemberIdentity(member)].filter(Boolean).join(" · "), {
@@ -2316,7 +2316,7 @@ function NoteEditor({
                   )}
                 </>
               ) : (
-                <div style={{ fontSize: 11, color: "#6b7280" }}>{t("Only the note's owner can add or remove people.")}</div>
+                <div style={{ fontSize: 11, color: "#727272" }}>{t("Only the note's owner can add or remove people.")}</div>
               )}
             </div>
           );
@@ -2332,7 +2332,7 @@ function NoteEditor({
             <div style={{ fontSize: 13, fontWeight: 700, color: "#9a3412", marginBottom: 8 }}>
               {t("This note was changed on another device while you were editing. Which version do you want to keep?")}
             </div>
-            <div style={{ fontSize: 12, color: "#374151", whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 120, overflow: "auto", background: "var(--surface)", border: "1px solid #fed7aa", borderRadius: 8, padding: 8, marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: "#404040", whiteSpace: "pre-wrap", overflowWrap: "anywhere", maxHeight: 120, overflow: "auto", background: "var(--surface)", border: "1px solid #fed7aa", borderRadius: 8, padding: 8, marginBottom: 10 }}>
               {conflict.title ? `${conflict.title}\n` : ""}{notePreviewText(conflict.text, 600)}
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -2383,18 +2383,18 @@ function ProjectNotesView({
   const t = (text: string) => studioT(text, language);
 
   if (groups.length === 0) {
-    return <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>{t("No project notes yet.")}</div>;
+    return <div style={{ textAlign: "center", padding: 60, color: "#727272" }}>{t("No project notes yet.")}</div>;
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {groups.map(({ order, entries }) => (
-        <div key={order.id} style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 14, padding: 14 }}>
+        <div key={order.id} style={{ background: "white", border: "1px solid #e7e7e7", borderRadius: 14, padding: 14 }}>
           <div style={{ fontWeight: 800, fontSize: 16 }}>
             {order.designName?.trim() || order.customerName || t("Project")}
           </div>
           {order.customerName && (
-            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 8 }}>{order.customerName}</div>
+            <div style={{ fontSize: 12, color: "#727272", marginBottom: 8 }}>{order.customerName}</div>
           )}
           {entries.map((e, i) =>
             e.orderNote ? (
@@ -2480,7 +2480,7 @@ function OrderNoteEntry({
               setEditing(false);
             }
           }}
-          style={{ width: "100%", minHeight: 84, marginTop: 4, fontSize: 14, borderRadius: 8, border: "1px solid #d7dae0", padding: 8, resize: "vertical", fontFamily: "inherit" }}
+          style={{ width: "100%", minHeight: 84, marginTop: 4, fontSize: 14, borderRadius: 8, border: "1px solid #dadada", padding: 8, resize: "vertical", fontFamily: "inherit" }}
         />
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
           <button
@@ -2495,7 +2495,7 @@ function OrderNoteEntry({
             type="button"
             disabled={saving}
             onClick={() => { setDraft(text); setEditing(false); }}
-            style={{ border: "1px solid #e5e7eb", background: "white", borderRadius: 8, padding: "6px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
+            style={{ border: "1px solid #e7e7e7", background: "white", borderRadius: 8, padding: "6px 14px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}
           >
             {t("Cancel")}
           </button>

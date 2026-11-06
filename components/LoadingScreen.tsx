@@ -98,7 +98,7 @@ export function LoadingScreen() {
         minHeight: "100vh",
         width: "100vw",
         padding: 24,
-        background: "var(--app-bg, #f3f4f6)",
+        background: "var(--app-bg, #f4f4f4)",
       }}
     >
       <section className="card" style={{ padding: 28, textAlign: "center", maxWidth: 420, width: "min(420px, 100%)" }}>

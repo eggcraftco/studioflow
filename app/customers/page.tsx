@@ -787,7 +787,7 @@ export default function CustomersPage() {
                   key={tag}
                   type="button"
                   onClick={() => setSegmentFilter(current => current === tag ? null : tag)}
-                  style={{ cursor: "pointer", fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "3px 11px", border: segmentFilter === tag ? "1px solid #2f6df6" : "1px solid rgba(120,120,140,0.25)", background: segmentFilter === tag ? "rgba(47,109,246,0.1)" : "transparent", color: segmentFilter === tag ? "#2f6df6" : "inherit" }}
+                  style={{ cursor: "pointer", fontSize: 11, fontWeight: 700, borderRadius: 999, padding: "3px 11px", border: segmentFilter === tag ? "1px solid #2f6df6" : "1px solid rgba(122,122,122,0.25)", background: segmentFilter === tag ? "rgba(47,109,246,0.1)" : "transparent", color: segmentFilter === tag ? "#2f6df6" : "inherit" }}
                 >
                   ⬖ {tag} <span style={{ opacity: 0.55 }}>{count}</span>
                 </button>
@@ -1129,7 +1129,7 @@ function CustomerDetail({
             const waSource = (customer.whatsappNumber || customer.phone || customer.primaryPhone).trim();
             const waDigits = waSource.replace(/[^0-9+]/g, "").replace(/^\+/, "").replace(/^00/, "");
             const instagram = customer.instagram.trim().replace(/^@/, "");
-            const quickAction: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "4px 12px", border: "1px solid rgba(120,120,140,0.28)", textDecoration: "none", color: "inherit" };
+            const quickAction: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 700, borderRadius: 999, padding: "4px 12px", border: "1px solid rgba(122,122,122,0.28)", textDecoration: "none", color: "inherit" };
             // "Do not contact" wins over every outreach shortcut — the links
             // stay visible but inert, so the flag is impossible to miss.
             const blocked = customer.doNotContact;
@@ -1176,7 +1176,7 @@ function CustomerDetail({
                 }}
                 placeholder={`＋ ${t("Add segment")}`}
                 list="customer-segment-suggestions"
-                style={{ fontSize: 11, padding: "3px 10px", borderRadius: 999, border: "1px dashed rgba(120,120,140,0.4)", background: "transparent", color: "inherit", width: 120 }}
+                style={{ fontSize: 11, padding: "3px 10px", borderRadius: 999, border: "1px dashed rgba(122,122,122,0.4)", background: "transparent", color: "inherit", width: 120 }}
               />
               <datalist id="customer-segment-suggestions">
                 {["VIP", "High value", "Repeat customer", "New customer", "Inactive", "Outstanding balance", "Waiting for response", "Marketing subscribed", "Wholesale"].map(item => (
@@ -1254,7 +1254,7 @@ function CustomerDetail({
           {customer.integrationLastPayload ? (
             <details style={{ padding: "0 18px 12px", fontSize: 11.5 }}>
               <summary style={{ cursor: "pointer", opacity: 0.65, fontWeight: 700 }}>{t("View raw store data")}</summary>
-              <pre style={{ margin: "8px 0 0", padding: 10, borderRadius: 10, background: "rgba(120,120,140,0.08)", overflowX: "auto", fontSize: 11, lineHeight: 1.5 }}>
+              <pre style={{ margin: "8px 0 0", padding: 10, borderRadius: 10, background: "rgba(122,122,122,0.08)", overflowX: "auto", fontSize: 11, lineHeight: 1.5 }}>
                 {(() => { try { return JSON.stringify(JSON.parse(customer.integrationLastPayload), null, 2); } catch { return customer.integrationLastPayload; } })()}
               </pre>
             </details>

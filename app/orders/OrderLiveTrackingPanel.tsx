@@ -145,7 +145,7 @@ export function OrderLiveTrackingPanel({
         <strong style={{ color: tone, fontSize: 12.5, flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>{t(trackingStatusLabel(status))}</strong>
         <span
           title={provider === "DHL Express" ? t("Tracked directly with DHL Express") : provider === "17TRACK" ? t("Tracked through 17TRACK") : provider}
-          style={{ fontSize: 9.5, fontWeight: 800, opacity: 0.7, padding: "3px 7px", borderRadius: 7, background: "rgba(120,120,140,0.14)", whiteSpace: "nowrap" }}
+          style={{ fontSize: 9.5, fontWeight: 800, opacity: 0.7, padding: "3px 7px", borderRadius: 7, background: "rgba(122,122,122,0.14)", whiteSpace: "nowrap" }}
         >
           {provider}
         </span>

@@ -77,7 +77,7 @@ const STAGE_DOT_COLORS: Record<string, string> = {
   blocked: "#ef4444",
   review: "#8b5cf6",
   shipready: "#16a34a",
-  done: "#9ca3af"
+  done: "#a2a2a2"
 };
 
 function startOfToday() {

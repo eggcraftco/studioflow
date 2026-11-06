@@ -40,7 +40,7 @@ const fieldStyle: React.CSSProperties = {
   width: "100%",
   padding: "10px 12px",
   borderRadius: 10,
-  border: "1px solid var(--border, #d9d9e3)",
+  border: "1px solid var(--border, #dadada)",
   background: "var(--surface, #fff)",
   color: "var(--text, #111)",
   fontWeight: 600
@@ -181,7 +181,7 @@ export function ExportOrdersPanel({
         </div>
       ) : null}
 
-      <hr style={{ border: 0, borderTop: "1px solid var(--border, #e6e6ef)", margin: "18px 0" }} />
+      <hr style={{ border: 0, borderTop: "1px solid var(--border, #e7e7e7)", margin: "18px 0" }} />
 
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "center" }}>
         <label style={optLabelStyle}>

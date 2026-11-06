@@ -923,7 +923,7 @@ function AdminSiteStatsSection() {
               {(() => {
                 const devices = topStatsEntries(current, "devices", 3);
                 const palette: Record<string, string> = { desktop: "#0a84ff", mobile: "#8a5cf6", tablet: "#30b0c7" };
-                const slices = devices.map(([key, value]) => ({ label: key.charAt(0).toUpperCase() + key.slice(1), value, color: palette[key] || "#9ca3af" }));
+                const slices = devices.map(([key, value]) => ({ label: key.charAt(0).toUpperCase() + key.slice(1), value, color: palette[key] || "#a2a2a2" }));
                 return slices.length ? <StatsDonut slices={slices} centerLabel="Total" /> : <p className="muted-copy">No data yet.</p>;
               })()}
             </section>
@@ -1349,7 +1349,7 @@ function AdminSearchConsoleSection() {
                 <p className="muted-copy">No data yet.</p>
               ) : (
                 <StatsDonut
-                  slices={devices.map(d => ({ label: SEARCH_DEVICE_LABELS[d.device] || d.device, value: d.impressions, color: SEARCH_DEVICE_COLORS[d.device] || "#9ca3af" }))}
+                  slices={devices.map(d => ({ label: SEARCH_DEVICE_LABELS[d.device] || d.device, value: d.impressions, color: SEARCH_DEVICE_COLORS[d.device] || "#a2a2a2" }))}
                   centerLabel="Impr."
                 />
               )}
@@ -1617,7 +1617,7 @@ function AdminUsersWorkspacesDetail({ onBack, view }: { onBack: () => void; view
 
   const planSlices = Object.entries(data.workspaces.planCounts)
     .filter(([, value]) => value > 0)
-    .map(([key, value]) => ({ label: ADMIN_PLAN_LABELS[key] || key, value, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }));
+    .map(([key, value]) => ({ label: ADMIN_PLAN_LABELS[key] || key, value, color: ADMIN_PLAN_COLORS[key] || "#a2a2a2" }));
 
   return (
     <div className="settings-card-stack">
@@ -1816,7 +1816,7 @@ function AdminSubscriptionsDetail({ onBack, view }: { onBack: () => void; view: 
   }
 
   const paidSlices = ["lifetime_lite", "pro_monthly", "team_monthly"]
-    .map(key => ({ label: ADMIN_PLAN_LABELS[key] || key, value: data.subscriptions.planCounts[key] || 0, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }))
+    .map(key => ({ label: ADMIN_PLAN_LABELS[key] || key, value: data.subscriptions.planCounts[key] || 0, color: ADMIN_PLAN_COLORS[key] || "#a2a2a2" }))
     .filter(slice => slice.value > 0);
 
   const mrrEntries: [string, number][] = ["lifetime_lite", "pro_monthly", "team_monthly"]
@@ -2003,7 +2003,7 @@ function AdminRevenueDetail({ onBack, view }: { onBack: () => void; view: AdminV
   }
 
   const planSlices = ["lifetime_lite", "pro_monthly", "team_monthly"]
-    .map(key => ({ label: ADMIN_PLAN_LABELS[key] || key, value: data.revenue.mrrByPlan[key] || 0, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }))
+    .map(key => ({ label: ADMIN_PLAN_LABELS[key] || key, value: data.revenue.mrrByPlan[key] || 0, color: ADMIN_PLAN_COLORS[key] || "#a2a2a2" }))
     .filter(slice => slice.value > 0);
 
   const breakdownRows: [string, number][] = [
@@ -2355,7 +2355,7 @@ function AdminPlansDetail({ onBack, view }: { onBack: () => void; view: AdminVie
 
   const total = Math.max(data.totalWorkspaces, 1);
   const planSlices = ADMIN_PLAN_ORDER
-    .map(key => ({ label: ADMIN_PLAN_LABELS[key] || key, value: data.stats[key]?.workspaces || 0, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }))
+    .map(key => ({ label: ADMIN_PLAN_LABELS[key] || key, value: data.stats[key]?.workspaces || 0, color: ADMIN_PLAN_COLORS[key] || "#a2a2a2" }))
     .filter(slice => slice.value > 0);
 
   return (
@@ -2655,7 +2655,7 @@ const ADMIN_TYPE_COLORS: Record<string, string> = {
   Documents: "#0a84ff",
   Videos: "#30d158",
   Audio: "#ff9f0a",
-  Other: "#9ca3af"
+  Other: "#a2a2a2"
 };
 
 function AdminStorageDetail({ onBack, view }: { onBack: () => void; view: AdminView }) {
@@ -2705,12 +2705,12 @@ function AdminStorageDetail({ onBack, view }: { onBack: () => void; view: AdminV
   const typeSlices = Object.entries(data.typeBytes)
     .filter(([, value]) => value > 0)
     .sort((a, b) => b[1] - a[1])
-    .map(([key, value]) => ({ label: key, value, color: ADMIN_TYPE_COLORS[key] || "#9ca3af" }));
+    .map(([key, value]) => ({ label: key, value, color: ADMIN_TYPE_COLORS[key] || "#a2a2a2" }));
 
   // The deleted / unknown workspace group belongs in the chart, or the plans do not add up to the
   // total (11.2 MB on 15 Oct had no plan to land in).
   const planSlices = ["demo", "lifetime_lite", "pro_monthly", "team_monthly", "unknown"]
-    .map(key => ({ label: key === "unknown" ? "Deleted / unknown workspace" : ADMIN_PLAN_LABELS[key] || key, value: data.planBytes[key] || 0, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }))
+    .map(key => ({ label: key === "unknown" ? "Deleted / unknown workspace" : ADMIN_PLAN_LABELS[key] || key, value: data.planBytes[key] || 0, color: ADMIN_PLAN_COLORS[key] || "#a2a2a2" }))
     .filter(slice => slice.value > 0);
 
   return (
@@ -2819,7 +2819,7 @@ function AdminStorageDetail({ onBack, view }: { onBack: () => void; view: AdminV
             <div style={{ display: "grid" }}>
               {data.recentUploads.map((file, index) => (
                 <div key={`${file.fileName}-${file.uploadedAtMs}`} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)" }}>
-                  <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: ADMIN_TYPE_COLORS[file.type] || "#9ca3af" }} />
+                  <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 99, background: ADMIN_TYPE_COLORS[file.type] || "#a2a2a2" }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.fileName}</div>
                     <div style={{ fontSize: 11, color: "var(--muted)" }}>{file.companyName}</div>
@@ -3157,7 +3157,7 @@ function AdminOverviewPanel({ view, onOpen }: { view: AdminView; onOpen: (page: 
 
   const planSlices = Object.entries(data.workspaces.planCounts)
     .filter(([, value]) => value > 0)
-    .map(([key, value]) => ({ label: ADMIN_PLAN_LABELS[key] || key, value, color: ADMIN_PLAN_COLORS[key] || "#9ca3af" }));
+    .map(([key, value]) => ({ label: ADMIN_PLAN_LABELS[key] || key, value, color: ADMIN_PLAN_COLORS[key] || "#a2a2a2" }));
 
   const usageEntries: [string, number | null][] = [
     ["Orders (total)", data.usage.ordersTotal],

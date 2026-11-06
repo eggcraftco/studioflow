@@ -147,7 +147,7 @@ export default function RefundPaymentDialog({
       aria-describedby={`${formId}-terms`}
       onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closeRefund(); } }}
       style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end", textAlign: "left", whiteSpace: "normal",
-        border: "1px solid rgba(120,120,140,0.22)", borderRadius: 10, padding: 12 }}
+        border: "1px solid rgba(122,122,122,0.22)", borderRadius: 10, padding: 12 }}
     >
       <strong id={`${formId}-title`} style={{ flexBasis: "100%", fontSize: 13 }}>{t("Refund this payment")}</strong>
       <label style={{ display: "grid", gap: 3, fontSize: 11.5, opacity: 0.75 }}>
@@ -201,7 +201,7 @@ export default function RefundPaymentDialog({
         type="button"
         disabled={refunding}
         onClick={closeRefund}
-        style={{ border: "1px solid rgba(120,120,140,0.35)", borderRadius: 8, background: "transparent", color: "inherit",
+        style={{ border: "1px solid rgba(122,122,122,0.35)", borderRadius: 8, background: "transparent", color: "inherit",
           cursor: "pointer", font: "inherit", fontSize: 13, fontWeight: 700, padding: "6px 12px" }}
       >
         {t("Close")}
