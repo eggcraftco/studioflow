@@ -79,16 +79,18 @@ function siteProblems(dir: string, table: string): string[] {
   if (!/read-only/.test(english("detail")) || !/never writes to your calendar/.test(english("detail"))) out.push("the detail does not say read only and never writes");
   if (!/nobody else in the workspace, the owner included, can see your meetings/.test(english("detail"))) out.push("the detail does not say nobody else sees the meetings");
   if (!/Calendar is on the web app today/.test(english("detail"))) out.push("the detail does not say the Calendar is on the web app today");
-  if (!/Outlook/.test(english("note")) || !/still verifying NivaDesk as a publisher/.test(english("note"))) out.push("the note does not carry Microsoft's open publisher check");
+  if (!/Outlook/.test(english("note")) || !/Microsoft has verified NivaDesk as a publisher/.test(english("note")) || !/administrator/.test(english("note"))) out.push("the note does not say Microsoft verified NivaDesk and that some organisations ask an administrator");
+  if (/still verifying NivaDesk/.test(all)) out.push("the old 'Microsoft is still verifying' caveat is back (verification finished 6 Nov 2026)");
   return out;
 }
 const siteMutants: Array<[string, string, string]> = [
   ["card gone", directory.replace('{ name: "Calendar", category', '{ name: "Kalender", category'), publicT],
   ["card coming soon", directory.replace(/(\{ name: "Calendar",[^\n]*)state: "live"/, '$1state: "comingSoon"'), publicT],
   ["card with a logo", directory.replace('{ name: "Calendar", category', '{ name: "Calendar", logo: "x.svg", category'), publicT],
-  ["a language missing", directory, publicT.replace(/\n    "integrations\.note\.calendar": "[^\n]*Google Takvim herkese[^\n]*/, "")],
-  ["a pilot card", directory, publicT.replace("Google Calendar is open to everyone.", "Google Calendar is a pilot.")],
-  ["the Outlook caveat dropped", directory, publicT.replace("Microsoft is still verifying NivaDesk as a publisher, so a work", "A work")],
+  ["a language missing", directory, publicT.replace(/\n    "integrations\.note\.calendar": "[^\n]*Google Takvim ve Outlook herkese[^\n]*/, "")],
+  ["a pilot card", directory, publicT.replace("Google Calendar and Outlook are open to everyone.", "Google Calendar is a pilot.")],
+  ["the verified-publisher line dropped", directory, publicT.replace(" Microsoft has verified NivaDesk as a publisher; some", " Some")],
+  ["the old caveat back", directory, publicT.replace("Microsoft has verified NivaDesk as a publisher;", "Microsoft is still verifying NivaDesk as a publisher;")],
   ["the web-only limit dropped", directory, publicT.replace(" The Calendar is on the web app today.", "")],
 ];
 
@@ -106,7 +108,7 @@ function settingsProblems(sec: string, page: string, calT: string, ints: string)
   if (!/\.catch\(\(\) => \{ if \(active\) setAnswer\(null\); \}\)/.test(sec)) out.push("a failed read is not shown as 'could not check'");
   if (!/Could not check your calendar connections just now/.test(sec)) out.push("no sentence for a failed read");
   if (!/Nobody else in the workspace, the owner included, sees your meetings/.test(sec)) out.push("the section does not say nobody else sees the meetings");
-  if (!/Microsoft is still verifying NivaDesk as a publisher/.test(sec)) out.push("the section does not carry the Outlook caveat");
+  if (!/Microsoft has verified NivaDesk as a publisher/.test(sec)) out.push("the section does not say Microsoft verified NivaDesk");
   const sentences = new Set<string>();
   for (const m of sec.matchAll(/\bt\("((?:[^"\\]|\\.)+)"\)/g)) sentences.add(m[1]);
   const blurb = ints.match(/id: "calendar", name: "Calendar"[\s\S]*?blurb: "([^"]+)"/)?.[1];
@@ -131,7 +133,7 @@ const settingsMutants: Array<[string, string, string, string, string]> = [
   ["a failed read looks like 'not connected'", section.replace(".catch(() => { if (active) setAnswer(null); })", ".catch(() => { if (active) setAnswer({ connections: {} }); })"), settingsPage, calendarT, integrations],
   ["a late answer lands", section.replace("if (active) setAnswer(next)", "setAnswer(next)"), settingsPage, calendarT, integrations],
   ["speaks for the team", section.replace("Nobody else in the workspace, the owner included, sees your meetings.", "Your team sees your meetings."), settingsPage, calendarT, integrations],
-  ["the Outlook caveat dropped", section.replace("Microsoft is still verifying NivaDesk as a publisher.", "Outlook works."), settingsPage, calendarT, integrations],
+  ["the verified-publisher line dropped", section.replace("Microsoft has verified NivaDesk as a publisher.", "Outlook works."), settingsPage, calendarT, integrations],
   ["the section calls the availability callable", section.replace('import { auth } from "@/lib/firebase/client";', 'import { auth } from "@/lib/firebase/client";\nimport { calendarConnectorsAvailable } from "@/lib/studioflow/calendarExternal";'), settingsPage, calendarT, integrations],
   ["a sentence loses a language", section, settingsPage, calendarT.replace(/("Open Calendar": \{[^\n]*?)"Deutsch": "[^"]*", /, "$1"), integrations],
 ];

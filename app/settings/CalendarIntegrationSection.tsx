@@ -93,7 +93,7 @@ export function CalendarIntegrationSection({ workspace, language = "English" }: 
       <p className="muted-copy">{t("Every person connects their own calendar. Nobody else in the workspace, the owner included, sees your meetings.")}</p>
       <p className="muted-copy">{t("NivaDesk only reads. It never writes to your calendar, never reads your email, and a meeting never becomes a task or an order.")}</p>
       <p className="muted-copy">{t("Disconnect any time from Calendar. NivaDesk deletes its copies of your meetings; your calendar itself is not changed.")}</p>
-      <p className="muted-copy" data-calendar-outlook-note>{t("Microsoft is still verifying NivaDesk as a publisher. A work or school Outlook account may show an “unverified publisher” notice or ask your administrator to approve it.")}</p>
+      <p className="muted-copy" data-calendar-outlook-note>{t("Microsoft has verified NivaDesk as a publisher. Some organisations still ask an administrator to approve new apps on work or school Outlook accounts.")}</p>
     </section>
   );
 }
