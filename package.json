@@ -129,6 +129,7 @@
     "test:language-audit": "npx tsx scripts/check-language-audit.mts",
     "test:multilingual-seo": "npx tsx scripts/check-multilingual-seo.mts",
     "test:public-bundle": "npx tsx scripts/check-public-bundle.mts",
+    "test:firebase-deferred": "npx tsx scripts/check-firebase-deferred.mts",
     "test:calendar-integration-card": "npx tsx scripts/check-calendar-integration-card.mts",
     "test:online-booking": "npx tsx scripts/check-online-booking.mts",
     "test:royal-mail-web": "npx tsx scripts/check-royal-mail-web.mts",

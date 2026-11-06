@@ -1,5 +1,4 @@
-import { httpsCallable } from "firebase/functions";
-import { functions } from "@/lib/firebase/client";
+import { functions, httpsCallable } from "@/lib/firebase/lazy"; // the price buttons on public pages import this
 import { trackOnboarding } from "@/lib/studioflow/onboardingEvents";
 
 export type StripeBillingItemKey =

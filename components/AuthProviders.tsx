@@ -5,10 +5,10 @@
 // Google first everywhere else.
 
 import { useEffect, useState } from "react";
-import { signInWithPopup } from "firebase/auth";
-import { auth, appleProvider, googleProvider } from "@/lib/firebase/client";
+// Firebase through lib/firebase/lazy.ts (the sign-up page is public): loaded when the buttons appear, so the popup
+// still opens inside the click.
+import { loadedFirebaseKit, loadFirebaseKit } from "@/lib/firebase/lazy";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
-import { SECOND_FACTOR_CANCELLED, withSecondFactor } from "@/lib/auth/secondFactor";
 
 function isApplePlatform() {
   if (typeof navigator === "undefined") return false;
@@ -58,15 +58,18 @@ export function AuthProviderButtons({
   const [appleFirst, setAppleFirst] = useState(false);
   useEffect(() => {
     setAppleFirst(isApplePlatform());
+    void loadFirebaseKit().catch(() => undefined);
   }, []);
 
   async function signIn(provider: "apple" | "google") {
     onStart?.();
     try {
+      const { appleProvider, auth, googleProvider, signInWithPopup, withSecondFactor } = loadedFirebaseKit() ?? await loadFirebaseKit();
       await withSecondFactor(auth, () => signInWithPopup(auth, provider === "apple" ? appleProvider : googleProvider));
       onSuccess();
     } catch (error) {
       const code = (error as { code?: string })?.code ?? "";
+      const SECOND_FACTOR_CANCELLED = loadedFirebaseKit()?.SECOND_FACTOR_CANCELLED;
       if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request" || code === SECOND_FACTOR_CANCELLED) {
         onError("");
         return;

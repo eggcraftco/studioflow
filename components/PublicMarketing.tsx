@@ -5,9 +5,8 @@ import { createPortal } from "react-dom";
 import Link from "@/lib/publicSite/PublicLink";
 import { openCookiePreferences } from "@/lib/cookieConsent";
 import { usePathname, useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from "firebase/auth";
-import { httpsCallable } from "firebase/functions";
-import { auth, functions } from "@/lib/firebase/client";
+// Firebase on demand (lib/firebase/lazy.ts): the same calls, loaded by the first one that needs them.
+import { auth, createUserWithEmailAndPassword, functions, httpsCallable, sendEmailVerification, updateProfile } from "@/lib/firebase/lazy";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { SiteVisitBeacon } from "@/components/SiteVisitBeacon";
 import { PublicHomeTour } from "@/components/PublicHomeTour";

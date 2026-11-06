@@ -7,11 +7,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useStudioT } from "@/lib/studioflow/useStudioT";
-import {
-  registerSecondFactorPresenter,
-  type SecondFactorAnswer,
-  type SecondFactorRequest
-} from "@/lib/auth/secondFactor";
+import type { SecondFactorAnswer, SecondFactorRequest } from "@/lib/auth/secondFactor";
+// Registered when Firebase is loaded (lib/firebase/lazy.ts): a sign-in can only ask for the code after that.
+import { whenFirebaseKitLoaded, type FirebaseKit } from "@/lib/firebase/lazy";
 
 type Pending = { request: SecondFactorRequest; resolve: (answer: SecondFactorAnswer) => void };
 
@@ -25,15 +23,20 @@ export function SecondFactorPromptHost() {
   const pendingRef = useRef<Pending | null>(null);
 
   useEffect(() => {
-    registerSecondFactorPresenter(request => new Promise<SecondFactorAnswer>(resolve => {
-      const next = { request, resolve };
-      pendingRef.current = next;
-      setCode("");
-      setRecoveryEmail(request.email);
-      setPending(next);
-    }));
+    let registerSecondFactorPresenter: FirebaseKit["registerSecondFactorPresenter"] | null = null;
+    const cancel = whenFirebaseKitLoaded(kit => {
+      registerSecondFactorPresenter = kit.registerSecondFactorPresenter;
+      registerSecondFactorPresenter(request => new Promise<SecondFactorAnswer>(resolve => {
+        const next = { request, resolve };
+        pendingRef.current = next;
+        setCode("");
+        setRecoveryEmail(request.email);
+        setPending(next);
+      }));
+    });
     return () => {
-      registerSecondFactorPresenter(null);
+      cancel();
+      registerSecondFactorPresenter?.(null);
       pendingRef.current?.resolve({ kind: "cancel" });
     };
   }, []);

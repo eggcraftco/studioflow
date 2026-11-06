@@ -1,18 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
-import {
-  EmailAuthProvider,
-  reauthenticateWithCredential,
-  reauthenticateWithPopup,
-  type AuthProvider as FirebaseAuthProvider
-} from "firebase/auth";
-import { auth, googleProvider, appleProvider } from "@/lib/firebase/client";
-import { signOutAndWipe, UNSYNCED_SIGN_OUT_TEXT } from "@/lib/auth/signOutSession";
+// Firebase through lib/firebase/lazy.ts: this host is in the root layout, so it must not put Firebase in a public page's
+// first download. It only acts for a signed-in user, and a signed-in user means Firebase is loaded.
+import { loadedFirebaseKit, loadFirebaseKit } from "@/lib/firebase/lazy";
 import { useAppConfirm } from "@/components/AppConfirmDialog";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useStudioT } from "@/lib/studioflow/useStudioT";
-import { withSecondFactor } from "@/lib/auth/secondFactor";
 import {
   ACTIVITY_WRITE_GAP_MS,
   AUTO_LOCK_CHANGED_EVENT,
@@ -217,6 +211,7 @@ export function SessionAutoLock() {
     setBusy(true);
     setError("");
     try {
+      const { auth, EmailAuthProvider, reauthenticateWithCredential, withSecondFactor } = await loadFirebaseKit();
       const credential = EmailAuthProvider.credential(user.email, password);
       await withSecondFactor(auth, () => reauthenticateWithCredential(user, credential), { email: user.email ?? "" });
       finishUnlock();
@@ -227,11 +222,15 @@ export function SessionAutoLock() {
     }
   }
 
-  async function handleProviderUnlock(provider: FirebaseAuthProvider) {
+  async function handleProviderUnlock(which: "google" | "apple") {
     if (!user || busy) return;
     setBusy(true);
     setError("");
     try {
+      // Loaded already (there is a user), so the popup still opens inside the click.
+      const kit = loadedFirebaseKit() ?? await loadFirebaseKit();
+      const { auth, reauthenticateWithPopup, withSecondFactor } = kit;
+      const provider = which === "apple" ? kit.appleProvider : kit.googleProvider;
       await withSecondFactor(auth, () => reauthenticateWithPopup(user, provider));
       finishUnlock();
     } catch {
@@ -246,6 +245,7 @@ export function SessionAutoLock() {
       // The lock screen's sign-out is a sign-out like any other
       // (lib/auth/signOutSession.ts): the browser's Firestore copy goes with
       // it, after asking about writes that have not reached the server.
+      const { signOutAndWipe, UNSYNCED_SIGN_OUT_TEXT } = await loadFirebaseKit();
       await signOutAndWipe({
         confirmUnsynced: () => confirmSignOut({
           title: t(UNSYNCED_SIGN_OUT_TEXT.title),
@@ -300,13 +300,13 @@ export function SessionAutoLock() {
         ) : null}
 
         {!hasPassword && hasGoogle ? (
-          <button className="button session-lock-button" type="button" disabled={busy} onClick={() => handleProviderUnlock(googleProvider)}>
+          <button className="button session-lock-button" type="button" disabled={busy} onClick={() => handleProviderUnlock("google")}>
             {busy ? t("Unlocking...") : t("Unlock with Google")}
           </button>
         ) : null}
 
         {!hasPassword && hasApple ? (
-          <button className="button session-lock-button" type="button" disabled={busy} onClick={() => handleProviderUnlock(appleProvider)}>
+          <button className="button session-lock-button" type="button" disabled={busy} onClick={() => handleProviderUnlock("apple")}>
             {busy ? t("Unlocking...") : t("Unlock with Apple")}
           </button>
         ) : null}

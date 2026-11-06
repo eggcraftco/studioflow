@@ -1,5 +1,5 @@
-import { httpsCallable } from "firebase/functions";
-import { functions } from "@/lib/firebase/client";
+// Firebase through lib/firebase/lazy.ts (PublicMarketing, on every public page, imports this): the call loads it.
+import { functions, httpsCallable } from "@/lib/firebase/lazy";
 import type { GuideNode } from "@/lib/publicSite/guideChrome";
 
 // The guide is a paid-plan feature, so its content is not in this bundle: it

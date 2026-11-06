@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { onAuthStateChanged, type User } from "firebase/auth";
-import { auth } from "@/lib/firebase/client";
+import type { User } from "firebase/auth";
+// Firebase through lib/firebase/lazy.ts (every public page has this widget): signed-in state once Firebase is loaded.
+import { auth, onAuthStateChanged } from "@/lib/firebase/lazy";
 import { usePublicSiteLanguage } from "@/lib/publicSite/i18n";
 import {
   loadWebsiteChatThread,

@@ -1,5 +1,5 @@
-import { httpsCallable } from "firebase/functions";
-import { functions } from "@/lib/firebase/client";
+// Firebase through lib/firebase/lazy.ts (the chat is on every public page): the first call loads it.
+import { functions, httpsCallable } from "@/lib/firebase/lazy";
 
 export type WebsiteChatMessage = {
   id: string;

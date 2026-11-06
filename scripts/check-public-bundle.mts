@@ -10,11 +10,15 @@
 // Second step, same day: the legal and policy texts (lib/publicSite/privacyPolicy.ts, termsPolicy.ts … supportContact.ts,
 // ~1 MB raw / ~0.28 MB gzip) were in every public page too, because components/PublicMarketing.tsx imported all ten.
 // Their pages now live in components/publicLegal/ — one file per page — so each text loads on its own page only.
+// Third step: Firebase (~0.16 MB gzip, and App Check's reCAPTCHA, ~0.36 MB from Google, which starts with it) is no
+// longer in a public page's first download: the root layout and the public modules take it from lib/firebase/lazy.ts
+// (one dynamic import of lib/firebase/rootKit.ts). Behaviour: scripts/check-firebase-deferred.mts.
 //
 // Source checks always run. With a build (.next) present — or --require-build — it also reads the built chunks of every
 // public route: no app-dictionary canary, no public text of another language, English public text present (positive
 // control), the app routes still carry the dictionary (positive control), no legal text outside its own page (and its own
-// text on it — positive control), and a gzip budget.
+// text on it — positive control), no Firebase in a public route's first download (the app routes keep it — positive
+// control; and it is still in the build, for loading on demand), and a gzip budget.
 //
 //   npx tsx scripts/check-public-bundle.mts [--root <web tree>] [--next-dir <.next>] [--require-build]
 //
@@ -35,11 +39,12 @@ const root = path.resolve(arg("--root") ?? scriptRoot);
 const nextDir = path.resolve(arg("--next-dir") ?? path.join(root, ".next"));
 const requireBuild = args.includes("--require-build");
 // Public route JS, gzip level 9, summed over the layout chain + page. 63b2be578: 3.02 MB; c5f6b3596 (no app dictionary):
-// 0.65 MB; with the legal texts on their own pages: 0.376 MB (/custom-order-management 0.380 MB).
-const GZIP_BUDGET = 420_000;
-// A page that carries its own long text — a legal page (0.40–0.43 MB) or an integration guide (0.44–0.50 MB) — gets
-// this one instead. c5f6b3596 had every one of them at 0.65–0.78 MB.
-const LONG_TEXT_PAGE_BUDGET = 560_000;
+// 0.65 MB; with the legal texts on their own pages (ddec6ef2e): 0.376 MB; Firebase on demand: 0.213 MB
+// (/custom-order-management 0.218 MB).
+const GZIP_BUDGET = 250_000;
+// A page that carries its own long text — a legal page (0.235–0.265 MB) or an integration guide (0.28–0.34 MB) — gets
+// this one instead. ddec6ef2e had them at 0.40–0.50 MB, c5f6b3596 at 0.65–0.78 MB.
+const LONG_TEXT_PAGE_BUDGET = 390_000;
 
 const failures: string[] = [];
 let passed = 0;
@@ -57,11 +62,12 @@ function resolveImport(from: string, spec: string): string | null {
   if (spec.startsWith("@/")) base = path.join(root, spec.slice(2));
   else if (spec.startsWith(".")) base = path.resolve(path.dirname(from), spec);
   else return null;
-  if (fs.existsSync(base) && fs.statSync(base).isFile()) return base;
+  // Code only: a stylesheet (`import "./globals.css"`) carries no imports and no text a canary may hit.
+  if (fs.existsSync(base) && fs.statSync(base).isFile()) return /\.(tsx?|m?jsx?)$/.test(base) ? base : null;
   for (const e of EXTS) if (fs.existsSync(base + e)) return base + e;
   return null;
 }
-type Parsed = { client: boolean; imports: string[] };
+type Parsed = { client: boolean; imports: string[]; packages: string[] };
 const parsed = new Map<string, Parsed>();
 function parse(file: string): Parsed {
   const known = parsed.get(file);
@@ -69,7 +75,9 @@ function parse(file: string): Parsed {
   const src = fs.readFileSync(file, "utf8");
   const client = /^\s*(?:\/\/[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*["']use client["']/.test(src);
   const imports: string[] = [];
-  const re = /(?:^|\n)\s*(import|export)\s+([\s\S]*?)\s*from\s+["']([^"']+)["']|(?:^|\n)\s*import\s+["']([^"']+)["']/g;
+  const packages: string[] = [];
+  // The clause stops at a ";" — a side-effect import (`import "x";`) must not be read as part of the next import's clause.
+  const re = /(?:^|\n)\s*(import|export)\s+([^;]*?)\s*from\s+["']([^"']+)["']|(?:^|\n)\s*import\s+["']([^"']+)["']/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(src))) {
     const spec = m[3] ?? m[4];
@@ -80,8 +88,9 @@ function parse(file: string): Parsed {
     if (named && named[1].split(",").map(s => s.trim()).filter(Boolean).every(s => /^type\s/.test(s))) continue;
     const target = resolveImport(file, spec);
     if (target) imports.push(target);
+    else if (!spec.startsWith(".") && !spec.startsWith("@/")) packages.push(spec);
   }
-  const value = { client, imports };
+  const value = { client, imports, packages };
   parsed.set(file, value);
   return value;
 }
@@ -203,6 +212,23 @@ for (const dir of legalPageDirs) {
   check(JSON.stringify(has.sort()) === JSON.stringify(own.sort()), `app/${dir}/page.tsx loads exactly its own legal text (${own.join(", ")}; got ${has.join(", ") || "none"})`);
 }
 
+// ---------------------------------------------------------------- Firebase: not in a public page's first download
+// Value imports only (type imports leave nothing); lib/firebase/lazy.ts loads lib/firebase/rootKit.ts with import(),
+// which this parser — like the bundler's first download — does not follow.
+const firebaseClient = path.join(root, "lib/firebase/client.ts");
+const firebaseRootKit = path.join(root, "lib/firebase/rootKit.ts");
+const firebaseImporters = (graph: { client: Set<string> }) => [...graph.client].filter(f => {
+  const p = parse(f);
+  return p.packages.some(spec => /^firebase(\/|$)|^@firebase\//.test(spec)) || p.imports.includes(firebaseClient) || p.imports.includes(firebaseRootKit);
+});
+const publicFirebase = firebaseImporters(publicGraph);
+check(publicFirebase.length === 0,
+  `no public page imports Firebase statically${publicFirebase.length ? ` (${publicFirebase.slice(0, 4).map(f => publicGraph.chain(f)).join("; ")})` : ""}`);
+check(!publicGraph.client.has(firebaseClient) && !publicGraph.client.has(firebaseRootKit), "lib/firebase/client.ts and rootKit.ts are outside the public pages' static graph");
+check(fs.existsSync(firebaseRootKit) && /import\("@\/lib\/firebase\/rootKit"\)/.test(read("lib/firebase/lazy.ts")), "lib/firebase/lazy.ts loads rootKit.ts on demand");
+const appGraph = clientClosure(["app/orders/page.tsx", "app/dashboard/page.tsx"].filter(f => fs.existsSync(path.join(root, f))));
+check(appGraph.client.has(firebaseClient), "positive control: the app routes still import lib/firebase/client.ts statically");
+
 // ---------------------------------------------------------------- canaries (strings that identify a table in a chunk)
 const publicSources = [...publicGraph.client].map(f => fs.readFileSync(f, "utf8"));
 const outsideTranslations = [...publicGraph.client].filter(f => !f.endsWith(path.join("lib", "publicSite", "translations.ts")))
@@ -310,6 +336,14 @@ if (!fs.existsSync(manifestFile)) {
     const text = files.map(f => chunk(f).text).join("\n");
     return canaries.filter(c => text.includes(c));
   };
+  // Firebase SDK strings (one per part: Auth, Firestore, App Check + its reCAPTCHA, Functions, Storage).
+  const FIREBASE_MARKERS = ["identitytoolkit.googleapis.com", "firebaseLocalStorageDb", "firestore.googleapis.com", "@firebase/app-check",
+    "firebase-app-check-database", "recaptcha/api.js", "@firebase/functions", "@firebase/storage"];
+  const firstDownload = new Set(publicRoutes.flatMap(routeFiles));
+  const allChunks = fs.readdirSync(path.join(nextDir, "static/chunks"), { recursive: true }).map(String)
+    .filter(f => f.endsWith(".js")).map(f => `static/chunks/${f}`);
+  const onDemand = found(allChunks.filter(f => !firstDownload.has(f)), FIREBASE_MARKERS);
+  check(onDemand.length === FIREBASE_MARKERS.length, `Firebase is still in the build, outside the public pages' first download (${onDemand.length}/${FIREBASE_MARKERS.length})`);
   const rows: string[] = [];
   for (const route of publicRoutes) {
     const files = routeFiles(route);
@@ -334,14 +368,18 @@ if (!fs.existsSync(manifestFile)) {
       else if (hits.length) strayLegal.push(`${m} ${hits.length}/${canaries.length}`);
     }
     check(strayLegal.length === 0, `${route}: no other page's legal text in the bundle${strayLegal.length ? ` (${strayLegal.join(", ")})` : ""}`);
+    const firebase = found(files, FIREBASE_MARKERS);
+    check(firebase.length === 0, `${route}: no Firebase in the first download${firebase.length ? ` (${firebase.join(", ")})` : ""}`);
     const budget = ownLegal.length || /^(\/\[lang\])?\/integrations\//.test(route) ? LONG_TEXT_PAGE_BUDGET : GZIP_BUDGET;
     check(gz <= budget, `${route}: JS ${gz} bytes gzip ≤ ${budget}`);
-    rows.push(`${route.padEnd(36)} ${String(files.length).padStart(3)} js ${(gz / 1e6).toFixed(3)} MB gz  app ${app.length}  other-languages ${strayLanguages.length ? strayLanguages.join("; ") : "0"}  legal ${ownLegal.length ? ownLegal.join("+") : "-"}${strayLegal.length ? ` STRAY ${strayLegal.join("; ")}` : ""}`);
+    rows.push(`${route.padEnd(36)} ${String(files.length).padStart(3)} js ${(gz / 1e6).toFixed(3)} MB gz  app ${app.length}  other-languages ${strayLanguages.length ? strayLanguages.join("; ") : "0"}  firebase ${firebase.length}  legal ${ownLegal.length ? ownLegal.join("+") : "-"}${strayLegal.length ? ` STRAY ${strayLegal.join("; ")}` : ""}`);
   }
   // Positive controls: an app screen still has the dictionary, so the canaries are real and app pages are unchanged.
   for (const route of ["/orders/page", "/dashboard/page", "/settings/page"].filter(r => pages[r])) {
     const hits = found(routeFiles(route), appCanaries);
     check(hits.length >= 0.95 * appCanaries.length, `${route}: the app dictionary is still there (${hits.length}/${appCanaries.length})`);
+    const firebaseHere = found(routeFiles(route), FIREBASE_MARKERS);
+    check(firebaseHere.length >= FIREBASE_MARKERS.length - 2, `${route}: Firebase is still in the first download (${firebaseHere.length}/${FIREBASE_MARKERS.length})`);
   }
   console.log(rows.join("\n"));
 }
