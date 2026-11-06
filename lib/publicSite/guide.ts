@@ -1794,6 +1794,17 @@ const TREE_EN: GuideNode[] = [
         "Notifications follow the workspace you are signed in to. They are not sent to people outside it, and a notification meant for particular people is sent only to them."
       ] }
     ]
+  },
+  {
+    id: "privacy-complaints",
+    title: "Complaints about your personal data (ICO)",
+    blocks: [
+      { kind: "para", text: "Our Privacy Policy (section 19, nivadesk.app/privacy) says how to complain about the way we handle your personal data." },
+      { kind: "sub", text: "Complaining to us" },
+      { kind: "para", text: "Complaints. If you are concerned about how we handle your personal data, you can complain to us at contact@nivadesk.co.uk; you do not need to be signed in or have an account. We will acknowledge your complaint within 30 days, investigate it, keep you informed of progress and tell you the outcome without undue delay." },
+      { kind: "sub", text: "Complaining to the Information Commission (ICO)" },
+      { kind: "para", text: "You can also complain to the Information Commission (ico.org.uk). The regulator may ask whether you have raised your concerns with us first. If the EU GDPR applies, you may also complain to a competent supervisory authority, including where you habitually live or work, or where you believe an infringement occurred." }
+    ]
   }
 ];
 
@@ -3532,6 +3543,17 @@ const TREE_TR: GuideNode[] = [
         "Cihaz, oturum açtığınızda kendini kaydeder ve çıkış yaptığınızda kaydı silinir — çıkış yaptığınız bir telefon o çalışma alanıyla ilgili hiçbir şey almayı bırakır.",
         "Bildirimler oturum açtığınız çalışma alanını izler. Dışarıdaki kişilere gönderilmez ve belirli kişiler için olan bir bildirim yalnızca onlara gider."
       ] }
+    ]
+  },
+  {
+    id: "privacy-complaints",
+    title: "Kişisel verilerinizle ilgili şikâyetler (ICO)",
+    blocks: [
+      { kind: "para", text: "Kişisel verilerinizi işleme biçimimizden nasıl şikâyet edebileceğinizi Gizlilik Politikamızın 19. bölümü (nivadesk.app/privacy) anlatır. Güncel ve geçerli metin İngilizce sürümdür. Bu, yürürlükteki hukukun size tanıdığı vazgeçilemez hakları etkilemez." },
+      { kind: "sub", text: "Bize şikâyet" },
+      { kind: "para", text: "Kişisel verilerinizle ilgili soru ve şikâyetleriniz için contact@nivadesk.co.uk adresine yazın. Şikâyetleri 30 gün içinde aldığımızı bildiririz. Şikâyet etmek için oturum açmanız ya da hesabınızın olması gerekmez. Şikâyetinizi inceler, ilerleme hakkında sizi bilgilendirir ve sonucu gecikmeksizin bildiririz." },
+      { kind: "sub", text: "Information Commission'a (ICO) şikâyet" },
+      { kind: "para", text: "Birleşik Krallık veri koruma düzenleyicisi Information Commission'a (ico.org.uk) da şikâyette bulunabilirsiniz. Düzenleyici, endişenizi önce bize iletip iletmediğinizi sorabilir. AB GDPR'ı uygulanıyorsa, olağan olarak yaşadığınız ya da çalıştığınız yerdeki ya da ihlalin gerçekleştiğini düşündüğünüz yerdeki yetkili bir denetim makamına da şikâyette bulunabilirsiniz." }
     ]
   }
 ];
