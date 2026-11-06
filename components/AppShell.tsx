@@ -1505,7 +1505,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           memberCanAccess(loadedWorkspace, "financialInfo");
         const [loadedOrders, loadedSettings] = await Promise.all([
           canLoadFinance
-            ? loadDashboardFinanceOrders(loadedWorkspace.id)
+            ? loadDashboardFinanceOrders(loadedWorkspace.id, loadedWorkspace, currentUser.uid)
             : Promise.resolve([]),
           loadWorkspaceSettingsOverview(loadedWorkspace.id),
         ]);

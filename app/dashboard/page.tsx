@@ -667,9 +667,12 @@ export default function DashboardPage() {
           stages: productionStagesFromSettings(rawStages),
           steps: (headings?.customSteps ?? []).filter(step => Boolean(step.title?.trim()))
         }));
+        // The workspace and the uid go to both order loaders (B8, 6 Nov 2026): without them an Assigned
+        // Projects Only member asked for the whole workspace's orders, the rules refused the query and the
+        // page said "Missing or insufficient permissions". Owners and members issue the same queries as before.
         const [loadedCounts, loadedFinanceOrders, loadedSettings] = await Promise.all([
-          production.then(board => loadDashboardCounts(loadedWorkspace.id, undefined, "", board)),
-          loadDashboardFinanceOrders(loadedWorkspace.id),
+          production.then(board => loadDashboardCounts(loadedWorkspace.id, loadedWorkspace, uid, board)),
+          loadDashboardFinanceOrders(loadedWorkspace.id, loadedWorkspace, uid),
           loadWorkspaceSettingsOverview(loadedWorkspace.id)
         ]);
         if (cancelled) return;

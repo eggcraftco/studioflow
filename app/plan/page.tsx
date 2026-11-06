@@ -143,7 +143,7 @@ export default function PlanPage() {
         if (cancelled) return;
         setWorkspace(loadedWorkspace);
         const [loadedCounts, loadedOrderUsage] = await Promise.all([
-          loadDashboardCounts(loadedWorkspace.id),
+          loadDashboardCounts(loadedWorkspace.id, loadedWorkspace, uid),
           // Active orders by the server's rule, total outside Trash (planOrderUsage.ts).
           loadPlanOrderUsage(loadedWorkspace.id, loadedWorkspace.entitlements.orderLimit).catch(usageError => {
             console.warn("Plan order usage could not be loaded:", usageError);
