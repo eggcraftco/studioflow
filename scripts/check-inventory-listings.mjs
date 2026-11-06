@@ -105,6 +105,8 @@ for (const panel of ["app/inventory/EbayListingsPanel.tsx", "app/inventory/WooPr
   ok(`${panel}: pictures brought in after an import`, /async function picturesAfterImport\(/.test(src) && /await picturesAfterImport\(workspace, done\.filter/.test(src));
 }
 ok("Woo panel skips cards whose picture the import already copied", /r\.photo !== "copied"/.test(read("app/inventory/WooProductsPanel.tsx")));
+const thumb = read("app/inventory/InventoryThumb.tsx");
+ok("row picture asks once more after the malware-scan window before showing the tile", /const THUMB_RETRY_MS = \d+;/.test(thumb) && /setTimeout\(\(\) => \{\s*photoUrl\(path\)/.test(thumb) && /clearTimeout\(retry\)/.test(thumb));
 ok("package.json runs this check", /"test:inventory-listings": "node scripts\/check-inventory-listings\.mjs"/.test(read("package.json")));
 
 fs.rmSync(tmp, { recursive: true, force: true });

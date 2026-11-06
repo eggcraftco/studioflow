@@ -18,6 +18,8 @@ function photoUrl(path: string): Promise<string> {
   return pending;
 }
 
+const THUMB_RETRY_MS = 6000;
+
 export function InventoryThumb({ path, glyph, size = "row" }: { path: string; glyph: string; size?: "row" | "small" }) {
   const box = useRef<HTMLSpanElement>(null);
   const [near, setNear] = useState(false);
@@ -40,8 +42,16 @@ export function InventoryThumb({ path, glyph, size = "row" }: { path: string; gl
     setUrl(""); setFailed(false);
     if (!near || !path) return;
     let cancelled = false;
-    photoUrl(path).then((next) => { if (!cancelled) setUrl(next); }).catch(() => { if (!cancelled) setFailed(true); });
-    return () => { cancelled = true; };
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    // envanter-aktarma (6 Nov 2026): a picture copied from a listing a moment ago can answer 403 for a few seconds while
+    // the malware scan runs (inventory fixes, 27 Oct). Ask once more after a short wait before settling on the tile.
+    photoUrl(path).then((next) => { if (!cancelled) setUrl(next); }).catch(() => {
+      if (cancelled) return;
+      retry = setTimeout(() => {
+        photoUrl(path).then((next) => { if (!cancelled) setUrl(next); }).catch(() => { if (!cancelled) setFailed(true); });
+      }, THUMB_RETRY_MS);
+    });
+    return () => { cancelled = true; if (retry) clearTimeout(retry); };
   }, [near, path]);
 
   const showPhoto = Boolean(path && url && !failed);
