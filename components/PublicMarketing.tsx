@@ -3658,14 +3658,14 @@ function PublicPricingPageContent() {
             <article className="public-card public-addon-card" data-addon="100">
               <span className="public-eyebrow">{t("pricingPage.addon.label")}</span>
               <h3>{t("pricingPage.addon100.title")}</h3>
-              <p className="public-addon-price">£9 / month · £90 / year</p>
+              <p className="public-addon-price">{t("pricingPage.addon100.price")}</p>
               <p>{t("pricingPage.addon100.body")}</p>
               <Link href="/plan" className="public-button secondary">{t("cta.openPortal")}</Link>
             </article>
             <article className="public-card public-addon-card" data-addon="200">
               <span className="public-eyebrow">{t("pricingPage.addon.label")}</span>
               <h3>{t("pricingPage.addon200.title")}</h3>
-              <p className="public-addon-price">£15 / month · £150 / year</p>
+              <p className="public-addon-price">{t("pricingPage.addon200.price")}</p>
               <p>{t("pricingPage.addon200.body")}</p>
               <Link href="/plan" className="public-button secondary">{t("cta.openPortal")}</Link>
             </article>

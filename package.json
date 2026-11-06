@@ -125,6 +125,7 @@
     "test:amazon-site-rules": "npx tsx scripts/check-amazon-site-rules.mts",
     "test:site-integration-names": "npx tsx scripts/check-site-integration-names.mts",
     "test:site-features-page": "npx tsx scripts/check-site-features-page.mts",
+    "test:addon-price": "npx tsx scripts/check-addon-price-translated.mts",
     "test:language-audit": "npx tsx scripts/check-language-audit.mts",
     "test:multilingual-seo": "npx tsx scripts/check-multilingual-seo.mts",
     "test:calendar-integration-card": "npx tsx scripts/check-calendar-integration-card.mts",

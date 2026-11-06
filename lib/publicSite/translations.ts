@@ -929,6 +929,8 @@ export const PUBLIC_SITE_EN = {
   "pricingPage.addon100.body": "For studios that keep richer reference libraries and production assets in Client Files.",
   "pricingPage.addon200.title": "200 GB Storage",
   "pricingPage.addon200.body": "For larger teams and long-running archives with heavier upload needs.",
+  "pricingPage.addon100.price": "£9 / month · £90 / year",
+  "pricingPage.addon200.price": "£15 / month · £150 / year",
 
   "plan.demo.shortName": "Free",
   "plan.demo.publicName": "Free",
@@ -5292,6 +5294,22 @@ const FILL_TRANSLATIONS_2: Partial<Record<StudioLanguage, Partial<Record<PublicS
     "featuresPage.glance.body": "स्थिति, टीम और डिलीवरी एक ही स्क्रीन पर।",
     "featuresPage.glance.title": "एक नज़र में स्पष्टता",
   }
+};
+
+// Night quality run (6 Nov 2026): the two storage add-on prices on /pricing were English text in every language.
+// Same words as each language's plan.lite.price, same amounts as before (scripts/check-addon-price-translated.mts).
+const FILL_TRANSLATIONS_ADDON_PRICE: Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>> = {
+  "Türkçe": { "pricingPage.addon100.price": "£9 / ay · £90 / yıl", "pricingPage.addon200.price": "£15 / ay · £150 / yıl" },
+  "Deutsch": { "pricingPage.addon100.price": "£9 / Monat · £90 / Jahr", "pricingPage.addon200.price": "£15 / Monat · £150 / Jahr" },
+  "Français": { "pricingPage.addon100.price": "£9 / mois · £90 / an", "pricingPage.addon200.price": "£15 / mois · £150 / an" },
+  "Italiano": { "pricingPage.addon100.price": "£9 / mese · £90 / anno", "pricingPage.addon200.price": "£15 / mese · £150 / anno" },
+  "Español (Spanish)": { "pricingPage.addon100.price": "£9 / mes · £90 / año", "pricingPage.addon200.price": "£15 / mes · £150 / año" },
+  "Português": { "pricingPage.addon100.price": "£9 / mês · £90 / ano", "pricingPage.addon200.price": "£15 / mês · £150 / ano" },
+  "Русский (Russian)": { "pricingPage.addon100.price": "£9 / месяц · £90 / год", "pricingPage.addon200.price": "£15 / месяц · £150 / год" },
+  "日本語 (Japanese)": { "pricingPage.addon100.price": "£9 / 月 · £90 / 年", "pricingPage.addon200.price": "£15 / 月 · £150 / 年" },
+  "中文 (Chinese)": { "pricingPage.addon100.price": "£9 / 月 · £90 / 年", "pricingPage.addon200.price": "£15 / 月 · £150 / 年" },
+  "العربية (Arabic)": { "pricingPage.addon100.price": "£9 / شهر · £90 / سنة", "pricingPage.addon200.price": "£15 / شهر · £150 / سنة" },
+  "हिन्दी (Hindi)": { "pricingPage.addon100.price": "£9 / माह · £90 / वर्ष", "pricingPage.addon200.price": "£15 / माह · £150 / वर्ष" },
 };
 
 // Batch 3: pricing preview, pricing page, plans and the plan comparison table.
@@ -15517,6 +15535,7 @@ const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSi
   FILL_TRANSLATIONS,
   FILL_TRANSLATIONS_2,
   FILL_TRANSLATIONS_3,
+  FILL_TRANSLATIONS_ADDON_PRICE,
   FILL_TRANSLATIONS_4,
   FILL_TRANSLATIONS_5,
   FILL_TRANSLATIONS_6,
