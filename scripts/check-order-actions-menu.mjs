@@ -65,7 +65,7 @@ check("dark theme rule for the actions panel exists", /body\[data-studio-theme="
 // 2. Card visibility helper wired into the page.
 check("page imports the helper", /import \{ orderActionCardVisible, visibleActionCardsFor \} from "@\/lib\/studioflow\/orderActionCards";/.test(page));
 check("canShowOrderCard uses the helper", /function canShowOrderCard\(cardId: OrderDetailCardId\) \{[\s\S]{0,400}if \(!orderActionCardVisible\(workspace\.memberAccess, cardId\)\) return false;/.test(page));
-check("Customize list is built from visibleActionCardsFor", /const customizeCardOrder = visibleActionCardsFor\(workspace\.memberAccess, isNarrowLayout \? cardLayout\.mobileCardOrder : cardLayout\.cardOrder\)/.test(page));
+check("Customize list is built from visibleActionCardsFor", /const customizeCardOrder = visibleActionCardsFor\(workspace\.memberAccess, isNarrowLayout(?: \|\| isStackView)? \? cardLayout\.mobileCardOrder : cardLayout\.cardOrder\)/.test(page));
 check("no local CARD_ACCESS_KEYS map remains", !page.includes("CARD_ACCESS_KEYS"));
 check("Invoice PDF stays behind canSeeFinance", /\{canSeeFinance \? \(\s*<button[\s\S]{0,400}\{t\("Invoice PDF"\)\}\s*<\/button>\s*\) : null\}/.test(page));
 check("Order Value header toggle stays behind canSeeFinance", /\.\.\.\(canSeeFinance \? \[\{\s*label: t\("Order Value"\)/.test(page));

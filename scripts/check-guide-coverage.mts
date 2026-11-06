@@ -225,8 +225,11 @@ function nodeStrings(node: GuideNode): string[] {
 
 check("1 every page under app/ has a guide chapter or a written reason", () => {
   const problems: string[] = [];
+  // 6 Nov 2026: app/[lang]/… (multilingual SEO, 4 Nov) renders the same public page in another language, so
+  // /[lang]/pricing takes /pricing's entry and /[lang] takes "/". The English page must still be listed.
+  const english = (route: string) => (route === "/[lang]" ? "/" : route.startsWith("/[lang]/") ? route.slice("/[lang]".length) : route);
   for (const route of pages()) {
-    if (route in PAGE_CHAPTERS || route in PAGES_WITHOUT_CHAPTER) continue;
+    if (english(route) in PAGE_CHAPTERS || english(route) in PAGES_WITHOUT_CHAPTER) continue;
     problems.push(`${route}: new page — add its chapter to PAGE_CHAPTERS, or the reason it has none to PAGES_WITHOUT_CHAPTER`);
   }
   const existing = new Set(pages());

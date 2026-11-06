@@ -97,7 +97,8 @@ has("canShowOrderCard must ask the card's access key before anything else",
   /function canShowOrderCard\(cardId: OrderDetailCardId\) \{[\s\S]{0,400}?if \(!orderActionCardVisible\(workspace\.memberAccess, cardId\)\) return false;\s*if \(cardId === "financial"\) return canSeeFinance;/);
 has("the Invoice Items editor must hide prices without Financial Info", /showMoney=\{canSeeFinance\}\s*onSave=\{items => saveDetailsPatch\(\{ lineItems: items \}, "Invoice items"\)\}/);
 has("the Invoice Items card's Invoice PDF button must be inside canSeeFinance",
-  /\{canSeeFinance \? \(\s*<button\s*type="button"\s*onClick=\{\(\) => void handleExportInvoice\(\)\}/);
+  // 6 Nov 2026: the Sections view (8c54267d2, 31 Oct) gave the button a className between type and onClick.
+  /\{canSeeFinance \? \(\s*<button\s*type="button"(?:\s*className=\{[^}]*\})?\s*onClick=\{\(\) => void handleExportInvoice\(\)\}/);
 has("the Actions menu's Invoice PDF must be inside canSeeFinance",
   /\{canSeeFinance \? \(\s*<button\s*type="button"\s*onClick=\{\(\) => \{\s*setOrderActionsOpen\(false\);\s*void handleExportInvoice\(\);/);
 has("handleExportInvoice must refuse a member without Financial Info before it assigns a number",

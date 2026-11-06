@@ -91,7 +91,14 @@ const firestore = read("lib/studioflow/firestore.ts");
 ok("card: no pre-engine profit formula left in the order screen", !/paidAmount \+ remainingAmount \+ customRemainingTotal - watchPurchasePrice/.test(content));
 ok("mapper: OrderDetail no longer carries a pre-computed netProfit", !/netProfit: paidAmount \+ remainingAmount/.test(firestore) && !/^\s*netProfit: number;\s*$/m.test(firestore.slice(firestore.indexOf("export type OrderDetail = {"), firestore.indexOf("export type OrderDetail = {") + 4000)));
 // ETSY-E2E (24 Oct) added the "Estimated profit" row (no cost entered): three rows read the same block.
-ok("card: Final Profit, Estimated profit and Profit before CT read the engine block", (content.match(/(?:\bmoney|orderValueMoney)\(orderFinance\.netProfit, hideNumbers\)/g) || []).length === 3);
+// 6 Nov 2026: the Sections view's status strip (8c54267d2, 31 Oct) shows "Final profit" under Order Value from the same
+// block — a fourth reader. Each row is now named, so a row that stops reading the engine fails by name.
+ok("card: Final Profit, Estimated profit and Profit before CT read the engine block",
+  /label=\{t\("Profit before Corporation Tax"\)\} value=\{orderValueMoney\(orderFinance\.netProfit, hideNumbers\)\}/.test(content)
+  && /label=\{t\("Estimated profit"\)\} value=\{orderValueMoney\(orderFinance\.netProfit, hideNumbers\)\}/.test(content)
+  && /label=\{t\("Final Profit"\)\} value=\{orderValueMoney\(orderFinance\.netProfit, hideNumbers\)\}/.test(content));
+ok("header status tile: Final profit reads the engine block", /\{t\("Final profit"\)\} <b className=\{orderFinance\.netProfit < 0 \? "is-negative" : ""\}>\{orderValueMoney\(orderFinance\.netProfit, hideNumbers\)\}<\/b>/.test(content));
+ok("no other netProfit print on the order screen", (content.match(/(?:\bmoney|orderValueMoney)\(orderFinance\.netProfit, hideNumbers\)/g) || []).length === 4);
 ok("card: Platform Fee and VAT Amount rows show the engine's figures", /displayValue=\{(?:money|orderValueMoney)\(orderFinance\.platformFee, hideNumbers\)\}/.test(content) && /value=\{(?:money|orderValueMoney)\(orderFinance\.vatDue, hideNumbers\)\}/.test(content));
 ok("PDF: the Financial Info rows and profit come from the engine", content.includes("const pdfFinance = orderDetailFinance(order, settings);") && content.includes("const profitAfterVat = pdfFinance.netProfit;"));
 ok("hidden finance: PDF finance rows still sit behind showFinInternal", /if \(showFinInternal\) \{\s*\/\/ The engine's figures/.test(content));

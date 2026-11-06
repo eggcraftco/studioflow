@@ -91,7 +91,10 @@ check("order screen: header chip, Order Value, Financial card and line items use
   const detail = read("app/orders/OrderDetailContent.tsx");
   assert.match(detail, /const orderCurrencyRef = \{ customFields: order\.customFields, etsySource \};/);
   assert.match(detail, /formatOrderMoney\(value, orderCurrencyRef, moneySettings\)/);
-  assert.match(detail, /<CardIconGlyph icon="finance" symbol=\{orderIconSymbol\(orderCurrencyRef, moneySettings\)\} \/>\s*\{orderValueMoney\(order\.paidAmount \+ order\.remainingAmount/);
+  // 6 Nov 2026: the Sections view (8c54267d2, 31 Oct) replaced the header money chip with the status strip's
+  // Order Value tile; it still prints through orderValueMoney (the order's currency) and only for canSeeFinance.
+  assert.match(detail, /function renderStatusStrip\(\) \{[\s\S]{0,300}?const orderValue = order\.paidAmount \+ order\.remainingAmount \+ orderCustomRemainingTotal\(order\);/);
+  assert.match(detail, /\{canSeeFinance && headerShowOrderValue \? \(\s*<div className="order-status-tile is-value">\s*<span className="order-status-tile__label">\{t\("Order Value"\)\}<\/span>\s*<strong className="order-status-tile__value">\{orderValueMoney\(orderValue, hideNumbers\)\}<\/strong>/);
   assert.match(detail, /t\("Order Value"\)\}<\/span>\s*<strong>\{canSeeFinance \? orderValueMoney\(/);
   assert.match(detail, /formatMoney=\{value => orderValueMoney\(value\)\}/);
   assert.match(detail, /displayValue=\{orderValueMoney\(order\.paidAmount, hideNumbers\)\}/);
