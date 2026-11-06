@@ -7,10 +7,14 @@
 //   - the root layout's hosts translate through lib/studioflow/useStudioT.ts (no import of language.ts);
 //   - the public provider imports only PUBLIC_SITE_EN; a language address gets its table from app/[lang]/layout.tsx,
 //     a one-address page fetches /api/public-site-text/<code>.
+// Second step, same day: the legal and policy texts (lib/publicSite/privacyPolicy.ts, termsPolicy.ts … supportContact.ts,
+// ~1 MB raw / ~0.28 MB gzip) were in every public page too, because components/PublicMarketing.tsx imported all ten.
+// Their pages now live in components/publicLegal/ — one file per page — so each text loads on its own page only.
 //
 // Source checks always run. With a build (.next) present — or --require-build — it also reads the built chunks of every
 // public route: no app-dictionary canary, no public text of another language, English public text present (positive
-// control), the app routes still carry the dictionary (positive control), and a gzip budget.
+// control), the app routes still carry the dictionary (positive control), no legal text outside its own page (and its own
+// text on it — positive control), and a gzip budget.
 //
 //   npx tsx scripts/check-public-bundle.mts [--root <web tree>] [--next-dir <.next>] [--require-build]
 //
@@ -30,8 +34,12 @@ const scriptRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".
 const root = path.resolve(arg("--root") ?? scriptRoot);
 const nextDir = path.resolve(arg("--next-dir") ?? path.join(root, ".next"));
 const requireBuild = args.includes("--require-build");
-// Public route JS, gzip level 9, summed over the layout chain + page. 63b2be578: 3.02 MB; after the split: ~0.69 MB.
-const GZIP_BUDGET = 950_000;
+// Public route JS, gzip level 9, summed over the layout chain + page. 63b2be578: 3.02 MB; c5f6b3596 (no app dictionary):
+// 0.65 MB; with the legal texts on their own pages: 0.376 MB (/custom-order-management 0.380 MB).
+const GZIP_BUDGET = 420_000;
+// A page that carries its own long text — a legal page (0.40–0.43 MB) or an integration guide (0.44–0.50 MB) — gets
+// this one instead. c5f6b3596 had every one of them at 0.65–0.78 MB.
+const LONG_TEXT_PAGE_BUDGET = 560_000;
 
 const failures: string[] = [];
 let passed = 0;
@@ -113,15 +121,32 @@ const { LOCALIZED_PUBLIC_PAGE_PATHS } = await import(path.join(root, "lib/public
 };
 const englishPages = Object.values(LOCALIZED_PUBLIC_PAGE_PATHS);
 const pageFile = (p: string, prefixed: boolean) => `app/${prefixed ? "[lang]/" : ""}${p === "/" ? "" : `${p.slice(1)}/`}page.tsx`;
+// Legal texts: module → the pages (app/…/page.tsx) that show it. legalLanguageNotice.ts is the "English text governs" notice every
+// legal page carries.
+const LEGAL_PAGES: Record<string, string[]> = {
+  privacyPolicy: ["privacy"],
+  termsPolicy: ["terms"],
+  cookiePolicy: ["cookies"],
+  accountDeletionPolicy: ["account-deletion"],
+  refundCancellationPolicy: ["refund-cancellation"],
+  securityOverview: ["security", "[lang]/security"],
+  subprocessors: ["subprocessors"],
+  dataProcessingAgreement: ["data-processing-agreement"],
+  acceptableUsePolicy: ["acceptable-use"],
+  supportContact: ["contact", "[lang]/contact"]
+};
+LEGAL_PAGES.legalLanguageNotice = [...new Set(Object.values(LEGAL_PAGES).flat())];
+const legalModuleFile = (m: string) => path.join(root, "lib/publicSite", `${m}.ts`);
+const legalPageDirs = new Set(LEGAL_PAGES.legalLanguageNotice);
 const publicEntries = [
   "app/layout.tsx",
   "app/[lang]/layout.tsx",
   ...englishPages.map(p => pageFile(p, false)),
   ...englishPages.map(p => pageFile(p, true)),
   "app/custom-order-management/page.tsx",
-  "app/privacy/page.tsx",
-  "app/changelog/page.tsx"
-].filter(f => fs.existsSync(path.join(root, f)));
+  "app/changelog/page.tsx",
+  ...[...legalPageDirs].map(d => `app/${d}/page.tsx`)
+].filter((f, i, all) => fs.existsSync(path.join(root, f)) && all.indexOf(f) === i);
 check(publicEntries.length >= 2 * englishPages.length + 3, `public entries found (${publicEntries.length})`);
 const publicGraph = clientClosure(publicEntries);
 const appDictionary = path.join(root, "lib/studioflow/language.ts");
@@ -148,6 +173,35 @@ for (const host of ["components/StudioToastHost.tsx", "components/SecondFactorPr
 }
 check(/^registerStudioTranslate\(studioT\);\s*$/m.test(read("lib/studioflow/language.ts")) && /^import \{ registerStudioTranslate \} from "\.\/studioTranslateRegistry";$/m.test(read("lib/studioflow/language.ts")),
   "language.ts registers studioT for the root-layout hosts");
+
+// ---------------------------------------------------------------- legal texts: only on their own pages
+check(Object.keys(LEGAL_PAGES).every(m => fs.existsSync(legalModuleFile(m))), "the eleven legal modules exist");
+check([...legalPageDirs].every(d => fs.existsSync(path.join(root, "app", d, "page.tsx"))), `the ${legalPageDirs.size} legal page entries exist`);
+// Every public entry that is not a legal page: no legal module in its browser code.
+const otherPublicEntries = [
+  "app/layout.tsx",
+  "app/[lang]/layout.tsx",
+  ...[...englishPages.map(p => pageFile(p, false)), ...englishPages.map(p => pageFile(p, true))]
+    .filter(f => !legalPageDirs.has(f.replace(/^app\//, "").replace(/\/?page\.tsx$/, ""))),
+  "app/custom-order-management/page.tsx",
+  "app/changelog/page.tsx",
+  "app/login/page.tsx",
+  "app/signup/page.tsx"
+].filter((f, i, all) => fs.existsSync(path.join(root, f)) && all.indexOf(f) === i);
+const otherGraph = clientClosure(otherPublicEntries);
+for (const m of Object.keys(LEGAL_PAGES)) {
+  const f = legalModuleFile(m);
+  check(!otherGraph.client.has(f), `no non-legal public page imports lib/publicSite/${m}.ts${otherGraph.client.has(f) ? ` (${otherGraph.chain(f)})` : ""}`);
+}
+check(!/from "@\/lib\/publicSite\/(privacyPolicy|termsPolicy|cookiePolicy|accountDeletionPolicy|refundCancellationPolicy|securityOverview|subprocessors|dataProcessingAgreement|acceptableUsePolicy|supportContact|legalLanguageNotice)"/
+  .test(read("components/PublicMarketing.tsx").replace(/import type [^;]*;/g, "")), "components/PublicMarketing.tsx imports no legal module");
+// Each legal page: its own text (and the notice), no other policy's.
+for (const dir of legalPageDirs) {
+  const graph = clientClosure([`app/${dir}/page.tsx`]);
+  const own = Object.keys(LEGAL_PAGES).filter(m => LEGAL_PAGES[m].includes(dir));
+  const has = Object.keys(LEGAL_PAGES).filter(m => graph.client.has(legalModuleFile(m)));
+  check(JSON.stringify(has.sort()) === JSON.stringify(own.sort()), `app/${dir}/page.tsx loads exactly its own legal text (${own.join(", ")}; got ${has.join(", ") || "none"})`);
+}
 
 // ---------------------------------------------------------------- canaries (strings that identify a table in a chunk)
 const publicSources = [...publicGraph.client].map(f => fs.readFileSync(f, "utf8"));
@@ -183,6 +237,41 @@ for (const [lang, table] of Object.entries(site.PUBLIC_SITE_TRANSLATIONS)) {
   check(languageCanaries.get(lang)!.length >= 40, `${lang}: public-text canaries chosen (${languageCanaries.get(lang)!.length})`);
 }
 
+// Legal texts: per module, strings that only that module holds (every exported value, and every language's sections).
+const { SUPPORTED_STUDIO_LANGUAGES } = await import(path.join(root, "lib/studioflow/languageCore.ts")) as { SUPPORTED_STUDIO_LANGUAGES: readonly string[] };
+const legalStrings = new Map<string, Set<string>>();
+const collect = (value: unknown, into: Set<string>, depth = 0) => {
+  if (depth > 8 || value == null) return;
+  if (typeof value === "string") { into.add(value); return; }
+  if (Array.isArray(value)) { for (const v of value) collect(v, into, depth + 1); return; }
+  if (typeof value === "object") for (const v of Object.values(value as Record<string, unknown>)) collect(v, into, depth + 1);
+};
+for (const m of Object.keys(LEGAL_PAGES)) {
+  const mod = await import(legalModuleFile(m)) as Record<string, unknown>;
+  const into = new Set<string>();
+  for (const [name, value] of Object.entries(mod)) {
+    if (typeof value === "function" && /^get/.test(name)) for (const l of SUPPORTED_STUDIO_LANGUAGES) collect((value as (l: string) => unknown)(l), into);
+    else collect(value, into);
+  }
+  legalStrings.set(m, into);
+}
+const legalSource = Object.keys(LEGAL_PAGES).map(m => [m, fs.readFileSync(legalModuleFile(m), "utf8")] as const);
+// Sources outside the legal modules that a public page or a legal page also loads (a canary must not be in them).
+const legalPageGraph = clientClosure([...legalPageDirs].map(d => `app/${d}/page.tsx`));
+const nonLegalSource = [...new Set([...publicGraph.client, ...legalPageGraph.client])]
+  .filter(f => !Object.keys(LEGAL_PAGES).some(m => f === legalModuleFile(m)))
+  .map(f => fs.readFileSync(f, "utf8")).join("\n\u0000\n");
+const legalCanaries = new Map<string, string[]>();
+for (const [m, strings] of legalStrings) {
+  const others = legalSource.filter(([o]) => o !== m).map(([, src]) => src).join("\n");
+  const own = legalSource.find(([o]) => o === m)![1];
+  // Written out as one literal in the module (so the minifier keeps it whole), and nowhere else a page loads.
+  const values = [...strings].filter(plain).filter(v => own.includes(v) && !others.includes(v) && !nonLegalSource.includes(v));
+  legalCanaries.set(m, sample(values, 40));
+  check(legalCanaries.get(m)!.length >= 12, `${m}: legal-text canaries chosen (${legalCanaries.get(m)!.length})`);
+}
+console.log(`public-bundle: legal-text canaries ${[...legalCanaries].map(([m, c]) => `${m} ${c.length}`).join(", ")}`);
+
 // ---------------------------------------------------------------- the build
 const manifestFile = path.join(nextDir, "app-build-manifest.json");
 if (!fs.existsSync(manifestFile)) {
@@ -213,9 +302,10 @@ if (!fs.existsSync(manifestFile)) {
   const publicRoutes = [
     ...englishPages.map(p => routeKey(p, false)),
     ...englishPages.map(p => routeKey(p, true)),
-    "/custom-order-management/page", "/privacy/page", "/changelog/page"
-  ].filter(r => pages[r]);
-  check(publicRoutes.length >= 2 * englishPages.length + 3, `public routes in the build (${publicRoutes.length})`);
+    "/custom-order-management/page", "/changelog/page",
+    ...[...legalPageDirs].filter(d => !d.startsWith("[lang]/") && !englishPages.includes(`/${d}`)).map(d => `/${d}/page`)
+  ].filter((r, i, all) => pages[r] && all.indexOf(r) === i);
+  check(publicRoutes.length >= 2 * englishPages.length + 2 + legalPageDirs.size - 4, `public routes in the build (${publicRoutes.length})`);
   const found = (files: string[], canaries: string[]) => {
     const text = files.map(f => chunk(f).text).join("\n");
     return canaries.filter(c => text.includes(c));
@@ -235,8 +325,18 @@ if (!fs.existsSync(manifestFile)) {
     check(strayLanguages.length === 0, `${route}: no public text in another language in the bundle${strayLanguages.length ? ` (${strayLanguages.join(", ")})` : ""}`);
     const en = found(files, languageCanaries.get("English")!);
     check(en.length >= 0.9 * languageCanaries.get("English")!.length, `${route}: the English public text is in the bundle (${en.length}/${languageCanaries.get("English")!.length})`);
-    check(gz <= GZIP_BUDGET, `${route}: JS ${gz} bytes gzip ≤ ${GZIP_BUDGET}`);
-    rows.push(`${route.padEnd(36)} ${String(files.length).padStart(3)} js ${(gz / 1e6).toFixed(2)} MB gz  app ${app.length}  other-languages ${strayLanguages.length ? strayLanguages.join("; ") : "0"}`);
+    const legalDir = route.replace(/^\//, "").replace(/\/?page$/, "");
+    const ownLegal = Object.keys(LEGAL_PAGES).filter(m => LEGAL_PAGES[m].includes(legalDir));
+    const strayLegal: string[] = [];
+    for (const [m, canaries] of legalCanaries) {
+      const hits = found(files, canaries);
+      if (ownLegal.includes(m)) check(hits.length >= 0.9 * canaries.length, `${route}: its own legal text ${m} is in the bundle (${hits.length}/${canaries.length})`);
+      else if (hits.length) strayLegal.push(`${m} ${hits.length}/${canaries.length}`);
+    }
+    check(strayLegal.length === 0, `${route}: no other page's legal text in the bundle${strayLegal.length ? ` (${strayLegal.join(", ")})` : ""}`);
+    const budget = ownLegal.length || /^(\/\[lang\])?\/integrations\//.test(route) ? LONG_TEXT_PAGE_BUDGET : GZIP_BUDGET;
+    check(gz <= budget, `${route}: JS ${gz} bytes gzip ≤ ${budget}`);
+    rows.push(`${route.padEnd(36)} ${String(files.length).padStart(3)} js ${(gz / 1e6).toFixed(3)} MB gz  app ${app.length}  other-languages ${strayLanguages.length ? strayLanguages.join("; ") : "0"}  legal ${ownLegal.length ? ownLegal.join("+") : "-"}${strayLegal.length ? ` STRAY ${strayLegal.join("; ")}` : ""}`);
   }
   // Positive controls: an app screen still has the dictionary, so the canaries are real and app pages are unchanged.
   for (const route of ["/orders/page", "/dashboard/page", "/settings/page"].filter(r => pages[r])) {

@@ -128,7 +128,11 @@ if (noticeModule) {
 }
 
 // ---------- H-07: every legal page renders the notice (read from source) ----------
-const marketing = fs.readFileSync(path.join(root, "components", "PublicMarketing.tsx"), "utf8");
+// Since 6 Nov 2026 (site speed) the legal pages and their shared blocks live in components/publicLegal/ — one file per
+// page, so each policy text is downloaded on its own page only — moved there unchanged from PublicMarketing.tsx.
+const legalDir = path.join(root, "components", "publicLegal");
+const marketing = fs.readdirSync(legalDir).filter((f) => f.endsWith(".tsx")).sort()
+  .map((f) => fs.readFileSync(path.join(legalDir, f), "utf8")).join("\n");
 const body = (name: string) => {
   const start = marketing.indexOf(`function ${name}(`);
   if (start < 0) return "";

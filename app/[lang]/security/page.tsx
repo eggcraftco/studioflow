@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { PublicSecurityPage } from "@/components/PublicMarketing";
+import { PublicSecurityPage } from "@/components/publicLegal/PublicSecurityPage";
 import { publicLocaleByCode } from "@/lib/publicSite/locales";
 import { localizedPublicPageMetadata } from "@/lib/publicSite/metadata";
 import { LocalizedPageStructuredData } from "@/lib/publicSite/structuredData";

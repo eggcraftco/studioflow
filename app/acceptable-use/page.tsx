@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { PublicAcceptableUsePage } from "@/components/PublicMarketing";
+import { PublicAcceptableUsePage } from "@/components/publicLegal/PublicAcceptableUsePage";
 import { publicPageMetadata } from "@/lib/publicSite/metadata";
 
 export const metadata: Metadata = publicPageMetadata("acceptableUse");
