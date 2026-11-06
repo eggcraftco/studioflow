@@ -5106,15 +5106,17 @@ export function OrderDetailContent({
   // Assignable members for the order-detail "Assign Project" control. Mirrors the
   // orders-list menu (lib/studioflow/projectAssignees.ts, N16): the team minus
   // the owner, except that the owner sees their own row first; plus Unassigned.
+  // B5 (6 Nov 2026): a suspended member is offered only while on this order (to be taken off).
   const viewerIsOwner = normalizeWorkspaceRole(workspace.role) === "owner";
+  const orderAssigneeKey = orderAssigneeUids(order).join("\n");
   const assignableMembers = useMemo(
     () => projectAssigneeOptions(teamMembers, {
       uid: user?.uid ?? "",
       isOwner: viewerIsOwner,
       email: user?.email,
       displayName: user?.displayName
-    }),
-    [teamMembers, user?.uid, user?.email, user?.displayName, viewerIsOwner]
+    }, orderAssigneeKey ? orderAssigneeKey.split("\n") : []),
+    [teamMembers, user?.uid, user?.email, user?.displayName, viewerIsOwner, orderAssigneeKey]
   );
 
   const currentAssignee = useMemo(() => {
@@ -10951,6 +10953,7 @@ export function OrderDetailContent({
                       >
                         <span aria-hidden="true">{isCurrent ? "✓" : "○"}</span>
                         {member.displayName.trim() || member.email.trim() || member.id}
+                        {member.suspended ? ` · ${t("No access")}` : ""}
                       </button>
                     );
                   })}

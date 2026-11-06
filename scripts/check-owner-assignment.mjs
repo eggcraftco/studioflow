@@ -66,6 +66,23 @@ if (!fs.existsSync(path.join(root, modulePath))) {
   ok("an owner alone in the workspace is offered themselves", ids(projectAssigneeOptions([owner], { uid: "owner-uid", isOwner: true })) === "owner-uid");
   ok("an empty team stays empty", projectAssigneeOptions([], { uid: "owner-uid", isOwner: true }).length === 0);
   ok("the input list is not changed", ids(team) === "owner-uid,ann-uid,bob-uid" && team[0].email === "owner@example.test");
+
+  // B5 (6 Nov 2026): a suspended member is offered only while on the order (so they can be taken off it).
+  const sue = { id: "sue-uid", email: "sue@example.test", displayName: "Sue", isOwner: false, role: "member", suspended: true };
+  const cat = { id: "cat-uid", email: "cat@example.test", displayName: "Cat", isOwner: false, role: "member", suspended: false };
+  const withSue = [owner, ann, sue, cat];
+  ok(`B5 a suspended member not on the order is not offered (got ${ids(projectAssigneeOptions(withSue, { uid: "owner-uid", isOwner: true }))})`,
+    ids(projectAssigneeOptions(withSue, { uid: "owner-uid", isOwner: true })) === "owner-uid,ann-uid,cat-uid");
+  ok("B5 same with an explicit empty order list", ids(projectAssigneeOptions(withSue, { uid: "owner-uid", isOwner: true }, [])) === "owner-uid,ann-uid,cat-uid");
+  ok("B5 a suspended member ON the order keeps their row, in place",
+    ids(projectAssigneeOptions(withSue, { uid: "owner-uid", isOwner: true }, ["ann-uid", "sue-uid"])) === "owner-uid,ann-uid,sue-uid,cat-uid");
+  ok("B5 order uids are trimmed", ids(projectAssigneeOptions(withSue, { uid: "owner-uid", isOwner: true }, [" sue-uid "])) === "owner-uid,ann-uid,sue-uid,cat-uid");
+  ok("B5 a member who may assign gets the same rule (no owner row)",
+    ids(projectAssigneeOptions(withSue, { uid: "ann-uid", isOwner: false }, ["sue-uid"])) === "ann-uid,sue-uid,cat-uid"
+    && ids(projectAssigneeOptions(withSue, { uid: "ann-uid", isOwner: false })) === "ann-uid,cat-uid");
+  ok("B5 suspended:false and a missing flag are both offered", ids(projectAssigneeOptions([ann, cat], { uid: "x", isOwner: false })) === "ann-uid,cat-uid");
+  ok("B5 the kept row is the member itself (flag kept for the label)", projectAssigneeOptions(withSue, { uid: "owner-uid", isOwner: true }, ["sue-uid"])
+    .find((m) => m.id === "sue-uid")?.suspended === true);
 }
 
 // --- 2. the two menus
@@ -78,6 +95,10 @@ ok("orders list passes whether the viewer is the owner", list.includes('isOwner:
 ok("order view imports projectAssigneeOptions", detail.includes('import { projectAssigneeOptions } from "@/lib/studioflow/projectAssignees";'));
 ok("order view builds assignableMembers with projectAssigneeOptions", /const assignableMembers = useMemo\(\s*\(\) => projectAssigneeOptions\(teamMembers, \{/.test(detail));
 ok("order view no longer drops the owner for everyone", !detail.includes("teamMembers.filter(member => !member.isOwner)"));
+ok("B5 orders list menu passes the order's people", list.includes("}, orderAssigneeUids(contextOrder))"));
+ok("B5 order view passes the order's people", detail.includes('}, orderAssigneeKey ? orderAssigneeKey.split("\\n") : []),'));
+ok("B5 both menus mark a kept suspended row with the translated \"No access\"",
+  list.includes('{member.suspended ? ` · ${t("No access")}` : ""}') && detail.includes('{member.suspended ? ` · ${t("No access")}` : ""}'));
 ok("who may assign is unchanged (orders list)", list.includes('return normalizeWorkspaceRole(workspace.role) === "owner" ||\n    (canDeleteOrdersForRole(workspace.role) && workspaceAccessAllows(workspace.memberAccess, "manageProjectAssignments"));'));
 ok("who may assign is unchanged (order view)", detail.includes('normalizeWorkspaceRole(workspace.role) === "owner" ||\n      (canDeleteOrdersForRole(workspace.role) && workspaceAccessAllows(workspace.memberAccess, "manageProjectAssignments"))'));
 
