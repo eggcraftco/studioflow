@@ -1609,6 +1609,19 @@ const TREE_EN: GuideNode[] = [
             "Once a name is set up, the links NivaDesk hands out — the portal link on the order card, estimate links and SMS status updates — use your branded address automatically. Links shared earlier keep working on the old address.",
             "File links follow your name too: opening or sharing a client file uses a clean viewer link on your address (like track.yourdomain.com/f/…) instead of a raw storage URL, and the files a customer opens from their tracking page stay on your domain as well."
           ] },
+          { kind: "sub", text: "A separate address for file links, instead of track. (Pro and Team)" },
+          { kind: "para", text: "File links can have an address of their own. Out of the box, a file you open or share from NivaDesk uses your customer portal address — for example track.yourdomain.com/f/… — so if you would rather keep track. for order tracking, add a file link address such as files.yourdomain.com. It is optional, takes one more CNAME record, and links already sent keep working." },
+          { kind: "steps", items: [
+            "Open Settings ▸ Customer Portal Domain (owner only) and find File link address, under Custom domain.",
+            "Type a subdomain of your own website, such as files.yourdomain.com, and press Use this address.",
+            "At your domain provider, add the CNAME record shown on the card: the first part of the address (files) pointing to customers.nivadesk.app.",
+            "Press Check again until the card shows Live — the security certificate usually takes a few minutes after DNS is verified. From then on, the file links NivaDesk makes on the web — when you open a file from an order or from Files — use the file address."
+          ] },
+          { kind: "bullets", items: [
+            "Nothing breaks: file links sent earlier keep opening on the address they were made with, and order tracking, estimate, SMS and payment links do not move.",
+            "Until the card shows Live, or after you remove the file address, file links use your customer portal address as before. The file address cannot be your payment link address.",
+            "Files a customer opens from their order tracking page stay on that page's address, and the Mac, iPhone and Android apps still use your customer portal address for file links for now."
+          ] },
           { kind: "sub", text: "The NivaDesk app for ChatGPT" },
           { kind: "bullets", items: [
             "NivaDesk has an app inside ChatGPT, so you can ask about your own workspace in plain language. It has its own section: see NivaDesk in ChatGPT."
@@ -3364,6 +3377,19 @@ const TREE_TR: GuideNode[] = [
             "Aynı bölümdeki \"Your customer links\" kartı kısa bağlantılarınızın canlı bir örneğini gösterir (https://atolyeniz.nivadesk.app/r/… gibi) — sipariş takibi ve teklif sayfaları burada kurduğunuz adı izler.",
             "Ad kurulduktan sonra NivaDesk'in verdiği bağlantılar — sipariş kartındaki portal bağlantısı, teklif bağlantıları ve SMS durum güncellemeleri — otomatik olarak markalı adresinizi kullanır. Daha önce paylaşılan bağlantılar eski adreste çalışmaya devam eder.",
             "Dosya bağlantıları da adınızı taşır: bir müşteri dosyasını açmak veya paylaşmak, ham depolama URL'si yerine sizin adresinizde temiz bir görüntüleyici bağlantısı (track.sizinsite.com/f/… gibi) kullanır; müşterinin takip sayfasından açtığı dosyalar da sizin domain'inizde kalır."
+          ] },
+          { kind: "sub", text: "Dosya bağlantıları için track yerine ayrı adres (Pro ve Team)" },
+          { kind: "para", text: "Dosya bağlantılarının kendi adresi olabilir. Varsayılan olarak NivaDesk'te açtığınız veya paylaştığınız bir dosya müşteri portalı adresinizi kullanır — örneğin track.sizinsite.com/f/… — yani track. adını yalnız sipariş takibine bırakmak isterseniz files.sizinsite.com gibi bir dosya bağlantısı adresi ekleyin. İsteğe bağlıdır, bir CNAME kaydı daha ister ve daha önce gönderilen bağlantılar çalışmaya devam eder." },
+          { kind: "steps", items: [
+            "Settings ▸ Customer Portal Domain bölümünü açın (yalnız sahip); File link address, Custom domain'in altındadır.",
+            "Kendi sitenizin bir alt alan adını yazın — örn. files.sizinsite.com — ve Use this address'e basın.",
+            "Alan adı sağlayıcınızda kartta gösterilen CNAME kaydını ekleyin: adresin ilk parçası (files), hedef customers.nivadesk.app.",
+            "Kart Canlı gösterene kadar Check again'e basın — DNS doğrulandıktan sonra güvenlik sertifikası genellikle birkaç dakika sürer. Bundan sonra NivaDesk'in web'de oluşturduğu dosya bağlantıları — bir siparişten veya Files'tan dosya açtığınızda — dosya adresini kullanır."
+          ] },
+          { kind: "bullets", items: [
+            "Hiçbir şey bozulmaz: daha önce gönderilen dosya bağlantıları oluşturuldukları adreste açılmaya devam eder; sipariş takibi, teklif, SMS ve ödeme bağlantıları yer değiştirmez.",
+            "Kart Canlı gösterene kadar ya da dosya adresini kaldırırsanız dosya bağlantıları eskisi gibi müşteri portalı adresinizi kullanır. Dosya adresi ödeme bağlantısı adresinizle aynı olamaz.",
+            "Müşterinin sipariş takip sayfasından açtığı dosyalar o sayfanın adresinde kalır; Mac, iPhone ve Android uygulamaları dosya bağlantılarında şimdilik müşteri portalı adresinizi kullanır."
           ] },
           { kind: "sub", text: "ChatGPT için NivaDesk uygulaması" },
           { kind: "bullets", items: [

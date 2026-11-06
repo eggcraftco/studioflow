@@ -32,6 +32,7 @@ import {
 import { trackingEmailRecordFrom, type TrackingEmailRecord } from "@/lib/studioflow/trackingEmailRules";
 import { mapWorkDayHistory, mapWorkDays, type WorkDayDetail, type WorkDayHistoryDetail } from "@/lib/studioflow/workDays";
 import { mapWorkSessionAudit, type WorkSessionAuditDetail } from "@/lib/studioflow/workSessionCorrections";
+import { fileLinkHostFor } from "@/lib/studioflow/fileLinkHost";
 import { productionWorkIsLive, type ProductionStage } from "@/lib/studioflow/production";
 import type { HeadingItem } from "@/lib/studioflow/blockHeadings";
 import { compareOrdersTieBreak, orderIsCancelled, wooStoreFieldsFrom, type FilterableOrder } from "@/lib/studioflow/orderFilters";
@@ -99,6 +100,8 @@ export type WorkspaceContext = {
   currentMemberDisplayName: string;
   currentMemberPhotoURL: string;
   quickReplyMenuEnabled: boolean;
+  /** Host for shared FILE links: the workspace's live file address (files.yourdomain.com), else clientPortalHost. */
+  fileLinkHost: string;
   /** Branded host for customer links (custom domain, else slug.nivadesk.app); empty = default nivadesk.app. */
   clientPortalHost: string;
   entitlements: PlanEntitlements;
@@ -1279,6 +1282,12 @@ async function loadWorkspaceContextFromServer(uid: string): Promise<WorkspaceCon
   const memberData = members[uid] && typeof members[uid] === "object" && !Array.isArray(members[uid])
     ? members[uid] as Record<string, unknown>
     : {};
+  const clientPortalHost = (() => {
+    const customHost = stringValue(companyData.clientPortalCustomHost, "").trim().toLowerCase();
+    if (customHost) return customHost;
+    const slug = stringValue(companyData.clientPortalSlug, "").trim().toLowerCase();
+    return slug ? `${slug}.nivadesk.app` : "";
+  })();
 
   return {
     id: companyId,
@@ -1327,12 +1336,8 @@ async function loadWorkspaceContextFromServer(uid: string): Promise<WorkspaceCon
       ? stringValue(memberData.photoURL, "")
       : "",
     quickReplyMenuEnabled: booleanValue(companyData.quickReplyMenuEnabled, true),
-    clientPortalHost: (() => {
-      const customHost = stringValue(companyData.clientPortalCustomHost, "").trim().toLowerCase();
-      if (customHost) return customHost;
-      const slug = stringValue(companyData.clientPortalSlug, "").trim().toLowerCase();
-      return slug ? `${slug}.nivadesk.app` : "";
-    })(),
+    clientPortalHost,
+    fileLinkHost: fileLinkHostFor(companyData, clientPortalHost),
     entitlements
   };
 }

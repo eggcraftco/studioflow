@@ -320,7 +320,7 @@ export function FilesLibraryView({
       const url = await libraryFileUrl(file.storagePath);
       // Masked viewer: the tab shows the workspace's branded host (or
       // nivadesk.app), never the raw firebasestorage address.
-      await openSharedFile(url, workspace.clientPortalHost);
+      await openSharedFile(url, workspace.fileLinkHost);
     } catch {
       setNotice(t("This file's storage area is not accessible to your account."));
     }

@@ -9659,7 +9659,7 @@ export function OrderDetailContent({
                 <div className={["app-client-files-list", "compact-list-grid", clientFileItems.length <= 3 ? "is-static" : "is-scrollable"].join(" ")}>
                   {clientFileItems.map(file => (
                     <ClientFileCard
-            brandedHost={workspace.clientPortalHost}
+            brandedHost={workspace.fileLinkHost}
                       key={file.id}
                       file={file}
                       canUseClientFiles={canUseClientFiles}
@@ -11244,7 +11244,7 @@ export function OrderDetailContent({
 
       {activeClientFilePreview ? (
         <ClientFilePreviewModal
-          brandedHost={workspace.clientPortalHost}
+          brandedHost={workspace.fileLinkHost}
           files={previewableClientFiles}
           activeFile={activeClientFilePreview}
           canManageClientFiles={canManageClientFiles}
