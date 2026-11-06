@@ -168,7 +168,7 @@ for (const [loaderName, loader] of Object.entries(LOADERS)) {
     }
   }
 }
-// Without a workspace (Dashboard, Plan, Settings, the app shell): unchanged, whatever the role.
+// Without a workspace: the loaders' contract, unchanged whatever the role (no screen calls them that way since B8 — section 4).
 for (const [loaderName, loader] of Object.entries(LOADERS)) {
   if (typeof loader !== "function") continue;
   FAKE_FS.recorded.length = 0;
@@ -205,10 +205,53 @@ expect("Customers page loads with the workspace and the uid", customersPage.incl
 expect("Customers page refresh passes the workspace and the uid", customersPage.includes("loadWorkspaceCustomers(workspace.id, workspace, user?.uid ?? \"\")"), true);
 expect("Customers page never calls the loader with the workspace id alone", /loadWorkspaceCustomers\([a-zA-Z.]+\)/.test(customersPage), false);
 
+// ---- 4. B8 (6 Nov 2026): Dashboard, Plan, Settings and the app shell called the two order loaders with the workspace id
+// alone. For an Assigned Projects Only member that is the whole-workspace query the rules refuse, so /dashboard said
+// "Missing or insufficient permissions" (Settings and Plan failed the same Promise.all). Every caller in the web tree
+// must pass the workspace and the uid; the loaders keep owners' and members' queries as they were (section 1).
+{
+  const { queries } = { queries: await (async () => { FAKE_FS.recorded.length = 0; await F.loadDashboardCounts(WS); return FAKE_FS.recorded.map((q) => ({ ...q })); })() };
+  expect("negative control: the old call shape (workspace id alone) issues a query the rules refuse to an Assigned Projects Only member",
+    queries.some((q) => refusedByRules("assigned", q)), true);
+  FAKE_FS.recorded.length = 0; await F.loadDashboardFinanceOrders(WS);
+  expect("negative control: loadDashboardFinanceOrders(id) alone is refused to an Assigned Projects Only member",
+    FAKE_FS.recorded.some((q) => refusedByRules("assigned", { ...q })), true);
+}
+const LOADER_CALL = /\b(loadDashboardCounts|loadDashboardFinanceOrders)\(/g;
+const argsAt = (src, open) => { // top-level arguments of the call whose "(" is at src[open]
+  const args = []; let depth = 0, cur = "", quote = "";
+  for (let i = open + 1; i < src.length; i++) {
+    const c = src[i];
+    if (quote) { cur += c; if (c === quote && src[i - 1] !== "\\") quote = ""; continue; }
+    if (c === '"' || c === "'" || c === "`") { quote = c; cur += c; continue; }
+    if ("([{".includes(c)) depth++;
+    if (")]}".includes(c)) { if (depth === 0) { if (cur.trim()) args.push(cur.trim()); return args; } depth--; }
+    if (c === "," && depth === 0) { args.push(cur.trim()); cur = ""; continue; }
+    cur += c;
+  }
+  return args;
+};
+const walk = (dir) => fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((e) =>
+  e.isDirectory() ? (e.name === "node_modules" || e.name.startsWith(".") ? [] : walk(path.join(dir, e.name)))
+    : /\.(ts|tsx)$/.test(e.name) ? [path.join(dir, e.name)] : []);
+let callSites = 0;
+for (const rel of ["app", "components", "lib"].flatMap(walk)) {
+  const src = read(rel);
+  for (const m of src.matchAll(LOADER_CALL)) {
+    if (/function\s+$/.test(src.slice(Math.max(0, m.index - 20), m.index))) continue; // the definition
+    callSites += 1;
+    const args = argsAt(src, m.index + m[0].length - 1);
+    const line = src.slice(0, m.index).split("\n").length;
+    const scoped = args.length >= 3 && !["undefined", "null"].includes(args[1]) && !['""', "''", "``"].includes(args[2]);
+    expect(`${rel}:${line} ${m[1]}(${args.join(", ")}) passes the workspace and the uid`, scoped, true);
+  }
+}
+expect("the web tree calls the two order loaders somewhere (the scan found them)", callSites >= 7, true);
+
 fs.rmSync(tmp, { recursive: true, force: true });
 if (failures.length) {
   console.error(`Home order scope: ${failures.length} failure(s) of ${checks} checks`);
   for (const f of failures) console.error(`  FAIL ${f}`);
   process.exit(1);
 }
-console.log(`Home order scope: all ${checks} checks pass — Workflow Only and Assigned Projects Only read only their own orders on Home; Owner, Member, View Only and Orders-off issue the same queries as before; Customers passes the workspace and the uid`);
+console.log(`Home order scope: all ${checks} checks pass — Workflow Only and Assigned Projects Only read only their own orders on Home; Owner, Member, View Only and Orders-off issue the same queries as before; Customers passes the workspace and the uid; every Dashboard / Plan / Settings / app shell call is scoped (B8)`);

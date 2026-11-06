@@ -938,7 +938,7 @@ export default function SettingsPage() {
         const isWorkflowOnly = normalizeWorkspaceRole(loadedWorkspace.role) === "workflow";
         const timed = <T,>(name: string, promise: Promise<T>) => promise.then(value => { mark(name); return value; });
         const [loadedCounts, loadedSettings, loadedQuickReplySettings, loadedTeamData, loadedSupportUnreadSummary] = await Promise.all([
-          isWorkflowOnly ? Promise.resolve(null) : timed("counts", loadDashboardCounts(loadedWorkspace.id)),
+          isWorkflowOnly ? Promise.resolve(null) : timed("counts", loadDashboardCounts(loadedWorkspace.id, loadedWorkspace, currentUser.uid)),
           timed("overview", loadWorkspaceSettingsOverview(loadedWorkspace.id)),
           timed("quickReply", loadQuickReplySettings(loadedWorkspace.id)),
           timed("team", teamDataPromise),
@@ -1104,7 +1104,7 @@ export default function SettingsPage() {
     if (!workspace) return;
     const isWorkflowOnly = normalizeWorkspaceRole(workspace.role) === "workflow";
     const [nextCounts, nextSettings, nextQuickReplySettings] = await Promise.all([
-      isWorkflowOnly ? Promise.resolve(null) : loadDashboardCounts(workspace.id),
+      isWorkflowOnly ? Promise.resolve(null) : loadDashboardCounts(workspace.id, workspace, user?.uid ?? ""),
       loadWorkspaceSettingsOverview(workspace.id),
       loadQuickReplySettings(workspace.id)
     ]);
