@@ -110,7 +110,7 @@ import {
 import { CardIconGlyph, type CardIcon } from "@/components/CardTitle";
 import SupportChatWidget from "@/components/SupportChatWidget";
 import { PublicMascot } from "@/components/PublicMascot";
-import { CITY_ANCHORS, PublicIsoCity, PublicIsoTile } from "@/components/PublicIllustrations";
+import { CITY_SIZE, PublicIsoTile, PublicIsoTown, TOWN_ANCHORS, type TownAnchor } from "@/components/PublicIllustrations";
 import { PUBLIC_FONT_CLASSES } from "@/lib/publicSite/fonts";
 import { safeNextFromLocation } from "@/lib/security/safeNext";
 
@@ -2953,56 +2953,100 @@ function PlatformNote() {
   );
 }
 
-// The order in the middle of the studio (cream redesign, 2 Nov 2026): one
-// isometric plate with the four parts of the work around the order, each with
-// a label pinned to it. The labels are the words the card diagram used.
+// The order in the middle of the studio (cream redesign 2 Nov 2026; six parts,
+// owner 6 Nov 2026): one isometric block with the order in the middle and a
+// landmark for each part of NivaDesk around it, each with a label pinned to it.
+// The picture is decorative; the labels are the text, in reading order, and on
+// a phone they become the list under the picture. Every label names something a
+// workspace can use today (docs/integrations); nothing pilot-only is drawn.
+type TownLabel = {
+  zone: Exclude<TownAnchor, "order" | "owl">;
+  titleKey: PublicSiteTranslationKey;
+  subKey: PublicSiteTranslationKey;
+  tone: string;
+  place: "top" | "bottom";
+  x: number;
+  icon: ReactNode;
+};
+const TOWN_LABELS: TownLabel[] = [
+  { zone: "channels", titleKey: "connected.zone.channels", subKey: "connected.zone.channelsSub", tone: "rose", place: "top", x: 50, icon: <><path d="M3.5 8.2h13l-1.2-4.2H4.7z" /><path d="M4.6 8.2V16h10.8V8.2" /><path d="M8.6 16v-4.2h2.8V16" /></> },
+  { zone: "customers", titleKey: "connected.zone.customers", subKey: "connected.zone.customersSub", tone: "sage", place: "top", x: 22, icon: <><circle cx="10" cy="7" r="3" /><path d="M4.5 16.5c1-3 3-4.5 5.5-4.5s4.5 1.5 5.5 4.5" /></> },
+  { zone: "production", titleKey: "connected.zone.production", subKey: "connected.zone.productionSub", tone: "lilac", place: "top", x: 78, icon: <><rect x="3" y="4" width="14" height="12" rx="1.6" /><path d="M7.7 4v12M12.3 4v12M4.6 7.2h1.6M9.2 7.2h1.6M13.8 7.2h1.6" /></> },
+  { zone: "stock", titleKey: "connected.zone.stock", subKey: "connected.zone.stockSub", tone: "sand", place: "bottom", x: 22, icon: <><path d="M10 2.8 16.5 6v8L10 17.2 3.5 14V6z" /><path d="M3.5 6 10 9.2 16.5 6M10 9.2v8" /></> },
+  { zone: "shipping", titleKey: "connected.zone.shipping", subKey: "connected.zone.shippingSub", tone: "sky", place: "bottom", x: 50, icon: <><path d="M2.6 5.6h9v8h-9z" /><path d="M11.6 8.6h3.1l2.6 2.8v2.2h-5.7" /><circle cx="6" cy="14.6" r="1.6" /><circle cx="14.2" cy="14.6" r="1.6" /></> },
+  { zone: "money", titleKey: "connected.zone.money", subKey: "connected.zone.moneySub", tone: "butter", place: "bottom", x: 78, icon: <><path d="M2.8 8 10 3.8 17.2 8z" /><path d="M5 8.4v5.6M8.3 8.4v5.6M11.7 8.4v5.6M15 8.4v5.6M3.2 16.2h13.6" /></> }
+];
+// Where the top labels end, as % of the picture's height: their pins start here.
+const TOWN_LABEL_FOOT = 19;
+// The assistant's speech bubble: its lower edge over the owl's head, clear of the
+// Production pin (% of the picture). The list is taller than the picture, so the
+// height goes in as a margin, which CSS takes as a share of the width.
+const TOWN_BUBBLE = { x: 83, y: 39.5 };
+const TOWN_BUBBLE_MARGIN = `${((TOWN_BUBBLE.y * CITY_SIZE.h) / CITY_SIZE.w).toFixed(2)}%`;
+// The bottom labels start where the picture ends, so their icons and titles line up
+// whatever the length of the line under them.
+const TOWN_BELOW = `${((100 * CITY_SIZE.h) / CITY_SIZE.w).toFixed(2)}%`;
+
+function TownIcon({ tone, children, small }: { tone: string; children: ReactNode; small?: boolean }) {
+  return (
+    <span className={`hero-float-icon${small ? " public-iso-mark-icon" : ""}`} data-tone={tone} aria-hidden="true">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+    </span>
+  );
+}
+
 function ConnectedOrderDiagram() {
   const { t } = usePublicSiteLanguage();
-  const sides: { titleKey: PublicSiteTranslationKey; subKey: PublicSiteTranslationKey; icon: ReactNode; tone: string; anchor: "customer" | "work" | "money" | "items"; place: "top" | "bottom" }[] = [
-    { titleKey: "orderCards.group.customer", subKey: "connected.customerSub", tone: "sage", anchor: "customer", place: "top", icon: <><circle cx="10" cy="7" r="3" /><path d="M4.5 16.5c1-3 3-4.5 5.5-4.5s4.5 1.5 5.5 4.5" /></> },
-    { titleKey: "orderCards.group.work", subKey: "connected.workSub", tone: "violet", anchor: "work", place: "top", icon: <><path d="M13 3.5l3.5 3.5-9 9H4v-3.5z" /></> },
-    { titleKey: "orderCards.group.money", subKey: "connected.moneySub", tone: "green", anchor: "money", place: "top", icon: <><circle cx="10" cy="10" r="6.5" /><path d="M10 6.5v7M8 8.2c0-.9.9-1.5 2-1.5s2 .6 2 1.4c0 2.2-4 1.2-4 3.4 0 .8.9 1.4 2 1.4s2-.6 2-1.5" /></> },
-    { titleKey: "orderCards.group.items", subKey: "connected.itemsSub", tone: "gold", anchor: "items", place: "bottom", icon: <><path d="M10 2.8 16.5 6v8L10 17.2 3.5 14V6z" /><path d="M3.5 6 10 9.2 16.5 6M10 9.2v8" /></> }
-  ];
+  const owl = TOWN_ANCHORS.owl;
   return (
     <section className="public-section public-connected-section public-scroll-reveal">
       <div className="public-shell">
         <span className="public-eyebrow public-connected-eyebrow">{t("section.flow.eyebrow")}</span>
         <h2 className="public-connected-title">{t("section.flow.title")}</h2>
         <div className="public-iso-city-wrap">
-          <div className="public-iso-city-stage">
-          <PublicIsoCity />
-          <svg className="public-iso-pins" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            {sides.map(side => {
-              const anchor = CITY_ANCHORS[side.anchor];
-              return (
-                <line
-                  key={side.anchor}
-                  data-tone={side.tone}
-                  x1={anchor.x}
-                  y1={side.place === "top" ? 13 : 100}
-                  x2={anchor.x}
-                  y2={anchor.y}
-                  vectorEffect="non-scaling-stroke"
-                />
-              );
-            })}
-          </svg>
-          <span className="public-iso-order-pill" style={{ left: `${CITY_ANCHORS.order.x}%`, top: `${CITY_ANCHORS.order.y}%` }}>
-            {t("orderCards.group.order")}
-          </span>
-          <PublicMascot pose="magnifier" className="public-iso-mascot" />
+          <div className="public-iso-city-stage" aria-hidden="true">
+            <PublicIsoTown />
+            <svg className="public-iso-pins" viewBox="0 0 100 100" preserveAspectRatio="none">
+              {TOWN_LABELS.map(label => {
+                const anchor = TOWN_ANCHORS[label.zone];
+                return (
+                  <line
+                    key={label.zone}
+                    data-tone={label.tone}
+                    x1={label.x}
+                    y1={label.place === "top" ? TOWN_LABEL_FOOT : 100}
+                    x2={anchor.x}
+                    y2={anchor.y}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                );
+              })}
+            </svg>
+            {TOWN_LABELS.map(label => (
+              <span key={label.zone} className="public-iso-mark" style={{ left: `${TOWN_ANCHORS[label.zone].x}%`, top: `${TOWN_ANCHORS[label.zone].y}%` }}>
+                <TownIcon tone={label.tone} small>{label.icon}</TownIcon>
+              </span>
+            ))}
+            <span className="public-iso-order-pill" style={{ left: `${TOWN_ANCHORS.order.x}%`, top: `${TOWN_ANCHORS.order.y}%` }}>
+              {t("orderCards.group.order")}
+            </span>
+            <span className="public-iso-mascot" style={{ left: `${owl.x}%`, top: `${owl.y}%` }}>
+              <PublicMascot pose="laptop" />
+            </span>
           </div>
-          <ul className="public-iso-labels">
-            {sides.map(side => (
-              <li key={side.anchor} data-place={side.place} data-tone={side.tone} style={{ left: `${CITY_ANCHORS[side.anchor].x}%` }}>
-                <span className="hero-float-icon" data-tone={side.tone} aria-hidden="true">
-                  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{side.icon}</svg>
-                </span>
-                <strong>{t(side.titleKey)}</strong>
-                <span>{t(side.subKey)}</span>
+          <ul className="public-iso-labels" aria-label={t("connected.zonesAria")}>
+            {TOWN_LABELS.map(label => (
+              <li key={label.zone} data-place={label.place} style={{ left: `${label.x}%`, marginTop: label.place === "bottom" ? TOWN_BELOW : undefined }}>
+                <TownIcon tone={label.tone}>{label.icon}</TownIcon>
+                <strong>{t(label.titleKey)}</strong>
+                <span>{t(label.subKey)}</span>
               </li>
             ))}
+            <li data-place="assistant" style={{ left: `${TOWN_BUBBLE.x}%`, marginTop: TOWN_BUBBLE_MARGIN }}>
+              <TownIcon tone="teal"><path d="M3.5 4.5h13v8.6H9.2l-3.7 3v-3H3.5z" /><path d="M7 8.8h.01M10 8.8h.01M13 8.8h.01" /></TownIcon>
+              <strong>{t("connected.assistant")}</strong>
+              <span>{t("connected.assistantSub")}</span>
+            </li>
           </ul>
         </div>
       </div>

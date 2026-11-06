@@ -25,7 +25,9 @@ const SHADES = {
   lilac: { top: "#e3ddf0", left: "#c9c0e2", right: "#afa4d2" },
   sky: { top: "#d6e7ef", left: "#b4d2df", right: "#8fb8ca" },
   gold: { top: "#f6d88a", left: "#e8be5e", right: "#d2a443" },
-  ink: { top: "#4a3f3a", left: "#352c28", right: "#251d1a" }
+  ink: { top: "#4a3f3a", left: "#352c28", right: "#251d1a" },
+  rose: { top: "#f7d9d2", left: "#ecbcb1", right: "#da9e91" },
+  butter: { top: "#fbeec8", left: "#f1da9c", right: "#dfc273" }
 } satisfies Record<string, Shade>;
 
 type ShadeName = keyof typeof SHADES;
@@ -212,58 +214,249 @@ export function PublicIsoTile({ scene, className }: { scene: IsoScene; className
   );
 }
 
-// The big plate on the home page: the order in the middle, the four parts of
-// the studio around it, joined by dashed paths. The section draws its labels
-// over it at CITY_ANCHORS (percentages of the picture), so the words stay text.
+// The big plate on the home page (owner, 6 Nov 2026: "daha belirgin ana yapılar,
+// özellikleri temsil eden alanlar"): the order in the middle of a 3×3 block and
+// one readable landmark for each part of NivaDesk around it — shops for the
+// sales channels, a house and a phone for the customer and their order link, a
+// board and people for production, a shelf and a file cabinet for stock and
+// files, a van and a map pin for shipping, a bank and coins for payments. The
+// side corners hold trees and the owl. Only what every workspace can use today
+// is drawn. The section draws its labels over the picture at TOWN_ANCHORS
+// (percentages of the picture), so the words stay text.
 const CITY = { s: 4.2, cx: 500, cy: 150 };
-const CITY_PARTS: { scene: IsoScene; ox: number; oy: number; k: number; plate: ShadeName }[] = [
-  { scene: "work", ox: 6, oy: 6, k: 0.36, plate: "sand" },
-  { scene: "money", ox: 58, oy: 6, k: 0.36, plate: "cream" },
-  { scene: "customer", ox: 6, oy: 58, k: 0.36, plate: "sage" },
-  { scene: "order", ox: 34, oy: 34, k: 0.32, plate: "paper" },
-  { scene: "items", ox: 58, oy: 58, k: 0.36, plate: "lilac" }
-];
 export const CITY_SIZE = { w: 1000, h: 600 };
 
 function cityPoint(x: number, y: number, z = 0): Pt {
   return project({ ...CITY, ox: 0, oy: 0, k: 1 }, x, y, z);
 }
 
-/** Where each part's label line meets the picture, as % of CITY_SIZE. */
-export const CITY_ANCHORS: Record<"work" | "money" | "customer" | "items" | "order", { x: number; y: number }> = (() => {
+type P3 = [number, number, number];
+
+function Poly({ f, list, fill }: { f: Frame; list: P3[]; fill: string }) {
+  return <polygon points={pts(list.map(([x, y, z]) => project(f, x, y, z)))} fill={fill} />;
+}
+
+/** A face on the plane x = X (the right-hand side of a box). */
+function FaceX({ f, X, y1, y2, z1, z2, fill }: { f: Frame; X: number; y1: number; y2: number; z1: number; z2: number; fill: string }) {
+  return <Poly f={f} list={[[X, y1, z1], [X, y2, z1], [X, y2, z2], [X, y1, z2]]} fill={fill} />;
+}
+
+function Person({ f, x, y, c }: { f: Frame; x: number; y: number; c: ShadeName }) {
+  const [hx, hy] = project(f, x, y, 19);
+  return (
+    <g>
+      <Cylinder f={f} x={x} y={y} r={5.5} h={13} c={c} />
+      <circle cx={hx} cy={hy} r={5.2 * f.k * f.s} fill={SHADES.sand.top} />
+    </g>
+  );
+}
+
+function MapPin({ f, x, y, h, r }: { f: Frame; x: number; y: number; h: number; r: number }) {
+  const [bx, by] = project(f, x, y, 0);
+  const [hx, hy] = project(f, x, y, h);
+  const R = r * f.k * f.s;
+  const n = (v: number) => v.toFixed(1);
+  return (
+    <g>
+      <ellipse cx={bx} cy={by} rx={R * 0.7} ry={R * 0.35} fill={INK} opacity="0.18" strokeWidth="0" />
+      <path d={`M${n(bx)} ${n(by)}L${n(hx - R * 0.87)} ${n(hy + R * 0.5)}A${n(R)} ${n(R)} 0 1 1 ${n(hx + R * 0.87)} ${n(hy + R * 0.5)}Z`} fill={SHADES.terracotta.top} />
+      <circle cx={hx} cy={hy} r={R * 0.42} fill={SHADES.paper.top} />
+    </g>
+  );
+}
+
+/** A striped awning on the front (y = Y) of a shop, from x1 to x2. */
+function Awning({ f, x1, x2, Y, z, out, c }: { f: Frame; x1: number; x2: number; Y: number; z: number; out: number; c: ShadeName }) {
+  const w = (x2 - x1) / 5;
+  return (
+    <g>
+      {[0, 1, 2, 3, 4].map(i => (
+        <Poly key={i} f={f} list={[[x1 + i * w, Y, z], [x1 + (i + 1) * w, Y, z], [x1 + (i + 1) * w, Y + out, z - 5], [x1 + i * w, Y + out, z - 5]]} fill={i % 2 ? SHADES.paper.top : SHADES[c].top} />
+      ))}
+      {[0, 1, 2, 3, 4].map(i => (
+        <Face key={`v${i}`} f={f} x1={x1 + i * w} x2={x1 + (i + 1) * w} y={Y + out} z1={z - 8} z2={z - 5} fill={i % 2 ? SHADES.paper.left : SHADES[c].left} />
+      ))}
+    </g>
+  );
+}
+
+type TownZone = "channels" | "customers" | "production" | "stock" | "shipping" | "money";
+
+function TownScene({ zone, f }: { zone: TownZone; f: Frame }): ReactNode {
+  switch (zone) {
+    case "channels":
+      return (
+        <g>
+          <Box f={f} x={8} y={12} w={42} d={30} h={32} c="cream" />
+          <Face f={f} x1={13} x2={30} y={42} z1={4} z2={17} fill={SHADES.sky.top} />
+          <Face f={f} x1={35} x2={44} y={42} z1={0} z2={17} fill={SHADES.teal.right} />
+          <Awning f={f} x1={8} x2={50} Y={42} z={26} out={9} c="terracotta" />
+          <Box f={f} x={56} y={30} w={32} d={26} h={26} c="paper" />
+          <Face f={f} x1={60} x2={82} y={56} z1={4} z2={13} fill={SHADES.sky.top} />
+          <Awning f={f} x1={56} x2={88} Y={56} z={21} out={8} c="teal" />
+          <Box f={f} x={62} y={74} w={11} d={11} h={9} c="sand" />
+          <Box f={f} x={66} y={74} z={9} w={3} d={11} h={0.6} c="terracotta" />
+          <Box f={f} x={80} y={84} w={9} d={9} h={7} c="sand" />
+        </g>
+      );
+    case "customers":
+      return (
+        <g>
+          <Tree f={f} x={84} y={20} h={10} r={7} />
+          <Box f={f} x={8} y={30} w={42} d={32} h={24} c="cream" />
+          <Poly f={f} list={[[8, 26, 22], [50, 26, 22], [50, 46, 38], [8, 46, 38]]} fill={SHADES.terracotta.top} />
+          <Poly f={f} list={[[50, 30, 24], [50, 62, 24], [50, 46, 38]]} fill={SHADES.cream.right} />
+          <Poly f={f} list={[[8, 46, 38], [50, 46, 38], [50, 66, 22], [8, 66, 22]]} fill={SHADES.terracotta.left} />
+          <Face f={f} x1={14} x2={23} y={62} z1={0} z2={15} fill={SHADES.teal.right} />
+          <Face f={f} x1={29} x2={44} y={62} z1={7} z2={16} fill={SHADES.sky.top} />
+          <FaceX f={f} X={50} y1={38} y2={52} z1={8} z2={17} fill={SHADES.sky.left} />
+          <Box f={f} x={70} y={64} w={18} d={4} h={42} c="ink" />
+          <Face f={f} x1={71.8} x2={86.2} y={68} z1={4} z2={38} fill={SHADES.paper.top} />
+          <Face f={f} x1={73.5} x2={84.5} y={68} z1={32} z2={35.5} fill={SHADES.teal.left} />
+          <Face f={f} x1={73.5} x2={84.5} y={68} z1={17} z2={28} fill={SHADES.sage.left} />
+          <Face f={f} x1={73.5} x2={84.5} y={68} z1={10} z2={12.5} fill={SHADES.cream.right} />
+          <Face f={f} x1={73.5} x2={80.5} y={68} z1={10} z2={12.5} fill={SHADES.terracotta.left} />
+        </g>
+      );
+    case "production":
+      return (
+        <g>
+          <Box f={f} x={16} y={24} w={3} d={3} h={12} c="ink" />
+          <Box f={f} x={70} y={24} w={3} d={3} h={12} c="ink" />
+          <Box f={f} x={12} y={22} z={12} w={64} d={4} h={38} c="paper" />
+          <Face f={f} x1={15} x2={32} y={26} z1={43} z2={46.5} fill={SHADES.terracotta.top} />
+          <Face f={f} x1={35} x2={52} y={26} z1={43} z2={46.5} fill={SHADES.gold.top} />
+          <Face f={f} x1={55} x2={72} y={26} z1={43} z2={46.5} fill={SHADES.teal.top} />
+          <Face f={f} x1={16} x2={31} y={26} z1={33} z2={40} fill={SHADES.sand.top} />
+          <Face f={f} x1={16} x2={31} y={26} z1={24} z2={31} fill={SHADES.sand.top} />
+          <Face f={f} x1={36} x2={51} y={26} z1={33} z2={40} fill={SHADES.sky.top} />
+          <Face f={f} x1={56} x2={71} y={26} z1={33} z2={40} fill={SHADES.sage.top} />
+          <Person f={f} x={28} y={48} c="teal" />
+          <Person f={f} x={50} y={60} c="terracotta" />
+          <Person f={f} x={70} y={46} c="gold" />
+        </g>
+      );
+    case "stock":
+      return (
+        <g>
+          <Box f={f} x={6} y={28} w={3} d={22} h={46} c="ink" />
+          <Box f={f} x={43} y={28} w={3} d={22} h={46} c="ink" />
+          {[12, 28, 44].map(z => (
+            <Box key={z} f={f} x={6} y={28} z={z} w={40} d={22} h={2} c="cream" />
+          ))}
+          <Box f={f} x={10} y={33} z={14} w={12} d={12} h={10} c="terracotta" />
+          <Box f={f} x={27} y={34} z={14} w={12} d={11} h={8} c="sky" />
+          <Box f={f} x={12} y={34} z={30} w={10} d={10} h={10} c="sage" />
+          <Box f={f} x={27} y={33} z={30} w={13} d={12} h={7} c="lilac" />
+          <Box f={f} x={58} y={34} w={28} d={26} h={38} c="paper" />
+          {[13, 25].map(z => (
+            <Face key={z} f={f} x1={58} x2={86} y={60} z1={z - 0.5} z2={z + 0.5} fill={SHADES.paper.right} />
+          ))}
+          {[7, 19, 31].map(z => (
+            <Face key={`h${z}`} f={f} x1={67} x2={77} y={60} z1={z - 1.2} z2={z + 1.2} fill={SHADES.ink.left} />
+          ))}
+          <Box f={f} x={64} y={44} z={38} w={16} d={3} h={9} c="gold" />
+        </g>
+      );
+    case "shipping": {
+      const [vx, vy] = [14, 44];
+      return (
+        <g>
+          <MapPin f={f} x={30} y={24} h={40} r={10} />
+          <Box f={f} x={vx} y={vy} z={4} w={44} d={24} h={24} c="paper" />
+          <Box f={f} x={vx + 44} y={vy + 2} z={4} w={16} d={20} h={16} c="teal" />
+          <Face f={f} x1={vx + 47} x2={vx + 56} y={vy + 22} z1={11} z2={17} fill={SHADES.sky.top} />
+          <Face f={f} x1={vx + 6} x2={vx + 38} y={vy + 24} z1={11} z2={20} fill={SHADES.terracotta.top} />
+          {[[vx + 9, vy + 24], [vx + 36, vy + 24], [vx + 53, vy + 22]].map(([wx, wy]) => {
+            const [cx, cy] = project(f, wx, wy, 4);
+            return <ellipse key={wx} cx={cx} cy={cy} rx={5 * f.k * f.s} ry={5.5 * f.k * f.s} fill={SHADES.ink.left} />;
+          })}
+          <Box f={f} x={82} y={78} w={10} d={10} h={8} c="sand" />
+        </g>
+      );
+    }
+    case "money":
+      return (
+        <g>
+          <Box f={f} x={12} y={20} w={54} d={46} h={5} c="cream" />
+          <Box f={f} x={17} y={25} z={5} w={44} d={28} h={22} c="cream" />
+          {[21, 33, 45, 57].map(cx => (
+            <Cylinder key={cx} f={f} x={cx} y={60} z={5} r={3.4} h={22} c="paper" />
+          ))}
+          <Box f={f} x={12} y={20} z={27} w={54} d={46} h={4} c="paper" />
+          <Poly f={f} list={[[12, 20, 31], [12, 66, 31], [39, 66, 43], [39, 20, 43]]} fill={SHADES.butter.top} />
+          <Poly f={f} list={[[39, 20, 43], [39, 66, 43], [66, 66, 31], [66, 20, 31]]} fill={SHADES.butter.right} />
+          <Poly f={f} list={[[12, 66, 31], [66, 66, 31], [39, 66, 43]]} fill={SHADES.paper.left} />
+          <Cylinder f={f} x={82} y={34} r={8} h={20} c="gold" rings={3} />
+          <Cylinder f={f} x={84} y={60} r={8} h={11} c="gold" rings={1} />
+        </g>
+      );
+  }
+}
+
+// Cell size and the three cell origins along each side of the plate.
+const CELL = 29;
+const AT = [3.5, 35.5, 67.5];
+const ZONES: { zone: TownZone; i: number; j: number; plate: ShadeName }[] = [
+  { zone: "channels", i: 0, j: 0, plate: "rose" },
+  { zone: "customers", i: 0, j: 1, plate: "sage" },
+  { zone: "production", i: 1, j: 0, plate: "lilac" },
+  { zone: "stock", i: 1, j: 2, plate: "sand" },
+  { zone: "money", i: 2, j: 1, plate: "butter" },
+  { zone: "shipping", i: 2, j: 2, plate: "sky" }
+];
+const cellFrame = (i: number, j: number): Frame => ({ ...CITY, ox: AT[i], oy: AT[j], k: CELL / 100 });
+const cellMid = (i: number) => AT[i] + CELL / 2;
+
+export type TownAnchor = TownZone | "order" | "owl";
+
+/** Where each label meets the picture, as % of CITY_SIZE. */
+export const TOWN_ANCHORS: Record<TownAnchor, { x: number; y: number }> = (() => {
   const at = (x: number, y: number, z: number) => {
     const [px, py] = cityPoint(x, y, z);
-    return { x: (px / CITY_SIZE.w) * 100, y: (py / CITY_SIZE.h) * 100 };
+    return { x: +((px / CITY_SIZE.w) * 100).toFixed(2), y: +((py / CITY_SIZE.h) * 100).toFixed(2) };
   };
   return {
-    work: at(24, 24, 14),
-    money: at(76, 24, 14),
-    customer: at(24, 76, 14),
-    items: at(76, 76, 18),
-    order: at(50, 50, 18)
+    channels: at(cellMid(0), cellMid(0), 13),
+    customers: at(cellMid(0), cellMid(1), 12),
+    production: at(cellMid(1), cellMid(0), 14),
+    order: at(50, 50, 16),
+    stock: at(cellMid(1), cellMid(2), 12),
+    money: at(cellMid(2), cellMid(1), 12),
+    shipping: at(cellMid(2), cellMid(2), 10),
+    // The owl stands towards the outer edge of the right-hand corner, so its bubble clears the Production pin.
+    owl: at(AT[2] + CELL * 0.7, AT[0] + CELL * 0.36, 0)
   };
 })();
 
-export function PublicIsoCity({ className }: { className?: string }) {
+export function PublicIsoTown({ className }: { className?: string }) {
   const base: Frame = { ...CITY, ox: 0, oy: 0, k: 1 };
-  const road = (a: Pt, b: Pt) => <line x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]} />;
+  const center = cityPoint(50, 50);
+  const park = cellFrame(0, 2);
+  const corner = cellFrame(2, 0);
+  // Back to front: the cells further up the picture are drawn first.
+  const drawOrder = [...ZONES].sort((a, b) => a.i + a.j - (b.i + b.j));
   return (
     <svg className={`public-iso public-iso-city${className ? ` ${className}` : ""}`} viewBox={`0 0 ${CITY_SIZE.w} ${CITY_SIZE.h}`} aria-hidden="true" focusable="false">
       <g stroke={INK} strokeWidth="1.3" strokeLinejoin="round">
         <Plate f={base} c="cream" thick={4} grid={false} />
-        <g stroke={SHADES.terracotta.right} strokeWidth="3" strokeDasharray="10 9" strokeLinecap="round" opacity="0.8">
-          {road(cityPoint(50, 3), cityPoint(50, 97))}
-          {road(cityPoint(3, 50), cityPoint(97, 50))}
+        <Plate f={cellFrame(1, 1)} c="paper" thick={3} />
+        {ZONES.map(z => (
+          <Plate key={z.zone} f={cellFrame(z.i, z.j)} c={z.plate} thick={3} />
+        ))}
+        <g stroke={SHADES.terracotta.right} strokeWidth="3" strokeDasharray="10 9" strokeLinecap="round" opacity="0.85">
+          {ZONES.map(z => {
+            const end = cityPoint(cellMid(z.i), cellMid(z.j));
+            return <line key={z.zone} x1={center[0]} y1={center[1]} x2={end[0]} y2={end[1]} />;
+          })}
         </g>
-        {CITY_PARTS.map(part => {
-          const f: Frame = { ...CITY, ox: part.ox, oy: part.oy, k: part.k };
-          return (
-            <g key={part.scene}>
-              <Plate f={f} c={part.plate} thick={3} />
-              <Scene scene={part.scene} f={f} />
-            </g>
-          );
-        })}
+        <Tree f={park} x={30} y={30} h={14} r={11} />
+        <Tree f={park} x={62} y={40} h={10} r={8} />
+        <Tree f={park} x={38} y={70} h={12} r={9} />
+        <Tree f={corner} x={30} y={22} h={12} r={9} />
+        {drawOrder.filter(z => z.i + z.j < 2).map(z => <TownScene key={z.zone} zone={z.zone} f={cellFrame(z.i, z.j)} />)}
+        <Scene scene="order" f={cellFrame(1, 1)} />
+        {drawOrder.filter(z => z.i + z.j > 2).map(z => <TownScene key={z.zone} zone={z.zone} f={cellFrame(z.i, z.j)} />)}
       </g>
     </svg>
   );
