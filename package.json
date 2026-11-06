@@ -54,6 +54,7 @@
     "test:stripe-resume": "node scripts/check-stripe-resume.mjs",
     "test:inventory-notes": "node scripts/check-inventory-notes.mjs",
     "test:inventory-fixes": "node scripts/check-inventory-fixes.mjs",
+    "test:inventory-listings": "node scripts/check-inventory-listings.mjs",
     "test:plan-order-usage": "node scripts/check-plan-order-usage.mjs",
     "test:count-labels": "npx tsx scripts/check-count-labels.ts",
     "test:import-count-phrases": "npx tsx scripts/check-import-count-phrases.ts",
