@@ -147,6 +147,28 @@ const facts = { setupFinished: false, hasCustomer: false, hasOrder: false, hasSt
     }
     assert.equal(changelog.CHANGELOG_LAST_UPDATED, "5 November 2026");
   });
+  await check("6.2a Apple 2.4.1 is on iPhone, iPad and Mac (both App Store pages, 5 Nov 2026); 2.4 stays iPhone & iPad", () => {
+    const find = (anchor: string) => changelog.CHANGELOG.find((entry) => changelog.changelogAnchor(entry) === anchor);
+    const apple241 = find("apple-2.4.1");
+    assert.ok(apple241, "no apple-2.4.1 entry");
+    assert.equal(apple241.platform, "iPhone, iPad & Mac");
+    assert.equal(apple241.date, "5 November 2026");
+    const highlight = apple241.highlight ?? "";
+    assert.ok(highlight.includes("Released to the App Store for iPhone, iPad and Mac on 5 November 2026."), highlight);
+    assert.ok(!highlight.includes("Mac App Store"), "the highlight still says Mac only");
+    assert.ok(highlight.includes("first update after 2.3") && highlight.includes("everything listed under 2.4"), "the Mac skipped 2.4: the highlight must say 2.4.1 brings it");
+    // The What's New that was entered (identical on the public iPhone and Mac pages, read 6 Nov 2026).
+    assert.deepEqual(apple241.changes.map((change) => change.text), [
+      "Security update: the app's connection to its database now includes Google's latest Firebase security fix, which removes the certificates of a compromised certificate authority from the list the app trusts. We recommend updating on every iPhone, iPad and Mac you use.",
+      "Online booking: requests from your booking page show their status in Calendar, and you can confirm or decline them in the app, with an optional message to the customer.",
+      "NivaDesk help: your conversation is kept on this device for 7 days, so you can pick it up again later.",
+      "Smaller fixes and translations.",
+    ]);
+    assert.equal(find("apple-2.4")?.platform, "iPhone & iPad", "macOS 2.4 never shipped (withdrawn 5 Nov); the Mac got it in 2.4.1");
+    const source = read("lib/publicSite/changelog.ts");
+    assert.ok(!source.includes("Once iOS 2.4.1 is released"), "the 'until iOS ships' note is still in the file");
+    assert.ok(!source.includes("once it is released, change `platform`"), "the 2.4 entry still waits for a Mac 2.4 release");
+  });
   await check("6.3 2.1 notes claim nothing that is server-gated or web-only", () => {
     const text = changelog.CHANGELOG.filter((entry) => entry.version === "2.1")
       .flatMap((entry) => [entry.highlight ?? "", ...entry.changes.map((change) => change.text)]).join(" ");

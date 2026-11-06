@@ -65,17 +65,20 @@ export function isLatestForPlatform(entry: ChangelogEntry, list: ChangelogEntry[
 export const CHANGELOG_LAST_UPDATED = "5 November 2026";
 
 export const CHANGELOG: ChangelogEntry[] = [
-  // 2.4.1 (Apple) — from the App Store "What's New" that was entered (en-GB; ~/Developer/nivadesk-deploy-2026-11-05/store-2.4.1/README.md,
-  // identical for iOS and macOS) for native-2.4.1-candidate-2026-11-01 @5336c2245, build 35. Read 5 Nov 2026: App Store Connect
-  // MAC_OS 2.4.1 READY_FOR_SALE (it was WAITING_FOR_REVIEW at 11:20Z the same day), iOS 2.4.1 still WAITING_FOR_REVIEW.
-  // Once iOS 2.4.1 is released, change `platform` to "iPhone, iPad & Mac" and add the iPhone/iPad release day to `highlight` —
-  // keep version and anchor (#apple-2.4.1) as they are.
+  // 2.4.1 (Apple, iPhone, iPad & Mac) — from the App Store "What's New" that was entered (en-GB; ~/Developer/nivadesk-deploy-2026-11-05/store-2.4.1/README.md,
+  // identical for iOS and macOS) for native-2.4.1-candidate-2026-11-01 @5336c2245, build 35. Read back 6 Nov 2026 ~01:15Z from the public
+  // App Store (no sign-in): iOS — itunes lookup gb version 2.4.1, currentVersionReleaseDate 2026-11-05T22:14:37Z, and the iPhone page's
+  // version history "2.4.1 · Thu Nov 05 2026 22:14:37 GMT"; Mac — the apps.apple.com macOS page's version history "2.4.1 · Thu Nov 05 2026
+  // 12:11:09 GMT", right after "2.3 · 29 Oct" (the macOS 2.4 build was withdrawn from review on 5 Nov and the same version turned into
+  // 2.4.1, so the Mac went from 2.3 straight to 2.4.1 and got the 2.4 changes with it). Same What's New text on both pages. Both stores
+  // released it on 5 November 2026 (Mac first, iPhone/iPad the same evening). The itunes lookup with entity=macSoftware still answered the
+  // iOS 2.4 record (2.4, 2026-11-02T21:39:46Z, minimum OS 17.0 = the iOS minimum; the Mac page says macOS 14.0) — not a source for the Mac.
   {
     version: "2.4.1",
     platformKey: "apple",
-    platform: "Mac",
+    platform: "iPhone, iPad & Mac",
     date: "5 November 2026",
-    highlight: "A security update for the app's database connection, plus confirming online bookings in the app. Released to the Mac App Store on 5 November 2026.",
+    highlight: "A security update for the app's database connection, plus confirming online bookings in the app. Released to the App Store for iPhone, iPad and Mac on 5 November 2026. On the Mac this is the first update after 2.3, so it also brings everything listed under 2.4.",
     changes: [
       { tag: "fixed", text: "Security update: the app's connection to its database now includes Google's latest Firebase security fix, which removes the certificates of a compromised certificate authority from the list the app trusts. We recommend updating on every iPhone, iPad and Mac you use." },
       { tag: "new", text: "Online booking: requests from your booking page show their status in Calendar, and you can confirm or decline them in the app, with an optional message to the customer." },
@@ -102,8 +105,8 @@ export const CHANGELOG: ChangelogEntry[] = [
   // 2.4 (Apple, iPhone & iPad) — from the App Store "What's New" that was entered, read back from the public App Store
   // record (itunes lookup, gb + us, 4 Nov 2026: version 2.4, currentVersionReleaseDate 2026-11-02T21:39:46Z; same text as
   // ~/Developer/nivadesk-deploy-2026-11-01/store-2.4/notes-2.4.md en-GB) for native-2.4-release-2026-11-01, build 34.
-  // The macOS 2.4 build was still In Review (Mac 2.3 live) when this was added: once it is released, change `platform`
-  // to "iPhone, iPad & Mac" and add the Mac release day to `highlight` — keep version and anchor (#apple-2.4) as they are.
+  // The macOS 2.4 build never shipped: it was withdrawn from review on 5 Nov 2026 and the Mac got these changes in 2.4.1 (see
+  // the 2.4.1 entry above), so this entry stays "iPhone & iPad" — do not add the Mac here.
   {
     version: "2.4",
     platformKey: "apple",
