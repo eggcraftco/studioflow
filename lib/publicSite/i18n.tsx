@@ -14,14 +14,23 @@ import {
   normalizeStudioLanguage,
   SUPPORTED_STUDIO_LANGUAGES,
   type StudioLanguage
-} from "@/lib/studioflow/language";
+} from "@/lib/studioflow/languageCore";
 import { studioLanguageDir } from "@/lib/studioflow/languageDirection";
+// English only. The other eleven languages never ride in a chunk: a language address gets its table from the server
+// (app/[lang]/layout.tsx → PublicRouteLanguage), and a one-address page in another language fetches that one table
+// (app/api/public-site-text). translations.ts builds the other tables with pure calls, so the minifier drops them from
+// this bundle; scripts/check-public-bundle.mts reads the built chunks and fails if another language comes back.
 import {
   PUBLIC_SITE_EN,
-  PUBLIC_SITE_TRANSLATIONS,
+  type PublicSiteTextTable,
   type PublicSiteTranslationKey
 } from "@/lib/publicSite/translations";
-import { isLocalizedPublicPath, localizedPublicHref, splitPublicLocalePath } from "@/lib/publicSite/locales";
+import {
+  isLocalizedPublicPath,
+  localizedPublicHref,
+  publicLocaleByLanguage,
+  splitPublicLocalePath
+} from "@/lib/publicSite/locales";
 
 export const PUBLIC_SITE_LANGUAGE_STORAGE_KEY = "studioflow-public-language";
 // The language of the last language-prefixed page read in this tab (/de/…). A page with one address reached
@@ -71,9 +80,35 @@ type PublicSiteLanguageContextValue = {
 
 const PublicSiteLanguageContext = createContext<PublicSiteLanguageContextValue | null>(null);
 
-export function publicSiteT(key: PublicSiteTranslationKey, language: StudioLanguage | string | null | undefined) {
-  const normalized = normalizeStudioLanguage(language);
-  return PUBLIC_SITE_TRANSLATIONS[normalized]?.[key] ?? PUBLIC_SITE_EN[key] ?? key;
+// A language's own text, or the English text where that language has none (the same fallback as before the split).
+function publicSiteTextLookup(table: PublicSiteTextTable): PublicSiteText {
+  return (key: PublicSiteTranslationKey) => table[key] ?? PUBLIC_SITE_EN[key] ?? key;
+}
+
+// The tables this tab already has (English is in the bundle). A language address adds its own (PublicRouteLanguage),
+// so a German reader who goes from /de to /privacy reads the German header and footer without another request.
+const publicSiteTexts = new Map<StudioLanguage, PublicSiteTextTable>([["English", PUBLIC_SITE_EN]]);
+const publicSiteTextLoads = new Map<StudioLanguage, Promise<PublicSiteTextTable>>();
+
+function loadPublicSiteText(language: StudioLanguage): Promise<PublicSiteTextTable> {
+  const known = publicSiteTexts.get(language);
+  if (known) return Promise.resolve(known);
+  let load = publicSiteTextLoads.get(language);
+  if (!load) {
+    const code = publicLocaleByLanguage(language).code;
+    load = fetch(`/api/public-site-text/${code}`, { credentials: "omit" })
+      .then(response => {
+        if (!response.ok) throw new Error(`public site text ${code}: ${response.status}`);
+        return response.json() as Promise<PublicSiteTextTable>;
+      })
+      .then(table => {
+        publicSiteTexts.set(language, table);
+        return table;
+      })
+      .finally(() => publicSiteTextLoads.delete(language));
+    publicSiteTextLoads.set(language, load);
+  }
+  return load;
 }
 
 export function publicLanguageDir(language: StudioLanguage) {
@@ -147,9 +182,26 @@ export function rememberPublicSiteLanguage(language: StudioLanguage) {
 // app/[lang] pins its subtree to the address's language: /de/… is German for everyone, Googlebot included, and
 // the server renders it German.
 const PublicRouteLanguageContext = createContext<StudioLanguage | null>(null);
+// …and hands down that language's table, which the server put in the page (the only language this page loads).
+const PublicRouteTextContext = createContext<PublicSiteTextTable | null>(null);
 
-export function PublicRouteLanguage({ language, children }: { language: StudioLanguage; children: ReactNode }) {
-  return <PublicRouteLanguageContext.Provider value={language}>{children}</PublicRouteLanguageContext.Provider>;
+export function PublicRouteLanguage({
+  language,
+  text,
+  children
+}: {
+  language: StudioLanguage;
+  text: PublicSiteTextTable;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    if (!publicSiteTexts.has(language)) publicSiteTexts.set(language, text);
+  }, [language, text]);
+  return (
+    <PublicRouteLanguageContext.Provider value={language}>
+      <PublicRouteTextContext.Provider value={text}>{children}</PublicRouteTextContext.Provider>
+    </PublicRouteLanguageContext.Provider>
+  );
 }
 
 export function PublicSiteLanguageProvider({
@@ -164,10 +216,32 @@ export function PublicSiteLanguageProvider({
   lockLanguage?: StudioLanguage;
 }) {
   const routeLanguage = useContext(PublicRouteLanguageContext);
+  const routeText = useContext(PublicRouteTextContext);
   const router = useRouter();
   const [chosenLanguage, setLanguageState] = useState<StudioLanguage>("English");
+  // Bumped when a fetched table lands (publicSiteTexts is outside React).
+  const [, setTextsLoaded] = useState(0);
   // A language address decides its language; elsewhere it is the reader's (see getInitialPublicSiteLanguage).
-  const language = lockLanguage ?? routeLanguage ?? chosenLanguage;
+  const requestedLanguage = lockLanguage ?? routeLanguage ?? chosenLanguage;
+  const requestedText = requestedLanguage === routeLanguage && routeText ? routeText : publicSiteTexts.get(requestedLanguage);
+  // Until the reader's table is here the page stays in English — the words, <html lang> and dir together.
+  const language: StudioLanguage = requestedText ? requestedLanguage : "English";
+  const text = requestedText ?? PUBLIC_SITE_EN;
+
+  useEffect(() => {
+    if (requestedText) return;
+    // A page with language versions is about to move to that language's address, which brings its table.
+    if (!routeLanguage && isLocalizedPublicPath(window.location.pathname)) return;
+    let cancelled = false;
+    loadPublicSiteText(requestedLanguage)
+      .then(() => {
+        if (!cancelled) setTextsLoaded(count => count + 1);
+      })
+      .catch(() => undefined); // stays English, as on a page that never loaded the table
+    return () => {
+      cancelled = true;
+    };
+  }, [requestedLanguage, requestedText, routeLanguage]);
 
   useEffect(() => {
     if (lockLanguage) return;
@@ -217,10 +291,10 @@ export function PublicSiteLanguageProvider({
     language,
     languages: SUPPORTED_STUDIO_LANGUAGES,
     setLanguage,
-    t: key => publicSiteT(key, language),
+    t: publicSiteTextLookup(text),
     dir,
     locale
-  }), [dir, language, locale, setLanguage]);
+  }), [dir, language, locale, setLanguage, text]);
 
   return (
     <PublicSiteLanguageContext.Provider value={value}>

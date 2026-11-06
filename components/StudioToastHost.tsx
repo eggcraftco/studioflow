@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { studioT } from "@/lib/studioflow/language";
+import { useStudioT } from "@/lib/studioflow/useStudioT";
 
 export type StudioToastInput = {
   message: string;
@@ -27,6 +27,7 @@ export function dispatchStudioToast(toast: StudioToastInput) {
 
 export function StudioToastHost() {
   const { language } = useAuth();
+  const t = useStudioT(language);
   const [toasts, setToasts] = useState<StudioToastItem[]>([]);
   const nextIdRef = useRef(1);
 
@@ -66,7 +67,7 @@ export function StudioToastHost() {
           <button
             type="button"
             className="studio-toast-close"
-            aria-label={studioT("Dismiss", language)}
+            aria-label={t("Dismiss")}
             onClick={() => setToasts(current => current.filter(item => item.id !== toast.id))}
           >
             ×

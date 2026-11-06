@@ -11,7 +11,7 @@ import { auth, googleProvider, appleProvider } from "@/lib/firebase/client";
 import { signOutAndWipe, UNSYNCED_SIGN_OUT_TEXT } from "@/lib/auth/signOutSession";
 import { useAppConfirm } from "@/components/AppConfirmDialog";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { studioT } from "@/lib/studioflow/language";
+import { useStudioT } from "@/lib/studioflow/useStudioT";
 import { withSecondFactor } from "@/lib/auth/secondFactor";
 import {
   ACTIVITY_WRITE_GAP_MS,
@@ -38,7 +38,7 @@ import { REAUTH_REQUEST_EVENT, type ReauthRequestDetail } from "@/lib/auth/recen
 // Cancel instead of Sign out.
 export function SessionAutoLock() {
   const { user, language } = useAuth();
-  const t = useCallback((text: string) => studioT(text, language), [language]);
+  const t = useStudioT(language);
   const [confirmSignOut, signOutConfirmDialog] = useAppConfirm(t);
 
   const [minutes, setMinutes] = useState(0);

@@ -4,9 +4,9 @@
 // or re-authentication (lib/auth/secondFactor.ts → withSecondFactor). Rendered
 // once at the app root. Reuses the session-lock dialog styles.
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { studioT } from "@/lib/studioflow/language";
+import { useStudioT } from "@/lib/studioflow/useStudioT";
 import {
   registerSecondFactorPresenter,
   type SecondFactorAnswer,
@@ -17,7 +17,7 @@ type Pending = { request: SecondFactorRequest; resolve: (answer: SecondFactorAns
 
 export function SecondFactorPromptHost() {
   const { language } = useAuth();
-  const t = useCallback((text: string) => studioT(text, language), [language]);
+  const t = useStudioT(language);
   const [pending, setPending] = useState<Pending | null>(null);
   const [code, setCode] = useState("");
   const [useRecovery, setUseRecovery] = useState(false);

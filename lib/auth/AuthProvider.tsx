@@ -6,7 +6,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { arrayUnion, doc, getDoc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, clearFirestoreLocalCache, db, functions } from "@/lib/firebase/client";
-import { studioLanguageForLocaleTag } from "@/lib/studioflow/language";
+import { studioLanguageForLocaleTag } from "@/lib/studioflow/languageCore";
 import { accessLost, accessWatchStep, mayReloadForAccess, memberAccessFingerprint } from "@/lib/studioflow/accessWatch";
 import { bootMark } from "@/lib/studioflow/bootTrace";
 
