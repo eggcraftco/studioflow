@@ -20,6 +20,9 @@ const PUBLIC_PAGES: { path: string; priority: number; changeFrequency: MetadataR
   // Listed only once the Claude endpoint's address is published; until then the
   // page is noindex (app/integrations/claude/page.tsx reads the same constant).
   ...(CLAUDE_CONNECTOR_URL ? [{ path: "/integrations/claude", priority: 0.7, changeFrequency: "monthly" as const }] : []),
+  // The custom-order landing page (English only on purpose, see components/CustomOrderLanding.tsx): indexable with
+  // its own canonical since August 2026 but missing here until 6 Nov 2026 (proof sprint H3). One entry, no hreflang.
+  { path: "/custom-order-management", priority: 0.8, changeFrequency: "monthly" },
   { path: "/features", priority: 0.9, changeFrequency: "weekly" },
   { path: "/pricing", priority: 0.9, changeFrequency: "weekly" },
   { path: "/chatgpt", priority: 0.9, changeFrequency: "weekly" },
