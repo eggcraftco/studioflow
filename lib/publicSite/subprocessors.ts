@@ -138,7 +138,7 @@ export const SUBPROCESSORS_SECTIONS: PrivacyPolicySection[] = [
       {
         title: "Google Analytics for Firebase",
         paragraphs: [
-          "Purpose: measuring how our iPhone, iPad, Mac and Android apps are used, including sign-ups.",
+          "Purpose: measuring how our iPhone, iPad, Mac and Android apps are used.",
           "Data: an app instance identifier, device and app information, and usage events.",
           "Location: Google's global infrastructure, including the United States."
         ]
