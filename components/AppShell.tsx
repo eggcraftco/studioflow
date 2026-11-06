@@ -807,7 +807,7 @@ function TrialBanner({
         style={{
           display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
           width: "100%", padding: "5px 14px", background: "var(--surface, #fff)",
-          border: 0, borderBottom: "1px solid rgba(120, 120, 140, 0.18)",
+          border: 0, borderBottom: "1px solid rgba(122, 122, 122, 0.18)",
           fontSize: 11.5, fontWeight: 650, cursor: "pointer", color: "inherit",
         }}
       >
@@ -826,7 +826,7 @@ function TrialBanner({
       style={{
         display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10,
         padding: "9px 14px", background: "var(--surface, #fff)",
-        borderBottom: "1px solid rgba(120, 120, 140, 0.18)", fontSize: 13,
+        borderBottom: "1px solid rgba(122, 122, 122, 0.18)", fontSize: 13,
       }}
     >
       <span
@@ -860,7 +860,7 @@ function TrialBanner({
         aria-label={t("Collapse")}
         onClick={() => setCollapsed(true)}
         style={{
-          border: 0, background: "rgba(120, 120, 140, 0.12)", color: "inherit",
+          border: 0, background: "rgba(122, 122, 122, 0.12)", color: "inherit",
           borderRadius: 999, width: 26, height: 26, fontWeight: 700, fontSize: 12, cursor: "pointer",
         }}
       >
@@ -912,7 +912,7 @@ function TrialEndedBanner({
       style={{
         display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10,
         padding: "9px 14px", background: "var(--surface, #fff)",
-        borderBottom: "1px solid rgba(120, 120, 140, 0.18)", fontSize: 13,
+        borderBottom: "1px solid rgba(122, 122, 122, 0.18)", fontSize: 13,
       }}
     >
       <span
@@ -920,7 +920,7 @@ function TrialEndedBanner({
         style={{
           display: "inline-flex", alignItems: "center", justifyContent: "center",
           width: 28, height: 28, borderRadius: 8, fontSize: 14,
-          background: "linear-gradient(135deg, #64748b, #334155)", color: "#fff",
+          background: "linear-gradient(135deg, #737373, #404040)", color: "#fff",
         }}
       >
         ✓
@@ -937,7 +937,7 @@ function TrialEndedBanner({
         type="button"
         onClick={dismiss}
         style={{
-          border: "1px solid rgba(120, 120, 140, 0.35)", background: "transparent",
+          border: "1px solid rgba(122, 122, 122, 0.35)", background: "transparent",
           color: "inherit", borderRadius: 8, padding: "7px 12px",
           fontWeight: 650, fontSize: 12, cursor: "pointer",
         }}
@@ -998,7 +998,7 @@ function DemoPlanBanner({
           padding: "5px 14px",
           background: "var(--surface, #fff)",
           border: 0,
-          borderBottom: "1px solid rgba(120, 120, 140, 0.18)",
+          borderBottom: "1px solid rgba(122, 122, 122, 0.18)",
           fontSize: 11.5,
           fontWeight: 650,
           cursor: "pointer",
@@ -1024,7 +1024,7 @@ function DemoPlanBanner({
         gap: 10,
         padding: "9px 14px",
         background: "var(--surface, #fff)",
-        borderBottom: "1px solid rgba(120, 120, 140, 0.18)",
+        borderBottom: "1px solid rgba(122, 122, 122, 0.18)",
         fontSize: 13,
       }}
     >
@@ -1073,7 +1073,7 @@ function DemoPlanBanner({
         onClick={() => setCollapsed(true)}
         style={{
           border: 0,
-          background: "rgba(120, 120, 140, 0.12)",
+          background: "rgba(122, 122, 122, 0.12)",
           color: "inherit",
           borderRadius: 999,
           width: 26,
@@ -1130,7 +1130,7 @@ function ContinueSetupBanner({
         gap: 10,
         padding: "9px 14px",
         background: "var(--surface, #fff)",
-        borderBottom: "1px solid rgba(120, 120, 140, 0.18)",
+        borderBottom: "1px solid rgba(122, 122, 122, 0.18)",
         fontSize: 13,
       }}
     >
@@ -1186,7 +1186,7 @@ function ContinueSetupBanner({
         }}
         style={{
           border: 0,
-          background: "rgba(120, 120, 140, 0.12)",
+          background: "rgba(122, 122, 122, 0.12)",
           color: "inherit",
           borderRadius: 999,
           width: 26,

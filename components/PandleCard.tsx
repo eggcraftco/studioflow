@@ -250,8 +250,8 @@ export function PandleCard({ companyId, categoriesInUse, t, money }: {
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <span aria-hidden="true" style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(14,165,233,0.14)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>📒</span>
         <strong style={{ fontSize: 14.5 }}>{t("Accounting")} · Pandle</strong>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: linked ? "#16a34a" : "#6b7280" }}>
-          <span style={{ width: 6, height: 6, borderRadius: 999, background: linked ? "#16a34a" : "#9ca3af", display: "inline-block" }} />
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: linked ? "#16a34a" : "#727272" }}>
+          <span style={{ width: 6, height: 6, borderRadius: 999, background: linked ? "#16a34a" : "#a2a2a2", display: "inline-block" }} />
           {linked ? t("Connected") : t("Not connected")}
         </span>
         <span style={{ flex: 1 }} />
@@ -339,7 +339,7 @@ export function PandleCard({ companyId, categoriesInUse, t, money }: {
 
       {/* ---- Match + push ------------------------------------------------- */}
       {linked ? (
-        <div style={{ marginTop: 14, borderTop: "1px solid rgba(120,120,140,0.14)", paddingTop: 12 }}>
+        <div style={{ marginTop: 14, borderTop: "1px solid rgba(122,122,122,0.14)", paddingTop: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <button type="button" style={btnSm} disabled={busy === "preview" || !connection?.bankAccountId} onClick={() => void findMatches()}>
               {busy === "preview" ? t("Comparing with Pandle…") : `⇄ ${t("Find matches")}`}
@@ -364,7 +364,7 @@ export function PandleCard({ companyId, categoriesInUse, t, money }: {
           ) : null}
 
           {preview && preview.items.length ? (
-            <div style={{ marginTop: 10, maxHeight: 420, overflow: "auto", border: "1px solid rgba(120,120,140,0.16)", borderRadius: 10 }}>
+            <div style={{ marginTop: 10, maxHeight: 420, overflow: "auto", border: "1px solid rgba(122,122,122,0.16)", borderRadius: 10 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                 <thead>
                   <tr>
@@ -384,7 +384,7 @@ export function PandleCard({ companyId, categoriesInUse, t, money }: {
                   {preview.items.map(item => {
                     const failure = pushResult?.results.find(row => row.transactionId === item.transactionId && !row.ok);
                     return (
-                      <tr key={item.transactionId} style={{ borderTop: "1px solid rgba(120,120,140,0.1)", opacity: item.ready ? 1 : 0.6 }}>
+                      <tr key={item.transactionId} style={{ borderTop: "1px solid rgba(122,122,122,0.1)", opacity: item.ready ? 1 : 0.6 }}>
                         <td style={tdCell}>
                           {item.ready ? <input type="checkbox" checked={selected.has(item.transactionId)} onChange={() => toggle(item.transactionId)} /> : <span aria-hidden="true" style={{ color: "#f59e0b" }}>●</span>}
                         </td>
@@ -439,17 +439,17 @@ export function PandleCard({ companyId, categoriesInUse, t, money }: {
 
 const card: React.CSSProperties = {
   background: "var(--surface, rgba(255,255,255,0.6))",
-  border: "1px solid rgba(120,120,140,0.18)",
+  border: "1px solid rgba(122,122,122,0.18)",
   borderRadius: 14,
   padding: "16px 18px",
   position: "relative"
 };
 const btnSm: React.CSSProperties = {
-  border: "1px solid rgba(120,120,140,0.3)", background: "transparent", color: "inherit",
+  border: "1px solid rgba(122,122,122,0.3)", background: "transparent", color: "inherit",
   borderRadius: 10, padding: "5px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer"
 };
 const footLink: React.CSSProperties = { border: 0, background: "transparent", color: "#2563eb", fontWeight: 700, fontSize: 12.5, cursor: "pointer", padding: "10px 0 0", textAlign: "left" };
-const select: React.CSSProperties = { fontSize: 12.5, padding: "5px 8px", borderRadius: 7, border: "1px solid rgba(120,120,140,0.35)", background: "transparent", color: "inherit", maxWidth: "100%" };
+const select: React.CSSProperties = { fontSize: 12.5, padding: "5px 8px", borderRadius: 7, border: "1px solid rgba(122,122,122,0.35)", background: "transparent", color: "inherit", maxWidth: "100%" };
 const input: React.CSSProperties = { ...select, width: "100%", boxSizing: "border-box" };
 const th: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.55 };
 const thCell: React.CSSProperties = { ...th, textAlign: "left", padding: "8px 10px", position: "sticky", top: 0, background: "var(--surface, rgba(255,255,255,0.9))" };

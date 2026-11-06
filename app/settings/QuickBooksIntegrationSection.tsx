@@ -115,11 +115,11 @@ const tabStyle = (active: boolean): CSSProperties => ({
   fontWeight: 700, fontSize: 13, padding: "9px 14px", cursor: "pointer", marginBottom: -1, whiteSpace: "nowrap"
 });
 const facts: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, margin: 0, padding: 0, listStyle: "none" };
-const fact: CSSProperties = { padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(120,120,140,0.25)", fontSize: 12.5 };
+const fact: CSSProperties = { padding: "8px 10px", borderRadius: 8, border: "1px solid rgba(122,122,122,0.25)", fontSize: 12.5 };
 const factLabel: CSSProperties = { display: "block", fontSize: 10.5, textTransform: "uppercase", letterSpacing: 0.4, opacity: 0.6, marginBottom: 3 };
-const selectStyle: CSSProperties = { fontSize: 12.5, padding: "6px 9px", borderRadius: 7, border: "1px solid rgba(120,120,140,0.35)", background: "transparent", color: "inherit", width: "100%" };
-const th: CSSProperties = { textAlign: "left", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, opacity: 0.6, padding: "6px 8px", borderBottom: "1px solid rgba(120,120,140,0.25)" };
-const td: CSSProperties = { padding: "6px 8px", fontSize: 12.5, borderBottom: "1px solid rgba(120,120,140,0.12)", verticalAlign: "top" };
+const selectStyle: CSSProperties = { fontSize: 12.5, padding: "6px 9px", borderRadius: 7, border: "1px solid rgba(122,122,122,0.35)", background: "transparent", color: "inherit", width: "100%" };
+const th: CSSProperties = { textAlign: "left", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, opacity: 0.6, padding: "6px 8px", borderBottom: "1px solid rgba(122,122,122,0.25)" };
+const td: CSSProperties = { padding: "6px 8px", fontSize: 12.5, borderBottom: "1px solid rgba(122,122,122,0.12)", verticalAlign: "top" };
 
 export function AccountingProviderSection({ workspace, language = "English", provider }: Props & { provider: AccountingProvider }) {
   const ui = PROVIDER_UI[provider];
@@ -491,7 +491,7 @@ export function AccountingProviderSection({ workspace, language = "English", pro
         ) : null}
       </section>
 
-      <div role="tablist" aria-label={pt("{provider} sections")} style={{ display: "flex", gap: 2, overflowX: "auto", borderBottom: "1px solid rgba(120,120,140,0.25)" }}>
+      <div role="tablist" aria-label={pt("{provider} sections")} style={{ display: "flex", gap: 2, overflowX: "auto", borderBottom: "1px solid rgba(122,122,122,0.25)" }}>
         {tabs.map(([key, label]) => (
           <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} style={tabStyle(tab === key)}>{label}</button>
         ))}

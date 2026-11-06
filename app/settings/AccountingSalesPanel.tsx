@@ -75,19 +75,19 @@ const KIND_ORDER: Record<string, number> = { sale: 0, payment: 1, refund: 2 };
 
 const card: CSSProperties = { display: "grid", gap: 10 };
 const softBox: CSSProperties = { border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px", background: "var(--panel)", display: "grid", gap: 8, minWidth: 0 };
-const selectStyle: CSSProperties = { fontSize: 12.5, padding: "6px 9px", borderRadius: 7, border: "1px solid rgba(120,120,140,0.35)", background: "transparent", color: "inherit", width: "100%", minWidth: 0 };
+const selectStyle: CSSProperties = { fontSize: 12.5, padding: "6px 9px", borderRadius: 7, border: "1px solid rgba(122,122,122,0.35)", background: "transparent", color: "inherit", width: "100%", minWidth: 0 };
 const small: CSSProperties = { fontSize: 12, opacity: 0.75 };
-const th: CSSProperties = { textAlign: "left", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, opacity: 0.6, padding: "4px 6px", borderBottom: "1px solid rgba(120,120,140,0.25)" };
-const td: CSSProperties = { padding: "4px 6px", fontSize: 12.5, borderBottom: "1px solid rgba(120,120,140,0.12)", verticalAlign: "top", overflowWrap: "anywhere" };
+const th: CSSProperties = { textAlign: "left", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.4, opacity: 0.6, padding: "4px 6px", borderBottom: "1px solid rgba(122,122,122,0.25)" };
+const td: CSSProperties = { padding: "4px 6px", fontSize: 12.5, borderBottom: "1px solid rgba(122,122,122,0.12)", verticalAlign: "top", overflowWrap: "anywhere" };
 type Tone = "accent" | "success" | "warning" | "danger" | "muted";
 const badge = (tone: Tone): CSSProperties => ({
   display: "inline-flex", alignItems: "center", gap: 4, borderRadius: 999, padding: "2px 8px", fontSize: 11, fontWeight: 700, lineHeight: 1.5, whiteSpace: "nowrap",
   color: "inherit",
-  background: tone === "muted" ? "rgba(120,120,140,0.14)" : `var(--${tone}-soft)`,
-  border: `1px solid ${tone === "muted" ? "rgba(120,120,140,0.25)" : `var(--${tone})`}`
+  background: tone === "muted" ? "rgba(122,122,122,0.14)" : `var(--${tone}-soft)`,
+  border: `1px solid ${tone === "muted" ? "rgba(122,122,122,0.25)" : `var(--${tone})`}`
 });
 const chip = (active: boolean): CSSProperties => ({
-  border: `1px solid ${active ? "var(--accent)" : "rgba(120,120,140,0.3)"}`, background: active ? "var(--accent-soft)" : "transparent", color: "inherit",
+  border: `1px solid ${active ? "var(--accent)" : "rgba(122,122,122,0.3)"}`, background: active ? "var(--accent-soft)" : "transparent", color: "inherit",
   borderRadius: 999, padding: "5px 11px", fontSize: 12.5, fontWeight: active ? 800 : 600, cursor: "pointer", whiteSpace: "nowrap"
 });
 const linkButton: CSSProperties = { border: 0, background: "transparent", color: "var(--accent)", padding: 0, fontSize: 12.5, fontWeight: 700, cursor: "pointer" };
@@ -609,7 +609,7 @@ export function AccountingSalesPanel({ companyId, connectionId, provider, provid
     const canVoid = isOwner && canPost && SENT.has(row.status) && row.changed?.removed === true && row.kind !== "refund" && row.providerState !== "voided";
     const rowBusy = busy.endsWith(`-${row.id}`);
     return (
-      <div key={row.id} data-posting-row={row.id} data-posting-status={row.status} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", borderTop: first ? 0 : "1px solid rgba(120,120,140,0.14)", minWidth: 0 }}>
+      <div key={row.id} data-posting-row={row.id} data-posting-status={row.status} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "8px 0", borderTop: first ? 0 : "1px solid rgba(122,122,122,0.14)", minWidth: 0 }}>
         {canPost && isOwner ? (
           isApprovable(row)
             ? <input type="checkbox" aria-label={t("Select")} style={{ marginTop: 3, flex: "0 0 auto", width: 14, height: 14 }} disabled={!checkable || busy === "approve"} checked={checkable && chosen.includes(row.id)} onChange={(event) => toggle(row, event.target.checked)} />

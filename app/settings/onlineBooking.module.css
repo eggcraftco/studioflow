@@ -25,7 +25,7 @@
   border-radius: 10px;
   background: #ffffff;
   padding: 6px;
-  border: 1px solid var(--border, #e3e6eb);
+  border: 1px solid var(--border, #e6e6e6);
 }
 
 .embed {
@@ -62,7 +62,7 @@
 
 .presetChip {
   padding: 8px 12px;
-  border: 1.5px solid var(--border, #d6dae0);
+  border: 1.5px solid var(--border, #dadada);
   border-radius: 999px;
   background: transparent;
   color: inherit;
@@ -72,8 +72,8 @@
 }
 
 .presetChip.on {
-  border-color: var(--accent, #2563eb);
-  background: color-mix(in srgb, var(--accent, #2563eb) 12%, transparent);
+  border-color: var(--accent, #0569dc);
+  background: color-mix(in srgb, var(--accent, #0569dc) 12%, transparent);
   font-weight: 600;
 }
 
@@ -112,13 +112,13 @@
 
 .listRow {
   padding: 10px 12px;
-  border: 1px solid var(--border, #e3e6eb);
+  border: 1px solid var(--border, #e6e6e6);
   border-radius: 12px;
 }
 
 .service {
   padding: 12px;
-  border: 1px solid var(--border, #e3e6eb);
+  border: 1px solid var(--border, #e6e6e6);
   border-radius: 12px;
 }
 
@@ -202,7 +202,7 @@
 .linkButton {
   border: 0;
   background: none;
-  color: var(--accent, #2563eb);
+  color: var(--accent, #0569dc);
   font: inherit;
   cursor: pointer;
 }
@@ -229,9 +229,9 @@
   flex-wrap: wrap;
   padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid var(--border, #e3e6eb);
+  border: 1px solid var(--border, #e6e6e6);
   background: var(--surface, #ffffff);
-  box-shadow: 0 6px 24px rgba(20, 30, 45, 0.12);
+  box-shadow: 0 6px 24px rgba(30, 30, 30, 0.12);
 }
 
 .saveBar p {

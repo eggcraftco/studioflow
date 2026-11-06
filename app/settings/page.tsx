@@ -8854,9 +8854,9 @@ const supportTicketCardStyle: React.CSSProperties = {
   gap: 12,
   padding: "18px 20px",
   borderRadius: 18,
-  border: "1px solid rgba(148, 163, 184, 0.28)",
+  border: "1px solid rgba(162, 162, 162, 0.28)",
   background: "color-mix(in srgb, var(--card) 88%, transparent)",
-  boxShadow: "0 12px 28px rgba(15, 23, 42, 0.08)"
+  boxShadow: "0 12px 28px rgba(23, 23, 23, 0.08)"
 };
 
 const baseSupportPillStyle: React.CSSProperties = {
@@ -8909,7 +8909,7 @@ function supportStatusPillStyle(status: string): React.CSSProperties {
     return { ...baseSupportPillStyle, color: "#c026d3", background: "rgba(250, 232, 255, 0.98)", borderColor: "rgba(217, 70, 239, 0.16)" };
   }
   if (normalized === "closed") {
-    return { ...baseSupportPillStyle, color: "#64748b", background: "rgba(241, 245, 249, 0.98)", borderColor: "rgba(100, 116, 139, 0.16)" };
+    return { ...baseSupportPillStyle, color: "#737373", background: "rgba(244, 244, 244, 0.98)", borderColor: "rgba(115, 115, 115, 0.16)" };
   }
   return { ...baseSupportPillStyle, color: "#0284c7", background: "rgba(224, 242, 254, 0.98)", borderColor: "rgba(14, 165, 233, 0.18)" };
 }
@@ -8925,7 +8925,7 @@ function supportPriorityPillStyle(priority: string): React.CSSProperties {
   if (normalized === "low") {
     return { ...baseSupportPillStyle, color: "#16a34a", background: "rgba(220, 252, 231, 0.98)", borderColor: "rgba(34, 197, 94, 0.16)" };
   }
-  return { ...baseSupportPillStyle, color: "#64748b", background: "rgba(241, 245, 249, 0.98)", borderColor: "rgba(100, 116, 139, 0.16)" };
+  return { ...baseSupportPillStyle, color: "#737373", background: "rgba(244, 244, 244, 0.98)", borderColor: "rgba(115, 115, 115, 0.16)" };
 }
 
 function supportStatusLabel(status: string) {

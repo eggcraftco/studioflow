@@ -60,7 +60,7 @@ function PandleCallbackContent() {
         <p style={{ margin: 0, fontSize: 14, color: failed ? "#dc2626" : "inherit", fontWeight: failed ? 600 : 400 }}>{message || "…"}</p>
         {failed ? (
           <button type="button" onClick={() => router.replace("/bank")}
-            style={{ marginTop: 16, border: "1px solid rgba(120,120,140,0.3)", background: "transparent", color: "inherit", borderRadius: 10, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            style={{ marginTop: 16, border: "1px solid rgba(122,122,122,0.3)", background: "transparent", color: "inherit", borderRadius: 10, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
             ← {t("Back to Bank Spending")}
           </button>
         ) : null}

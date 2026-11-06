@@ -587,16 +587,16 @@ function todoPdfHtml(order: OrderDetail, tasks: ToDoDetail[], workspaceName: str
         <style>
           @page { size: A4; margin: 24mm; }
           * { box-sizing: border-box; }
-          body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #202126; background: #fff; }
+          body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #212121; background: #fff; }
           .page { max-width: 780px; margin: 0 auto; padding: 32px 34px; }
           header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; border-bottom: 1px solid #ddd; padding-bottom: 18px; margin-bottom: 18px; }
-          .brand { color: #8b8f96; font-size: 12px; font-weight: 700; }
-          .doc-title { text-align: right; color: rgba(30, 32, 38, 0.32); font-size: 28px; font-weight: 900; letter-spacing: .04em; }
-          .summary { padding: 14px; border-radius: 12px; background: rgba(23, 25, 35, .035); margin-bottom: 16px; }
+          .brand { color: #8f8f8f; font-size: 12px; font-weight: 700; }
+          .doc-title { text-align: right; color: rgba(32, 32, 32, 0.32); font-size: 28px; font-weight: 900; letter-spacing: .04em; }
+          .summary { padding: 14px; border-radius: 12px; background: rgba(25, 25, 25, .035); margin-bottom: 16px; }
           .summary h1 { margin: 0 0 7px; font-size: 20px; }
-          .summary div { display: flex; flex-wrap: wrap; gap: 12px; color: #777c84; font-size: 11px; font-weight: 700; }
+          .summary div { display: flex; flex-wrap: wrap; gap: 12px; color: #7c7c7c; font-size: 11px; font-weight: 700; }
           .task { display: flex; gap: 10px; align-items: flex-start; margin: 9px 0; }
-          .check { width: 22px; height: 22px; border: 2px solid #a0a4aa; border-radius: 999px; display: grid; place-items: center; color: #34c759; font-size: 14px; font-weight: 900; flex: 0 0 auto; margin-top: 8px; }
+          .check { width: 22px; height: 22px; border: 2px solid #a4a4a4; border-radius: 999px; display: grid; place-items: center; color: #34c759; font-size: 14px; font-weight: 900; flex: 0 0 auto; margin-top: 8px; }
           .task.done .check { border-color: #34c759; background: rgba(52, 199, 89, .08); }
           .task.overdue .check { border-color: #ff3b30; }
           .task-body { flex: 1; border: 1px solid rgba(18, 133, 255, .12); background: rgba(18, 133, 255, .045); border-radius: 10px; padding: 11px 12px; }
@@ -607,10 +607,10 @@ function todoPdfHtml(order: OrderDetail, tasks: ToDoDetail[], workspaceName: str
           .status { border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 900; white-space: nowrap; color: #1285ff; background: rgba(18, 133, 255, .1); }
           .status.done { color: #2fbf55; background: rgba(52, 199, 89, .11); }
           .status.overdue { color: #ff3b30; background: rgba(255, 59, 48, .1); }
-          .meta { display: flex; flex-wrap: wrap; gap: 8px 12px; color: #7e838b; font-size: 10px; font-weight: 700; margin-top: 7px; }
-          p { margin: 7px 0 0; color: #777c84; font-size: 11px; line-height: 1.45; }
-          .empty { padding: 14px; border-radius: 10px; color: #80848b; background: rgba(23, 25, 35, .04); font-size: 13px; font-weight: 700; }
-          footer { border-top: 1px solid #ddd; margin-top: 22px; padding-top: 10px; text-align: center; color: #8b8f96; font-size: 10px; }
+          .meta { display: flex; flex-wrap: wrap; gap: 8px 12px; color: #838383; font-size: 10px; font-weight: 700; margin-top: 7px; }
+          p { margin: 7px 0 0; color: #7c7c7c; font-size: 11px; line-height: 1.45; }
+          .empty { padding: 14px; border-radius: 10px; color: #848484; background: rgba(25, 25, 25, .04); font-size: 13px; font-weight: 700; }
+          footer { border-top: 1px solid #ddd; margin-top: 22px; padding-top: 10px; text-align: center; color: #8f8f8f; font-size: 10px; }
           @media print { .page { padding: 0; } }
         </style>
       </head>
@@ -684,14 +684,14 @@ function historyPdfHtml(order: OrderDetail, logs: OrderDetail["historyLog"], wor
         <style>
           @page { size: A4; margin: 24mm; }
           * { box-sizing: border-box; }
-          body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #202126; background: #fff; }
+          body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #212121; background: #fff; }
           .page { max-width: 780px; margin: 0 auto; padding: 32px 34px; }
           header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; border-bottom: 1px solid #ddd; padding-bottom: 18px; margin-bottom: 18px; }
-          .brand { color: #8b8f96; font-size: 12px; font-weight: 700; }
-          .doc-title { text-align: right; color: rgba(30, 32, 38, 0.32); font-size: 28px; font-weight: 900; letter-spacing: .04em; }
-          .summary { padding: 14px; border-radius: 12px; background: rgba(23, 25, 35, .035); margin-bottom: 16px; }
+          .brand { color: #8f8f8f; font-size: 12px; font-weight: 700; }
+          .doc-title { text-align: right; color: rgba(32, 32, 32, 0.32); font-size: 28px; font-weight: 900; letter-spacing: .04em; }
+          .summary { padding: 14px; border-radius: 12px; background: rgba(25, 25, 25, .035); margin-bottom: 16px; }
           .summary h1 { margin: 0 0 7px; font-size: 20px; }
-          .summary div { display: flex; flex-wrap: wrap; gap: 12px; color: #777c84; font-size: 11px; font-weight: 700; }
+          .summary div { display: flex; flex-wrap: wrap; gap: 12px; color: #7c7c7c; font-size: 11px; font-weight: 700; }
           .history-row { display: flex; gap: 10px; align-items: stretch; margin: 8px 0; }
           .timeline { width: 20px; flex: 0 0 auto; display: grid; justify-items: center; padding-top: 10px; }
           .timeline span { width: 16px; height: 16px; border-radius: 999px; background: rgba(18, 133, 255, .18); position: relative; }
@@ -700,13 +700,13 @@ function historyPdfHtml(order: OrderDetail, logs: OrderDetail["historyLog"], wor
           .history-body { flex: 1; border: 1px solid rgba(18, 133, 255, .12); background: rgba(18, 133, 255, .045); border-radius: 10px; padding: 11px 12px; }
           .history-title-row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
           .history-title-row strong { font-size: 13px; line-height: 1.3; }
-          .history-title-row span { color: #7e838b; font-size: 10px; font-weight: 800; white-space: nowrap; }
-          .change-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: start; margin-top: 7px; color: #7e838b; font-size: 11px; line-height: 1.35; }
+          .history-title-row span { color: #838383; font-size: 10px; font-weight: 800; white-space: nowrap; }
+          .change-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: start; margin-top: 7px; color: #838383; font-size: 11px; line-height: 1.35; }
           .change-row span, .change-row strong { overflow-wrap: anywhere; }
-          .change-row b { color: #8b8f96; font-size: 11px; }
-          .change-row strong { color: #202126; }
-          .empty { padding: 14px; border-radius: 10px; color: #80848b; background: rgba(23, 25, 35, .04); font-size: 13px; font-weight: 700; }
-          footer { border-top: 1px solid #ddd; margin-top: 22px; padding-top: 10px; text-align: center; color: #8b8f96; font-size: 10px; }
+          .change-row b { color: #8f8f8f; font-size: 11px; }
+          .change-row strong { color: #212121; }
+          .empty { padding: 14px; border-radius: 10px; color: #848484; background: rgba(25, 25, 25, .04); font-size: 13px; font-weight: 700; }
+          footer { border-top: 1px solid #ddd; margin-top: 22px; padding-top: 10px; text-align: center; color: #8f8f8f; font-size: 10px; }
           @media print { .page { padding: 0; } }
         </style>
       </head>
@@ -923,31 +923,31 @@ function orderPdfHtml(
         <style>
           @page { size: A4; margin: 18mm; }
           * { box-sizing: border-box; }
-          body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #202126; background: #fff; }
+          body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #212121; background: #fff; }
           .page { max-width: 780px; margin: 0 auto; padding: 30px 34px; }
           header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; border-bottom: 1px solid #ddd; padding-bottom: 16px; margin-bottom: 18px; }
-          .brand { color: #8b8f96; font-size: 12px; font-weight: 700; }
+          .brand { color: #8f8f8f; font-size: 12px; font-weight: 700; }
           .brand img { display: block; max-height: 48px; max-width: 150px; object-fit: contain; margin-bottom: 6px; }
-          .doc-title { text-align: right; color: rgba(30, 32, 38, 0.28); font-size: 28px; font-weight: 900; letter-spacing: .04em; }
-          .summary { padding: 14px; border-radius: 12px; background: rgba(23, 25, 35, .035); margin-bottom: 18px; }
+          .doc-title { text-align: right; color: rgba(32, 32, 32, 0.28); font-size: 28px; font-weight: 900; letter-spacing: .04em; }
+          .summary { padding: 14px; border-radius: 12px; background: rgba(25, 25, 25, .035); margin-bottom: 18px; }
           .summary h1 { margin: 0 0 7px; font-size: 20px; }
-          .summary div { display: flex; flex-wrap: wrap; gap: 12px; color: #777c84; font-size: 11px; font-weight: 700; }
+          .summary div { display: flex; flex-wrap: wrap; gap: 12px; color: #7c7c7c; font-size: 11px; font-weight: 700; }
           .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px 22px; align-items: start; }
           .pdf-section { break-inside: avoid; margin-bottom: 18px; }
-          .pdf-section h2 { margin: 0 0 8px; color: #777c84; font-size: 11px; font-weight: 900; letter-spacing: .08em; }
-          .pdf-box { padding: 14px; border-radius: 10px; background: rgba(23, 25, 35, .04); }
+          .pdf-section h2 { margin: 0 0 8px; color: #7c7c7c; font-size: 11px; font-weight: 900; letter-spacing: .08em; }
+          .pdf-box { padding: 14px; border-radius: 10px; background: rgba(25, 25, 25, .04); }
           .pdf-row { display: grid; grid-template-columns: 122px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 12px; line-height: 1.4; margin: 7px 0; }
-          .pdf-row strong { color: #202126; font-weight: 800; }
-          .pdf-row span { color: #30323a; overflow-wrap: anywhere; }
+          .pdf-row strong { color: #212121; font-weight: 800; }
+          .pdf-row span { color: #323232; overflow-wrap: anywhere; }
           .tone-green { color: #34c759 !important; font-weight: 800; }
           .tone-orange { color: #ff9500 !important; font-weight: 800; }
           .tone-red { color: #ff3b30 !important; font-weight: 800; }
-          .tone-gray { color: #8b8f96 !important; font-weight: 800; }
-          .pdf-divider { height: 1px; background: rgba(20, 22, 28, .16); margin: 10px 0; }
-          p { margin: 0; color: #777c84; font-size: 12px; line-height: 1.45; }
-          .preview-image { display: block; max-width: 100%; max-height: 210px; object-fit: contain; border-radius: 10px; background: rgba(23, 25, 35, .04); }
-          .empty-preview { color: #777c84; font-size: 12px; font-weight: 700; }
-          footer { border-top: 1px solid #ddd; margin-top: 22px; padding-top: 10px; text-align: center; color: #8b8f96; font-size: 10px; }
+          .tone-gray { color: #8f8f8f !important; font-weight: 800; }
+          .pdf-divider { height: 1px; background: rgba(22, 22, 22, .16); margin: 10px 0; }
+          p { margin: 0; color: #7c7c7c; font-size: 12px; line-height: 1.45; }
+          .preview-image { display: block; max-width: 100%; max-height: 210px; object-fit: contain; border-radius: 10px; background: rgba(25, 25, 25, .04); }
+          .empty-preview { color: #7c7c7c; font-size: 12px; font-weight: 700; }
+          footer { border-top: 1px solid #ddd; margin-top: 22px; padding-top: 10px; text-align: center; color: #8f8f8f; font-size: 10px; }
           @media print { .page { padding: 0; } }
         </style>
       </head>
@@ -1083,7 +1083,7 @@ function invoiceHtml(
   const itemsHeading = "Description";
   const fmtQty = (q: number) => (Number.isInteger(q) ? String(q) : q.toFixed(2));
   const itemRows = printedLines.length > 0
-    ? printedLines.map((it) => `<tr><td>${escapeHtml(it.name || "-")}${it.quantity !== 1 ? `<div style="font-size:10px;color:#6b7280;">${fmtQty(it.quantity)} × ${money(it.unitPrice)}</div>` : ""}</td><td class="r">${money(it.lineTotal)}</td></tr>`).join("")
+    ? printedLines.map((it) => `<tr><td>${escapeHtml(it.name || "-")}${it.quantity !== 1 ? `<div style="font-size:10px;color:#727272;">${fmtQty(it.quantity)} × ${money(it.unitPrice)}</div>` : ""}</td><td class="r">${money(it.lineTotal)}</td></tr>`).join("")
     : `<tr><td>${escapeHtml(description)}</td><td class="r">${money(subtotal)}</td></tr>`;
 
   let vatRow = "";
@@ -1098,40 +1098,40 @@ function invoiceHtml(
   return `<!doctype html><html><head><meta charset="utf-8"/><title>${escapeHtml(isEstimate ? "Estimate" : "Invoice")} ${escapeHtml(documentNumber)}</title>
   <style>
     @page { size: A4; margin: 18mm; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1c1c1e; margin: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1c1c1c; margin: 0; }
     .wrap { max-width: 720px; margin: 0 auto; padding: 24px; }
     header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
     .biz img { max-width: 240px; max-height: 64px; object-fit: contain; display: block; margin-bottom: 8px; }
     .biz .name { font-weight: 800; font-size: 16px; }
-    .biz .nums { color: #6b7280; font-size: 11px; margin-top: 4px; line-height: 1.5; }
+    .biz .nums { color: #727272; font-size: 11px; margin-top: 4px; line-height: 1.5; }
     .inv { text-align: right; }
     .inv .title { font-size: 30px; font-weight: 900; color: rgba(0,0,0,0.35); letter-spacing: 1px; }
-    .inv .meta { font-size: 12px; margin-top: 4px; color: #374151; }
-    hr { border: none; border-top: 1px solid #e5e7eb; margin: 18px 0; }
-    .bill .label { font-size: 10px; font-weight: 800; letter-spacing: 1px; color: #6b7280; }
+    .inv .meta { font-size: 12px; margin-top: 4px; color: #404040; }
+    hr { border: none; border-top: 1px solid #e7e7e7; margin: 18px 0; }
+    .bill .label { font-size: 10px; font-weight: 800; letter-spacing: 1px; color: #727272; }
     .bill .who { font-weight: 700; font-size: 13px; margin-top: 4px; }
-    .bill .email { color: #6b7280; font-size: 11px; }
+    .bill .email { color: #727272; font-size: 11px; }
     table { width: 100%; border-collapse: collapse; margin-top: 18px; }
-    th { text-align: left; font-size: 11px; background: #f3f4f6; padding: 9px 12px; }
+    th { text-align: left; font-size: 11px; background: #f4f4f4; padding: 9px 12px; }
     th.r, td.r { text-align: right; }
     td { padding: 11px 12px; font-size: 12px; border-bottom: 1px solid #eee; }
     .totals { margin-top: 14px; margin-left: auto; width: 280px; }
     .trow { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px; }
-    .trow.total { border-top: 1px solid #d1d5db; margin-top: 4px; padding-top: 8px; font-size: 15px; font-weight: 800; }
+    .trow.total { border-top: 1px solid #d5d5d5; margin-top: 4px; padding-top: 8px; font-size: 15px; font-weight: 800; }
     .trow strong { font-weight: 700; }
-    .muted-note { font-size: 10px; color: #6b7280; padding: 4px 0; }
+    .muted-note { font-size: 10px; color: #727272; padding: 4px 0; }
     .due { color: #dc2626; }
     .paid { color: #16a34a; }
-    footer { margin-top: 28px; border-top: 1px solid #e5e7eb; padding-top: 12px; color: #6b7280; font-size: 11px; white-space: pre-wrap; }
-    .credit { text-align: center; color: #9ca3af; font-size: 9px; margin-top: 18px; }
+    footer { margin-top: 28px; border-top: 1px solid #e7e7e7; padding-top: 12px; color: #727272; font-size: 11px; white-space: pre-wrap; }
+    .credit { text-align: center; color: #a2a2a2; font-size: 9px; margin-top: 18px; }
     .approval { margin-top: 22px; border: 1px solid rgba(0,0,0,0.12); border-radius: 10px; padding: 14px 16px; }
     .approval.ok { border-color: rgba(22,163,74,0.45); }
     .approval.no { border-color: rgba(220,38,38,0.45); }
-    .approval-title { font-size: 11px; font-weight: 800; letter-spacing: 0.5px; color: #6b7280; }
+    .approval-title { font-size: 11px; font-weight: 800; letter-spacing: 0.5px; color: #727272; }
     .approval-row { font-size: 12px; margin-top: 5px; }
-    .approval-row.muted { color: #6b7280; font-size: 11px; }
+    .approval-row.muted { color: #727272; font-size: 11px; }
     .sig { display: block; margin-top: 10px; max-width: 260px; max-height: 90px; object-fit: contain; }
-    .terms { margin-top: 14px; font-size: 10px; color: #6b7280; white-space: pre-wrap; }
+    .terms { margin-top: 14px; font-size: 10px; color: #727272; white-space: pre-wrap; }
   </style></head><body><div class="wrap">
     <header>
       <div class="biz">
@@ -1173,7 +1173,7 @@ function invoiceHtml(
     </div>
     ${approvalBlock}
     ${isEstimate && estimate!.terms.trim() ? `<div class="terms">${escapeHtml(estimate!.terms)}</div>` : ""}
-    ${!isEstimate && order.invoiceNote && order.invoiceNote.trim() ? `<div style="margin-top:22px; border:1px solid rgba(0,0,0,0.12); border-radius:10px; padding:14px 16px;"><div style="font-size:11px; font-weight:700; color:#6b7280; letter-spacing:0.5px;">NOTES</div><div style="font-size:12px; margin-top:6px; white-space:pre-wrap;">${escapeHtml(order.invoiceNote)}</div></div>` : ""}
+    ${!isEstimate && order.invoiceNote && order.invoiceNote.trim() ? `<div style="margin-top:22px; border:1px solid rgba(0,0,0,0.12); border-radius:10px; padding:14px 16px;"><div style="font-size:11px; font-weight:700; color:#727272; letter-spacing:0.5px;">NOTES</div><div style="font-size:12px; margin-top:6px; white-space:pre-wrap;">${escapeHtml(order.invoiceNote)}</div></div>` : ""}
     ${footerNote ? `<footer>${escapeHtml(footerNote)}</footer>` : ""}
     <div class="credit">Generated with NivaDesk</div>
   </div></body></html>`;
@@ -6044,7 +6044,7 @@ export function OrderDetailContent({
                   style={firstProjectGuideStep === 5 && cardId === "financial" ? {
                     borderRadius: 18,
                     background: "rgba(239, 246, 255, 0.96)",
-                    color: "#111827"
+                    color: "#181818"
                   } : undefined}
                   onDragOver={event => handleCardDragOver(event, cardId)}
                   onDragLeave={event => handleCardDragLeave(event, cardId)}
@@ -6065,7 +6065,7 @@ export function OrderDetailContent({
                         borderRadius: 20,
                         border: "4px solid #2563eb",
                         background: "linear-gradient(180deg, rgba(239, 246, 255, 0.99), rgba(255, 255, 255, 0.99))",
-                        color: "#111827",
+                        color: "#181818",
                         boxShadow: "0 24px 64px rgba(37, 99, 235, 0.34), 0 0 0 7px rgba(37, 99, 235, 0.14)",
                         pointerEvents: "auto"
                       }}
@@ -6085,8 +6085,8 @@ export function OrderDetailContent({
                       >
                         {`${t("Step")} 5 / 6`}
                       </span>
-                      <strong style={{ fontSize: 16, color: "#111827" }}>{t("Open Financial Info")}</strong>
-                      <span style={{ fontSize: 13, lineHeight: 1.45, color: "#374151" }}>
+                      <strong style={{ fontSize: 16, color: "#181818" }}>{t("Open Financial Info")}</strong>
+                      <span style={{ fontSize: 13, lineHeight: 1.45, color: "#404040" }}>
                         {t("Turn on Financial Info to track paid amount, costs, remaining balance and profit for this project.")}
                       </span>
                     </div>
@@ -8068,7 +8068,7 @@ export function OrderDetailContent({
                                       if (event.key === "Enter") void savePaymentNote(payment.id);
                                       if (event.key === "Escape") setEditingPaymentNoteId(null);
                                     }}
-                                    style={{ flex: 1, minWidth: 120, fontSize: 12, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(120,120,140,0.35)", background: "transparent", color: "inherit" }}
+                                    style={{ flex: 1, minWidth: 120, fontSize: 12, padding: "3px 8px", borderRadius: 6, border: "1px solid rgba(122,122,122,0.35)", background: "transparent", color: "inherit" }}
                                   />
                                   <button
                                     type="button"
@@ -10060,7 +10060,7 @@ export function OrderDetailContent({
           border: "4px solid #2563eb",
           borderRadius: 20,
           boxShadow: "0 22px 60px rgba(37, 99, 235, 0.34), 0 0 0 7px rgba(37, 99, 235, 0.14)",
-          color: "#111827",
+          color: "#181818",
           padding: 18,
           pointerEvents: "auto"
         }}
@@ -10081,9 +10081,9 @@ export function OrderDetailContent({
           >
             3
           </span>
-          <strong style={{ fontSize: 16, color: "#111827" }}>{t("Customer & Communication")}</strong>
+          <strong style={{ fontSize: 16, color: "#181818" }}>{t("Customer & Communication")}</strong>
         </div>
-        <p style={{ margin: "0 0 14px", lineHeight: 1.45, color: "#374151" }}>
+        <p style={{ margin: "0 0 14px", lineHeight: 1.45, color: "#404040" }}>
           {t("This card is where you add the customer name, design details and contact information for the project.")}
         </p>
         <button
@@ -10123,7 +10123,7 @@ export function OrderDetailContent({
           borderRadius: 20,
           border: "4px solid #2563eb",
           background: "linear-gradient(180deg, rgba(239, 246, 255, 0.99), rgba(255, 255, 255, 0.99))",
-          color: "#111827",
+          color: "#181818",
           boxShadow: "0 24px 64px rgba(37, 99, 235, 0.34), 0 0 0 7px rgba(37, 99, 235, 0.14)",
           pointerEvents: "auto"
         }}
@@ -10143,8 +10143,8 @@ export function OrderDetailContent({
         >
           {`${t("Step")} 6 / 6`}
         </span>
-        <strong style={{ fontSize: 16, color: "#111827" }}>{t("Financial Info is now open")}</strong>
-        <span style={{ fontSize: 13, lineHeight: 1.45, color: "#374151" }}>
+        <strong style={{ fontSize: 16, color: "#181818" }}>{t("Financial Info is now open")}</strong>
+        <span style={{ fontSize: 13, lineHeight: 1.45, color: "#404040" }}>
           {t("This card is where paid amount, costs, remaining balance and profit are tracked for the project.")}
         </span>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 2 }}>
@@ -11010,7 +11010,7 @@ export function OrderDetailContent({
                   borderRadius: 20,
                   border: "4px solid #2563eb",
                   background: "linear-gradient(180deg, rgba(239, 246, 255, 0.99), rgba(255, 255, 255, 0.99))",
-                  color: "#111827",
+                  color: "#181818",
                   boxShadow: "0 24px 64px rgba(37, 99, 235, 0.34), 0 0 0 7px rgba(37, 99, 235, 0.14)",
                   textAlign: "left",
                   pointerEvents: "auto"
@@ -11031,8 +11031,8 @@ export function OrderDetailContent({
                 >
                   {`${t("Step")} 4 / 6`}
                 </span>
-                <strong style={{ fontSize: 16, color: "#111827" }}>{t("Open Customize cards")}</strong>
-                <span style={{ fontSize: 13, lineHeight: 1.45, color: "#374151" }}>
+                <strong style={{ fontSize: 16, color: "#181818" }}>{t("Open Customize cards")}</strong>
+                <span style={{ fontSize: 13, lineHeight: 1.45, color: "#404040" }}>
                   {t("Use Customize cards to choose which project cards are visible. Next, open Financial Info.")}
                 </span>
                 {/* This step waits for the user to open Customize cards, so without a
@@ -13620,7 +13620,7 @@ function ClientFilesUpgradeHint() {
         width: "fit-content",
         padding: "6px 10px",
         borderRadius: 999,
-        background: "var(--surface-soft, rgba(36, 42, 48, 0.045))",
+        background: "var(--surface-soft, rgba(41, 41, 41, 0.045))",
         color: "var(--muted)",
         fontSize: 12,
         fontWeight: 700,
@@ -13650,7 +13650,7 @@ function FinanceUpgradeHint() {
         marginTop: 8,
         padding: "6px 10px",
         borderRadius: 999,
-        background: "var(--surface-soft, rgba(36, 42, 48, 0.045))",
+        background: "var(--surface-soft, rgba(41, 41, 41, 0.045))",
         color: "var(--muted)",
         fontSize: 12,
         fontWeight: 700,

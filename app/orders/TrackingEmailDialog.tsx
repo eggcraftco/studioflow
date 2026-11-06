@@ -207,7 +207,7 @@ export function TrackingEmailDialog({
               </label>
             </div>
 
-            <section className="shipment-section" style={{ borderRadius: 10, padding: "10px 12px", background: "rgba(120,120,140,0.08)" }}>
+            <section className="shipment-section" style={{ borderRadius: 10, padding: "10px 12px", background: "rgba(122,122,122,0.08)" }}>
               <dl style={{ display: "grid", gridTemplateColumns: "minmax(110px, max-content) 1fr", gap: "4px 12px", margin: 0, fontSize: 13 }}>
                 {detailRows.map(([label, value]) => (
                   <div key={label} style={{ display: "contents" }}>
