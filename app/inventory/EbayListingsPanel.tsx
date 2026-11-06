@@ -12,7 +12,8 @@
 // host, loaded without a referrer, and never copied into NivaDesk.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
-import type { InventoryItem } from "@/lib/studioflow/inventory";
+import { copyListingPictures, type InventoryItem } from "@/lib/studioflow/inventory";
+import { inventoryListingsText } from "@/lib/studioflow/inventoryListings";
 import { studioLocaleTag } from "@/lib/studioflow/language";
 import { getEbayListingLinks, previewEbayListings, importEbayListings, ebayInventoryT, type EbayLinksAnswer } from "@/lib/studioflow/ebayInventory";
 import {
@@ -36,6 +37,25 @@ function priceText(price: { value: string; currency: string } | null, locale: st
 }
 
 const FILTERS: Array<[string, string]> = [["all", "All listings"], ["needs_choice", "Needs a choice"], ["sku_match", "Same SKU"], ["linked", "Linked"]];
+
+// envanter-aktarma (6 Nov 2026): after an import, the listing's picture onto every card it made or linked that still
+// has no photo (server copyListingPictures — the eBay import itself cannot store pictures: its runtime has no Storage
+// access). An older server has no such call: the import's own line stays as it was.
+async function picturesAfterImport(workspace: WorkspaceContext, ids: string[], language: string): Promise<string> {
+  const unique = Array.from(new Set(ids.filter(Boolean))).slice(0, 60);
+  if (!unique.length) return "";
+  try {
+    const done = await copyListingPictures(workspace, { inventoryItemIds: unique });
+    const copied = done?.counts?.copied ?? 0;
+    const failed = done?.counts?.not_copied ?? 0;
+    if (!copied && !failed) return "";
+    return inventoryListingsText("Pictures brought in: {copied}. Not brought in: {failed}.", language)
+      .replace("{copied}", String(copied)).replace("{failed}", String(failed))
+      || `Pictures brought in: ${copied}. Not brought in: ${failed}.`;
+  } catch {
+    return "";
+  }
+}
 
 export function EbayListingsPanel({ workspace, language, canEdit, items, categoryOptions, onStockChanged }: Props) {
   const t = useCallback((sentence: string) => ebayInventoryT(sentence, language), [language]);
@@ -112,8 +132,11 @@ export function EbayListingsPanel({ workspace, language, canEdit, items, categor
       const created = done.filter((r) => r.result === "created").length;
       const linked = done.filter((r) => r.result === "linked" || r.result === "already_linked").length;
       const refused = done.filter((r) => r.result === "refused").length;
-      setSummary(fill(t("{created} new cards · {linked} linked · {refused} not done"), { created, linked, refused }));
+      const doneLine = fill(t("{created} new cards · {linked} linked · {refused} not done"), { created, linked, refused });
+      setSummary(doneLine);
       setChosen((current) => current.filter((id) => byId[id] && byId[id].result === "refused"));
+      const pictures = await picturesAfterImport(workspace, done.filter((r) => r.result === "created" || r.result === "linked").map((r) => r.inventoryItemId), language);
+      if (pictures) setSummary(`${doneLine} · ${pictures}`);
       if (onStockChanged) await onStockChanged();
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : t("This could not be done."));

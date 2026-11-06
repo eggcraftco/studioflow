@@ -52,6 +52,11 @@ import { categoryGlyph, thumbPath, workspaceCategoryIcons } from "@/lib/studiofl
 import { shouldSuggestTradeSet } from "@/lib/studioflow/inventoryCategoryTemplates";
 import { inventoryListText } from "@/lib/studioflow/inventoryListText";
 import { getWooProductLinks, wooInventoryT } from "@/lib/studioflow/wooInventory";
+import { copyListingPictures } from "@/lib/studioflow/inventory";
+import {
+  attentionReasons, channelName, currencySymbolOf, inventoryListingsText, listedSummary, pictureCandidateIds,
+  type AttentionReason, type ChannelListings
+} from "@/lib/studioflow/inventoryListings";
 
 type InventoryTab = "items" | "purchases" | "suppliers" | "stocktake" | "locations" | "recipes" | "reports" | "categories" | "ebay" | "woo";
 
@@ -118,6 +123,11 @@ export function InventoryContent({
   const t = (text: string) => studioT(text, language);
   // This round's own sentences (lib/studioflow/inventoryListText.ts), then the app's.
   const invT = (text: string) => inventoryListText(text, language) || studioT(text, language);
+  // envanter-aktarma (6 Nov 2026): listing prices, pictures and "Needs details" (lib/studioflow/inventoryListings.ts).
+  const lt = (text: string) => inventoryListingsText(text, language) || studioT(text, language);
+  const [channelListings, setChannelListings] = useState<ChannelListings>({});
+  const [pictureBusy, setPictureBusy] = useState(false);
+  const [pictureNote, setPictureNote] = useState("");
 
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [listCursor, setListCursor] = useState<InventoryListCursor | null>(null);
@@ -169,7 +179,7 @@ export function InventoryContent({
   }, [workspace.id]);
   // The report's call (§28): ONE primary navigation. The sidebar is it; the
   // old tab strip is gone. Quick views are saved filters over the same list.
-  const [quickView, setQuickView] = useState<"all" | "low" | "incoming" | "reserved">("all");
+  const [quickView, setQuickView] = useState<"all" | "low" | "incoming" | "reserved" | "details">("all");
   const [locationFilter, setLocationFilter] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("");
   const [page, setPage] = useState(1);
@@ -208,6 +218,7 @@ export function InventoryContent({
       setCategories(list?.categoryDetails ?? []);
       setDefaultCategory(list?.defaultCategory ?? "");
       setSummary(totals?.summary ?? null);
+      setChannelListings(totals?.channelListings ?? {});
       setNotice("");
     } catch (failure) {
       setNotice(failure instanceof Error ? t(failure.message) : t("Inventory could not be loaded."));
@@ -274,6 +285,7 @@ export function InventoryContent({
       if (quickView === "low" && !(isInventoryLowStock(item) && item.status === "available")) return false;
       if (quickView === "incoming" && item.status !== "incoming") return false;
       if (quickView === "reserved" && item.status !== "reserved" && item.status !== "partiallyReserved") return false;
+      if (quickView === "details" && attentionReasons(item, { canSeeCost }).length === 0) return false;
       if (categoryFilter && item.category !== categoryFilter) return false;
       if (typeFilter && item.trackingType !== typeFilter) return false;
       if (statusFilter && item.status !== statusFilter) return false;
@@ -284,10 +296,30 @@ export function InventoryContent({
         .filter(Boolean)
         .some(field => String(field).toLowerCase().includes(needle));
     });
-  }, [items, search, quickView, categoryFilter, typeFilter, statusFilter, locationFilter, supplierFilter]);
+  }, [items, search, quickView, categoryFilter, typeFilter, statusFilter, locationFilter, supplierFilter, canSeeCost]);
 
   // Every tag in use, offered back as suggestions so spellings converge.
   const costMissing = useMemo(() => inventoryCostMissingCount(items), [items]);
+  // envanter-aktarma: "Needs details" counts the rows loaded (like costMissing); pictures a listing can fill.
+  const detailsCount = useMemo(() => items.filter(item => attentionReasons(item, { canSeeCost }).length > 0).length, [items, canSeeCost]);
+  const pictureIds = useMemo(() => pictureCandidateIds(items, channelListings), [items, channelListings]);
+  const listed = summary && !summary.costHidden ? listedSummary(summary as unknown as Record<string, unknown>) : null;
+  const reasonLabel: Record<AttentionReason, string> = { cost: lt("No cost"), photo: lt("No photo"), category: lt("No category") };
+  async function bringInPictures() {
+    if (!pictureIds.length || pictureBusy) return;
+    setPictureBusy(true); setPictureNote(lt("Bringing in pictures from your listings…"));
+    try {
+      const done = await copyListingPictures(workspace, { inventoryItemIds: pictureIds.slice(0, 60) });
+      const copied = done?.counts?.copied ?? 0;
+      const failed = (done?.counts?.not_copied ?? 0) + (done?.counts?.no_picture ?? 0);
+      setPictureNote(lt("Pictures brought in: {copied}. Not brought in: {failed}.").replace("{copied}", String(copied)).replace("{failed}", String(failed)));
+      await reload();
+    } catch (failure) {
+      setPictureNote(failure instanceof Error ? t(failure.message) : t("This could not be done."));
+    } finally {
+      setPictureBusy(false);
+    }
+  }
   const allTags = useMemo(
     () => Array.from(new Set(items.flatMap(item => item.tags ?? []).filter(Boolean))).sort(),
     [items]
@@ -317,7 +349,7 @@ export function InventoryContent({
   // 27 Oct 2026: the sidebar is ONE navigation, so one entry is active at a time — a quick view clears the category it
   // would otherwise silently keep (Low Stock under a stale "Watches" filter showed only low watches, with no category
   // highlighted), and All Items is all items: every list filter is cleared, the search too.
-  function openQuickView(next: "all" | "low" | "incoming" | "reserved") {
+  function openQuickView(next: "all" | "low" | "incoming" | "reserved" | "details") {
     setTab("items");
     setQuickView(next);
     setStatusFilter("");
@@ -455,6 +487,14 @@ export function InventoryContent({
             : undefined,
           hint: t("Purchase cost of business-owned stock on the shelf (available + reserved). Customer property, incoming, sold and used items are excluded.")
         },
+        // envanter-aktarma: the same shelf at its LISTING prices (eBay, the websites) — a second figure, never added to
+        // the one above (that one is what the stock cost). Only with Financial Info and a server that sends it.
+        ...(listed && listed.count > 0 ? [{
+          label: lt("Listed value"),
+          value: money(currencySymbolOf(listed.currency) || currencySymbol, listed.value),
+          sub: lt("{count} listed").replace("{count}", String(listed.count)),
+          hint: lt("What the items on the shelf are listed at on eBay and your websites — per item the lowest active listing price. A sale price, not a cost: it is not part of Total Inventory Value.")
+        }] : []),
         {
           label: t("Unique Items"), value: String(summary.uniqueCount), sub: money(currencySymbol, summary.uniqueValue),
           hint: t("Serial-tracked pieces on the shelf, and their purchase cost.")
@@ -508,6 +548,9 @@ export function InventoryContent({
         </button>
         <button type="button" data-active={tab === "items" && quickView === "reserved"} onClick={() => openQuickView("reserved")}>
           {t("Reserved")}{summary && summary.reservedCount > 0 ? <span className="inventory-nav-badge">{summary.reservedCount}</span> : null}
+        </button>
+        <button type="button" data-testid="inventory-nav-details" data-active={tab === "items" && quickView === "details"} onClick={() => openQuickView("details")}>
+          {lt("Needs details")}{detailsCount > 0 ? <span className="inventory-nav-badge">{detailsCount}{listCursor ? "+" : ""}</span> : null}
         </button>
         <p className="inventory-nav-group">{t("Items")}</p>
         {visibleCategories.map(category => (
@@ -629,6 +672,30 @@ export function InventoryContent({
         <p className="inventory-note" data-testid="inventory-cost-missing-note">
           {wooInventoryT("Items on the shelf with no cost entered: {count}. The inventory value leaves them out — it does not count them as money spent.", language)
             .replace("{count}", `${costMissing}${listCursor ? "+" : ""}`)}
+          {quickView !== "details" ? <>{" "}<button type="button" className="inventory-link" data-testid="inventory-cost-missing-show" onClick={() => openQuickView("details")}>{lt("Show them")}</button></> : null}
+        </p>
+      ) : null}
+
+      {/* envanter-aktarma: what the listing figures leave out, said next to them. */}
+      {listed && listed.noCost > 0 ? (
+        <p className="inventory-note" data-testid="inventory-listed-no-cost">{lt("{count} listed items have no cost yet — their margin is unknown.").replace("{count}", String(listed.noCost))}</p>
+      ) : null}
+      {listed && listed.otherCurrency > 0 ? (
+        <p className="inventory-note" data-testid="inventory-listed-other-currency">{lt("{count} more are listed in another currency and are not added.").replace("{count}", String(listed.otherCurrency))}</p>
+      ) : null}
+      {quickView === "details" ? (
+        <p className="inventory-note" data-testid="inventory-details-note">
+          {detailsCount > 0 ? lt("Items on the shelf missing a cost, a photo or a category. Cards brought in from eBay or a website start without a cost — add what you paid, so the inventory value is right.") : lt("Every item on the shelf has a cost, a photo and a category.")}
+        </p>
+      ) : null}
+      {canEdit && (pictureIds.length > 0 || pictureNote) ? (
+        <p className="inventory-note" data-testid="inventory-pictures-note">
+          {pictureIds.length > 0 ? (
+            <button type="button" className="inventory-secondary" data-testid="inventory-bring-pictures" disabled={pictureBusy} onClick={() => void bringInPictures()}>
+              {lt("Bring in pictures from listings ({count})").replace("{count}", String(Math.min(pictureIds.length, 60)))}
+            </button>
+          ) : null}
+          {pictureNote ? <span className="inventory-sub" data-testid="inventory-pictures-result">{" "}{pictureNote}</span> : null}
         </p>
       ) : null}
 
@@ -782,6 +849,22 @@ export function InventoryContent({
                         {[item.number, item.reference && `${invT("Ref.")} ${item.reference}`, item.serialNumber]
                           .filter(Boolean).join(" · ")}
                       </span>
+                      {/* envanter-aktarma: where it is listed and at what price (the price only with Financial Info — the
+                          server leaves it out otherwise). A sale price, so it sits here, not in the Value column. */}
+                      {channelListings[item.id] ? (
+                        <span className="inventory-sub" data-testid="inventory-row-listing"
+                          title={lt("Listed on {channel}").replace("{channel}", channelName(channelListings[item.id]))}>
+                          {channelName(channelListings[item.id])}
+                          {channelListings[item.id].price ? ` · ${money(currencySymbolOf(channelListings[item.id].price!.currency), channelListings[item.id].price!.value)}` : ""}
+                        </span>
+                      ) : null}
+                      {quickView === "details" ? (
+                        <span className="inventory-sub" data-testid="inventory-row-reasons">
+                          {attentionReasons(item, { canSeeCost }).map(reason => (
+                            <span key={reason} className="inventory-chip" data-reason={reason}>{reasonLabel[reason]}</span>
+                          ))}
+                        </span>
+                      ) : null}
                       {/* At phone width the Type and Category columns fold into this line. */}
                       <span className="inventory-sub inventory-item-folded">
                         {t(item.category)} · {item.trackingType === "unique" ? t("Unique") : `${t("On Hand")}: ${inventoryOnHand(item)}${item.quantity?.unit ? ` ${item.quantity.unit}` : ""}`}

@@ -10,7 +10,8 @@
 // store. Prices come only when the server sends them (Financial Info). Same look as the eBay listings panel.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
-import type { InventoryItem } from "@/lib/studioflow/inventory";
+import { copyListingPictures, type InventoryItem } from "@/lib/studioflow/inventory";
+import { inventoryListingsText } from "@/lib/studioflow/inventoryListings";
 import { studioLocaleTag } from "@/lib/studioflow/language";
 import { getWooProductLinks, previewWooProducts, importWooProducts, wooInventoryT, type WooLinksAnswer } from "@/lib/studioflow/wooInventory";
 import {
@@ -39,6 +40,25 @@ function priceText(price: { value: string; currency: string } | null, locale: st
 
 const FILTERS: Array<[string, string]> = [["active", "For sale"], ["needs_choice", "Needs a choice"], ["sku_match", "Same SKU"], ["linked", "Linked"], ["inactive", "Sold out or archived"]];
 const EMPTY: WooDecision = { action: "", inventoryItemId: "", trackingType: "", openingCount: "", inHand: false, confirmAmbiguous: false, category: "" };
+
+// envanter-aktarma (6 Nov 2026): after an import, the listing's picture onto every card it made or linked that still
+// has no photo (server copyListingPictures — the eBay import itself cannot store pictures: its runtime has no Storage
+// access). An older server has no such call: the import's own line stays as it was.
+async function picturesAfterImport(workspace: WorkspaceContext, ids: string[], language: string): Promise<string> {
+  const unique = Array.from(new Set(ids.filter(Boolean))).slice(0, 60);
+  if (!unique.length) return "";
+  try {
+    const done = await copyListingPictures(workspace, { inventoryItemIds: unique });
+    const copied = done?.counts?.copied ?? 0;
+    const failed = done?.counts?.not_copied ?? 0;
+    if (!copied && !failed) return "";
+    return inventoryListingsText("Pictures brought in: {copied}. Not brought in: {failed}.", language)
+      .replace("{copied}", String(copied)).replace("{failed}", String(failed))
+      || `Pictures brought in: ${copied}. Not brought in: ${failed}.`;
+  } catch {
+    return "";
+  }
+}
 
 export function WooProductsPanel({ workspace, language, canEdit, items, categoryOptions, defaultCategory = "", onStockChanged, onOpenCard }: Props) {
   const t = useCallback((sentence: string) => wooInventoryT(sentence, language), [language]);
@@ -133,8 +153,12 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
       const created = done.filter((r) => r.result === "created").length;
       const linked = done.filter((r) => r.result === "linked" || r.result === "already_linked").length;
       const refused = done.filter((r) => r.result === "refused").length;
-      setSummary(fill(t("{created} new cards · {linked} linked · {refused} not done"), { created, linked, refused }));
+      const doneLine = fill(t("{created} new cards · {linked} linked · {refused} not done"), { created, linked, refused });
+      setSummary(doneLine);
       setChosen((current) => current.filter((id) => byId[id] && byId[id].result === "refused"));
+      // The Woo import copies the picture onto a card it MAKES; a product linked to a card that already existed brings none.
+      const pictures = await picturesAfterImport(workspace, done.filter((r) => (r.result === "created" || r.result === "linked") && r.photo !== "copied").map((r) => r.inventoryItemId), language);
+      if (pictures) setSummary(`${doneLine} · ${pictures}`);
       if (onStockChanged) await onStockChanged();
     } catch (err) {
       setError(err instanceof Error && err.message ? err.message : t("This could not be done."));

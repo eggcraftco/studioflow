@@ -1,6 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import type { ChannelListings } from "@/lib/studioflow/inventoryListings";
 
 // Mirrors functions/inventory.js. The money rules live on the server — this file
 // only carries shapes and the call plumbing, so there is one place that decides
@@ -122,6 +123,18 @@ export type InventorySummary = {
   monthlyChange?: { available: boolean; netValue30d: number; pct: number; ledgerStartsMs: number };
   /** FIN-01: every value above is zeroed by the server — show none of them. */
   costHidden?: boolean;
+  // envanter-aktarma (6 Nov 2026): the channel-listing join (functions/inventoryListings.js). Absent on an older
+  // server — lib/studioflow/inventoryListings.ts listedSummary() then answers null and nothing new is drawn.
+  listedValue?: number;
+  listedCount?: number;
+  listedCurrency?: string;
+  listedOtherCurrencyCount?: number;
+  listedNoCostCount?: number;
+  costMissingCount?: number;
+  photoMissingCount?: number;
+  pictureAvailableCount?: number;
+  uncategorisedCount?: number;
+  listingsRead?: boolean;
 };
 
 // What the New Item form collects. Deliberately flat: the branching between a
@@ -196,10 +209,25 @@ export async function listInventoryItems(
 }
 
 export async function getInventorySummary(workspace: WorkspaceContext) {
-  return call<{ ok?: boolean; summary?: InventorySummary }>(
+  return call<{ ok?: boolean; summary?: InventorySummary; channelListings?: ChannelListings }>(
     "getInventorySummary",
     { companyId: workspace.id },
     "The inventory totals could not be loaded."
+  );
+}
+
+export type ListingPictureResult = { inventoryItemId: string; number?: string; photo: "copied" | "has_photo" | "no_picture" | "not_copied"; reason?: string; provider?: string };
+
+/**
+ * envanter-aktarma (6 Nov 2026): copy a linked eBay / WooCommerce listing's picture onto cards that have no photo
+ * (server copyListingPictures — only the channel's own picture host, only cards with no photo, an editing role).
+ * `all` = every such card on the shelf, 60 a call; the answer says how many remain.
+ */
+export async function copyListingPictures(workspace: WorkspaceContext, target: { inventoryItemIds: string[] } | { all: true }) {
+  return call<{ ok?: boolean; results?: ListingPictureResult[]; counts?: Record<string, number>; remaining?: number }>(
+    "copyListingPictures",
+    { companyId: workspace.id, ...target },
+    "The pictures could not be brought in."
   );
 }
 
