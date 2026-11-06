@@ -110,3 +110,36 @@ export async function managePaymentLinkDomain(
     "The payment address could not be updated."
   );
 }
+
+// FILE LINK ADDRESS (6 Nov 2026): the address shared FILE links are written on — files.<their domain> — so a
+// file no longer reads "track.…/f/…". Mirrors manageFileLinkDomain in functions/clientDomains.js: its own
+// registry row (kind "files"), so adding it never moves the tracking, estimate or payment links. The server
+// sets the workspace's fileLinkHostLive only once DNS and the certificate are both in place; the link
+// builders read that through workspace.fileLinkHost (lib/studioflow/fileLinkHost.ts).
+export type FileLinkDomainView = {
+  ok?: boolean;
+  host: string;
+  /** "files" for an address added here; "custom" when a verified client domain was chosen as it is. */
+  kind?: string;
+  status: string;
+  /** True once new file links are written on this address (DNS verified and certificate active). */
+  live?: boolean;
+  cnameTarget?: string;
+  record?: { type: string; name: string; target: string };
+  certificate?: { status?: string; error?: string } | null;
+  verified?: boolean;
+  found?: string[];
+  error?: string;
+};
+
+export async function manageFileLinkDomain(
+  workspace: WorkspaceContext,
+  action: "get" | "request" | "verify" | "remove",
+  host = ""
+) {
+  return call<FileLinkDomainView>(
+    "manageFileLinkDomain",
+    { companyId: workspace.id, action, ...(host ? { host } : {}) },
+    "The file address could not be updated."
+  );
+}

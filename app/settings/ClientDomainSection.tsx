@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { SettingsCardHead } from "./pageHeader";
+import { FileLinkDomainBlock } from "./FileLinkDomainBlock";
 import {
   getClientDomainConfig,
   removeClientDomain,
@@ -279,6 +280,9 @@ export function ClientDomainSection({
             })}
             <p className="settings-field-hint">{t("A verified domain serves your customer links with your branding; older nivadesk.app links keep working.")}</p>
           </div>
+
+          {/* Shared files get their own address (files.yourdomain.com) instead of the tracking one. */}
+          <FileLinkDomainBlock workspace={workspace} t={t} />
         </div>
       </section>
 

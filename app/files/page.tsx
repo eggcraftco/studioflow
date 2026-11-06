@@ -1207,12 +1207,12 @@ export default function FilesPage() {
                               // the older records' stored link.
                               <a
                                 className="button secondary"
-                                href={file.storagePath ? "#" : maskFileUrl(file.downloadURL, workspace?.clientPortalHost)}
+                                href={file.storagePath ? "#" : maskFileUrl(file.downloadURL, workspace?.fileLinkHost)}
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={event => {
                                   event.preventDefault();
-                                  void openStoredFile(file, workspace?.clientPortalHost).then(status => {
+                                  void openStoredFile(file, workspace?.fileLinkHost).then(status => {
                                     const problem = openOutcomeProblem(status);
                                     if (problem) setError(t(problem));
                                   });
@@ -1261,7 +1261,7 @@ export default function FilesPage() {
       {activePreview ? (
         <FilesPreviewModal
           t={t}
-          brandedHost={workspace?.clientPortalHost}
+          brandedHost={workspace?.fileLinkHost}
           files={previewFiles}
           activeFile={activePreview}
           onClose={() => setPreviewingFileId(null)}

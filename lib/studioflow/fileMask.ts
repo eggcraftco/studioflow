@@ -3,9 +3,11 @@
 // user opens/shares/copies — never for inline <img>/<iframe> embeds inside the app
 // (those must keep the raw URL so the bytes load as the actual file).
 //
-// When the workspace has a customer-link name (workspace.clientPortalHost —
-// their own domain or their nivadesk.app subdomain), pass it as brandedHost and
-// the link carries THEIR name: https://track.eggcraft.co.uk/f/…
+// When the workspace has a customer-link name, pass workspace.fileLinkHost as
+// brandedHost and the link carries THEIR name. That is the workspace's own file
+// address when one is live (https://files.eggcraft.co.uk/f/…, see
+// lib/studioflow/fileLinkHost.ts), otherwise its client domain or nivadesk.app
+// subdomain (https://track.eggcraft.co.uk/f/…) exactly as before.
 
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
