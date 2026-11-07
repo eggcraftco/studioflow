@@ -1181,6 +1181,8 @@ const TREE_EN: GuideNode[] = [
             "Etsy and eBay are not among those: each has a connection of its own, described in the sections that follow.",
             "Coming soon cards carry no setup because that integration does not exist yet; Request an integration opens a support ticket if you need one."
           ] },
+          { kind: "sub", text: "Shopify personalisation and variants" },
+          { kind: "para", text: "Personalisation a buyer fills in on a Shopify product — engraving text, a name, a font — arrives in the order's Notes, starting with “Personalisation —”; the buyer's own note follows as “Buyer note —”, and when the order has several products each line starts with the product's name. The chosen variant (for example Gold / 7) is part of the item's name in Invoice Items. Hidden fields that apps keep for themselves are left out, and the personalisation is not copied into the order's title. Orders already in NivaDesk before 7 November 2026 are not changed." },
           { kind: "sub", text: "Wix, Squarespace, Zapier and Make: the order webhook" },
           { kind: "steps", items: [
             "Settings → Integrations → Wix, Squarespace, Zapier or Make → Manage: all four open the same screen, Connect any store with one webhook.",
@@ -2950,6 +2952,8 @@ const TREE_TR: GuideNode[] = [
             "Etsy ve eBay bunlardan değil: her birinin kendi bağlantısı var, sonraki bölümlerde anlatılıyor.",
             "Coming soon kartlarında kurulum yoktur, çünkü o entegrasyon henüz yok; ihtiyacın varsa Request an integration bir destek talebi açar."
           ] },
+          { kind: "sub", text: "Shopify kişiselleştirmesi ve varyantlar" },
+          { kind: "para", text: "Alıcının bir Shopify ürününde doldurduğu kişiselleştirme — gravür metni, bir isim, yazı tipi — siparişin Notlar bölümüne “Personalisation —” ile başlayarak gelir; alıcının kendi notu arkasından “Buyer note —” olarak gelir, siparişte birden çok ürün varsa her satır ürünün adıyla başlar. Seçilen varyant (örneğin Gold / 7) Fatura Kalemleri'ndeki ürün adının parçasıdır. Uygulamaların kendileri için tuttuğu gizli alanlar alınmaz ve kişiselleştirme siparişin başlığına kopyalanmaz. 7 Kasım 2026'dan önce NivaDesk'te olan siparişler değişmez." },
           { kind: "sub", text: "Wix, Squarespace, Zapier ve Make: sipariş webhook'u" },
           { kind: "steps", items: [
             "Settings → Integrations → Wix, Squarespace, Zapier ya da Make → Manage: dördü de aynı ekranı açar, Connect any store with one webhook.",

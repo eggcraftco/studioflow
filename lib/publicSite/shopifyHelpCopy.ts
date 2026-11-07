@@ -113,7 +113,7 @@ const EN: ShopifyHelpCopy = {
   jobsTitle: "What the app does",
   jobsIntro: "Only what is listed here. Everything happens in your NivaDesk workspace; your Shopify store is read, never changed.",
   jobs: [
-    ["New paid orders become jobs", "Each new paid order arrives with the customer, line items and totals, matched to your existing customer records. Unpaid orders are skipped unless you switch on importing them; an order comes in once Shopify reports it paid."],
+    ["New paid orders become jobs", "Each new paid order arrives with the customer, line items and totals, matched to your existing customer records. Unpaid orders are skipped unless you switch on importing them; an order comes in once Shopify reports it paid. Personalisation the buyer typed on a product (engraving text, a name) comes in the order's Notes, and the chosen variant is part of the item's name."],
     ["Your workflow on every order", "In the app's Sync settings, choose the stage new orders start in, a task checklist to create on each order and a default assignee from your workspace."],
     ["Changes follow from Shopify", "Payment status, fulfilments with courier and tracking number, refunds and cancellations update the job. These updates change the Shopify details only; your notes and tasks stay as they are."],
     ["Choose which orders sync", "Sync every order, or only orders with selected products or collections, and include or leave out orders by tag."]
@@ -221,7 +221,7 @@ const TR: ShopifyHelpCopy = {
   jobsTitle: "Uygulama ne yapar",
   jobsIntro: "Yalnızca burada yazanları. Her şey NivaDesk çalışma alanınızda olur; Shopify mağazanız okunur, asla değiştirilmez.",
   jobs: [
-    ["Yeni ödenmiş siparişler işe dönüşür", "Her yeni ödenmiş sipariş müşteri, ürün satırları ve tutarlarla gelir ve mevcut müşteri kayıtlarınızla eşleştirilir. Ödenmemiş siparişler, içe aktarılmalarını açmadıkça atlanır; Shopify siparişi ödendi olarak bildirdiğinde gelir."],
+    ["Yeni ödenmiş siparişler işe dönüşür", "Her yeni ödenmiş sipariş müşteri, ürün satırları ve tutarlarla gelir ve mevcut müşteri kayıtlarınızla eşleştirilir. Ödenmemiş siparişler, içe aktarılmalarını açmadıkça atlanır; Shopify siparişi ödendi olarak bildirdiğinde gelir. Alıcının üründe yazdığı kişiselleştirme (gravür metni, bir isim) siparişin Notlar bölümüne, seçilen varyant da ürün adına gelir."],
     ["Her siparişte sizin iş akışınız", "Uygulamanın Sync settings ekranında yeni siparişlerin başlayacağı aşamayı, her siparişte oluşturulacak görev listesini ve çalışma alanınızdan varsayılan sorumluyu seçin."],
     ["Değişiklikler Shopify'dan gelir", "Ödeme durumu, kargo firması ve takip numarasıyla gönderimler, iadeler ve iptaller işi günceller. Bu güncellemeler yalnızca Shopify bilgilerini değiştirir; notlarınız ve görevleriniz olduğu gibi kalır."],
     ["Hangi siparişlerin geleceğini seçin", "Tüm siparişleri ya da yalnızca seçili ürün veya koleksiyonları içeren siparişleri eşitleyin; etikete göre sipariş dahil edin veya dışarıda bırakın."]
@@ -329,7 +329,7 @@ const DE: ShopifyHelpCopy = {
   jobsTitle: "Was die App macht",
   jobsIntro: "Nur das, was hier steht. Alles passiert in deinem NivaDesk-Arbeitsbereich; dein Shopify-Shop wird gelesen, nie verändert.",
   jobs: [
-    ["Neue bezahlte Bestellungen werden Aufträge", "Jede neue bezahlte Bestellung kommt mit Kunde, Positionen und Summen an und wird deinen bestehenden Kundendatensätzen zugeordnet. Unbezahlte Bestellungen werden übersprungen, außer du lässt ihren Import zu; eine Bestellung kommt, sobald Shopify sie als bezahlt meldet."],
+    ["Neue bezahlte Bestellungen werden Aufträge", "Jede neue bezahlte Bestellung kommt mit Kunde, Positionen und Summen an und wird deinen bestehenden Kundendatensätzen zugeordnet. Unbezahlte Bestellungen werden übersprungen, außer du lässt ihren Import zu; eine Bestellung kommt, sobald Shopify sie als bezahlt meldet. Was der Käufer bei einem Produkt eingegeben hat (Gravurtext, ein Name), kommt in die Notizen der Bestellung, und die gewählte Variante steht im Artikelnamen."],
     ["Dein Ablauf bei jeder Bestellung", "Lege in den Sync settings der App fest, in welcher Phase neue Bestellungen starten, welche Aufgabenliste bei jeder Bestellung entsteht und wer aus deinem Arbeitsbereich standardmäßig zuständig ist."],
     ["Änderungen kommen aus Shopify", "Zahlungsstatus, Sendungen mit Versanddienst und Sendungsnummer, Erstattungen und Stornierungen aktualisieren den Auftrag. Dabei ändern sich nur die Shopify-Angaben; deine Notizen und Aufgaben bleiben, wie sie sind."],
     ["Wähle, welche Bestellungen kommen", "Synchronisiere alle Bestellungen oder nur solche mit ausgewählten Produkten oder Kollektionen, und nimm Bestellungen per Tag auf oder lass sie weg."]
@@ -437,7 +437,7 @@ const FR: ShopifyHelpCopy = {
   jobsTitle: "Ce que fait l'application",
   jobsIntro: "Uniquement ce qui est indiqué ici. Tout se passe dans votre espace de travail NivaDesk ; votre boutique Shopify est lue, jamais modifiée.",
   jobs: [
-    ["Les nouvelles commandes payées deviennent des travaux", "Chaque nouvelle commande payée arrive avec le client, les lignes d'articles et les totaux, et elle est associée à vos fiches clients existantes. Les commandes non payées sont ignorées, sauf si vous autorisez leur import ; une commande arrive dès que Shopify l'indique payée."],
+    ["Les nouvelles commandes payées deviennent des travaux", "Chaque nouvelle commande payée arrive avec le client, les lignes d'articles et les totaux, et elle est associée à vos fiches clients existantes. Les commandes non payées sont ignorées, sauf si vous autorisez leur import ; une commande arrive dès que Shopify l'indique payée. La personnalisation saisie par l'acheteur sur un produit (texte à graver, un nom) arrive dans les Notes de la commande, et la variante choisie figure dans le nom de l'article."],
     ["Votre processus sur chaque commande", "Dans les Sync settings de l'application, choisissez l'étape de départ des nouvelles commandes, la liste de tâches créée sur chaque commande et la personne responsable par défaut dans votre espace."],
     ["Les changements viennent de Shopify", "Le statut de paiement, les expéditions avec transporteur et numéro de suivi, les remboursements et les annulations mettent le travail à jour. Ces mises à jour ne changent que les informations Shopify ; vos notes et vos tâches restent telles quelles."],
     ["Choisissez les commandes synchronisées", "Synchronisez toutes les commandes, ou seulement celles qui contiennent des produits ou collections choisis, et incluez ou excluez des commandes par tag."]
@@ -545,7 +545,7 @@ const IT: ShopifyHelpCopy = {
   jobsTitle: "Cosa fa l'app",
   jobsIntro: "Solo ciò che è scritto qui. Tutto avviene nel tuo spazio di lavoro NivaDesk; il tuo negozio Shopify viene letto, mai modificato.",
   jobs: [
-    ["I nuovi ordini pagati diventano lavori", "Ogni nuovo ordine pagato arriva con cliente, righe articolo e totali, abbinato alle schede cliente che hai già. Gli ordini non pagati vengono saltati, a meno che tu non ne consenta l'importazione; un ordine arriva quando Shopify lo segnala come pagato."],
+    ["I nuovi ordini pagati diventano lavori", "Ogni nuovo ordine pagato arriva con cliente, righe articolo e totali, abbinato alle schede cliente che hai già. Gli ordini non pagati vengono saltati, a meno che tu non ne consenta l'importazione; un ordine arriva quando Shopify lo segnala come pagato. La personalizzazione inserita dall'acquirente su un prodotto (testo da incidere, un nome) arriva nelle Note dell'ordine, e la variante scelta è nel nome dell'articolo."],
     ["Il tuo flusso su ogni ordine", "Nelle Sync settings dell'app scegli la fase iniziale dei nuovi ordini, la lista di attività da creare su ogni ordine e il responsabile predefinito del tuo spazio."],
     ["Le modifiche arrivano da Shopify", "Stato del pagamento, spedizioni con corriere e numero di tracciamento, rimborsi e annullamenti aggiornano il lavoro. Questi aggiornamenti cambiano solo i dati Shopify; le tue note e le tue attività restano come sono."],
     ["Scegli quali ordini sincronizzare", "Sincronizza tutti gli ordini, oppure solo quelli con prodotti o collezioni selezionati, e includi o escludi ordini per tag."]
@@ -653,7 +653,7 @@ const ES: ShopifyHelpCopy = {
   jobsTitle: "Qué hace la app",
   jobsIntro: "Solo lo que se indica aquí. Todo ocurre en tu espacio de trabajo de NivaDesk; tu tienda Shopify se lee, nunca se modifica.",
   jobs: [
-    ["Los nuevos pedidos pagados se convierten en trabajos", "Cada nuevo pedido pagado llega con el cliente, las líneas de artículos y los totales, y se asocia a tus fichas de clientes existentes. Los pedidos sin pagar se omiten, salvo que permitas importarlos; un pedido llega cuando Shopify lo marca como pagado."],
+    ["Los nuevos pedidos pagados se convierten en trabajos", "Cada nuevo pedido pagado llega con el cliente, las líneas de artículos y los totales, y se asocia a tus fichas de clientes existentes. Los pedidos sin pagar se omiten, salvo que permitas importarlos; un pedido llega cuando Shopify lo marca como pagado. La personalización que el comprador escribió en un producto (texto para grabar, un nombre) llega a las Notas del pedido, y la variante elegida aparece en el nombre del artículo."],
     ["Tu flujo en cada pedido", "En Sync settings de la app, elige la etapa en la que empiezan los pedidos nuevos, la lista de tareas que se crea en cada pedido y la persona responsable por defecto de tu espacio."],
     ["Los cambios llegan desde Shopify", "El estado del pago, los envíos con transportista y número de seguimiento, los reembolsos y las cancelaciones actualizan el trabajo. Estas actualizaciones solo cambian los datos de Shopify; tus notas y tareas se quedan como están."],
     ["Elige qué pedidos se sincronizan", "Sincroniza todos los pedidos, o solo los que incluyen productos o colecciones seleccionados, e incluye o excluye pedidos por etiqueta."]
@@ -761,7 +761,7 @@ const PT: ShopifyHelpCopy = {
   jobsTitle: "O que a aplicação faz",
   jobsIntro: "Apenas o que está aqui. Tudo acontece no teu espaço de trabalho NivaDesk; a tua loja Shopify é lida, nunca alterada.",
   jobs: [
-    ["Os novos pedidos pagos tornam-se trabalhos", "Cada novo pedido pago chega com o cliente, as linhas de artigos e os totais, associado às fichas de clientes que já tens. Os pedidos por pagar são ignorados, a não ser que permitas importá-los; um pedido chega quando a Shopify o indica como pago."],
+    ["Os novos pedidos pagos tornam-se trabalhos", "Cada novo pedido pago chega com o cliente, as linhas de artigos e os totais, associado às fichas de clientes que já tens. Os pedidos por pagar são ignorados, a não ser que permitas importá-los; um pedido chega quando a Shopify o indica como pago. A personalização que o comprador escreveu num produto (texto para gravar, um nome) chega às Notas do pedido, e a variante escolhida aparece no nome do artigo."],
     ["O teu fluxo em cada pedido", "Em Sync settings na aplicação, escolhe a etapa em que começam os novos pedidos, a lista de tarefas criada em cada pedido e o responsável predefinido do teu espaço."],
     ["As alterações vêm da Shopify", "O estado do pagamento, os envios com transportadora e número de seguimento, os reembolsos e os cancelamentos atualizam o trabalho. Estas atualizações só mudam os dados da Shopify; as tuas notas e tarefas ficam como estão."],
     ["Escolhe que pedidos sincronizar", "Sincroniza todos os pedidos, ou só os que têm produtos ou coleções selecionados, e inclui ou exclui pedidos por etiqueta."]
@@ -869,7 +869,7 @@ const RU: ShopifyHelpCopy = {
   jobsTitle: "Что делает приложение",
   jobsIntro: "Только то, что перечислено здесь. Всё происходит в вашем рабочем пространстве NivaDesk; магазин Shopify только читается и никогда не изменяется.",
   jobs: [
-    ["Новые оплаченные заказы становятся задачами", "Каждый новый оплаченный заказ приходит с клиентом, позициями и суммами и связывается с вашими существующими карточками клиентов. Неоплаченные заказы пропускаются, если вы не разрешили их импорт; заказ приходит, когда Shopify отмечает его оплаченным."],
+    ["Новые оплаченные заказы становятся задачами", "Каждый новый оплаченный заказ приходит с клиентом, позициями и суммами и связывается с вашими существующими карточками клиентов. Неоплаченные заказы пропускаются, если вы не разрешили их импорт; заказ приходит, когда Shopify отмечает его оплаченным. Персонализация, которую покупатель указал для товара (текст гравировки, имя), приходит в «Заметки» заказа, а выбранный вариант указан в названии позиции."],
     ["Ваш процесс для каждого заказа", "В разделе Sync settings приложения выберите этап, с которого начинаются новые заказы, список дел, создаваемый в каждом заказе, и ответственного по умолчанию из вашего пространства."],
     ["Изменения приходят из Shopify", "Статус оплаты, отправки со службой доставки и трек-номером, возвраты и отмены обновляют задачу. Эти обновления меняют только данные Shopify; ваши заметки и дела остаются как есть."],
     ["Выберите, какие заказы синхронизировать", "Синхронизируйте все заказы или только заказы с выбранными товарами или коллекциями, а также включайте или исключайте заказы по тегам."]
@@ -977,7 +977,7 @@ const JA: ShopifyHelpCopy = {
   jobsTitle: "アプリでできること",
   jobsIntro: "ここに書いてあることだけです。すべて NivaDesk のワークスペースで行われ、Shopify ストアは読み取るだけで変更しません。",
   jobs: [
-    ["新しい支払い済み注文がジョブになる", "新しい支払い済み注文は、顧客、商品明細、合計とともに届き、既存の顧客レコードと照合されます。未払いの注文は、取り込みを許可しない限りスキップされ、Shopify で支払い済みになった時点で届きます。"],
+    ["新しい支払い済み注文がジョブになる", "新しい支払い済み注文は、顧客、商品明細、合計とともに届き、既存の顧客レコードと照合されます。未払いの注文は、取り込みを許可しない限りスキップされ、Shopify で支払い済みになった時点で届きます。購入者が商品に入力したパーソナライズ（刻印の文字や名前など）は注文の「メモ」に、選んだバリエーションは商品名に含まれて届きます。"],
     ["すべての注文にあなたのワークフロー", "アプリの Sync settings で、新しい注文の開始ステージ、注文ごとに作るタスクリスト、ワークスペースの既定の担当者を選べます。"],
     ["変更は Shopify から反映", "支払い状況、配送業者と追跡番号付きの発送、返金、キャンセルがジョブを更新します。更新されるのは Shopify の情報だけで、メモやタスクはそのまま残ります。"],
     ["同期する注文を選ぶ", "すべての注文を同期するか、選んだ商品やコレクションを含む注文だけにするか、タグで注文を含めたり除外したりできます。"]
@@ -1085,7 +1085,7 @@ const ZH: ShopifyHelpCopy = {
   jobsTitle: "应用能做什么",
   jobsIntro: "仅限这里列出的内容。一切都在你的 NivaDesk 工作区中进行；你的 Shopify 店铺只被读取，从不被修改。",
   jobs: [
-    ["新的已付款订单变成任务", "每个新的已付款订单都会带着客户、商品明细和合计进入，并与你现有的客户记录匹配。未付款订单会被跳过，除非你允许导入；当 Shopify 标记为已付款时订单才会进入。"],
+    ["新的已付款订单变成任务", "每个新的已付款订单都会带着客户、商品明细和合计进入，并与你现有的客户记录匹配。未付款订单会被跳过，除非你允许导入；当 Shopify 标记为已付款时订单才会进入。买家为商品填写的个性化内容（刻字、名字等）会进入订单的「笔记」，所选款式会写在商品名称中。"],
     ["每个订单都按你的流程", "在应用的 Sync settings 中，选择新订单的起始阶段、在每个订单上创建的任务清单，以及工作区中的默认负责人。"],
     ["变化来自 Shopify", "付款状态、带承运商和运单号的发货、退款和取消都会更新任务。这些更新只改变 Shopify 信息；你的备注和待办保持不变。"],
     ["选择同步哪些订单", "同步所有订单，或只同步包含所选商品或系列的订单，并按标签包含或排除订单。"]
@@ -1193,7 +1193,7 @@ const AR: ShopifyHelpCopy = {
   jobsTitle: "ما الذي يفعله التطبيق",
   jobsIntro: "ما هو مذكور هنا فقط. كل شيء يحدث في مساحة عمل NivaDesk الخاصة بك؛ يُقرأ متجر Shopify ولا يُعدَّل أبدًا.",
   jobs: [
-    ["الطلبات المدفوعة الجديدة تصبح أعمالًا", "يصل كل طلب مدفوع جديد مع العميل وبنود المنتجات والإجماليات، ويُطابَق مع سجلات العملاء الموجودة لديك. تُتخطّى الطلبات غير المدفوعة ما لم تسمح باستيرادها؛ ويصل الطلب عندما يُبلغ Shopify بأنه مدفوع."],
+    ["الطلبات المدفوعة الجديدة تصبح أعمالًا", "يصل كل طلب مدفوع جديد مع العميل وبنود المنتجات والإجماليات، ويُطابَق مع سجلات العملاء الموجودة لديك. تُتخطّى الطلبات غير المدفوعة ما لم تسمح باستيرادها؛ ويصل الطلب عندما يُبلغ Shopify بأنه مدفوع. يصل التخصيص الذي كتبه المشتري على المنتج (نص النقش أو اسم) في «ملاحظات» الطلب، ويظهر الخيار المحدد في اسم البند."],
     ["سير عملك على كل طلب", "في Sync settings داخل التطبيق، اختر المرحلة التي تبدأ بها الطلبات الجديدة، وقائمة المهام التي تُنشأ في كل طلب، والشخص المسؤول الافتراضي من مساحة عملك."],
     ["التغييرات تأتي من Shopify", "تُحدِّث حالةُ الدفع، والشحناتُ مع شركة الشحن ورقم التتبّع، والمبالغُ المستردّة، والإلغاءاتُ العملَ. لا تغيّر هذه التحديثات إلا بيانات Shopify؛ وتبقى ملاحظاتك ومهامك كما هي."],
     ["اختر الطلبات التي تُزامَن", "زامن كل الطلبات، أو فقط الطلبات التي تحتوي على منتجات أو مجموعات مختارة، وأدرج الطلبات أو استبعدها حسب الوسم."]
@@ -1301,7 +1301,7 @@ const HI: ShopifyHelpCopy = {
   jobsTitle: "ऐप क्या करता है",
   jobsIntro: "सिर्फ़ वही जो यहाँ लिखा है। सब कुछ आपके NivaDesk वर्कस्पेस में होता है; आपका Shopify स्टोर केवल पढ़ा जाता है, कभी बदला नहीं जाता।",
   jobs: [
-    ["नए भुगतान वाले ऑर्डर जॉब बनते हैं", "हर नया भुगतान वाला ऑर्डर ग्राहक, आइटम और कुल राशि के साथ आता है और आपके मौजूदा ग्राहक रिकॉर्ड से मिलाया जाता है। बिना भुगतान वाले ऑर्डर तब तक छोड़े जाते हैं जब तक आप उनका इम्पोर्ट चालू न करें; Shopify जब ऑर्डर को भुगतान हो चुका बताता है, तब वह आता है।"],
+    ["नए भुगतान वाले ऑर्डर जॉब बनते हैं", "हर नया भुगतान वाला ऑर्डर ग्राहक, आइटम और कुल राशि के साथ आता है और आपके मौजूदा ग्राहक रिकॉर्ड से मिलाया जाता है। बिना भुगतान वाले ऑर्डर तब तक छोड़े जाते हैं जब तक आप उनका इम्पोर्ट चालू न करें; Shopify जब ऑर्डर को भुगतान हो चुका बताता है, तब वह आता है। खरीदार ने उत्पाद पर जो पर्सनलाइज़ेशन लिखा (उकेरने का टेक्स्ट, कोई नाम), वह ऑर्डर के नोट्स में आता है, और चुना गया वेरिएंट आइटम के नाम में दिखता है।"],
     ["हर ऑर्डर पर आपका वर्कफ़्लो", "ऐप की Sync settings में चुनें कि नए ऑर्डर किस स्टेज से शुरू हों, हर ऑर्डर पर कौन-सी टास्क चेकलिस्ट बने, और आपके वर्कस्पेस से डिफ़ॉल्ट ज़िम्मेदार व्यक्ति कौन हो।"],
     ["बदलाव Shopify से आते हैं", "भुगतान की स्थिति, कूरियर और ट्रैकिंग नंबर के साथ फ़ुलफ़िलमेंट, रिफ़ंड और रद्दीकरण जॉब को अपडेट करते हैं। ये अपडेट सिर्फ़ Shopify की जानकारी बदलते हैं; आपके नोट्स और टास्क जैसे हैं वैसे रहते हैं।"],
     ["चुनें कि कौन-से ऑर्डर सिंक हों", "सभी ऑर्डर सिंक करें, या सिर्फ़ चुने हुए प्रोडक्ट या कलेक्शन वाले ऑर्डर, और टैग के आधार पर ऑर्डर शामिल करें या बाहर रखें।"]

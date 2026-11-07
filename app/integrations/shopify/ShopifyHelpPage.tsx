@@ -2,6 +2,7 @@
 
 import Link from "@/lib/publicSite/PublicLink";
 import { PublicShell } from "@/components/PublicMarketing";
+import { PublicClip } from "@/components/PublicClip";
 import { usePublicSiteLanguage } from "@/lib/publicSite/i18n";
 import { AMAZON_SELLER_COPY } from "@/lib/publicSite/amazonSellerCopy";
 import { SHOPIFY_HELP_COPY, SHOPIFY_PLAN_PRICES_USD, type ShopifyHelpCopy } from "@/lib/publicSite/shopifyHelpCopy";
@@ -118,6 +119,7 @@ function ShopifyHelpContent() {
             </article>
           ))}
         </div>
+        <PublicClip id="store-orders" titleKey="tour.shops.title" bodyKey="tour.shops.body" className={own.clip} captionClassName={own.clipCaption} />
       </section>
 
       <section className={styles.section} aria-labelledby="shopify-direction">

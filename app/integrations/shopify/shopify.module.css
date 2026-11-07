@@ -13,3 +13,7 @@
 .statusLive .liveBody{color:#3d5238}
 .anchor{scroll-margin-top:88px}
 .billingFacts.billingFacts{margin-top:24px}
+/* 7 Nov 2026: the shop-orders recording from the homepage tour under "What the app does" (components/PublicClip.tsx).
+   The stage, video and pause button reuse the tour's .public-site.public-cream styles. */
+.clip{margin:28px auto 0;max-width:880px}
+.clipCaption{font-size:13px;line-height:1.5;color:#5f6b63;margin-top:10px;text-align:center}
