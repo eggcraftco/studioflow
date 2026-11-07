@@ -396,7 +396,7 @@ export function CustomOrderLanding() {
             <Link href="/terms">Terms</Link>
             <a href="mailto:contact@nivadesk.co.uk">Contact</a>
           </nav>
-          <span className="lp-footer-legal">© EGGCRAFT LIMITED · Registered in England and Wales No. 16566512</span>
+          <span className="lp-footer-legal">© EGGCRAFT LIMITED · Registered in England and Wales No. 16566512 · NivaDesk® is a registered trade mark of EGGCRAFT LIMITED in the United Kingdom (No. UK00004386449).</span>
         </div>
       </footer>
     </div>

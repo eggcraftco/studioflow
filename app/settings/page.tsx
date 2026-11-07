@@ -9058,6 +9058,7 @@ function AboutSection({ workspace, language = "English" }: { workspace: Workspac
       <footer className="settings-footer-note">
         <p><strong>{t("© 2026 All rights reserved.")}</strong></p>
         <p>{t("This software and all its components, including its custom logic, layout, and AI integration systems, are the exclusive intellectual property of the developer.")}</p>
+        <p>{t("NivaDesk® is a registered trade mark of EGGCRAFT LIMITED in the United Kingdom (No. UK00004386449).")}</p>
       </footer>
     </div>
   );

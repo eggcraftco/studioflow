@@ -16693,6 +16693,15 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   line-height: 1.5;
   color: var(--public-muted);
 }
+
+/* Registered trade mark line (UK00004386449) — its own row above the company line, same type. */
+.public-footer-meta .public-footer-trademark {
+  flex-basis: 100%;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--public-muted);
+}
 .public-footer-recaptcha a {
   color: var(--public-text);
   font-weight: 800;
@@ -17034,6 +17043,25 @@ body[data-studio-theme="dark"] .schedule-status-badge.gray {
   width: clamp(132px, 13vw, 172px);
   height: auto;
   object-fit: contain;
+}
+
+/* ® after the wordmark: a small superscript at the cap height of "NivaDesk" (39% down the logo), in the
+   wordmark's own navy. The padding reserves its width so it never touches the header divider. */
+.public-brand-mark {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding-right: 8px;
+}
+.public-brand-reg {
+  position: absolute;
+  top: 36%;
+  right: 0;
+  color: #081e4d;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .login-public-brand .public-brand-logo {
