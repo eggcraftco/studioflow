@@ -41880,14 +41880,36 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
    .login-public-shell is the public sign-in page only (scripts/mac-palette/scope.mjs
    counts it as public); the card's own tokens are re-pointed inside it, the app
    keeps its palette. The typing words above the card stay as they are: they
-   mirror the iPhone and Android sign-in screens. */
-.login-public-shell.public-cream {
+   mirror the iPhone and Android sign-in screens.
+   Light in either app theme, like every public page: the app's dark layer
+   (body[data-studio-theme="dark"] .page-shell / .login-public-shell) painted #141414
+   round the cream card and light-grey text into it. `body` in front gives these the
+   same weight as those rules, and they come later. Status tokens keep the sign-in
+   page's own light values (html .login-public-shell). */
+body .login-public-shell.public-cream {
+  --text: #251d1a;
   --public-text: #251d1a;
   --public-muted: #6b5d55;
   --muted: #6b5d55;
   --border: rgba(37, 29, 26, 0.12);
   --accent: #251d1a;
+  --accent-soft: rgba(37, 29, 26, 0.08);
+  --success: #34c759;
+  --success-soft: rgba(52, 199, 89, 0.14);
+  --warning: #ff9500;
+  --warning-rgb: 255, 149, 0;
+  --warning-soft: rgba(255, 149, 0, 0.14);
+  --danger: #9f2d2d;
+  --danger-soft: rgba(255, 59, 48, 0.12);
+  --background: #f8f0e4;
+  --panel: #fdf9f3;
+  background: #f8f0e4;
 }
+/* The dark theme's light logo lockup is for dark pages; the cream pages keep the dark-ink logo. */
+html[data-studio-theme="dark"] .public-cream .public-brand-logo,
+html[data-studio-theme="dark"] .public-cream .public-footer-logo,
+body[data-studio-theme="dark"] .public-cream .public-brand-logo,
+body[data-studio-theme="dark"] .public-cream .public-footer-logo { content: url("/brand/nivadesk-logo.png"); }
 .login-public-shell.public-cream .login-public-actions a:last-of-type {
   display: inline-flex;
   align-items: center;
@@ -41911,7 +41933,9 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
 
 /* ---- Cookie banner on the public pages --------------------------------
    It is mounted by the root layout, outside the shell, so it takes the cream
-   values by :has(); the app and the customer pages keep it as it is. */
+   values by :has(); the app and the customer pages keep it as it is. Same weight
+   as the app's dark-theme banner rules and later, so a public page shows it light
+   in either app theme, as the page itself. */
 body:has(.public-cream) .cookie-banner-inner {
   border-color: #eed6c4;
   background: #fdf9f3;
@@ -41922,6 +41946,7 @@ body:has(.public-cream) .cookie-banner-copy p,
 body:has(.public-cream) .cookie-cat-desc { color: #6b5d55; }
 body:has(.public-cream) .cookie-cat-title { color: #251d1a; }
 body:has(.public-cream) .cookie-cat { border-color: rgba(37, 29, 26, 0.12); background: rgba(37, 29, 26, 0.02); }
+body:has(.public-cream) .cookie-cat-badge { background: rgba(37, 29, 26, 0.06); color: #6b5d55; }
 body:has(.public-cream) .cookie-banner-copy a,
 body:has(.public-cream) .cookie-link-btn { color: #8f4f32; }
 body:has(.public-cream) .cookie-btn { border-radius: 6px; }
