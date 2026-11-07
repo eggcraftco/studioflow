@@ -32,6 +32,7 @@ import {
   orderLabelProblem, ORDER_LABEL_MAX, paymentLinkRefusal, standaloneFormProblem, STANDALONE_TITLE_MAX, type PaymentRequestRefundFields,
 } from "@/lib/studioflow/stripeConnect";
 import RefundPaymentDialog, { type RefundAttempt, type RefundNotice } from "@/components/RefundPaymentDialog";
+import RowActionsMenu, { type RowMenuItem } from "@/components/RowActionsMenu";
 import { usePaymentLinksPlan } from "@/lib/studioflow/usePaymentLinksAvailable";
 import { loadWorkspaceSettingsOverview } from "@/lib/studioflow/firestore";
 import { workspaceCurrencyCodes } from "@/lib/studioflow/orderCurrency";
@@ -248,16 +249,17 @@ export default function PaymentLinksPanel({
   const [standaloneOrderQuery, setStandaloneOrderQuery] = useState("");
   const [createOrderQuery, setCreateOrderQuery] = useState("");
   const filterRef = useRef<HTMLDivElement | null>(null);
+  // The row menu closes itself on a press elsewhere (RowActionsMenu: it lives in its own layer on <body> since 7 Nov
+  // 2026, so a "press outside this row" test here would close it before its own item could be pressed).
   useEffect(() => {
-    if (!menuFor && !filterOpen) return;
+    if (!filterOpen) return;
     const close = (event: MouseEvent) => {
       const target = event.target as Element | null;
-      if (menuFor && !target?.closest?.(`[data-row-menu="${menuFor}"]`)) setMenuFor("");
-      if (filterOpen && filterRef.current && !filterRef.current.contains(target as Node)) setFilterOpen(false);
+      if (filterRef.current && !filterRef.current.contains(target as Node)) setFilterOpen(false);
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
-  }, [menuFor, filterOpen]);
+  }, [filterOpen]);
 
   // Which load is the newest. Two can be in flight at once — React remounts the
   // panel on a tab switch, and Strict Mode runs the effect twice in development
@@ -990,26 +992,21 @@ export default function PaymentLinksPanel({
                   const menuItems = [
                     canOpenOrder ? { key: "order", label: reference ? t("Open order {reference}").replace("{reference}", reference) : t("Open order"), run: () => onOpenOrder?.(row.orderId) } : null,
                     isOpen ? { key: "show", label: shownId === row.paymentRequestId ? t("Hide link") : t("Show link"), run: () => setShownId(shownId === row.paymentRequestId ? "" : row.paymentRequestId) } : null,
-                    isOpen ? { key: "cancel", label: busyId === row.paymentRequestId ? t("Cancelling…") : t("Cancel link"), danger: true, run: () => void cancel(row) } : null,
-                  ].filter(Boolean) as { key: string; label: string; danger?: boolean; run: () => void }[];
+                    isOpen ? { key: "cancel", label: busyId === row.paymentRequestId ? t("Cancelling…") : t("Cancel link"), danger: true, disabled: busyId === row.paymentRequestId, run: () => void cancel(row) } : null,
+                  ].filter(Boolean) as RowMenuItem[];
+                  // The menu opens in its own layer, never inside the table's frame (which clips it: 7 Nov 2026).
                   const rowMenu = menuItems.length ? (
-                    <span className={s.menuWrap} data-row-menu={row.paymentRequestId}>
-                      <button type="button" className={s.more} aria-haspopup="menu" aria-expanded={menuFor === row.paymentRequestId}
-                        aria-label={t("More actions")} onClick={() => openMenuRow(row.paymentRequestId)}>
-                        <span aria-hidden="true">···</span>
-                      </button>
-                      {menuFor === row.paymentRequestId ? (
-                        <span className={s.menu} role="menu" onKeyDown={(e) => { if (e.key === "Escape") setMenuFor(""); }}>
-                          {menuItems.map((item) => (
-                            <button key={item.key} type="button" role="menuitem" className={item.danger ? s.danger : undefined}
-                              disabled={item.key === "cancel" && busyId === row.paymentRequestId}
-                              onClick={() => { setMenuFor(""); item.run(); }}>
-                              {item.label}
-                            </button>
-                          ))}
-                        </span>
-                      ) : null}
-                    </span>
+                    <RowActionsMenu
+                      rowKey={row.paymentRequestId}
+                      open={menuFor === row.paymentRequestId}
+                      onOpenChange={(next) => (next ? openMenuRow(row.paymentRequestId) : setMenuFor((current) => (current === row.paymentRequestId ? "" : current)))}
+                      items={menuItems}
+                      aria-label={t("More actions")}
+                      wrapClassName={s.menuWrap}
+                      triggerClassName={s.more}
+                      menuClassName={s.menu}
+                      dangerClassName={s.danger}
+                    />
                   ) : null;
                   return [
                     <tr key={row.paymentRequestId}>
