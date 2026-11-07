@@ -82,6 +82,7 @@
     "test:menu-card-strings": "node scripts/check-menu-card-strings.mjs",
     "test:calendar-core": "npx tsx scripts/check-calendar-core.mts",
     "test:calendar-view": "npx tsx scripts/check-calendar-view.mts",
+    "test:reminder-core": "npx tsx scripts/check-reminder-core.mts",
     "test:card-purposes": "node scripts/check-card-purposes.mjs",
     "test:order-assignees": "node --experimental-strip-types --no-warnings scripts/check-order-assignees.mts",
     "test:owner-assignment": "node scripts/check-owner-assignment.mjs",

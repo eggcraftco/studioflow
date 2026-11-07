@@ -606,7 +606,8 @@ const TREE_EN: GuideNode[] = [
           { kind: "bullets", items: [
             "Pick a Quick Reminder shortcut (for example Ask for approval, Send design update or Check payment) or type your own title.",
             "Set the date & time, a priority (Normal, High or Urgent) and an optional note. Turn on Notify to get a notification when it is due.",
-            "See Upcoming reminders and Recently completed ones; Mark Done, or Snooze by 1 hour or 1 day."
+            "See Upcoming reminders and Recently completed ones; Mark Done, or Snooze by 1 hour or 1 day.",
+            "The same reminders appear in Notes ▸ Reminders and on the Calendar. Linked reminders lists your notes and calendar entries linked to this order."
           ] },
           { kind: "sub", text: "What you can change" },
           { kind: "bullets", items: [
@@ -725,7 +726,8 @@ const TREE_EN: GuideNode[] = [
       { kind: "sub", text: "Order due dates and note reminders on the calendar, and filters" },
       { kind: "bullets", items: [
         "An order with a due date appears as Order due (📦) for people who can see Orders; Open order takes you to it. The date comes from the order, so change it on the order.",
-        "A note reminder appears as Note reminder (🔔) for people who can see Notes, with Open in Notes.",
+        "A note reminder appears as Note reminder (🔔) for people who can see Notes, at its time or as All day and with its linked order; Open in Notes opens that note.",
+        "An order's Schedule & Alerts reminder appears as Order reminder (⏰) at its time for people who can open the order; Open order takes you to it, and it is changed on the order.",
         "Filters narrows the calendar: My entries, Shared with me, Team entries, Who it is about, Type, Status and Linked order. Filters are remembered on this device, never change who can see an entry, and Reset filters clears them."
       ] },
       { kind: "sub", text: "Connecting Google Calendar or Outlook (your other calendars)" },
@@ -773,8 +775,9 @@ const TREE_EN: GuideNode[] = [
       ] },
       { kind: "sub", text: "Reminders" },
       { kind: "bullets", items: [
-        "Set a reminder on a note (Tomorrow, Next week or a custom time) and get notified.",
-        "See all your note reminders in one place, and remove a reminder when it is done."
+        "Set a reminder on a note: pick a date and a time, or tick All day (Tomorrow and Next week set 09:00).",
+        "Notes ▸ Reminders is one list: your note reminders, the Schedule & Alerts reminders of the orders you can open and your calendar reminders, soonest first, each with its date and time. Tap one to open the note, the order or the calendar entry.",
+        "Daily notes you write in the Calendar also appear in Notes, under From Calendar."
       ] },
       { kind: "sub", text: "Project notes" },
       { kind: "bullets", items: [
@@ -2390,7 +2393,8 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Bir Quick Reminder kısayolu seçin (örneğin Ask for approval, Send design update veya Check payment) ya da kendi başlığınızı yazın.",
             "Tarih & saat, bir öncelik (Normal, High veya Urgent) ve isteğe bağlı bir not belirleyin. Zamanı gelince bildirim almak için Notify'ı açın.",
-            "Upcoming (yaklaşan) ve Recently completed (son tamamlanan) hatırlatıcıları görün; Mark Done yapın veya 1 saat ya da 1 gün Snooze edin."
+            "Upcoming (yaklaşan) ve Recently completed (son tamamlanan) hatırlatıcıları görün; Mark Done yapın veya 1 saat ya da 1 gün Snooze edin.",
+            "Aynı hatırlatıcılar Notlar ▸ Hatırlatıcılar'da ve Takvim'de de görünür. Bağlı hatırlatıcılar, bu siparişe bağlı notlarınızı ve takvim kayıtlarınızı listeler."
           ] },
           { kind: "sub", text: "Neleri değiştirebilirsiniz" },
           { kind: "bullets", items: [
@@ -2496,7 +2500,8 @@ const TREE_TR: GuideNode[] = [
       { kind: "sub", text: "Takvimde sipariş teslim tarihleri, not hatırlatmaları ve filtreler" },
       { kind: "bullets", items: [
         "Teslim tarihi olan bir sipariş, Siparişler'i görebilen kişilere Sipariş teslim zamanı (📦) olarak görünür; Siparişi aç sizi siparişe götürür. Tarih siparişten gelir; değiştirmek için siparişte değiştirin.",
-        "Bir not hatırlatması, Notlar'ı görebilen kişilere Not hatırlatması (🔔) olarak, Notes'ta aç ile birlikte görünür.",
+        "Bir not hatırlatması, Notlar'ı görebilen kişilere Not hatırlatması (🔔) olarak saatinde ya da Tüm gün olarak, bağlı siparişiyle görünür; Notes'ta aç o notu açar.",
+        "Bir siparişin Schedule & Alerts hatırlatıcısı, siparişi açabilen kişilere saatinde Sipariş hatırlatıcısı (⏰) olarak görünür; Siparişi aç sizi siparişe götürür, değişiklik siparişte yapılır.",
         "Filtreler takvimi daraltır: Benim kayıtlarım, Benimle paylaşılanlar, Ekibin kayıtları, Kimin için, Tür, Durum ve Bağlı sipariş. Filtreler bu cihazda hatırlanır, bir kaydı kimin görebileceğini asla değiştirmez; Filtreleri sıfırla hepsini temizler."
       ] },
       { kind: "sub", text: "Google Takvim ya da Outlook takvimini bağlamak (diğer takvimleriniz)" },
@@ -2544,8 +2549,9 @@ const TREE_TR: GuideNode[] = [
       ] },
       { kind: "sub", text: "Hatırlatıcılar" },
       { kind: "bullets", items: [
-        "Bir nota hatırlatıcı kurun (Tomorrow, Next week veya özel bir zaman) ve bildirim alın.",
-        "Tüm not hatırlatıcılarınızı tek yerde görün ve işi bitince hatırlatıcıyı kaldırın."
+        "Bir nota hatırlatıcı kurun: bir tarih ve saat seçin ya da Tüm gün'ü işaretleyin (Tomorrow ve Next week saati 09:00 yapar).",
+        "Notlar ▸ Hatırlatıcılar tek listedir: not hatırlatıcılarınız, açabildiğiniz siparişlerin Schedule & Alerts hatırlatıcıları ve takvim hatırlatıcılarınız, en yakını üstte, her biri tarihi ve saatiyle. Birine dokunun; not, sipariş ya da takvim kaydı açılır.",
+        "Takvim'de yazdığınız günlük notlar Notlar'da da, Takvimden başlığı altında görünür."
       ] },
       { kind: "sub", text: "Proje notları" },
       { kind: "bullets", items: [
