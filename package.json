@@ -78,6 +78,7 @@
     "test:order-source-links": "node scripts/check-order-source-links.mjs",
     "test:order-source-chip": "node scripts/check-order-source-chip.mjs",
     "test:woo-store-chips": "node scripts/check-woo-store-chips.mjs",
+    "test:order-channel-preview": "npx tsx scripts/check-order-channel-preview.mts",
     "test:upload-progress": "node scripts/check-upload-progress.mjs",
     "test:upload-translations": "node scripts/check-upload-translations.mjs",
     "test:upload-policy": "node scripts/check-upload-policy.mjs",

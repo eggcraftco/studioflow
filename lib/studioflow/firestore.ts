@@ -1,3 +1,4 @@
+import { channelPreviewFrom, effectivePreviewLink, type ChannelPreviewInfo } from "./orderPreview";
 import { bootMark } from "./bootTrace";
 import {
   collection,
@@ -699,6 +700,8 @@ export type OrderDetail = {
   customerName: string;
   designName: string;
   designLink: string;
+  /** siparis-onizleme: the shop photo the server copied (channelPreview); read only. See orderPreview.ts. */
+  channelPreview: ChannelPreviewInfo | null;
   watchRef: string;
   status: string;
   designStatus: string;
@@ -2123,7 +2126,7 @@ function orderListItemFromDocument(orderDocument: QueryDocumentSnapshot<Document
       isDelivered: booleanValue(data.isDelivered, false),
       clientFileCount: Array.isArray(data.clientFiles) ? data.clientFiles.length : 0,
       projectNumber: numberValue(data.projectNumber, 0),
-      previewImageUrl: firstStringValue(
+      previewImageUrl: effectivePreviewLink(firstStringValue(
         data.previewImageUrl,
         data.previewImageURL,
         data.previewURL,
@@ -2133,7 +2136,7 @@ function orderListItemFromDocument(orderDocument: QueryDocumentSnapshot<Document
         data.designImageUrl,
         data.designImageURL,
         data.designLink
-      ),
+      ), channelPreviewFrom(data)),
       customFields: recordStringValue(data.customFields),
       extraStatuses: recordStringValue(data.extraStatuses),
       ...orderSourceFieldsFrom(data)
@@ -2190,7 +2193,7 @@ export async function loadScheduleOrders(companyId: string, workspace?: Workspac
       isDispatched: booleanValue(data.isDispatched, false),
       isDelivered: booleanValue(data.isDelivered, false),
       projectNumber: numberValue(data.projectNumber, 0),
-      previewImageUrl: firstStringValue(
+      previewImageUrl: effectivePreviewLink(firstStringValue(
         data.previewImageUrl,
         data.previewImageURL,
         data.previewURL,
@@ -2200,7 +2203,7 @@ export async function loadScheduleOrders(companyId: string, workspace?: Workspac
         data.designImageUrl,
         data.designImageURL,
         data.designLink
-      ),
+      ), channelPreviewFrom(data)),
       clientFileCount: Array.isArray(data.clientFiles) ? data.clientFiles.length : 0,
       customFields: stringMapValue(data.customFields),
       extraStatuses: stringMapValue(data.extraStatuses),
@@ -2341,7 +2344,7 @@ export async function loadWorkspaceCustomers(companyId: string, workspace?: Work
       designName: stringValue(data.designName, "Untitled design"),
       status: stringValue(data.status, "Not Yet"),
       notes: stringValue(data.notes, ""),
-      previewImageUrl: firstStringValue(
+      previewImageUrl: effectivePreviewLink(firstStringValue(
         data.previewImageUrl,
         data.previewImageURL,
         data.previewURL,
@@ -2351,7 +2354,7 @@ export async function loadWorkspaceCustomers(companyId: string, workspace?: Work
         data.designImageUrl,
         data.designImageURL,
         data.designLink
-      ),
+      ), channelPreviewFrom(data)),
       paidAmount: numberValue(data.paidAmount, 0),
       refundedAmount: numberValue(data.refundedAmount, 0),
       remainingAmount: numberValue(data.remainingAmount, 0),
@@ -2806,6 +2809,7 @@ function mapOrderDetailSnapshot(
     customerName: stringValue(data.customerName, "New Project"),
     designName: stringValue(data.designName, "Untitled design"),
     designLink: stringValue(data.designLink, ""),
+    channelPreview: channelPreviewFrom(data),
     watchRef: stringValue(data.watchRef, ""),
     status: stringValue(data.status, "Not Yet"),
     designStatus: stringValue(data.designStatus, "Not Yet"),

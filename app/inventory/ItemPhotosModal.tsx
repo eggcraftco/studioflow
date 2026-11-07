@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { ebayListingPhotoCopiedAt, formatCopyDate } from "@/lib/studioflow/channelPhotoNote";
 import {
   INVENTORY_PHOTO_LIMIT,
   deleteInventoryPhoto,
@@ -128,6 +129,12 @@ export function ItemPhotosModal({
             <div className="inventory-photo-stage">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={urls[viewing]} alt={item.name} />
+              {ebayListingPhotoCopiedAt(viewing) ? (
+                // eBay API License §8.1.3: a picture copied from an eBay listing shows when it was copied.
+                <p className="inventory-photo-note" data-photo-source="ebay">
+                  {t("Photo from the eBay listing")} · {formatCopyDate(ebayListingPhotoCopiedAt(viewing) as number)}
+                </p>
+              ) : null}
               <div className="inventory-inline-actions">
                 <button type="button" className="inventory-link" onClick={() => setViewing(null)}>
                   {t("Back to all photos")}
