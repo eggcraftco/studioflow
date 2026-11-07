@@ -1625,13 +1625,44 @@ export function keepWorkspaceListsListening(workspace: WorkspaceContext | null |
 }
 
 export async function loadDashboardFinanceOrders(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<DashboardFinanceOrder[]> {
+  return (await loadDashboardFinanceOrdersWithSource(companyId, workspace, uid)).orders;
+}
+
+/**
+ * The finance orders plus what the answer can be trusted for (setup takeover, 7 Nov 2026 — see
+ * lib/studioflow/setupTakeover.ts). getDocs does not fail when the client is offline: it answers from this
+ * browser's local copy, which right after a sign-in holds none of the workspace's orders. So an empty list is
+ * a count only when the server gave it, over the whole workspace.
+ */
+export type DashboardFinanceOrdersResult = {
+  orders: DashboardFinanceOrder[];
+  /** Order documents in the answer, Trash included. */
+  documentCount: number;
+  /** The answer came from the server, not from the local copy. */
+  fromServer: boolean;
+  /** Every order of the workspace was asked for (not only the ones assigned to this member). */
+  wholeWorkspace: boolean;
+};
+
+export async function loadDashboardFinanceOrdersWithSource(companyId: string, workspace?: WorkspaceContext | null, uid = ""): Promise<DashboardFinanceOrdersResult> {
   // Only the orders this member may read (usesAssignedOrderScope above).
   const assignedScope = usesAssignedOrderScope(workspace, uid);
   if (assignedScope) await ensureWorkflowAssignedOrderViews(companyId, workspace);
   const snapshot = await (assignedScope
     ? getWorkspaceOrderDocs(companyId, workspace, uid)
     : getDocs(query(collection(db, "siparisler"), where("companyId", "==", companyId))));
-  return snapshot.docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
+  // A merged assigned-scope answer carries no metadata; it is not a whole-workspace count either way.
+  const fromServer = "metadata" in snapshot ? snapshot.metadata.fromCache === false : false;
+  return {
+    orders: dashboardFinanceOrdersFrom(snapshot.docs),
+    documentCount: snapshot.docs.length,
+    fromServer,
+    wholeWorkspace: !assignedScope
+  };
+}
+
+function dashboardFinanceOrdersFrom(docs: QueryDocumentSnapshot<DocumentData>[]): DashboardFinanceOrder[] {
+  return docs.filter(orderDocument => !booleanValue(orderDocument.data().isDeleted, false)).map(orderDocument => {
     const data = orderDocument.data();
     return {
       id: orderDocument.id,
