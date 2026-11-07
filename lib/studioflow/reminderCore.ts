@@ -105,9 +105,11 @@ export function resolveReminderAllDay(reminderMs: number | null, mode: unknown):
   return Math.round(m.atMs) === Math.round(reminderMs) ? m.allDay : null;
 }
 
-/** What a client writes next to reminderDate. */
-export function reminderModeFor(reminderMs: number | null, allDay: boolean): { atMs: number; allDay: boolean } | null {
-  return reminderMs == null || !Number.isFinite(reminderMs) ? null : { atMs: Math.round(reminderMs), allDay };
+/** What a client writes next to reminderDate. `timeZone` (stage B) tells the server where 09:00 of an all-day reminder is;
+ *  reading ignores it. */
+export function reminderModeFor(reminderMs: number | null, allDay: boolean, timeZone?: string): { atMs: number; allDay: boolean; timeZone?: string } | null {
+  if (reminderMs == null || !Number.isFinite(reminderMs)) return null;
+  return timeZone && core.isTimeZone(timeZone) ? { atMs: Math.round(reminderMs), allDay, timeZone } : { atMs: Math.round(reminderMs), allDay };
 }
 
 /** Is the stored reminder date-only? See the time rules at the top. */
@@ -282,4 +284,21 @@ export function orderReminderLabel(customerName: string, designName: string): st
   const design = String(designName || "").trim();
   if (!design || design === "Untitled design") return customer;
   return customer ? `${customer} · ${design}` : design;
+}
+
+/**
+ * Where a reminder's bell row or push opens (stage B, server type "reminder"; one rule on every platform): a note → that
+ * note, an order reminder → the order on its Schedule & Alerts card, a calendar reminder → that day with the entry open.
+ * public/firebase-messaging-sw.js builds the same links for a push drawn by the browser.
+ */
+export function reminderNotificationHref(row: { reminderKind?: string | null; noteId?: string | null; orderId?: string | null; entryId?: string | null; dateKey?: string | null }): string {
+  const kind = String(row.reminderKind || "").trim();
+  const noteId = String(row.noteId || "").trim();
+  const orderId = String(row.orderId || "").trim();
+  const entryId = String(row.entryId || "").trim();
+  const dateKey = String(row.dateKey || "").trim();
+  if (kind === "note" && noteId) return `/notes?note=${encodeURIComponent(noteId)}`;
+  if (kind === "calendar") return core.isDateKey(dateKey) ? `/calendar?date=${dateKey}${entryId ? `&entry=${encodeURIComponent(entryId)}` : ""}` : "/calendar";
+  if (orderId) return `/orders?${new URLSearchParams({ orderId, focus: "schedule" }).toString()}`;
+  return noteId ? `/notes?note=${encodeURIComponent(noteId)}` : "/notes";
 }

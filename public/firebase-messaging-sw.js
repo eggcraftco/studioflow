@@ -31,7 +31,17 @@ self.addEventListener("notificationclick", (event) => {
   const shown = event.notification.data || {};
   const data = (shown.FCM_MSG && shown.FCM_MSG.data) || shown;
   let targetUrl = "/messages";
-  if (data.route === "customerInbox") {
+  if (data.type === "reminder") {
+    // Stage B (7 Nov 2026): a reminder opens the record it lives on — the same links as
+    // reminderNotificationHref in lib/studioflow/notificationSettings.ts.
+    if (data.reminderKind === "note" && data.noteId) targetUrl = "/notes?note=" + encodeURIComponent(data.noteId);
+    else if (data.reminderKind === "calendar") {
+      targetUrl = /^\d{4}-\d{2}-\d{2}$/.test(data.dateKey || "")
+        ? "/calendar?date=" + data.dateKey + (data.entryId ? "&entry=" + encodeURIComponent(data.entryId) : "")
+        : "/calendar";
+    } else if (data.orderId) targetUrl = "/orders?" + new URLSearchParams({ orderId: data.orderId, focus: "schedule" }).toString();
+    else targetUrl = data.noteId ? "/notes?note=" + encodeURIComponent(data.noteId) : "/notes";
+  } else if (data.route === "customerInbox") {
     // A customer wrote: the customer inbox, on that conversation — and the
     // workspace the server named (GN-07), so a push for another workspace says
     // so instead of opening "That conversation no longer exists."
@@ -51,7 +61,7 @@ self.addEventListener("notificationclick", (event) => {
     // Time; a parcel delivered opens on the Shipping card.
     const params = new URLSearchParams({ orderId: data.orderId });
     const focus = data.focus || (data.type === "delivery" ? "shipping" : "");
-    if (focus === "files" || focus === "workTime" || focus === "shipping") params.set("focus", focus);
+    if (focus === "files" || focus === "workTime" || focus === "shipping" || focus === "schedule") params.set("focus", focus);
     ["fileId", "workSessionId", "workDayId"].forEach((key) => { if (data[key]) params.set(key, data[key]); });
     targetUrl = "/orders?" + params.toString();
   }

@@ -1,6 +1,15 @@
 import { Timestamp } from "firebase/firestore";
 import { reminderModeFor, resolveReminderAllDay } from "./reminderCore";
 
+/** The writer's IANA zone (stage B: the server rings an all-day reminder at 09:00 there); "" where Intl has none. */
+function deviceZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
+}
+
 // Pure half of the notes model: the type, and the two converters between a
 // StudioKeepNote and its Firestore document. No Firebase client import, so a
 // plain Node script can prove that a note's text survives the round trip
@@ -142,7 +151,7 @@ export function keepNoteDocumentFields(note: StudioKeepNote): Record<string, unk
       ? Timestamp.fromMillis(note.reminderDateMillis)
       : null,
     // Only a reminder this screen set knowingly gets a mode; an unknown one (null) keeps the legacy reading.
-    reminderMode: note.reminderAllDay == null ? null : reminderModeFor(note.reminderDateMillis, note.reminderAllDay),
+    reminderMode: note.reminderAllDay == null ? null : reminderModeFor(note.reminderDateMillis, note.reminderAllDay, deviceZone()),
     manualOrder: note.manualOrder,
     noteType: note.noteType || "personal",
     linkedOrderId: note.linkedOrderId || "",

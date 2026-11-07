@@ -62,6 +62,26 @@ check("order card lists linked reminders", /<OrderLinkedReminders/.test(order) &
 const doc = src("lib/studioflow/noteDocument.ts");
 check("note documents read and write reminderMode", /resolveReminderAllDay\(/.test(doc) && /reminderModeFor\(/.test(doc));
 
+// Stage B (7 Nov 2026): where a reminder push / bell row opens, the same on every surface of the web.
+check("B link: note → that note", r.reminderNotificationHref({ reminderKind: "note", noteId: "N 1" }) === "/notes?note=N%201");
+check("B link: order → its Schedule card", r.reminderNotificationHref({ reminderKind: "order", orderId: "R-1" }) === "/orders?orderId=R-1&focus=schedule");
+check("B link: calendar → day + entry", r.reminderNotificationHref({ reminderKind: "calendar", dateKey: "2026-11-08", entryId: "E2" }) === "/calendar?date=2026-11-08&entry=E2");
+check("B link: calendar with a broken day → the calendar", r.reminderNotificationHref({ reminderKind: "calendar", dateKey: "8 Nov", entryId: "E2" }) === "/calendar");
+check("B mode carries the writer's zone, reading ignores it", JSON.stringify(r.reminderModeFor(1794139200000, true, "Europe/Istanbul")) === JSON.stringify({ atMs: 1794139200000, allDay: true, timeZone: "Europe/Istanbul" })
+  && r.resolveReminderAllDay(1794139200000, { atMs: 1794139200000, allDay: true, timeZone: "Europe/Istanbul" }) === true
+  && JSON.stringify(r.reminderModeFor(1794139200000, false, "Mars/Base")) === JSON.stringify({ atMs: 1794139200000, allDay: false }));
+const sw = src("public/firebase-messaging-sw.js");
+check("B push click: the service worker routes reminders (note, calendar, order Schedule card)", /data\.type === "reminder"/.test(sw) && /\/notes\?note=/.test(sw) && /\/calendar\?date=/.test(sw) && /focus: "schedule"/.test(sw));
+const drawer = src("components/NotificationsDrawer.tsx");
+check("B bell click: reminder rows open their record", /n\.type === "reminder"/.test(drawer) && /reminderNotificationHref\(n\)/.test(drawer));
+const pushLib = src("lib/studioflow/pushNotifications.ts");
+check("B foreground push click routes reminders", /data\.type === "reminder"/.test(pushLib) && /reminderNotificationHref\(data\)/.test(pushLib));
+const notifLib = src("lib/studioflow/notifications.ts");
+check("B bell rows keep the reminder fields", ["reminderKind", "noteId", "entryId", "dateKey"].every((k) => new RegExp(`${k}: str\\(data\\.${k}\\)`).test(notifLib)));
+const settingsLib = src("lib/studioflow/notificationSettings.ts");
+check("B order focus 'schedule' scrolls to the Schedule & Alerts card", /if \(focus === "schedule"\) return "schedule";/.test(settingsLib));
+check("B note documents write the writer's zone", /reminderModeFor\(note\.reminderDateMillis, note\.reminderAllDay, deviceZone\(\)\)/.test(src("lib/studioflow/noteDocument.ts")));
+
 if (fails.length) {
   console.error(`check-reminder-core: ${pass} passed, ${fails.length} FAILED`);
   for (const f of fails) console.error(`  ✗ ${f}`);
