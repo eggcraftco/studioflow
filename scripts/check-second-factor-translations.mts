@@ -12,7 +12,11 @@ const keys = new Set<string>();
 for (const rel of ["app/settings/TwoStepVerificationCard.tsx", "components/SecondFactorPromptHost.tsx"]) {
   for (const m of read(rel).matchAll(/(?<![\w.])t\(\s*"((?:[^"\\\n]|\\.)*)"\s*\)/g)) keys.add(m[1]);
 }
-for (const m of read("lib/auth/secondFactor.ts").matchAll(/"([A-Z][^"]{12,}[.?!])"/g)) keys.add(m[1]);
+for (const rel of ["lib/auth/secondFactor.ts", "lib/auth/smsSecondFactorRules.ts"]) {
+  for (const m of read(rel).matchAll(/"([A-Z][^"]{12,}[.?!])"/g)) keys.add(m[1]);
+}
+// SMS-MFA: the Settings card's fallback sentences (fail(err, "…")) are shown through t() too.
+for (const m of read("app/settings/TwoStepVerificationCard.tsx").matchAll(/fail\(err, "([^"]+)"\)/g)) keys.add(m[1]);
 // The server's own recovery replies (mfaRecovery.js GENERIC_FAIL / success) reach the prompt and
 // the login error line through t() as they are.
 keys.add("That code did not work. Check it, or wait an hour after several tries.");
@@ -32,5 +36,5 @@ const control = "GN10 control key that no table has";
 const controlSeen = others.every((lang) => studioT(control, lang) === control);
 console.log(`keys ${keys.size} × languages ${others.length}; problems ${problems.length}; control ${controlSeen ? "ok" : "BROKEN"}`);
 for (const line of problems) console.log(line);
-if (!controlSeen || problems.length || keys.size < 30) process.exit(1);
+if (!controlSeen || problems.length || keys.size < 70) process.exit(1);
 console.log("✅ SECOND FACTOR TRANSLATIONS OK");

@@ -76,6 +76,9 @@ if (typeof window !== "undefined" && APP_CHECK_SITE_KEY && !USE_EMULATOR) {
 export const auth = getAuth(app);
 if (USE_EMULATOR) {
   connectAuthEmulator(auth, `http://${EMULATOR_HOST}:${EMULATOR_PORTS.auth}`, { disableWarnings: true });
+  // SMS-MFA: the Auth emulator does not check reCAPTCHA; the SDK's mock widget stands in, so a
+  // text-message code can be tried end to end locally (the code is read from the emulator, no SMS is sent).
+  auth.settings.appVerificationDisabledForTesting = true;
 }
 
 // Persistent IndexedDB cache: repeat visits render instantly from disk while
