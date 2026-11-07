@@ -291,7 +291,9 @@ export function CustomerPortalContent({ token }: { token: string }) {
               <span className="portal-shell-muted">
                 {smsDeferredUntil
                   ? `We'll send a text to ${sms.consent.number} at 08:00 UK time. Tap the link in it to confirm.`
-                  : `We've sent a text to ${sms.consent.number}. Tap the link in it to confirm. Texts start only after you confirm.`}
+                  : sms.consent.confirm && sms.consent.confirm.sentAtMs
+                    ? `We've sent a text to ${sms.consent.number}. Tap the link in it to confirm. Texts start only after you confirm.`
+                    : `Texts start after you confirm with the link we text to ${sms.consent.number}.`}
               </span>
               {sms.consent.confirm && sms.consent.confirm.canResend ? (
                 <div>
