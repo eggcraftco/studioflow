@@ -36,7 +36,7 @@ import { doc, getDoc } from "firebase/firestore";
 import {
   loadCustomerPickerOptions,
   keepWorkspaceListsListening,
-  loadDashboardFinanceOrders,
+  loadDashboardFinanceOrdersWithSource,
   loadWorkspaceContext,
   loadWorkspaceSettingsOverview,
   switchActiveWorkspace,
@@ -61,6 +61,14 @@ import { studioLanguageDir, studioLanguageLocale } from "@/lib/studioflow/langua
 import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
 import { EMPTY_INTEGRATION_SIGNALS, loadIntegrationSignals, type IntegrationSignals } from "@/lib/studioflow/integrations";
 import { setupPassthroughFromUrl } from "@/lib/studioflow/etsyFirstImport";
+import {
+  continueSetupCardShows,
+  orderCountFor,
+  setupTakesOverAutomatically,
+  workspaceCountedEmpty,
+  workspaceOrderCount,
+  type WorkspaceOrderCount,
+} from "@/lib/studioflow/setupTakeover";
 import { canEditWorkspaceSettingsForRole, savePersonalInterfaceSettings } from "@/lib/studioflow/settingsActions";
 import {
   businessTypeForWorkKinds,
@@ -191,6 +199,9 @@ let cachedAppShellUserId = "";
 let cachedWorkspace: WorkspaceContext | null = null;
 let cachedSettings: WorkspaceSettingsOverview | null = null;
 let cachedFinanceOrders: DashboardFinanceOrder[] = [];
+// How many orders the cached workspace has, and whether that was counted (lib/studioflow/setupTakeover.ts).
+// Stamped with the account and workspace; null until a load has counted them.
+let cachedOrderCount: WorkspaceOrderCount | null = null;
 // Sales, Faz 1 — whether the menu entry belongs to THIS workspace. The answer is
 // the server's (getSalesCapability): eligibility, the workspace's own visibility
 // preference and the member's read permission, decided in one place. The flag
@@ -211,13 +222,25 @@ function rememberAppShellSnapshot(
     workspace?: WorkspaceContext | null;
     settings?: WorkspaceSettingsOverview | null;
     financeOrders?: DashboardFinanceOrder[];
+    orderCount?: WorkspaceOrderCount | null;
   },
 ) {
+  // The snapshot belongs to one account and one workspace. Stamping a new account, or a different workspace,
+  // must not leave the previous one's settings and orders behind it: the load's error path falls back to this
+  // cache, and an earlier account's settings beside this account's workspace (or a list never counted for it)
+  // is exactly what put the setup wizard over a working workspace (7 Nov 2026).
+  const nextWorkspaceId = "workspace" in snapshot ? snapshot.workspace?.id ?? "" : cachedWorkspace?.id ?? "";
+  if (cachedAppShellUserId !== userId || (cachedWorkspace?.id ?? "") !== nextWorkspaceId) {
+    cachedSettings = null;
+    cachedFinanceOrders = [];
+    cachedOrderCount = null;
+  }
   cachedAppShellUserId = userId;
   if ("workspace" in snapshot) cachedWorkspace = snapshot.workspace ?? null;
   if ("settings" in snapshot) cachedSettings = snapshot.settings ?? null;
   if ("financeOrders" in snapshot)
     cachedFinanceOrders = snapshot.financeOrders ?? [];
+  if ("orderCount" in snapshot) cachedOrderCount = snapshot.orderCount ?? null;
 }
 
 function clearAppShellSnapshot() {
@@ -225,6 +248,7 @@ function clearAppShellSnapshot() {
   cachedWorkspace = null;
   cachedSettings = null;
   cachedFinanceOrders = [];
+  cachedOrderCount = null;
   cachedSalesMenu = null;
 }
 
@@ -1343,18 +1367,16 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [financeOrders, setFinanceOrders] = useState<DashboardFinanceOrder[]>(
     () => (cachedShellMatchesUser ? cachedFinanceOrders : []),
   );
-  // An empty list means two very different things: "brand-new workspace" and
-  // "still loading". New-user surfaces must only trust the first — otherwise
-  // they flash at every sign-in until the orders arrive.
-  const [financeOrdersLoaded, setFinanceOrdersLoaded] = useState<boolean>(
-    () => cachedShellMatchesUser,
-  );
-  // "Loaded" is not the same as "we were allowed to count". A member who cannot
-  // read finance orders gets an empty array too, and a failed read gets one as
-  // well — neither is evidence of a new workspace, so the first-project tour
-  // must not fire on them.
-  const [financeOrdersTrusted, setFinanceOrdersTrusted] = useState<boolean>(
-    () => cachedShellMatchesUser,
+  // An empty list means very different things: "brand-new workspace", "still
+  // loading", "the load failed", "this member may not read the orders" and —
+  // the one that put the setup wizard over a working workspace on 7 Nov 2026 —
+  // "the client was offline and answered from this browser's local copy, which
+  // a sign-out had just wiped". The new-user surfaces (setup takeover,
+  // first-project guide) trust only a COUNTED zero: the server's answer, over
+  // the whole workspace, stamped with the account and workspace it was made
+  // for (lib/studioflow/setupTakeover.ts). Null means not counted yet.
+  const [orderCount, setOrderCount] = useState<WorkspaceOrderCount | null>(
+    () => (cachedShellMatchesUser ? cachedOrderCount : null),
   );
   const [cloudSyncState, setCloudSyncState] =
     useState<WebSyncState>("connecting");
@@ -1482,7 +1504,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       setWorkspace(null);
       setSettings(null);
       setFinanceOrders([]);
-      setFinanceOrdersLoaded(false);
+      setOrderCount(null);
       return;
     }
 
@@ -1502,28 +1524,41 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         const canLoadFinance =
           memberCanAccess(loadedWorkspace, "dashboard") &&
           memberCanAccess(loadedWorkspace, "financialInfo");
-        const [loadedOrders, loadedSettings] = await Promise.all([
+        const [financeResult, loadedSettings] = await Promise.all([
           canLoadFinance
-            ? loadDashboardFinanceOrders(loadedWorkspace.id, loadedWorkspace, currentUser.uid)
-            : Promise.resolve([]),
+            ? loadDashboardFinanceOrdersWithSource(loadedWorkspace.id, loadedWorkspace, currentUser.uid)
+            : Promise.resolve(null),
           loadWorkspaceSettingsOverview(loadedWorkspace.id),
         ]);
         // loadWorkspaceSettingsOverview already overlays the signed-in
         // user's personal theme/language for every workspace role.
         const resolvedSettings = loadedSettings;
         if (cancelled) return;
+        const loadedOrders = financeResult?.orders ?? [];
+        // No finance read (a member without the keys) is no count at all; an
+        // answer from the local copy or over an assigned-only view is a count
+        // that is not confirmed (lib/studioflow/setupTakeover.ts).
+        const loadedOrderCount = financeResult
+          ? workspaceOrderCount({
+            uid: currentUser.uid,
+            companyId: loadedWorkspace.id,
+            count: financeResult.documentCount,
+            fromServer: financeResult.fromServer,
+            wholeWorkspace: financeResult.wholeWorkspace,
+            allowed: canLoadFinance,
+          })
+          : null;
         setFinanceOrders(loadedOrders);
-        setFinanceOrdersLoaded(true);
-        setFinanceOrdersTrusted(canLoadFinance);
+        setOrderCount(loadedOrderCount);
         setSettings(resolvedSettings);
         rememberAppShellSnapshot(currentUser.uid, {
           workspace: loadedWorkspace,
           settings: resolvedSettings,
           financeOrders: loadedOrders,
+          orderCount: loadedOrderCount,
         });
       } catch (error) {
         if (!cancelled) {
-          setFinanceOrdersTrusted(false);
           const accessLost = error instanceof WorkspaceAccessLostError;
           // The server says this workspace no longer admits this person: what this
           // browser cached from it (orders, customers, bank rows) is wiped once and
@@ -1533,13 +1568,17 @@ function AppShellFrame({ children }: { children: ReactNode }) {
           if (!accessLost && hasCachedShellForUser(currentUser.uid) && cachedWorkspace) {
             setWorkspace(cachedWorkspace);
             setSettings(cachedSettings);
-            setFinanceOrders(cachedFinanceOrders);
-            setFinanceOrdersLoaded(true);
+            // A failed load counts nothing. The cached count is kept only if it
+            // was made for this account and this workspace, and never as a
+            // confirmed one: a failure must not open the setup wizard.
+            const cachedCount = orderCountFor(cachedOrderCount, currentUser.uid, cachedWorkspace.id);
+            setFinanceOrders(cachedCount ? cachedFinanceOrders : []);
+            setOrderCount(cachedCount ? { ...cachedCount, confirmed: false } : null);
           } else {
             setWorkspace(null);
             setSettings(null);
             setFinanceOrders([]);
-            setFinanceOrdersLoaded(false);
+            setOrderCount(null);
             setWorkspaceAccessLost(accessLost);
             setWorkspaceLoadError(
               accessLost
@@ -2409,16 +2448,23 @@ function AppShellFrame({ children }: { children: ReactNode }) {
    * (?setup=continue), from the Continue setup card below; it is never
    * hijacked, which is what §113 means by not locking the user on every login.
    *
-   * `financeOrdersLoaded` still guards the automatic case so the wizard cannot
-   * flash up before the order count is known. A resume request does not wait
-   * for it: the answer would not change what happens.
+   * "No orders" has to be a COUNTED zero (lib/studioflow/setupTakeover.ts):
+   * the server's answer over the whole workspace, for this account and this
+   * workspace. Not "nothing has arrived yet", not a failed load, not a member
+   * who may not read the orders, and not an offline answer from this browser's
+   * local copy — that last one opened the wizard over EGGcraft's 87 orders
+   * right after an account switch (7 Nov 2026), with Continue one click away
+   * from rewriting its country, currency, language and time zone. A resume
+   * request does not wait for the count: the answer would not change what
+   * happens.
    */
-  const setupTakeoverIsAutomatic = Boolean(
-    workspaceSetupIncomplete &&
-    !setupPassthrough &&
-    financeOrdersLoaded &&
-    financeOrders.length === 0,
-  );
+  const setupTakeoverIsAutomatic = setupTakesOverAutomatically({
+    setupIncomplete: workspaceSetupIncomplete,
+    passthrough: setupPassthrough,
+    uid: user?.uid,
+    companyId: workspace?.id,
+    orderCount,
+  });
   const showWorkspaceOnboarding = Boolean(
     workspaceSetupIncomplete &&
     !setupPassthrough &&
@@ -2464,13 +2510,16 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   // app for two seconds that they had started setting it up and never
   // finished. It says a true thing about people who have work in here and an
   // unfinished setup, and nothing at all until it knows which it is looking at.
-  const showContinueSetupCard = Boolean(
-    workspaceSetupIncomplete &&
-    !showWorkspaceOnboarding &&
-    !setupPassthrough &&
-    financeOrdersLoaded &&
-    financeOrders.length > 0,
-  );
+  // Any count above zero for this account and workspace is proof of work, even
+  // one from the local copy; only the zero needs the server.
+  const showContinueSetupCard = continueSetupCardShows({
+    setupIncomplete: workspaceSetupIncomplete,
+    passthrough: setupPassthrough,
+    wizardOnScreen: showWorkspaceOnboarding,
+    uid: user?.uid,
+    companyId: workspace?.id,
+    orderCount,
+  });
   // The "add your first project" guide is only for genuinely new users: no orders
   // yet and the guide not already completed. (Previously `firstProjectGuide === null`
   // made it show for any existing user without local guide state.)
@@ -2478,9 +2527,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     guideDeviceEligible &&
     canCreateToolbarOrder &&
     pathname.startsWith("/orders") &&
-    financeOrdersLoaded &&
-    financeOrdersTrusted &&
-    financeOrders.length === 0 &&
+    // Same evidence as the setup takeover: a counted zero for this account and
+    // workspace, never an empty answer from a failed, refused or offline read.
+    workspaceCountedEmpty(orderCount, user?.uid, workspace?.id) &&
     !firstProjectGuide?.completed &&
     (firstProjectGuide === null || firstProjectGuide.step === 1),
   );
