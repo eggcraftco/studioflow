@@ -331,6 +331,44 @@ const DRAWING_CONTAINERS = [".gpt-win", ".gpt-import", ".track-card", ".public-k
   ".auth-provider-btn", ".login-card-frame [aria-live]", "[class*='mockRow']", "[class*='stripTitle']"];
 const DRAWN_CLASS_PREFIXES = Object.keys(DRAWN);
 
+// The rendered probe, run inside each page (plain JavaScript).
+const PROBE_SOURCE = String.raw`function (OLDS, CONTAINERS, DRAWN_PREFIXES) {
+  var old = new Set(OLDS);
+  var rootEl = document.querySelector(".public-cream");
+  var main = document.querySelector("main");
+  function hex(c) {
+    var m = c.match(/rgba?\(([^)]+)\)/); if (!m) return null;
+    var p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
+    return { h: "#" + p.slice(0, 3).map(function (v) { return Math.round(v).toString(16).padStart(2, "0"); }).join(""), a: p.length > 3 ? p[3] : 1 };
+  }
+  function inDrawing(el) {
+    return CONTAINERS.some(function (s) { return el.closest(s); }) ||
+      Array.prototype.some.call(el.classList, function (c) { return DRAWN_PREFIXES.some(function (p) { return c.indexOf("_" + p + "__") >= 0; }); });
+  }
+  var hits = new Map();
+  document.body.querySelectorAll("*").forEach(function (el) {
+    var r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return;
+    var s = getComputedStyle(el); if (s.display === "none" || s.visibility === "hidden") return;
+    if (inDrawing(el)) return;
+    var cols = [["bg", s.backgroundColor]];
+    if (Array.prototype.some.call(el.childNodes, function (n) { return n.nodeType === 3 && (n.textContent || "").trim(); })) cols.push(["text", s.color]);
+    if (parseFloat(s.borderTopWidth) > 0) cols.push(["border", s.borderTopColor]);
+    if (parseFloat(s.borderBottomWidth) > 0) cols.push(["border", s.borderBottomColor]);
+    if (s.backgroundImage.indexOf("gradient") >= 0) (s.backgroundImage.match(/rgba?\([^)]+\)/g) || []).forEach(function (g) { cols.push(["gradient", g]); });
+    cols.forEach(function (kc) {
+      var x = hex(kc[1]); if (!x || x.a < 0.2 || !old.has(x.h)) return;
+      var where = [el, el.parentElement].map(function (e) { return e && typeof e.className === "string" ? e.className.split(/\s+/)[0] : (e ? e.tagName : ""); }).join("<");
+      var k = kc[0] + " " + x.h;
+      var prev = hits.get(k); if (prev) prev.n++; else hits.set(k, { n: 1, where: where });
+    });
+  });
+  var out = [];
+  hits.forEach(function (v, k) { out.push({ colour: k, where: v.where, n: v.n }); });
+  return {
+    creamRoot: !!rootEl, mainInCream: !!(rootEl && main && (rootEl === main || rootEl.contains(main))),
+    rootBg: rootEl ? getComputedStyle(rootEl).backgroundColor : null, old: out
+  };
+}`;
 type Result = { route: string; vp: string; status: number; creamRoot: boolean; mainInCream: boolean; rootBg: string | null; old: { colour: string; where: string; n: number }[] };
 const results: Result[] = [];
 if (base) {
@@ -360,41 +398,10 @@ if (base) {
       let status = 0;
       try { status = (await page.goto(base + route, { waitUntil: "networkidle2", timeout: 120000 }))?.status() ?? 0; } catch { status = 0; }
       await new Promise(r => setTimeout(r, 600));
-      const probe = await page.evaluate((OLDS: string[], CONTAINERS: string[], DRAWN_PREFIXES: string[]) => {
-        const old = new Set(OLDS);
-        const rootEl = document.querySelector(".public-cream");
-        const main = document.querySelector("main");
-        const hex = (c: string) => {
-          const m = c.match(/rgba?\(([^)]+)\)/); if (!m) return null;
-          const p = m[1].split(/[\s,/]+/).filter(Boolean).map(Number);
-          const a = p.length > 3 ? p[3] : 1;
-          return { h: "#" + p.slice(0, 3).map(v => Math.round(v).toString(16).padStart(2, "0")).join(""), a };
-        };
-        const inDrawing = (el: Element) => CONTAINERS.some(s => el.closest(s)) ||
-          [...el.classList].some(c => DRAWN_PREFIXES.some(p => c.includes(`_${p}__`)));
-        const hits = new Map<string, { n: number; where: string }>();
-        for (const el of document.body.querySelectorAll("*")) {
-          const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) continue;
-          const s = getComputedStyle(el); if (s.display === "none" || s.visibility === "hidden") continue;
-          if (inDrawing(el)) continue;
-          const cols: [string, string][] = [["bg", s.backgroundColor]];
-          if ([...el.childNodes].some(n => n.nodeType === 3 && (n.textContent || "").trim())) cols.push(["text", s.color]);
-          if (parseFloat(s.borderTopWidth) > 0) cols.push(["border", s.borderTopColor]);
-          if (parseFloat(s.borderBottomWidth) > 0) cols.push(["border", s.borderBottomColor]);
-          if (s.backgroundImage.includes("gradient")) for (const g of s.backgroundImage.match(/rgba?\([^)]+\)/g) || []) cols.push(["gradient", g]);
-          for (const [kind, c] of cols) {
-            const x = hex(c); if (!x || x.a < 0.2 || !old.has(x.h)) continue;
-            const where = [el, el.parentElement].map(e => e && typeof e.className === "string" ? e.className.split(/\s+/)[0] : e?.tagName).join("<");
-            const k = `${kind} ${x.h}`;
-            const prev = hits.get(k); if (prev) prev.n++; else hits.set(k, { n: 1, where });
-          }
-        }
-        return {
-          creamRoot: !!rootEl, mainInCream: !!(rootEl && main && (rootEl === main || rootEl.contains(main))),
-          rootBg: rootEl ? getComputedStyle(rootEl).backgroundColor : null,
-          old: [...hits].map(([colour, v]) => ({ colour, where: v.where, n: v.n }))
-        };
-      }, [...OLD], DRAWING_CONTAINERS, DRAWN_CLASS_PREFIXES);
+      // Browser code goes over as plain text: tsx's keep-names helper (__name) does not exist in the page.
+      const probe = await page.evaluate(`(${PROBE_SOURCE})(${JSON.stringify([...OLD])}, ${JSON.stringify(DRAWING_CONTAINERS)}, ${JSON.stringify(DRAWN_CLASS_PREFIXES)})`) as {
+        creamRoot: boolean; mainInCream: boolean; rootBg: string | null; old: { colour: string; where: string; n: number }[];
+      };
       results.push({ route, vp, status, ...probe });
       check(`R1 ${vp} ${route} (${status}) under a cream root holding <main>`, status === 200 && probe.creamRoot && probe.mainInCream,
         `cream root ${probe.creamRoot}, main inside ${probe.mainInCream}`);
