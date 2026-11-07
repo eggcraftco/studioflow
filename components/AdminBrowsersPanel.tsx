@@ -86,7 +86,7 @@ function useBrowsers(view: AdminView, period: OnlinePeriod) {
   return { answer, legacy, status, error, updatedAt, loading, refresh: load };
 }
 
-export function AdminBrowsersPanel({ view, onViewChange }: { view: AdminView; onViewChange: (view: AdminView) => void }) {
+export function AdminBrowsersPanel({ view, onViewChange, onOpenUser }: { view: AdminView; onViewChange: (view: AdminView) => void; onOpenUser?: (uid: string) => void }) {
   const [period, setPeriod] = useState<OnlinePeriod>("7d");
   const [filter, setFilter] = useState<BrowserFilter>("all");
   const [query, setQuery] = useState("");
@@ -232,7 +232,11 @@ export function AdminBrowsersPanel({ view, onViewChange }: { view: AdminView; on
               return (
                 <li key={person.uid} className={person.ai ? "admin-browser-person is-ai" : "admin-browser-person"}>
                   <div className="admin-online-who">
-                    <strong className="admin-online-name" title={person.uid}>{personLabel(person)}</strong>
+                    {onOpenUser ? (
+                      <button type="button" className="admin-person-link admin-online-name" onClick={() => onOpenUser(person.uid)}>{personLabel(person)}</button>
+                    ) : (
+                      <strong className="admin-online-name" title={person.uid}>{personLabel(person)}</strong>
+                    )}
                     <span className="admin-online-sub">
                       {[person.email && person.name ? person.name : "", person.workspace || (person.workspaceId ? "Workspace without a name" : "No workspace")].filter(Boolean).join(" · ")}
                     </span>

@@ -9,6 +9,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { CardTitle } from "@/components/CardTitle";
+import { ChartLiveText, ChartTip, useChartCursor, useElementAnchor, type ChartTipContent } from "@/components/AdminChart";
+import { chartCount } from "@/lib/studioflow/adminChartFormat";
 import { BrowserKindBadge, KindBars } from "@/components/AdminBrowserKinds";
 import { browserLabel, familyOrder, kindRows, type BrowserKind, type BrowserBucket } from "@/lib/studioflow/adminBrowsers";
 import {
@@ -112,7 +114,8 @@ export function LiveStatusPill({ status, updatedAt }: { status: "loading" | "liv
   );
 }
 
-/** Stacked columns per app; one column per bucket. HTML, not SVG, so labels keep their real size at any width. */
+/** Stacked columns per app; one column per bucket. HTML, not SVG, so labels keep their real size at any width.
+ *  Hover, tap or focus + arrow keys show the column's numbers (shared Insights chart cursor, 7 Nov 2026). */
 function PresenceColumns({ series, labelOf, title, tickEvery = 1, wrapLabels = false }: {
   series: (PresenceCounts & { key: string })[];
   labelOf: (index: number) => string;
@@ -122,19 +125,33 @@ function PresenceColumns({ series, labelOf, title, tickEvery = 1, wrapLabels = f
 }) {
   const max = Math.max(1, ...series.map(item => item.people));
   const peak = peakOf(series);
-  const summary = peak ? `${title}: busiest ${labelOf(series.indexOf(peak))} with ${peak.people}.` : `${title}: nothing recorded yet.`;
+  const peakIndex = peak ? series.indexOf(peak) : -1;
+  const summary = peak ? `${title}: busiest ${labelOf(peakIndex)} with ${peak.people}. Use the arrow keys to read each column.` : `${title}: nothing recorded yet.`;
+  const cursor = useChartCursor(series.length);
+  const anchor = useElementAnchor(cursor.ref, cursor.active, true);
+  const tip: ChartTipContent | null = cursor.active === null || !series[cursor.active] ? null : (() => {
+    const item = series[cursor.active as number];
+    const apps = appBuckets(item);
+    return {
+      title: labelOf(cursor.active as number),
+      rows: [
+        { label: item.people === 1 ? "Person" : "People", value: chartCount(item.people) },
+        ...PRESENCE_APPS.filter(app => apps[app.key].people > 0).map(app => ({ label: app.short, value: chartCount(apps[app.key].people), color: app.color }))
+      ],
+      note: [item.unidentified ? `${chartCount(item.unidentified)} unidentified` : "", cursor.active === peakIndex && item.people > 0 ? "Busiest in this range" : ""].filter(Boolean).join(" · ") || undefined
+    };
+  })();
   return (
-    <div className="admin-columns" role="img" aria-label={summary}>
-      <div className="admin-columns-plot">
+    <div className="admin-columns">
+      <div ref={cursor.ref} className="admin-columns-plot" role="group" aria-roledescription="chart" aria-label={summary} {...cursor.bind}>
         <span className="admin-columns-scale" aria-hidden="true">{max}</span>
         {series.map((item, index) => {
           const apps = appBuckets(item);
           // Apps can add up to more than the total (one member on two apps), so each app's share of
           // the column is scaled to the column's own total.
           const sum = PRESENCE_APPS.reduce((acc, app) => acc + apps[app.key].people, 0) || 1;
-          const label = `${labelOf(index)} — ${item.people} ${item.people === 1 ? "person" : "people"}${item.unidentified ? ` (${item.unidentified} unidentified)` : ""}`;
           return (
-            <div key={item.key} className="admin-columns-col" title={label}>
+            <div key={item.key} className={cursor.active === index ? "admin-columns-col is-active" : "admin-columns-col"} data-chart-index={index} aria-hidden="true">
               <div className="admin-columns-stack" style={{ height: `${(item.people / max) * 100}%` }}>
                 {PRESENCE_APPS.map(app => {
                   const value = apps[app.key].people;
@@ -144,6 +161,8 @@ function PresenceColumns({ series, labelOf, title, tickEvery = 1, wrapLabels = f
             </div>
           );
         })}
+        {tip && anchor ? <ChartTip anchor={anchor} content={tip} /> : null}
+        <ChartLiveText content={tip} enabled={cursor.viaKeyboard} />
       </div>
       <div className={wrapLabels ? "admin-columns-labels is-wrap" : "admin-columns-labels"} aria-hidden="true">
         {series.map((item, index) => (

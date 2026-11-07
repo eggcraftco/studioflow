@@ -167,7 +167,7 @@ check("B8 older server / labels not there yet are said, not shown as zero", () =
 
 check("B9 the page is Pulse ▸ Browsers (#browsers) and asks getSitePresence for `browsers` in the hub's view", () => {
   assert.ok(hub.includes('{ id: "browsers", label: "Browsers" }'));
-  assert.ok(hub.includes('page === "browsers" ? <AdminBrowsersPanel view={view} onViewChange={setView} />'));
+  assert.ok(hub.includes('page === "browsers" ? <AdminBrowsersPanel view={view} onViewChange={setView} onOpenUser={openUser} />'), "7 Nov 2026: names open the person's page");
   assert.ok(page.includes('httpsCallable<{ view: AdminView; browsers: { period: OnlinePeriod } }, BrowsersResponse>(functions, "getSitePresence")'));
   assert.ok(page.includes("callable({ view, browsers: { period } })"));
   assert.ok(page.includes('checked={view === "business"}') && page.includes("Hide internal accounts"));
