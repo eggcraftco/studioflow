@@ -1569,7 +1569,7 @@ const TREE_EN: GuideNode[] = [
             "Open the order ▸ Customer Portal card and turn on Automatic Updates and SMS.",
             "Tick \"The customer agreed to receive text updates about their orders\" — only if the customer said yes.",
             "Or the customer switches texts on themselves from their order page (the portal link): \"Text me updates\".",
-            "A text goes only to a number whose agreement is recorded. If the number on the order changes, record the agreement again.",
+            "Either way, NivaDesk then texts the customer once with a link. Texts start only after the customer taps \"Yes, text me\" on their own phone; until then the order shows \"Waiting for the customer to confirm\". If the number on the order changes, record the agreement again.",
           ] },
           { kind: "sub", text: "How a customer stops texts" },
           { kind: "bullets", items: [
@@ -3355,7 +3355,7 @@ const TREE_TR: GuideNode[] = [
             "Siparişi açın ▸ Müşteri Portalı kartında Otomatik Güncellemeler ve SMS'i açın.",
             "\"Müşteri, siparişleriyle ilgili SMS güncellemeleri almayı kabul etti\" kutusunu yalnızca müşteri evet dediyse işaretleyin.",
             "Ya da müşteri kendi sipariş sayfasından (portal bağlantısı) \"Text me updates\" ile SMS'i kendisi açar.",
-            "SMS yalnızca izni kayıtlı numaraya gider. Siparişteki numara değişirse izni yeniden kaydedin.",
+            "Her iki durumda da NivaDesk müşteriye bir kez bağlantılı bir SMS gönderir. SMS'ler ancak müşteri kendi telefonunda \"Yes, text me\"ye bastıktan sonra başlar; o zamana kadar siparişte \"Waiting for the customer to confirm\" yazar. Siparişteki numara değişirse izni yeniden kaydedin.",
           ] },
           { kind: "sub", text: "Müşteri SMS'leri nasıl durdurur" },
           { kind: "bullets", items: [

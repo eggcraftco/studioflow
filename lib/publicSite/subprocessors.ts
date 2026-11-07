@@ -113,7 +113,7 @@ export const SUBPROCESSORS_SECTIONS: PrivacyPolicySection[] = [
         paragraphs: [
           "Provider: Twilio Ireland Limited, our contracting party; messages are processed by Twilio Inc.",
           "Purpose: sending text messages to your customers about their orders, where your workspace switches this feature on.",
-          "Data: your customer's phone number and the message (your business name, the stage of the order, a link to your customer's order page and a link to stop texts). Twilio's copy of each message is deleted 30 days after it is sent, and may remain in Twilio's internal systems for up to 30 more days.",
+          "Data: your customer's phone number and the message (your business name, the stage of the order, a link to your customer's order page and a link to stop texts, or, for the first text, a link to confirm). Twilio's copy of each message is deleted 30 days after it is sent, and may remain in Twilio's internal systems for up to 30 more days.",
           "Location: United States. Twilio states that it is certified under the UK Extension to the EU-U.S. Data Privacy Framework; its data protection terms also include the UK International Data Transfer Addendum to the Standard Contractual Clauses."
         ]
       },

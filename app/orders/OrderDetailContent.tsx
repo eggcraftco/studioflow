@@ -43,6 +43,7 @@ import {
   getWorkspaceSmsSettings,
   recordSmsConsentStaff,
   revokeSmsConsentStaff,
+  smsConfirmationNotice,
   smsConsentLockedByCustomer,
   type OrderSmsStatus,
   type WorkspaceSmsSettings
@@ -6676,12 +6677,15 @@ export function OrderDetailContent({
     };
   }, [workspace, order.id, orderPhone, showsPortalSmsRow, workspaceSms?.available]);
 
-  async function toggleSmsConsent(next: boolean) {
+  async function toggleSmsConsent(next: boolean, resend = false) {
     setOrderSmsBusy(true);
     setOrderSmsNotice("");
     try {
-      const result = next ? await recordSmsConsentStaff(workspace, order.id) : await revokeSmsConsentStaff(workspace, order.id);
+      const result = next ? await recordSmsConsentStaff(workspace, order.id, { resend }) : await revokeSmsConsentStaff(workspace, order.id);
       setOrderSms(current => (current ? { ...current, consent: result.consent } : current));
+      // r5: the agreement is saved; say why the confirmation text did not go (night, limits, owner, allowance).
+      const confirmationNotice = result.ok && next ? smsConfirmationNotice(result.confirmation) : null;
+      if (confirmationNotice) setOrderSmsNotice(confirmationNotice);
       if (!result.ok) {
         setOrderSmsNotice(
           result.reason === "customer_opted_out" || result.reason === "global_stop" || result.reason === "customer_revoked"
@@ -6705,6 +6709,8 @@ export function OrderDetailContent({
     const sms = status.lastSms;
     const skip = status.lastSkip;
     if (skip && (!sms || skip.atMs > sms.createdAtMs)) {
+      // r5: the request is recorded but the customer has not confirmed from their phone yet.
+      if (skip.reason === "consent_unconfirmed") return { key: "No text was sent: the customer has not confirmed from their phone yet.", atMs: skip.atMs };
       const byClass: Record<string, string> = {
         waiting: "A text is waiting for the morning: texts are not sent at night.",
         consent: "No text was sent: the customer's agreement is not recorded.",
@@ -7359,17 +7365,37 @@ export function OrderDetailContent({
                       <label className="portal-consent-check">
                         <input
                           type="checkbox"
-                          checked={orderSms.consent.state === "active"}
+                          checked={orderSms.consent.state === "active" || orderSms.consent.state === "pending_confirmation"}
                           disabled={!canEditPortal || orderSmsBusy}
                           onChange={event => void toggleSmsConsent(event.target.checked)}
                         />
                         <span>
                           <strong>{t("The customer agreed to receive text updates about their orders")}</strong>
-                          <small>{t("Tick only if the customer said yes. They can stop texts at any time with the link in each text.")}</small>
+                          <small>{t("Tick only if the customer said yes. We'll text them once to confirm from their own phone; texts start only after they confirm.")}</small>
                         </span>
                       </label>
                     )}
-                    {orderSms.consent.state === "active" && orderSms.consent.source === "customer_portal_opt_in" ? (
+                    {orderSms.consent.state === "pending_confirmation" ? (
+                      <div className="portal-hint" data-sms-pending="1">
+                        <p className="portal-hint">
+                          {orderSms.consent.confirm && orderSms.consent.confirm.sentAtMs
+                            ? t("Waiting for the customer to confirm. We texted {number} on {date}.")
+                                .replace("{number}", orderSms.consent.number)
+                                .replace("{date}", new Date(orderSms.consent.confirm.sentAtMs).toLocaleDateString(undefined, { day: "numeric", month: "short" }))
+                            : t("Waiting for the customer to confirm from their phone.")}
+                        </p>
+                        {orderSms.consent.confirm && orderSms.consent.confirm.canResend && canEditPortal ? (
+                          <button type="button" className="button secondary" disabled={orderSmsBusy} onClick={() => void toggleSmsConsent(true, true)}>
+                            {t("Text the link again")}
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {orderSms.consent.state === "active" && orderSms.consent.confirmedAtMs ? (
+                      <p className="portal-hint">
+                        {t("The customer confirmed from their phone on {date}.").replace("{date}", new Date(orderSms.consent.confirmedAtMs).toLocaleDateString(undefined, { day: "numeric", month: "short" }))}
+                      </p>
+                    ) : orderSms.consent.state === "active" && orderSms.consent.source === "customer_portal_opt_in" ? (
                       <p className="portal-hint">{t("The customer switched texts on from their order page.")}</p>
                     ) : null}
                     {(() => {

@@ -39,11 +39,16 @@ type PortalView = {
 // (docs/legal/TWILIO-SMS-METINLER-2026-11-07.md §6.3, version below). The server reads the number from the
 // order and only returns it masked; this page never sends a number. An older server has no such callable,
 // and then the card simply does not appear.
-const SMS_PORTAL_TEXT_VERSION = "sms-consent-portal-2026-11";
+// r5: "b" = the wording that says one text with a link comes first (owner, 7 Nov 2026).
+const SMS_PORTAL_TEXT_VERSION = "sms-consent-portal-2026-11b";
 type PortalSmsView = {
   ok?: boolean;
   eligible: "ok" | "no_number" | "marketplace_order" | "sms_not_available";
-  consent: { state: "active" | "none" | "revoked" | "opted_out" | "global_stop" | "no_number"; number: string };
+  consent: {
+    state: "active" | "pending_confirmation" | "none" | "revoked" | "opted_out" | "global_stop" | "no_number";
+    number: string;
+    confirm?: { sentAtMs: number; canResend: boolean; sendsLeft: number } | null;
+  };
   acceptedTextVersions: string[];
 };
 
@@ -63,6 +68,7 @@ export function CustomerPortalContent({ token }: { token: string }) {
   const [sms, setSms] = useState<PortalSmsView | null>(null);
   const [smsBusy, setSmsBusy] = useState(false);
   const [smsNotice, setSmsNotice] = useState("");
+  const [smsDeferredUntil, setSmsDeferredUntil] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -111,7 +117,7 @@ export function CustomerPortalContent({ token }: { token: string }) {
     try {
       const callable = httpsCallable<
         { token: string; host?: string; choice: string; consentTextVersion?: string },
-        { ok: boolean; reason?: string; consent: PortalSmsView["consent"] }
+        { ok: boolean; reason?: string; consent: PortalSmsView["consent"]; confirmation?: { sent: boolean; reason: string; deferredUntilMs: number } | null }
       >(functions, "setSmsConsentFromPortal");
       const result = await callable({
         token,
@@ -121,6 +127,13 @@ export function CustomerPortalContent({ token }: { token: string }) {
       });
       setSms(current => (current ? { ...current, consent: result.data.consent } : current));
       if (!result.data.ok) setSmsNotice("Texts could not be switched on for this number.");
+      const confirmation = result.data.confirmation;
+      setSmsDeferredUntil(confirmation && confirmation.reason === "quiet_hours_deferred" ? confirmation.deferredUntilMs : 0);
+      if (confirmation && !confirmation.sent && confirmation.reason !== "quiet_hours_deferred" && confirmation.reason !== "confirm_recently_sent") {
+        setSmsNotice(confirmation.reason === "confirm_limit"
+          ? "We can't send more texts for this request."
+          : "We couldn't send the text just now. Please try again later.");
+      }
     } catch {
       setSmsNotice("That did not work. Please try again in a moment.");
     } finally {
@@ -272,14 +285,30 @@ export function CustomerPortalContent({ token }: { token: string }) {
                 Stop texts
               </button>
             </div>
+          ) : sms.consent.state === "pending_confirmation" ? (
+            <>
+              <strong>Check your phone</strong>
+              <span className="portal-shell-muted">
+                {smsDeferredUntil
+                  ? `We'll send a text to ${sms.consent.number} at 08:00 UK time. Tap the link in it to confirm.`
+                  : `We've sent a text to ${sms.consent.number}. Tap the link in it to confirm. Texts start only after you confirm.`}
+              </span>
+              {sms.consent.confirm && sms.consent.confirm.canResend ? (
+                <div>
+                  <button type="button" className="portal-sms-button is-secondary" disabled={smsBusy} onClick={() => void chooseTexts("opt_in")}>
+                    Send the text again
+                  </button>
+                </div>
+              ) : null}
+            </>
           ) : sms.consent.state === "global_stop" ? (
             <span className="portal-shell-muted">Texts to this number are switched off.</span>
           ) : (
             <>
               <strong>Get text updates about this order</strong>
               <span className="portal-shell-muted">
-                We&apos;ll text you at {sms.consent.number} when your order reaches an important stage, for example when it is
-                ready to collect. You can stop the texts at any time.
+                We&apos;ll send one text to {sms.consent.number} with a link to confirm. After that we&apos;ll text you when your
+                order reaches an important stage, for example when it is ready to collect. You can stop the texts at any time.
               </span>
               <div>
                 <button type="button" className="portal-sms-button" disabled={smsBusy} onClick={() => void chooseTexts("opt_in")}>

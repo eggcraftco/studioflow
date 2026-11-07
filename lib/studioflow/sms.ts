@@ -59,11 +59,14 @@ export type SmsUsage = {
   spendUsd: number;
 };
 
-/** The wording versions the owner approved on 7 Nov 2026; the server stores which one a person saw. */
+/**
+ * The wording versions the owner approved on 7 Nov 2026; the server stores which one a person saw.
+ * r5 ("b"): the staff box and the portal say that the customer confirms once from their own phone.
+ */
 export const SMS_TEXT_VERSIONS = {
   attestation: "sms-attestation-2026-11",
-  staffConsent: "sms-consent-staff-2026-11",
-  portalConsent: "sms-consent-portal-2026-11"
+  staffConsent: "sms-consent-staff-2026-11b",
+  portalConsent: "sms-consent-portal-2026-11b"
 } as const;
 
 export type SmsQuotaState = "ok" | "near" | "full" | "not_configured" | "unavailable";
@@ -114,6 +117,8 @@ export type WorkspaceSmsSettings = {
   attestationRequiredVersion?: string;
   attestationCurrent?: boolean;
   quietHours?: SmsQuietHours;
+  /** r5: customers confirm from their own phone before the first order text. */
+  confirmRequired?: boolean;
 };
 
 export type SaveWorkspaceSmsInput = {
@@ -133,7 +138,12 @@ export type SavedWorkspaceSmsSettings = {
   attestationCurrent?: boolean;
 };
 
-export type SmsConsentState = "active" | "none" | "revoked" | "opted_out" | "global_stop" | "no_number";
+export type SmsConsentState = "active" | "pending_confirmation" | "none" | "revoked" | "opted_out" | "global_stop" | "no_number";
+
+/** r5: the confirmation text of a pending request (null when nothing is pending). */
+export type SmsConfirmInfo = { sentAtMs: number; linkExpiresAtMs: number; sendsLeft: number; canResend: boolean; resendAtMs: number };
+/** r5: what happened when a confirmation text was asked for (state codes; the sentence is the screen's). */
+export type SmsConfirmationResult = { sent: boolean; reason: string; deferredUntilMs: number; nextAtMs: number; linkExpiresAtMs: number };
 export type SmsConsent = {
   state: SmsConsentState;
   source: string;
@@ -143,6 +153,9 @@ export type SmsConsent = {
   revokedSource: string;
   /** Masked by the server, e.g. "+44•••750". */
   number: string;
+  /** r5: when the customer confirmed from their phone (0 = not yet), and the pending request's text. */
+  confirmedAtMs?: number;
+  confirm?: SmsConfirmInfo | null;
 };
 
 export type OrderSmsStatus = {
@@ -160,13 +173,31 @@ export type OrderSmsStatus = {
   consent: SmsConsent;
 };
 
-export type StaffConsentResult = { ok: boolean; already?: boolean; reason?: string; consent: SmsConsent };
+export type StaffConsentResult = { ok: boolean; already?: boolean; reason?: string; consent: SmsConsent; confirmation?: SmsConfirmationResult | null };
+
+/** r5: one sentence for a confirmation text that was asked for but not sent (null = sent, or nothing to say). */
+export function smsConfirmationNotice(result: SmsConfirmationResult | null | undefined): string | null {
+  if (!result || result.sent) return null;
+  switch (result.reason) {
+    case "quiet_hours_deferred": return "The confirmation text will be sent at 08:00 UK time: texts are not sent at night.";
+    case "confirm_recently_sent": return "A confirmation text was sent less than a day ago. You can send it again tomorrow.";
+    case "confirm_limit": return "Three confirmation texts have been sent for this request. No more can be sent.";
+    case "no_owner_attestation":
+    case "attestation_outdated": return "The confirmation text was not sent: the workspace owner has not confirmed Customer SMS yet.";
+    case "pilot_scope": return "Text messages are being tried out first and open to every Pro and Team workspace soon.";
+    case "workspace_quota":
+    case "platform_quota": return "The confirmation text was not sent: this month's text allowance is used up.";
+    case "do_not_contact": return "This customer stopped texts. Only they can switch texts back on, from their order page.";
+    case "already_confirmed": return null;
+    default: return "The confirmation text could not be sent.";
+  }
+}
 
 /** A customer stopped texts themselves (or the network did): only the customer can switch them back on. */
 export function smsConsentLockedByCustomer(consent: SmsConsent | null | undefined): boolean {
   if (!consent) return false;
   if (consent.state === "opted_out" || consent.state === "global_stop") return true;
-  return consent.state === "revoked" && /^(customer_portal_opt_out|optout_link|inbound_stop|provider_21610)$/.test(consent.revokedSource || "");
+  return consent.state === "revoked" && /^(customer_portal_opt_out|optout_link|inbound_stop|provider_21610|confirm_declined)$/.test(consent.revokedSource || "");
 }
 
 /**
@@ -260,11 +291,14 @@ export async function getOrderSmsStatus(workspace: WorkspaceContext, orderId: st
   );
 }
 
-/** A member records that the customer agreed to texts (the approved staff wording). */
-export async function recordSmsConsentStaff(workspace: WorkspaceContext, orderId: string) {
+/**
+ * A member records that the customer agreed to texts (the approved staff wording). r5: the server then texts the
+ * customer once to confirm; `resend` asks for that text again (the server allows it once a day, three times in all).
+ */
+export async function recordSmsConsentStaff(workspace: WorkspaceContext, orderId: string, options: { resend?: boolean } = {}) {
   return call<StaffConsentResult>(
     "recordSmsConsentStaff",
-    { companyId: workspace.id, orderId, consentTextVersion: SMS_TEXT_VERSIONS.staffConsent },
+    { companyId: workspace.id, orderId, consentTextVersion: SMS_TEXT_VERSIONS.staffConsent, ...(options.resend ? { resend: true } : {}) },
     "The customer's agreement could not be saved."
   );
 }
