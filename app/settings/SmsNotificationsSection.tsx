@@ -15,6 +15,15 @@
 // 25 August 2026. So the screen says so plainly: everything is configurable
 // now, nothing is sent yet, and the wait is with the networks rather than with
 // anything the owner has done wrong.
+//
+// Twilio SMS r4 (7 Nov 2026, owner-approved texts in
+// docs/legal/TWILIO-SMS-METINLER-2026-11-07.md §6.1): the owner confirms once,
+// on this screen, that the workspace's customers agreed to texts and that the
+// texts carry order information only. The server stamps who and when; until it
+// has that, no text leaves the workspace. The screen also says whether the
+// workspace is inside the current rollout, how much of the month's allowance is
+// used, and that night-time texts wait for the morning. Every r4 field is
+// optional: an older server does not send it and nothing new is shown.
 
 import { useCallback, useEffect, useState } from "react";
 import { CardTitle } from "@/components/CardTitle";
@@ -28,6 +37,7 @@ import {
   getWorkspaceSmsSettings,
   normalizeSmsTriggers,
   saveWorkspaceSmsSettings,
+  SMS_TEXT_VERSIONS,
   SMS_TRIGGER_DEFAULTS,
   type SmsTriggerKey,
   type SmsTriggers,
@@ -70,6 +80,33 @@ function SmsFact({ label, value, note }: { label: string; value: string; note?: 
     </article>
   );
 }
+
+/** "21:00" in the viewer's locale for an hour on the 24-hour clock. */
+function hourLabel(hour: number, language: string): string {
+  try {
+    return new Intl.DateTimeFormat(studioLocaleTag(language), { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "UTC" })
+      .format(new Date(Date.UTC(2026, 0, 1, hour, 0)));
+  } catch {
+    return `${String(hour).padStart(2, "0")}:00`;
+  }
+}
+
+function dateLabel(ms: number, language: string): string {
+  if (!ms) return "";
+  try {
+    return new Intl.DateTimeFormat(studioLocaleTag(language), { day: "numeric", month: "long", year: "numeric" }).format(new Date(ms));
+  } catch {
+    return new Date(ms).toISOString().slice(0, 10);
+  }
+}
+
+// The owner's attestation (approved wording, version sms-attestation-2026-11).
+const ATTESTATION_POINTS = [
+  "my customers have agreed to receive text messages about their orders from this business;",
+  "I will record each customer's agreement in NivaDesk;",
+  "texts from this workspace will only give customers information about their orders, never marketing or promotions;",
+  "I will respect any customer's request to stop."
+];
 
 function monthLabel(month: string, language: string): string {
   const match = /^(\d{4})-(\d{2})$/.exec(String(month || ""));
@@ -145,7 +182,7 @@ export function SmsNotificationsSection({ workspace, language = "English" }: Pro
     () => handleSave(true)
   );
 
-  async function handleSave(rethrow = false) {
+  async function handleSave(rethrow = false, attest = false) {
     const sender = cleanSmsSenderIdInput(senderDraft).trim();
     // Every save writes the sender box; the contract has no "leave it alone".
     // A pending registration whose name the callable does not send back can
@@ -169,7 +206,8 @@ export function SmsNotificationsSection({ workspace, language = "English" }: Pro
       const saved = await saveWorkspaceSmsSettings(workspace, {
         senderId: sender,
         triggers,
-        defaultCallingCode: callingCode
+        defaultCallingCode: callingCode,
+        ...(attest ? { attestationTextVersion: settings?.attestationRequiredVersion || SMS_TEXT_VERSIONS.attestation } : {})
       });
       setTriggers(normalizeSmsTriggers(saved.triggers));
       setSenderDraft(saved.senderId);
@@ -183,12 +221,13 @@ export function SmsNotificationsSection({ workspace, language = "English" }: Pro
               // networks have verified it; until then a customer still sees the
               // platform's name.
               senderId: saved.senderStatus === "verified" && saved.senderId ? saved.senderId : current.platformSenderId,
-              sendingLive: current.platformSenderStatus === "verified" || (saved.senderStatus === "verified" && Boolean(saved.senderId))
+              sendingLive: current.platformSenderStatus === "verified" || (saved.senderStatus === "verified" && Boolean(saved.senderId)),
+              ...(saved.attestationCurrent === undefined ? {} : { attestation: saved.attestation ?? null, attestationCurrent: saved.attestationCurrent })
             }
           : current
       );
       markSaved();
-      setNotice(t("SMS settings saved."));
+      setNotice(attest ? t("Thank you. Your confirmation is recorded with your name and the date.") : t("SMS settings saved."));
     } catch (saveError) {
       setError(saveError instanceof Error ? t(saveError.message) : t("The SMS settings could not be saved."));
       if (rethrow) throw saveError;
@@ -232,11 +271,27 @@ export function SmsNotificationsSection({ workspace, language = "English" }: Pro
         detail: t("Nothing is sent until it is. Contact NivaDesk support and we will enable it.")
       };
     }
+    if (settings.pilotIncluded === false) {
+      return {
+        pill: t("Not open yet"),
+        headline: t("Text messages are being tried out first."),
+        detail: t("They open to every NivaDesk Pro and Team workspace soon. What you set here is saved and waits until then.")
+      };
+    }
+    if (settings.sendingLive && settings.attestationCurrent === false) {
+      return {
+        pill: t("Needs your confirmation"),
+        headline: t("One step before the first text."),
+        detail: t("The workspace owner confirms once, below, that your customers have agreed to receive texts. Until then no text leaves this workspace.")
+      };
+    }
     if (settings.sendingLive) {
       return {
         pill: t("Sending"),
         headline: t("SMS is live."),
-        detail: `${t("Texts go out from")} ${settings.senderId}. ${t("A customer only gets one when Automatic Updates and SMS are both switched on for their order.")}`
+        detail: `${t("Texts go out from")} ${settings.senderId}. ${settings.attestationCurrent === undefined
+          ? t("A customer only gets one when Automatic Updates and SMS are both switched on for their order.")
+          : t("A text goes only to a customer whose agreement is recorded on their order, and only when Automatic Updates and SMS are both on for that order.")}`
       };
     }
     return {
@@ -255,7 +310,13 @@ export function SmsNotificationsSection({ workspace, language = "English" }: Pro
         ? t("Waiting for approval")
         : t("Not registered");
 
-  const bandTone = !settings.available || !settings.providerConfigured ? "is-caution" : settings.sendingLive ? "is-success" : "is-info";
+  const needsAttestation = settings.available && settings.attestationCurrent === false;
+  const bandTone = !settings.available || !settings.providerConfigured || needsAttestation
+    ? "is-caution"
+    : settings.sendingLive && settings.pilotIncluded !== false ? "is-success" : "is-info";
+  const quota = settings.quota && settings.quota.state !== "unavailable" && Number(settings.quota.limitSegments) > 0 ? settings.quota : null;
+  const quiet = settings.quietHours && settings.quietHours.enabled ? settings.quietHours : null;
+  const allowanceSegments = quota ? Number(quota.limitSegments) || 0 : 0;
 
   return (
     <div className="settings-card-stack settings-sms-page">
@@ -280,6 +341,44 @@ export function SmsNotificationsSection({ workspace, language = "English" }: Pro
           ) : null}
         </span>
       </div>
+
+      {/* ── The owner's one-time confirmation (r4) ─────────────────────── */}
+      {settings.available && settings.attestationCurrent !== undefined ? (
+        <section className="card app-card" data-sms-attestation={settings.attestationCurrent ? "current" : "needed"}>
+          <SettingsCardHead
+            title={t("Before your first text")}
+            subtitle={settings.attestationCurrent
+              ? `${t("Confirmed by the workspace owner on")} ${dateLabel(settings.attestation?.atMs || 0, language)}.`
+              : t("The workspace owner confirms this once.")}
+          />
+          <p className="settings-field-label">{t("I confirm that:")}</p>
+          <ul className="settings-rule-list">
+            {ATTESTATION_POINTS.map(point => <li key={point}>{t(point)}</li>)}
+          </ul>
+          <p className="settings-field-hint">
+            {t("Recorded with your name and the date. Texts are sent under the sender name \"NivaDesk\" with your business name in the message.")}
+            {allowanceSegments > 0
+              ? ` ${t("Your plan includes {segments} text segments a month (about {texts} texts).").replace("{segments}", String(allowanceSegments)).replace("{texts}", String(Math.floor(allowanceSegments / 2)))}`
+              : ""}
+            {quiet ? ` ${t("Between {start} and {end} UK time, texts wait until the morning.").replace("{start}", hourLabel(quiet.startHour, language)).replace("{end}", hourLabel(quiet.endHour, language))}` : ""}
+          </p>
+          {!settings.attestationCurrent ? (
+            <div className="settings-action-row">
+              {!isOwner ? <p className="settings-field-hint">{t("Only the workspace owner can confirm this.")}</p> : null}
+              <button
+                type="button"
+                className="button"
+                disabled={!canEdit || busy === "save"}
+                onClick={() => {
+                  void handleSave(false, true);
+                }}
+              >
+                {busy === "save" ? t("Saving…") : t("I confirm")}
+              </button>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* ── The four triggers ──────────────────────────────────────────── */}
       <section className="card app-card">
@@ -398,11 +497,26 @@ export function SmsNotificationsSection({ workspace, language = "English" }: Pro
             <div><dt>{t("Segments")}</dt><dd>{String(usage.segments || 0)}</dd></div>
             <div><dt>{t("Spend")}</dt><dd>{spendLabel(usage.spendUsd || 0, language)}</dd></div>
           </dl>
+          {quota ? (
+            <p className={quota.state === "full" || quota.state === "near" ? "settings-field-hint is-caution" : "settings-field-hint"} data-sms-quota={quota.state}>
+              {t("Monthly allowance: {used} of {limit} segments used.").replace("{used}", String(quota.usedSegments || 0)).replace("{limit}", String(quota.limitSegments || 0))}
+              {quota.state === "full"
+                ? ` ${t("The allowance is used up: no more texts are sent until next month.")}`
+                : quota.state === "near"
+                  ? ` ${t("The allowance is nearly used up.")}`
+                  : ""}
+            </p>
+          ) : null}
           <p className="settings-field-hint">
             {nothingSentYet
               ? t("No messages have been sent from this workspace yet, so there is nothing to charge for.")
               : t("A long message is charged as more than one segment: 160 plain characters each, or 70 if it contains an emoji or an accented letter.")}
           </p>
+          {quiet ? (
+            <p className="settings-field-hint">
+              {t("Texts that would go out between {start} and {end} UK time wait until {end}.").replace("{start}", hourLabel(quiet.startHour, language)).split("{end}").join(hourLabel(quiet.endHour, language))}
+            </p>
+          ) : null}
           <div className="settings-action-row">
             <button
               type="button"

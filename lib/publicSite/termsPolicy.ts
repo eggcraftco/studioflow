@@ -225,6 +225,17 @@ export const TERMS_POLICY_SECTIONS: PrivacyPolicySection[] = [
           "You are responsible for having any permission the law requires before you message your customers, and for respecting their requests to stop.",
           "Meta may limit, suspend or end access to these channels under its own policies, and may charge for WhatsApp messaging under its own terms. NivaDesk is not responsible for Meta's services, decisions or charges."
         ]
+      },
+      {
+        // Twilio SMS legal texts (7 Nov 2026, NIVADESK_HUKUK.md O-18; owner approval pending). The unreleased legal
+        // drafts v2 use 17.2-17.4 for the API, Etsy and Shopify: renumber whichever lands second.
+        title: "17.2 Text messages to your customers (SMS)",
+        paragraphs: [
+          "If your plan includes text messages and you switch them on, NivaDesk sends texts on your behalf to your customers about their orders, under the sender name \"NivaDesk\" with your business name in the message.",
+          "Before your first text is sent, you confirm that your customers have agreed to receive these texts. You are responsible for having that agreement, for recording it in NivaDesk, for respecting a customer's request to stop, and for using texts only to give your customers information about their orders. Texts must not contain advertising or promotional material, including in the names you give to order stages.",
+          "Each plan that includes text messages has a monthly allowance, shown in Settings. When it is used up, no further texts are sent until the next month. Delivery is not guaranteed: mobile networks and our text message provider may delay or refuse a message.",
+          "We may suspend text messages for a workspace if we reasonably believe they are being used against these Terms, our Acceptable Use Policy or our provider's rules, or to protect the people receiving them, NivaDesk or our provider."
+        ]
       }
     ]
   },
