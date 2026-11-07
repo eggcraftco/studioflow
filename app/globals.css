@@ -41778,7 +41778,7 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
    colours on purpose: they show other products' screens and the app.
    ========================================================================== */
 
-/* ---- Plan comparison table ------------------------------------------- */
+/* ---- Plan comparison table, plan cards' limit tiles, /features order panels ---- */
 .public-site.public-cream .public-plan-matrix {
   border-color: var(--cream-peach-line);
   background: var(--cream-surface-2);
@@ -41805,6 +41805,20 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
   box-shadow: inset 0 0 0 1px var(--cream-sage-line);
 }
 .public-site.public-cream .public-plan-toggle-flag { background: var(--cream-teal-deep); }
+.public-site.public-cream .public-plan-limits div { background: var(--cream-surface-2); }
+/* The plan cards' lists carry their own check mark; the generic .public-card li dot doubled it. */
+.public-site.public-cream .public-plan-bullets li::before { content: none; }
+.public-site.public-cream .public-plan-matrix-pop { background: var(--cream-teal); color: var(--cream-bg); }
+@media (max-width: 760px) {
+  .public-site.public-cream .public-plan-matrix-plan-head.popular {
+    background: var(--cream-sage);
+    box-shadow: inset 0 0 0 1.5px var(--cream-sage-line);
+  }
+}
+.public-site.public-cream .public-order-card-panel {
+  border-color: var(--cream-peach-line);
+  background: linear-gradient(135deg, var(--cream-surface-2), var(--cream-surface));
+}
 
 /* ---- /features: shipping story band, deep-feature panel --------------- */
 .public-site.public-cream .public-scroll-story { background: transparent; border-color: var(--cream-line-soft); }

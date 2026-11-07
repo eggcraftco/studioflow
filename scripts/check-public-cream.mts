@@ -19,7 +19,7 @@
 //       that show other products or the app (DRAWING_CONTAINERS).
 //
 //   npx tsx scripts/check-public-cream.mts [--root <web tree>] [--base http://127.0.0.1:3522 --chrome <path>
-//     --puppeteer <dir with node_modules/puppeteer-core>] [--langs en,tr,de,ar] [--json out.json]
+//     --puppeteer <dir with node_modules/puppeteer-core>] [--langs en,tr,de,ar] [--only /pricing,/features] [--json out.json]
 //
 // --root is the SOURCE tree read for S1–S3 (printed). Run it with --root on the 6 Nov tree to see it fail.
 import fs from "fs";
@@ -380,6 +380,8 @@ if (base) {
   const langs = (arg("--langs") ?? "en,tr,de,ar").split(",");
   const jobs: string[] = [...LOCALIZED, ...SINGLE];
   for (const l of langs.filter(x => x !== "en")) for (const r of LOCALIZED) jobs.push(r === "/" ? `/${l}` : `/${l}${r}`);
+  const only = arg("--only")?.split(",");
+  if (only) jobs.splice(0, jobs.length, ...jobs.filter(j => only.some(o => j === o || j.endsWith(o))));
   const browser = await puppeteer.launch({ executablePath: chrome, headless: true, args: ["--force-color-profile=srgb", "--lang=en-GB"] });
   const offsite = new Map<string, number>();
   for (const [vp, view] of [["desktop", { width: 1440, height: 900 }], ["phone", { width: 390, height: 844, isMobile: true, hasTouch: true }]] as const) {
