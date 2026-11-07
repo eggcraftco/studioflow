@@ -46,7 +46,7 @@ try {
   const unexpected = diagnostics
     .split("\n")
     .filter((line) => /error TS\d+:/.test(line))
-    .filter((line) => !(/error TS2307:/.test(line) && /'(@\/lib\/[^']+|@\/components\/RefundPaymentDialog|firebase\/[a-z]+|react\/[a-z-]+|react|\.\/PaymentLinksPanel\.module\.css)'/.test(line)));
+    .filter((line) => !(/error TS2307:/.test(line) && /'(@\/lib\/[^']+|@\/components\/(?:RefundPaymentDialog|RowActionsMenu)|firebase\/[a-z]+|react\/[a-z-]+|react|\.\/PaymentLinksPanel\.module\.css)'/.test(line)));
   if (unexpected.length) {
     console.log("FAIL tsc reported something other than the expected unresolved imports:");
     for (const line of unexpected) console.log("   " + line);
@@ -84,6 +84,8 @@ try {
     "export const workspaceCurrencyCodes = refuse('workspaceCurrencyCodes');",
     // The refund form a paid row opens (31 Oct 2026): components/RefundPaymentDialog.tsx, checked by
     // check-refund-ui.mts. Nothing here renders it.
+    // The row's "···" menu (7 Nov 2026): components/RowActionsMenu.tsx, checked by check-row-menu-layer.mts. The same default
+    // export stands in for it: neither is rendered here.
     "export default function RefundPaymentDialog() { throw new Error('check-payment-links-panel: RefundPaymentDialog must not be rendered'); }",
     "export const useCallback = (fn) => fn;",
     "export const useEffect = () => {};",
@@ -100,7 +102,7 @@ try {
   writeFileSync(path.join(outDir, "css-stub.js"), "export default new Proxy({}, { get: (_, key) => String(key) });\n");
   const compiled = path.join(outDir, "PaymentLinksPanel.js");
   writeFileSync(compiled, readFileSync(compiled, "utf8").replace(
-    /from ['"](react\/jsx-runtime|react|firebase\/[a-z]+|@\/lib\/[^'"]+|@\/components\/RefundPaymentDialog)['"]/g,
+    /from ['"](react\/jsx-runtime|react|firebase\/[a-z]+|@\/lib\/[^'"]+|@\/components\/(?:RefundPaymentDialog|RowActionsMenu))['"]/g,
     "from './io-stub.js'",
   ).replace(/from ['"]\.\/PaymentLinksPanel\.module\.css['"]/g, "from './css-stub.js'"));
 

@@ -467,19 +467,22 @@
   display: inline-block;
 }
 
+/* The row menu is drawn in its own layer on <body> (RowActionsMenu), placed from its button with position: fixed —
+   never inside .tableWrap, whose overflow: hidden cut it off (7 Nov 2026). */
 .menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 20;
+  position: fixed;
+  z-index: var(--z-floating-menu, 120);
   display: grid;
+  align-content: start;
+  overflow-y: auto;
   min-width: 190px;
+  max-width: calc(100vw - 16px);
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--surface-strong);
   box-shadow: 0 12px 32px rgba(24, 24, 24, 0.16);
   padding: 6px;
-  text-align: left;
+  text-align: start;
 }
 
 .menu button {
@@ -489,7 +492,7 @@
   color: var(--text);
   font: inherit;
   font-size: 13.5px;
-  text-align: left;
+  text-align: start;
   padding: 9px 10px;
   cursor: pointer;
 }
@@ -499,8 +502,23 @@
   background: rgba(122, 122, 122, 0.1);
 }
 
+.menu button:focus-visible {
+  outline: 2px solid #0569dc;
+  outline-offset: -2px;
+}
+
+.menu button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .menu .danger {
   color: #b91c1c;
+}
+
+/* On the dark surface the light theme's red is too dark to read. */
+:global(body[data-studio-theme="dark"]) .menu .danger {
+  color: #ff8a8a;
 }
 
 .shown {
