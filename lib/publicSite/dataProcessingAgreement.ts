@@ -1,7 +1,7 @@
 import type { PrivacyPolicySection } from "@/lib/publicSite/privacyPolicy";
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
-export const DATA_PROCESSING_AGREEMENT_LAST_UPDATED = "13 May 2026";
+export const DATA_PROCESSING_AGREEMENT_LAST_UPDATED = "7 November 2026";
 
 export const DATA_PROCESSING_AGREEMENT_SECTIONS: PrivacyPolicySection[] = [
   {
@@ -133,7 +133,7 @@ export const DATA_PROCESSING_AGREEMENT_SECTIONS: PrivacyPolicySection[] = [
   {
     title: "11. Subprocessors",
     paragraphs: [
-      "Customer authorises NivaDesk to engage Subprocessors to provide the Services. Subprocessors may include hosting providers, cloud storage providers, authentication services, payment processors, email delivery services, analytics, crash reporting, and support tools.",
+      "Customer authorises NivaDesk to engage Subprocessors to provide the Services. Subprocessors may include hosting providers, cloud storage providers, authentication services, payment processors, email delivery services, text message (SMS) delivery services, analytics, crash reporting, and support tools.",
       "NivaDesk will maintain a list of Subprocessors, which may be published on the NivaDesk website or provided on request.",
       "NivaDesk will require Subprocessors to protect Customer Personal Data under written terms that provide a level of protection substantially similar to this DPA, to the extent applicable to the services they provide.",
       "NivaDesk remains responsible for the performance of its Subprocessors to the extent required by Applicable Data Protection Laws."

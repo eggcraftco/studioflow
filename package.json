@@ -143,6 +143,7 @@
     "test:sec-csp": "npx tsx scripts/check-sec-csp.mts",
     "test:no-ad-tags": "npx tsx scripts/check-no-ad-tags.mts",
     "test:legal-h06-h07": "npx tsx scripts/check-legal-h06-h07.mts",
+    "test:subprocessors-h02": "npx tsx scripts/check-subprocessors-h02.mts",
     "test:security-headers": "node scripts/check-security-headers.js 3091",
     "test:sec-connect-claim": "npx tsx scripts/check-sec-connect-claim.mts",
     "test:sec-storage-read": "npx tsx scripts/check-sec-storage-read.mts",
