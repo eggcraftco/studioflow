@@ -268,7 +268,7 @@ const TREE_EN: GuideNode[] = [
             "Preview images accept standard image files (JPG, PNG, HEIC and similar)."
           ] },
           { kind: "sub", text: "Photos from your shop" },
-          { kind: "para", text: "Orders from a connected WooCommerce shop bring the product's photo with them: when the order arrives, NivaDesk copies the ordered product's picture from your shop into the Preview card. A picture you add yourself always comes first, and if you remove the shop's photo it is not added again." },
+          { kind: "para", text: "Orders from a connected WooCommerce shop bring the product's photo with them: when the order arrives, NivaDesk copies the ordered product's picture from your shop into the Preview card. Shopify orders, and eBay orders whose listing you have brought into Inventory, get the photo too — on the web, and in the iPhone, iPad, Mac and Android apps from version 2.5. A photo from an eBay listing shows the date it was copied. A picture you add yourself always takes its place." },
           { kind: "para", text: "Tip: a good preview photo makes orders far easier to recognize at a glance in a busy list." }
         ]
       },
@@ -2071,7 +2071,7 @@ const TREE_TR: GuideNode[] = [
             "Önizleme görselleri standart görsel dosyalarını kabul eder (JPG, PNG, HEIC ve benzeri)."
           ] },
           { kind: "sub", text: "Mağazanızdan gelen fotoğraflar" },
-          { kind: "para", text: "Bağlı bir WooCommerce mağazasından gelen siparişler ürünün fotoğrafını da getirir: sipariş geldiğinde NivaDesk, sipariş edilen ürünün resmini mağazanızdan Preview kartına kopyalar. Kendi eklediğiniz resim her zaman önce gelir; mağaza fotoğrafını kaldırırsanız yeniden eklenmez." },
+          { kind: "para", text: "Bağlı bir WooCommerce mağazasından gelen siparişler ürünün fotoğrafını da getirir: sipariş geldiğinde NivaDesk, sipariş edilen ürünün resmini mağazanızdan Preview kartına kopyalar. Shopify siparişleri ve ilanını Inventory'ye aldığınız eBay siparişleri de fotoğrafı alır — web'de, iPhone, iPad, Mac ve Android uygulamalarında 2.5 sürümünden itibaren. eBay ilanından gelen fotoğrafın altında kopyalandığı tarih yazar. Kendi eklediğiniz resim her zaman onun yerini alır." },
           { kind: "para", text: "İpucu: iyi bir önizleme fotoğrafı, kalabalık bir listede siparişleri bir bakışta tanımayı çok kolaylaştırır." }
         ]
       },
