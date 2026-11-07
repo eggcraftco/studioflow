@@ -53,12 +53,12 @@ const TREE_EN: GuideNode[] = [
         id: "first-sign-in-setup",
         title: "Setting up your workspace when you first sign in",
         blocks: [
-          { kind: "para", text: "When you first open NivaDesk, a five-step setup gets your workspace ready for your kind of work. There is no Skip: every step is answerable, and the step that asks how you want to start offers \"Start empty\" and \"I'll set this up later\" as real choices. Back is there from step two onwards." },
+          { kind: "para", text: "When you first open NivaDesk, a five-step setup gets your workspace ready for your kind of work. There is no Skip: every step is answerable, and the step that asks how you want to start has \"I'll set this up later\" as a real choice beside connecting your shop. Back is there from step two onwards." },
           { kind: "steps", items: [
             "Workspace basics: country, currency and time zone, suggested from where you are and changeable now or later in Settings.",
+            "Bring your work in: connect your accounts now if you like — Shopify, WooCommerce, Open Banking or ChatGPT, and Etsy too on the web — or choose \"I'll set this up later\" to go straight to your workspace. There is no sample workspace or ready-made first order to pick here. Orders you already keep in a spreadsheet can come in afterwards: upload it to ChatGPT or Claude with NivaDesk connected and ask it to add them.",
             "What NivaDesk should help with first: your answer decides the three starting tasks you see when setup finishes.",
             "Tell us about your work: what you make or repair, which sets your order cards, your production stages and your labels.",
-            "Bring your work in: connect Shopify, WooCommerce or Etsy — or start another way, with your first order, a sample workspace, a spreadsheet import, an empty workspace, or \"I'll set this up later\".",
             "Your plan: the 14 trial days are free on any of them, nothing is charged until they end, and you can change plan at any time."
           ] },
           { kind: "para", text: "The setup runs once per workspace. If you have already been through it, everything it set is in Settings." }
@@ -1119,11 +1119,17 @@ const TREE_EN: GuideNode[] = [
         title: "PDF Export Settings",
         blocks: [
           { kind: "para", text: "Control how invoices and order PDFs look: your business details, logo and a footer note, plus what is included in the export." },
+          { kind: "sub", text: "Visible sections" },
+          { kind: "bullets", items: [
+            "Visible sections turns each part of the PDF on or off, in three groups: Customer details (Customer & Design, Contact & Notes, Preview Image, Billing Address, Shipping Address), Operations (Materials & Inventory, Priority / Risk, Production Status, Shipping & Tracking) and Payments (Financials: Paid & Remaining, Payment Method, Internal Financials).",
+            "Internal Financials — internal cost, profit and supplier details — prints only if you turn it on yourself.",
+            "[Mac] [iPhone/iPad] [Android] Settings ▸ PDF Export Settings has the Visible sections switches and no presets. Each switch is saved as you flip it, and the PDF preview on the same screen shows the result."
+          ] },
           { kind: "sub", text: "Presets" },
           { kind: "bullets", items: [
-            "Four one-tap presets set the visible sections for a common document: Customer invoice, Internal job sheet, Estimate and Delivery note. A preset only flips the toggles — review the result, open a preview, then press Save.",
-            "No preset ever turns on Internal Financials: internal cost, profit and supplier details print only if you enable that section yourself, and the page warns you when it is on.",
-            "Change any toggle by hand and the chip row shows Custom, so you always know whether you are on a preset or your own mix."
+            "[Web] Four one-tap presets set the visible sections for a common document: Customer invoice, Internal job sheet, Estimate and Delivery note. A preset only flips the toggles — review the result, open a preview, then press Save.",
+            "[Web] No preset ever turns on Internal Financials: internal cost, profit and supplier details print only if you enable that section yourself, and the page warns you when it is on.",
+            "[Web] Change any toggle by hand and the chip row shows Custom, so you always know whether you are on a preset or your own mix."
           ] }
         ]
       },
@@ -1499,6 +1505,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "para", text: "Import, export and back up your workspace data, and manage data clean-up." },
           { kind: "sub", text: "Importing a backup" },
           { kind: "bullets", items: [
+            "Import Backup takes a NivaDesk backup file (.json, made with Download backup), not a spreadsheet. To bring orders in from a spreadsheet — Excel, CSV, an order list or invoices — upload it to ChatGPT or Claude with NivaDesk connected and ask it to add them: each row becomes a real order, which you review as they are added. Stock has its own spreadsheet import, Import opening stock in Inventory.",
             "Import is a dry run first: before anything is written you see how many orders and customers the file holds, how many already exist in the workspace, how many look like duplicates, and whether the file includes settings.",
             "If the file is the exact backup you last downloaded, the preview says so — the SHA-256 noted at download time is checked against the file you picked.",
             "Likely duplicates are skipped by default; untick Skip likely duplicates only when you want deliberate second copies. One import is capped at 500 records and tells you what was left out.",
@@ -1531,33 +1538,37 @@ const TREE_EN: GuideNode[] = [
         id: "set-team",
         title: "Team Access",
         blocks: [
-          { kind: "para", text: "Invite people to your workspace by email or let them ask to join, choose what each of them can see and do, and take a member's access away — for a while or for good — without losing anything they did. Adding and managing people is for the workspace owner, on the Team plan." },
+          { kind: "para", text: "Invite people to your workspace by email (from the web app) or let them ask to join with your Company ID (on the web and in the apps), choose what each of them can see and do, and take a member's access away — for a while or for good — without losing anything they did. Adding and managing people is for the workspace owner, on the Team plan." },
           { kind: "sub", text: "Inviting someone by email (invitation link)" },
           { kind: "steps", items: [
-            "Settings ▸ Team Access ▸ Advanced: connect with Company ID › opens the Team page (Getting started ▸ Invite a team member opens it too).",
-            "Press Invite Member, choose By email, enter their email, pick a role and press Send Invitation.",
+            "[Web] Settings ▸ Team Access ▸ Advanced: connect with Company ID › opens the Team page (Getting started ▸ Invite a team member opens it too).",
+            "[Web] Press Invite Member, choose By email, enter their email, pick a role and press Send Invitation.",
             "They get an email with a link to nivadesk.app/invite/…, valid for 14 days. They sign in (or press I do not have an account yet and create one with the invited email) and press Accept Invitation."
           ] },
           { kind: "bullets", items: [
-            "If the email could not be sent, the invitation is still created: copy the link it shows and send it yourself.",
-            "Waiting to be accepted lists invitations not used yet; Withdraw cancels one."
+            "[Mac] [iPhone/iPad] [Android] The apps do not send email invitations: send one from the web app at nivadesk.app (the steps above), or let the person ask to join with your Company ID (below).",
+            "[Web] If the email could not be sent, the invitation is still created: copy the link it shows and send it yourself.",
+            "[Web] Waiting to be accepted lists invitations not used yet; Withdraw cancels one."
           ] },
           { kind: "sub", text: "Letting someone ask to join (Company ID)" },
           { kind: "bullets", items: [
-            "Copy invite code in Settings ▸ Team Access copies your Company ID. The person signs up, chooses Request Access and sends a request with your email or the Company ID.",
+            "[Web] Copy invite code in Settings ▸ Team Access copies your Company ID.",
+            "[Mac] [iPhone/iPad] [Android] Settings ▸ Team Access ▸ Invite People shows your Company ID: press Copy.",
+            "The person signs up, chooses Request Access and sends a request with your email or the Company ID.",
             "Their request appears in Team Access: choose a role, then Approve or Decline."
           ] },
           { kind: "sub", text: "Roles and what each person can do" },
           { kind: "bullets", items: [
             "Roles: Member, View Only, Workflow Only, or a role profile of your own. The owner's role is fixed.",
-            "The Permission matrix shows every role side by side — what each can view, edit or delete — with how many people have it.",
+            "[Web] The Permission matrix shows every role side by side — what each can view, edit or delete — with how many people have it.",
             "Control which menus, order cards and settings each role can see, including Bank Spending, Customer messages (WhatsApp, Instagram) and Team messages.",
             "Assign specific projects to specific people, and appoint support managers to handle workspace tickets."
           ] },
           { kind: "sub", text: "Seats, removing access and giving it back" },
           { kind: "bullets", items: [
             "Team includes 5 seats; extra seats are £5 a month or £50 a year each, up to 10 users. A person whose access is removed does not use a seat.",
-            "On the Team page, Remove Access takes someone's access away: nothing they did is deleted, they show No access, and Restore Access gives it back.",
+            "[Web] On the Team page, Remove Access takes someone's access away: nothing they did is deleted, they show No access, and Restore Access gives it back.",
+            "[Mac] [iPhone/iPad] [Android] In Settings ▸ Team Access each member has Remove Access (Restore Access gives it back) and Remove; taking access away deletes nothing they did.",
             "Remove takes a person out of the workspace altogether."
           ] }
         ]
@@ -1864,12 +1875,12 @@ const TREE_TR: GuideNode[] = [
         id: "first-sign-in-setup",
         title: "İlk girişte çalışma alanınızı kurma",
         blocks: [
-          { kind: "para", text: "NivaDesk'i ilk açtığınızda beş adımlık bir kurulum, çalışma alanınızı yaptığınız işe göre hazırlar. Atlama (Skip) yoktur: her adım cevaplanabilir ve nasıl başlamak istediğinizi soran adımda \"Boş başla\" ile \"Bunu sonra ayarlayacağım\" gerçek birer seçenektir. Geri düğmesi ikinci adımdan itibaren hep oradadır." },
+          { kind: "para", text: "NivaDesk'i ilk açtığınızda beş adımlık bir kurulum, çalışma alanınızı yaptığınız işe göre hazırlar. Atlama (Skip) yoktur: her adım cevaplanabilir ve nasıl başlamak istediğinizi soran adımda, mağazanızı bağlamanın yanında \"Bunu sonra ayarlayacağım\" da gerçek bir seçenektir. Geri düğmesi ikinci adımdan itibaren hep oradadır." },
           { kind: "steps", items: [
             "Çalışma alanı temelleri: ülke, para birimi ve saat dilimi. Konumunuzdan önerilir; şimdi ya da sonra Ayarlar'dan değiştirilebilir.",
+            "İşinizi içeri alın: isterseniz hesaplarınızı şimdi bağlayın — Shopify, WooCommerce, Open Banking ya da ChatGPT; web'de Etsy de vardır — ya da doğrudan çalışma alanınıza geçmek için \"Bunu sonra ayarlayacağım\"ı seçin. Burada örnek çalışma alanı ya da hazır bir ilk sipariş seçeneği yoktur. Bir tabloda tuttuğunuz siparişler sonra gelebilir: NivaDesk bağlıyken tabloyu ChatGPT'ye ya da Claude'a yükleyip eklemesini isteyin.",
             "NivaDesk önce neye yardım etsin: cevabınız, kurulum bitince göreceğiniz üç başlangıç görevini belirler.",
             "İşinizi anlatın: ne ürettiğiniz ya da onardığınız. Bu, sipariş kartlarınızı, üretim aşamalarınızı ve etiketlerinizi belirler.",
-            "İşinizi içeri alın: Shopify, WooCommerce veya Etsy bağlayın — ya da başka türlü başlayın: ilk siparişiniz, örnek bir çalışma alanı, tablo içe aktarma, boş çalışma alanı veya \"Bunu sonra ayarlayacağım\".",
             "Planınız: 14 günlük deneme hepsinde ücretsizdir, deneme bitmeden hiçbir ücret alınmaz ve planı istediğiniz zaman değiştirebilirsiniz."
           ] },
           { kind: "para", text: "Kurulum her çalışma alanı için bir kez çalışır. Daha önce geçtiyseniz, kurduğu her şey Settings içindedir." }
@@ -2917,11 +2928,17 @@ const TREE_TR: GuideNode[] = [
         title: "PDF Export Settings",
         blocks: [
           { kind: "para", text: "Fatura ve sipariş PDF'lerinin görünümünü, işletme bilgileri, logo ve alt not, ve dışa aktarıma neyin dahil edileceğini ayarlayın." },
+          { kind: "sub", text: "Görünür bölümler" },
+          { kind: "bullets", items: [
+            "Görünür bölümler, PDF'in her parçasını üç grupta açar ya da kapatır: Müşteri bilgileri (Müşteri ve Tasarım, İletişim ve Notlar, Önizleme Görseli, Fatura Adresi, Teslimat Adresi), Operasyon (Malzemeler ve Envanter, Öncelik / Risk, Üretim Durumu, Kargo ve Takip) ve Ödemeler (Finans: Ödenen ve Kalan, Ödeme Yöntemi, İç Finansallar).",
+            "İç Finansallar — iç maliyet, kâr ve tedarikçi bilgileri — yalnızca onu kendiniz açarsanız yazdırılır.",
+            "[Mac] [iPhone/iPad] [Android] Ayarlar ▸ PDF Çıktı Ayarları'nda Görünür bölümler anahtarları vardır, ön ayar yoktur. Her anahtar değiştirdiğiniz anda kaydedilir; aynı ekrandaki PDF önizlemesi sonucu gösterir."
+          ] },
           { kind: "sub", text: "Ön ayarlar" },
           { kind: "bullets", items: [
-            "Dört tek dokunuşluk ön ayar, sık kullanılan belgeler için görünür bölümleri ayarlar: Müşteri faturası, İç iş emri, Teklif ve İrsaliye. Ön ayar yalnızca anahtarları değiştirir — sonucu gözden geçirin, önizlemeyi açın, sonra Kaydet'e basın.",
-            "Hiçbir ön ayar İç Finansallar'ı açmaz: iç maliyet, kâr ve tedarikçi bilgileri yalnızca o bölümü kendiniz açarsanız yazdırılır; açıkken sayfa sizi uyarır.",
-            "Herhangi bir anahtarı elle değiştirirseniz çip satırı Custom gösterir; böylece bir ön ayarda mı yoksa kendi karışımınızda mı olduğunuzu her zaman bilirsiniz."
+            "[Web] Dört tek dokunuşluk ön ayar, sık kullanılan belgeler için görünür bölümleri ayarlar: Müşteri faturası, İç iş emri, Teklif ve İrsaliye. Ön ayar yalnızca anahtarları değiştirir — sonucu gözden geçirin, önizlemeyi açın, sonra Kaydet'e basın.",
+            "[Web] Hiçbir ön ayar İç Finansallar'ı açmaz: iç maliyet, kâr ve tedarikçi bilgileri yalnızca o bölümü kendiniz açarsanız yazdırılır; açıkken sayfa sizi uyarır.",
+            "[Web] Herhangi bir anahtarı elle değiştirirseniz çip satırı Custom gösterir; böylece bir ön ayarda mı yoksa kendi karışımınızda mı olduğunuzu her zaman bilirsiniz."
           ] }
         ]
       },
@@ -3297,6 +3314,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "para", text: "Çalışma alanı verilerinizi içe/dışa aktarın, yedeğini alın ve veri temizliğini yönetin." },
           { kind: "sub", text: "Yedek içe aktarma" },
           { kind: "bullets", items: [
+            "Yedek İçe Aktar yalnızca bir NivaDesk yedek dosyası (.json, Yedeği indir ile oluşturulan) alır, tablo almaz. Siparişleri bir tablodan — Excel, CSV, sipariş listesi ya da faturalar — getirmek için, NivaDesk bağlıyken dosyayı ChatGPT'ye ya da Claude'a yükleyip eklemesini isteyin: her satır gerçek bir sipariş olur, eklendikçe gözden geçirirsiniz. Stoğun kendi tablo içe aktarması vardır: Envanter'de Açılış stoğunu içe aktar.",
             "İçe aktarma önce kuru çalıştırmadır: hiçbir şey yazılmadan önce dosyada kaç sipariş ve müşteri olduğunu, kaçının çalışma alanında zaten bulunduğunu, kaçının kopya göründüğünü ve dosyanın ayar içerip içermediğini görürsünüz.",
             "Dosya, en son indirdiğiniz yedeğin birebir aynısıysa önizleme bunu söyler — indirme sırasında not edilen SHA-256, seçtiğiniz dosyayla karşılaştırılır.",
             "Olası kopyalar varsayılan olarak atlanır; bilerek ikinci kopya istiyorsanız Skip likely duplicates işaretini kaldırın. Bir içe aktarma 500 kayıtla sınırlıdır ve dışarıda kalanları söyler.",
@@ -3329,33 +3347,37 @@ const TREE_TR: GuideNode[] = [
         id: "set-team",
         title: "Ekip Erişimi",
         blocks: [
-          { kind: "para", text: "İnsanları çalışma alanınıza e-postayla davet edin ya da katılmak istemelerine izin verin, her birinin neyi görüp yapabileceğini seçin ve bir üyenin erişimini — bir süreliğine ya da tamamen — yaptığı hiçbir şeyi kaybetmeden kaldırın. Kişi eklemek ve yönetmek, Team planında çalışma alanı sahibinin işidir." },
+          { kind: "para", text: "İnsanları çalışma alanınıza e-postayla davet edin (web uygulamasından) ya da Şirket ID'nizle katılmak istemelerine izin verin (web'de ve uygulamalarda), her birinin neyi görüp yapabileceğini seçin ve bir üyenin erişimini — bir süreliğine ya da tamamen — yaptığı hiçbir şeyi kaybetmeden kaldırın. Kişi eklemek ve yönetmek, Team planında çalışma alanı sahibinin işidir." },
           { kind: "sub", text: "Ekibe birini e-postayla davet etmek (davet bağlantısı)" },
           { kind: "steps", items: [
-            "Ayarlar ▸ Ekip Erişimi ▸ Gelişmiş: Şirket ID ile bağlan › Ekip sayfasını açar (Başlarken ▸ Ekip üyesi davet et de onu açar).",
-            "Üye Davet Et'e basın, E-posta ile'yi seçin, kişinin e-postasını girin, bir rol seçin ve Daveti Gönder'e basın.",
+            "[Web] Ayarlar ▸ Ekip Erişimi ▸ Gelişmiş: Şirket ID ile bağlan › Ekip sayfasını açar (Başlarken ▸ Ekip üyesi davet et de onu açar).",
+            "[Web] Üye Davet Et'e basın, E-posta ile'yi seçin, kişinin e-postasını girin, bir rol seçin ve Daveti Gönder'e basın.",
             "Kişiye nivadesk.app/invite/… bağlantılı, 14 gün geçerli bir e-posta gider. Giriş yapar (ya da Henüz hesabım yok'a basıp davet edilen e-postayla hesap açar) ve Daveti Kabul Et'e basar."
           ] },
           { kind: "bullets", items: [
-            "E-posta gönderilemediyse davet yine de oluşturulur: gösterilen bağlantıyı kopyalayıp kendiniz gönderin.",
-            "Kabul edilmeyi bekliyor henüz kullanılmamış davetleri listeler; Geri Çek bir daveti iptal eder."
+            "[Mac] [iPhone/iPad] [Android] Uygulamalar e-posta daveti göndermez: daveti nivadesk.app'teki web uygulamasından (yukarıdaki adımlarla) gönderin ya da kişinin Şirket ID'nizle katılmak istemesine izin verin (aşağıda).",
+            "[Web] E-posta gönderilemediyse davet yine de oluşturulur: gösterilen bağlantıyı kopyalayıp kendiniz gönderin.",
+            "[Web] Kabul edilmeyi bekliyor henüz kullanılmamış davetleri listeler; Geri Çek bir daveti iptal eder."
           ] },
           { kind: "sub", text: "Birinin katılmak istemesine izin vermek (Şirket ID, davet kodu)" },
           { kind: "bullets", items: [
-            "Ayarlar ▸ Ekip Erişimi'ndeki Davet kodunu kopyala, Şirket ID'nizi kopyalar. Kişi kaydolur, Erişim İste'yi seçer ve e-postanızla ya da Şirket ID ile bir istek gönderir.",
+            "[Web] Ayarlar ▸ Ekip Erişimi'ndeki Davet kodunu kopyala, Şirket ID'nizi kopyalar.",
+            "[Mac] [iPhone/iPad] [Android] Ayarlar ▸ Ekip Erişimi ▸ Kişi Davet Et kartı Şirket ID'nizi gösterir: Kopyala'ya basın.",
+            "Kişi kaydolur, Erişim İste'yi seçer ve e-postanızla ya da Şirket ID ile bir istek gönderir.",
             "İsteği Ekip Erişimi'nde görünür: bir rol seçip Onayla ya da Reddet'e basın."
           ] },
           { kind: "sub", text: "Roller, yetkiler ve her kişinin neler yapabileceği" },
           { kind: "bullets", items: [
             "Roller: Üye, Sadece Görüntüleme, Sadece İş Akışı ya da kendi rol profiliniz. Sahibin rolü sabittir.",
-            "Yetki matrisi tüm rolleri yan yana gösterir — her rolün neyi görüp düzenleyip silebildiği — ve her rolün kaç kişide olduğunu.",
+            "[Web] Yetki matrisi tüm rolleri yan yana gösterir — her rolün neyi görüp düzenleyip silebildiği — ve her rolün kaç kişide olduğunu.",
             "Her rolün hangi menüleri, sipariş kartlarını ve ayarları göreceğini kontrol edin; Banka Harcamaları, Müşteri mesajları (WhatsApp, Instagram) ve Ekip mesajları dahil.",
             "Belirli projeleri belirli kişilere atayın ve çalışma alanı destek taleplerini yönetmek için destek yöneticileri belirleyin."
           ] },
           { kind: "sub", text: "Koltuklar, erişimi kaldırmak ve geri vermek" },
           { kind: "bullets", items: [
             "Team 5 koltuk içerir; ek koltukların her biri ayda £5 ya da yılda £50'dir, en çok 10 kullanıcıya kadar. Erişimi kaldırılan kişi koltuk kullanmaz.",
-            "Ekip sayfasında Erişimi Kaldır birinin erişimini alır: yaptığı hiçbir şey silinmez, Erişim yok olarak görünür ve Erişimi Geri Ver erişimini geri verir.",
+            "[Web] Ekip sayfasında Erişimi Kaldır birinin erişimini alır: yaptığı hiçbir şey silinmez, Erişim yok olarak görünür ve Erişimi Geri Ver erişimini geri verir.",
+            "[Mac] [iPhone/iPad] [Android] Ayarlar ▸ Ekip Erişimi'nde her üyenin yanında Erişimi Kaldır (Erişimi Geri Ver geri verir) ve Kaldır vardır; erişimi almak, kişinin yaptığı hiçbir şeyi silmez.",
             "Kaldır kişiyi çalışma alanından tamamen çıkarır."
           ] }
         ]
