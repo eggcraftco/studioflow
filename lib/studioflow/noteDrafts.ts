@@ -1,4 +1,5 @@
 import type { StudioKeepNote } from "./noteDocument";
+import { noteReminderIsAllDay } from "./reminderCore";
 
 // Unsaved note drafts (8 Oct 2026). While the editor is open, every change is
 // mirrored into two places: a module-level Map (survives the editor
@@ -129,7 +130,9 @@ export function noteContentSignature(note: StudioKeepNote): string {
     labels: note.labels,
     collaboratorEmails: note.collaboratorEmails,
     reminderDateMillis: note.reminderDateMillis,
-    reminderAllDay: note.reminderAllDay ?? null,
+    // The EFFECTIVE all-day reading, so a legacy date-only note opened in the editor (mode null, read as all-day) is not
+    // "changed" just by being shown with All day ticked.
+    reminderAllDay: note.reminderDateMillis == null ? null : noteReminderIsAllDay(note.reminderDateMillis, note.reminderAllDay),
     noteType: note.noteType,
     linkedOrderId: note.linkedOrderId,
     linkedCustomerName: note.linkedCustomerName,

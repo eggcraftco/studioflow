@@ -117,10 +117,11 @@ export function noteReminderIsAllDay(ms: number, flag: boolean | null | undefine
   return Number.isFinite(ms) && ms % DAY_MS === 0;
 }
 
-/** The day a date-only reminder belongs to. A flagged one is the stored instant's day where the viewer is (local
- *  noon never crosses a day); an unflagged UTC-midnight one is that UTC day, as its writer picked it. */
-export function noteReminderDayKey(ms: number, flag: boolean | null | undefined, viewerTimeZone: string): string {
-  if (flag !== true && ms % DAY_MS === 0) return new Date(ms).toISOString().slice(0, 10);
+/** The day a date-only reminder belongs to. One stored at exactly UTC midnight (the Android app and the older web,
+ *  also once a newer screen has saved such a note with its all-day mode) is that UTC day, as its writer picked it;
+ *  any other (new writes: local noon, which never crosses a day) is the stored instant's day where the viewer is. */
+export function noteReminderDayKey(ms: number, _flag: boolean | null | undefined, viewerTimeZone: string): string {
+  if (ms % DAY_MS === 0) return new Date(ms).toISOString().slice(0, 10);
   return core.localParts(ms, viewerTimeZone).dateKey;
 }
 

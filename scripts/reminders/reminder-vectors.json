@@ -239,7 +239,7 @@
       ]
     },
     {
-      "name": "legacy UTC-midnight date stays on the day its writer picked, also west of Greenwich; a flagged all-day one is the day where the viewer is",
+      "name": "legacy UTC-midnight date stays on the day its writer picked, also west of Greenwich; a flagged all-day one is the day where the viewer is; a legacy one saved again with its all-day mode keeps its UTC day",
       "viewerTimeZone": "America/New_York",
       "notes": [
         {
@@ -254,6 +254,13 @@
           "text": "",
           "reminderMs": 1794139200000,
           "reminderAllDay": true
+        },
+        {
+          "id": "n-flag-midnight",
+          "title": "Saved again",
+          "text": "",
+          "reminderMs": 1794096000000,
+          "reminderAllDay": true
         }
       ],
       "orders": [],
@@ -263,6 +270,18 @@
           "key": "note:n-flag",
           "kind": "note",
           "title": "Flagged",
+          "allDay": true,
+          "dayKey": "2026-11-08",
+          "time": null,
+          "overdue": false,
+          "dueMs": 1794114000000,
+          "orderId": null,
+          "orderLabel": ""
+        },
+        {
+          "key": "note:n-flag-midnight",
+          "kind": "note",
+          "title": "Saved again",
           "allDay": true,
           "dayKey": "2026-11-08",
           "time": null,
