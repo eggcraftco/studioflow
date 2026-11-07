@@ -605,7 +605,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "sub", text: "What you can do" },
           { kind: "bullets", items: [
             "Pick a Quick Reminder shortcut (for example Ask for approval, Send design update or Check payment) or type your own title.",
-            "Set the date & time, a priority (Normal, High or Urgent) and an optional note. Turn on Notify to get a notification when it is due.",
+            "Set the date & time, a priority (Normal, High or Urgent) and an optional note. Turn on Notify to get a notification when it is due: it goes to the person who set the reminder and the people assigned to the order, on every device where they use NivaDesk.",
             "See Upcoming reminders and Recently completed ones; Mark Done, or Snooze by 1 hour or 1 day.",
             "The same reminders appear in Notes ▸ Reminders and on the Calendar. Linked reminders lists your notes and calendar entries linked to this order."
           ] },
@@ -718,7 +718,7 @@ const TREE_EN: GuideNode[] = [
       { kind: "sub", text: "Tasks, reminders, overdue tasks and repeating entries" },
       { kind: "bullets", items: [
         "Click an entry to open its detail. A task has Mark done, Reopen and Cancel task; the person it is assigned to can change its status too.",
-        "Reminder: Off, At the time, 15 minutes before, 1 hour before or 1 day before (an all-day entry also has Reminder time). Reminders appear inside NivaDesk, under Calendar reminders in the notification bell; they are not sent by email, text message or phone notification.",
+        "Reminder: Off, At the time, 15 minutes before, 1 hour before or 1 day before (an all-day entry also has Reminder time). Reminders appear under Calendar reminders in the notification bell and as a phone, Mac or browser notification on every device where you use NivaDesk; they are not sent by email or text message.",
         "Overdue tasks: open Day view on today. Open tasks planned in the last 14 days that are not done yet are listed there, each with Late since.",
         "Editing or deleting a repeating entry asks Only this one or This and following.",
         "Edit and Delete are at the bottom of the detail. Delete cannot be undone."
@@ -775,7 +775,7 @@ const TREE_EN: GuideNode[] = [
       ] },
       { kind: "sub", text: "Reminders" },
       { kind: "bullets", items: [
-        "Set a reminder on a note: pick a date and a time, or tick All day (Tomorrow and Next week set 09:00).",
+        "Set a reminder on a note: pick a date and a time, or tick All day (Tomorrow and Next week set 09:00). When it is due you get a notification on every device where you use NivaDesk; an all-day reminder rings at 09:00.",
         "Notes ▸ Reminders is one list: your note reminders, the Schedule & Alerts reminders of the orders you can open and your calendar reminders, soonest first, each with its date and time. Tap one to open the note, the order or the calendar entry.",
         "Daily notes you write in the Calendar also appear in Notes, under From Calendar."
       ] },
@@ -2411,7 +2411,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "sub", text: "Neler yapabilirsiniz" },
           { kind: "bullets", items: [
             "Bir Quick Reminder kısayolu seçin (örneğin Ask for approval, Send design update veya Check payment) ya da kendi başlığınızı yazın.",
-            "Tarih & saat, bir öncelik (Normal, High veya Urgent) ve isteğe bağlı bir not belirleyin. Zamanı gelince bildirim almak için Notify'ı açın.",
+            "Tarih & saat, bir öncelik (Normal, High veya Urgent) ve isteğe bağlı bir not belirleyin. Zamanı gelince bildirim almak için Notify'ı açın: bildirim hatırlatıcıyı kuran kişiye ve siparişe atananlara, NivaDesk'i kullandıkları her cihazda gider.",
             "Upcoming (yaklaşan) ve Recently completed (son tamamlanan) hatırlatıcıları görün; Mark Done yapın veya 1 saat ya da 1 gün Snooze edin.",
             "Aynı hatırlatıcılar Notlar ▸ Hatırlatıcılar'da ve Takvim'de de görünür. Bağlı hatırlatıcılar, bu siparişe bağlı notlarınızı ve takvim kayıtlarınızı listeler."
           ] },
@@ -2511,7 +2511,7 @@ const TREE_TR: GuideNode[] = [
       { kind: "sub", text: "Görevler, hatırlatıcılar, gecikmiş görevler ve tekrarlayan kayıtlar" },
       { kind: "bullets", items: [
         "Ayrıntısını açmak için bir kayda tıklayın. Görevde Tamamlandı işaretle, Yeniden Aç ve Görevi iptal et vardır; görevin atandığı kişi de durumunu değiştirebilir.",
-        "Hatırlatıcı: Kapalı, Tam zamanında, 15 dakika önce, 1 saat önce ya da 1 gün önce (tüm gün süren kayıtlarda ayrıca Hatırlatma saati). Hatırlatmalar NivaDesk'in içinde, bildirim zilinde Takvim hatırlatmaları altında görünür; e-posta, SMS ya da telefon bildirimi olarak gönderilmez.",
+        "Hatırlatıcı: Kapalı, Tam zamanında, 15 dakika önce, 1 saat önce ya da 1 gün önce (tüm gün süren kayıtlarda ayrıca Hatırlatma saati). Hatırlatmalar bildirim zilinde Takvim hatırlatmaları altında ve NivaDesk'i kullandığınız her cihazda telefon, Mac ya da tarayıcı bildirimi olarak görünür; e-posta ya da SMS olarak gönderilmez.",
         "Gecikmiş görevler: bugünde Gün görünümünü açın. Son 14 günde planlanıp henüz bitmemiş açık görevler Gecikmiş başlığı altında listelenir; her birinde ne zamandan beri geciktiği yazar (… tarihinden beri gecikmiş).",
         "Tekrarlayan bir kaydı düzenlemek ya da silmek Yalnız bu mu, Bu ve sonrakiler mi diye sorar.",
         "Düzenle ve Sil ayrıntının en altındadır. Silme geri alınamaz."
@@ -2568,7 +2568,7 @@ const TREE_TR: GuideNode[] = [
       ] },
       { kind: "sub", text: "Hatırlatıcılar" },
       { kind: "bullets", items: [
-        "Bir nota hatırlatıcı kurun: bir tarih ve saat seçin ya da Tüm gün'ü işaretleyin (Tomorrow ve Next week saati 09:00 yapar).",
+        "Bir nota hatırlatıcı kurun: bir tarih ve saat seçin ya da Tüm gün'ü işaretleyin (Tomorrow ve Next week saati 09:00 yapar). Zamanı gelince NivaDesk'i kullandığınız her cihaza bildirim gelir; tüm gün hatırlatıcısı 09:00'da çalar.",
         "Notlar ▸ Hatırlatıcılar tek listedir: not hatırlatıcılarınız, açabildiğiniz siparişlerin Schedule & Alerts hatırlatıcıları ve takvim hatırlatıcılarınız, en yakını üstte, her biri tarihi ve saatiyle. Birine dokunun; not, sipariş ya da takvim kaydı açılır.",
         "Takvim'de yazdığınız günlük notlar Notlar'da da, Takvimden başlığı altında görünür."
       ] },
