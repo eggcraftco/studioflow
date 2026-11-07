@@ -612,6 +612,10 @@ const TREE_EN: GuideNode[] = [
           { kind: "sub", text: "What you can change" },
           { kind: "bullets", items: [
             "Use Edit headings to customize the Quick Reminder shortcuts and their default timing so they match how you follow up."
+          ] },
+          { kind: "sub", text: "Who gets the reminder notification" },
+          { kind: "bullets", items: [
+            "The person who set the reminder and the people assigned to the order get it on every device where they use NivaDesk, as long as they can still open that order. If none of them can, the workspace owner gets it."
           ] }
         ]
       },
@@ -1820,6 +1824,7 @@ const TREE_EN: GuideNode[] = [
         "A parcel moving: the first tracking scan, and delivery.",
         "A note shared with you, and an invitation to work on a note together.",
         "A message from a teammate, and a reply on a support ticket.",
+        "A reminder coming due: your own note and calendar reminders, and the Schedule & Alerts reminders of orders you set them on or are assigned to.",
         "Anything that lands in the activity list is a notification as well, so the list and the alerts never tell different stories."
       ] },
       { kind: "sub", text: "Turning them on, and off" },
@@ -2418,6 +2423,10 @@ const TREE_TR: GuideNode[] = [
           { kind: "sub", text: "Neleri değiştirebilirsiniz" },
           { kind: "bullets", items: [
             "Başlıkları Düzenle ile Quick Reminder kısayollarını ve varsayılan zamanlamalarını, takip etme şeklinize uyacak biçimde özelleştirin."
+          ] },
+          { kind: "sub", text: "Hatırlatıcı bildirimi kime gider" },
+          { kind: "bullets", items: [
+            "Bildirimi hatırlatıcıyı kuran kişi ve siparişe atananlar, NivaDesk'i kullandıkları her cihazda alır; yeter ki o siparişi hâlâ açabilsinler. Hiçbiri açamıyorsa işletme sahibi alır."
           ] }
         ]
       },
@@ -3605,6 +3614,7 @@ const TREE_TR: GuideNode[] = [
         "Bir kargonun hareket etmesi: ilk okutma ve teslimat.",
         "Sizinle paylaşılan bir not ve bir nota birlikte çalışma daveti.",
         "Ekip arkadaşınızdan mesaj ve destek talebine gelen yanıt.",
+        "Zamanı gelen bir hatırlatıcı: kendi not ve takvim hatırlatıcılarınız, kurduğunuz ya da atandığınız siparişlerin Schedule & Alerts hatırlatıcıları.",
         "Hareket listesine düşen her şey aynı zamanda bir bildirimdir; liste ile uyarılar asla farklı şeyler anlatmaz."
       ] },
       { kind: "sub", text: "Açmak ve kapatmak" },
