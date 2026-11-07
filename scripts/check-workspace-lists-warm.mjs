@@ -50,7 +50,14 @@ const CUSTOMERS = 'query(collection(db, "musteriler"), where("companyId", "==", 
 expect("kept orders query is the loaders' query", lists.includes(ORDERS));
 expect("kept customers query is the loaders' query", lists.includes(CUSTOMERS));
 expect("the counts' 1000-order sample is not kept (a second whole-list transfer at every sign-in)", !/limit\(/.test(lists));
-expect("loadDashboardFinanceOrders reads the same orders query", body(fsSrc, "export async function loadDashboardFinanceOrders(").includes(ORDERS));
+// Since 7 Nov 2026 (setup takeover) the finance query sits in loadDashboardFinanceOrdersWithSource, which also reports
+// whether the answer came from the server; loadDashboardFinanceOrders returns its orders. Either way it must be the
+// kept query, so a screen's read joins the live target.
+const financeOrdersLoader = body(fsSrc, "export async function loadDashboardFinanceOrders(");
+const financeOrdersQuerySite = financeOrdersLoader.includes("loadDashboardFinanceOrdersWithSource(companyId, workspace, uid)")
+  ? body(fsSrc, "export async function loadDashboardFinanceOrdersWithSource(")
+  : financeOrdersLoader;
+expect("loadDashboardFinanceOrders reads the same orders query", financeOrdersQuerySite.includes(ORDERS));
 const customersLoader = body(fsSrc, "export async function loadWorkspaceCustomers(");
 expect("loadWorkspaceCustomers reads the same orders query", customersLoader.includes(ORDERS));
 expect("loadWorkspaceCustomers reads the same customers query", customersLoader.includes(CUSTOMERS));
