@@ -1025,7 +1025,12 @@ export function PublicHeader({ hideLanguage = false }: { hideLanguage?: boolean 
       <div className="public-header-inner">
         <div className="public-header-pill public-header-pill-main">
           <Link href="/" className="public-brand" aria-label={t("brand.homeAria")}>
-            <img className="public-brand-logo" src="/brand/nivadesk-logo.png" alt="" aria-hidden="true" />
+            {/* NivaDesk is a registered UK trade mark (UK00004386449, EGGCRAFT LIMITED, classes 9 + 42): ® at its first, most
+                prominent use. Trade Marks Act 1994 s.95 — only while the registration stands; the footer says where it is registered. */}
+            <span className="public-brand-mark">
+              <img className="public-brand-logo" src="/brand/nivadesk-logo.png" alt="" aria-hidden="true" />
+              <span className="public-brand-reg" aria-hidden="true">®</span>
+            </span>
           </Link>
           <span className="public-header-divider" aria-hidden="true" />
           <nav className="public-nav-links" aria-label={t("nav.publicPages")} ref={navRef}>
@@ -1214,6 +1219,7 @@ function PublicFooter() {
               );
             })()}
           </span>
+          <span className="public-footer-trademark">{t("footer.trademark")}</span>
           <span className="public-footer-legal">
             EGGCRAFT LIMITED · Registered in England and Wales No. 16566512 · VAT GB 514512621 · 141d Randolph Avenue, London W9 1DN, United Kingdom
           </span>
