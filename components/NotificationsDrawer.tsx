@@ -1,6 +1,7 @@
 "use client";
 
-import { orderNotificationHref, reminderNotificationHref } from "@/lib/studioflow/notificationSettings";
+import { orderNotificationHref } from "@/lib/studioflow/notificationSettings";
+import { reminderNotificationHref } from "@/lib/studioflow/reminderCore";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {

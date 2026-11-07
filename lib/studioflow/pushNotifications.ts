@@ -3,7 +3,8 @@ import { getMessaging, getToken, isSupported, onMessage } from "firebase/messagi
 import { db, messagingServiceWorkerConfig } from "@/lib/firebase/client";
 import { getApp } from "firebase/app";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
-import { orderNotificationHref, reminderNotificationHref } from "@/lib/studioflow/notificationSettings";
+import { orderNotificationHref } from "@/lib/studioflow/notificationSettings";
+import { reminderNotificationHref } from "@/lib/studioflow/reminderCore";
 import { openInApp } from "@/lib/studioflow/openInApp";
 
 const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ?? "";
@@ -172,8 +173,8 @@ export async function registerWebPush(
             const shown = new Notification(title, { body, icon: "/icon.png" });
             shown.onclick = () => {
               window.focus();
-              if (data.type === "reminder") openInApp(reminderNotificationHref(data));
-              else if (data.orderId) openInApp(orderNotificationHref(data));
+              if (data.orderId && data.type !== "reminder") openInApp(orderNotificationHref(data));
+              else if (data.type === "reminder") openInApp(reminderNotificationHref(data));
             };
           });
       });

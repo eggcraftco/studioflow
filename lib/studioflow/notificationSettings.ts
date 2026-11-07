@@ -91,9 +91,6 @@ export function orderNotificationHref(row: { orderId?: string | null; type?: str
   return `/orders?${params.toString()}`;
 }
 
-/** Where a reminder's bell row or push opens (stage B) — the pure builder lives in reminderCore. */
-export { reminderNotificationHref } from "./reminderCore";
-
 /** Fired by the Orders page when a link with `focus` arrives for an order that may already be open. */
 export const ORDER_CARD_FOCUS_EVENT = "nivadesk-order-card-focus";
 
