@@ -345,7 +345,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
           "a record of each text that was not sent and why (for example because no agreement was recorded), kept for 90 days;",
           "the record of a customer's agreement (that the customer gave it, or which team member recorded it, when, and which wording was shown), kept while it applies and for 2 years after it is withdrawn, so that it can be shown if the customer or our provider asks;",
           "a text waiting for the morning, kept until it is sent and for 2 days at most;",
-          "Twilio's own copy of each text, deleted 30 days after it was sent; until then Twilio keeps it under its own terms;",
+          "Twilio's own copy of each text, deleted 30 days after it was sent; until then Twilio keeps it under its own terms, and Twilio may keep it in its internal systems for up to 30 more days;",
           "deleted records can remain in NivaDesk's database backups for up to 14 days, until these expire."
         ]
       },
@@ -554,7 +554,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "technical logs may be kept for a limited period for security and troubleshooting;",
       "deleted data may remain in backups for a limited time before being permanently removed;",
       "your customers' WhatsApp and Instagram messages are kept for 90 days, and NivaDesk's copies of files they send on WhatsApp for 30 days, as described in sections 7.1 and 7.2;",
-      "records of the text messages your workspace sends to your customers are kept for 13 months, records of texts that were not sent for 90 days, and a customer's recorded agreement for 2 years after it is withdrawn; Twilio's copy of each text is deleted after 30 days, as described in section 7.5;",
+      "records of the text messages your workspace sends to your customers are kept for 13 months, records of texts that were not sent for 90 days, and a customer's recorded agreement for 2 years after it is withdrawn; Twilio's copy of each text is deleted after 30 days (it may remain in Twilio's internal systems for up to 30 more days), as described in section 7.5;",
       "copies of your Amazon orders held in NivaDesk's dedicated Amazon system are deleted 90 days after NivaDesk last saw them change, and on disconnection, as described in section 7.3;",
       "Client Files and cloud-stored message attachments whose paid access has ended may be retained for up to 90 days for restoration upon resubscription, after which they may be deleted;",
       "AI assistant connections stay active until disconnected, or until 90 days without use for an assistant that renews its access (30 days for one that does not); the records of their keys are removed after the keys expire or the connection ends, and when your account is deleted, as described in section 10.3."
