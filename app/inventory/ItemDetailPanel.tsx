@@ -17,6 +17,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { studioT } from "@/lib/studioflow/language";
+import { ebayListingPhotoCopiedAt, formatCopyDate } from "@/lib/studioflow/channelPhotoNote";
 import {
   inventoryFreeToReserve,
   inventoryItemToInput,
@@ -134,6 +135,8 @@ export function ItemDetailPanel({
   const [error, setError] = useState("");
   const [qrSvg, setQrSvg] = useState("");
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  // The path behind each shown URL, so a photo copied from an eBay listing can carry its date (eBay §8.1.3).
+  const [photoPaths, setPhotoPaths] = useState<string[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[] | null>(null);
   const [purchase, setPurchase] = useState<PurchaseJoin | null | "none">(null);
   const [bankTx, setBankTx] = useState<BankTxJoin | null>(null);
@@ -171,7 +174,12 @@ export function ItemDetailPanel({
     let cancelled = false;
     const paths = (item.photos || []).slice(0, 12);
     Promise.all(paths.map(path => inventoryPhotoUrl(path).catch(() => "")))
-      .then(urls => { if (!cancelled) setPhotoUrls(urls.filter(Boolean)); })
+      .then(urls => {
+        if (cancelled) return;
+        const shown = urls.map((url, index) => ({ url, path: paths[index] })).filter(row => row.url);
+        setPhotoUrls(shown.map(row => row.url));
+        setPhotoPaths(shown.map(row => row.path));
+      })
       .catch(() => undefined);
     return () => { cancelled = true; };
   }, [item.photos]);
@@ -704,10 +712,19 @@ export function ItemDetailPanel({
             <p className="inventory-sub">{t("No photos yet. For a unique piece, the photos are half the identity.")}</p>
           ) : (
             <div className="inventory-panel-gallery is-full">
-              {photoUrls.map((url, index) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={index} src={url} alt="" onClick={() => onManagePhotos(item)} />
-              ))}
+              {photoUrls.map((url, index) => {
+                const ebayCopiedAt = ebayListingPhotoCopiedAt(photoPaths[index]);
+                return ebayCopiedAt ? (
+                  <figure key={index} className="inventory-photo-figure" data-photo-source="ebay">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={url} alt="" onClick={() => onManagePhotos(item)} />
+                    <figcaption>{t("Photo from the eBay listing")} · {formatCopyDate(ebayCopiedAt)}</figcaption>
+                  </figure>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img key={index} src={url} alt="" onClick={() => onManagePhotos(item)} />
+                );
+              })}
             </div>
           )}
           {canEdit ? (

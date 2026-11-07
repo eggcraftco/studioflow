@@ -48,5 +48,21 @@ expect("the caption is translated into all 11 other languages", (row.match(/": "
 expect("phone fold counts the shop photo", dsrc.includes("preview: Boolean(order.designLink) || Boolean(shopPreviewLink) ||"));
 expect("the Preview menu still edits designLink only", !/savePreviewLink\([^)]*channelPreview/.test(dsrc));
 
+// Stock cards: a picture copied from an eBay listing shows its copy date (eBay §8.1.3), read from the file name.
+const notePath = at("lib/studioflow/channelPhotoNote.ts");
+expect("stock-card note helper exists", existsSync(notePath));
+if (existsSync(notePath)) {
+  const n = await import(notePath.href);
+  expect("eBay copy path → its copy time", n.ebayListingPhotoCopiedAt("companies/ws1/inventory_photos/card1/1762516800000-ebay-123456789012.jpg") === 1762516800000);
+  expect("Woo copy, own upload, other folders → none", n.ebayListingPhotoCopiedAt("companies/ws1/inventory_photos/card1/1762516800000-woo-p501.jpg") === null
+    && n.ebayListingPhotoCopiedAt("companies/ws1/inventory_photos/card1/upload.jpg") === null
+    && n.ebayListingPhotoCopiedAt("companies/ws1/design_images/1762516800000-ebay-1.jpg") === null && n.ebayListingPhotoCopiedAt("") === null);
+  expect("copy date format", n.formatCopyDate(1762516800000) === "07 Nov 2025" || n.formatCopyDate(1762516800000).includes("Nov"));
+}
+const msrc = readFileSync(at("app/inventory/ItemPhotosModal.tsx"), "utf8");
+const psrc = readFileSync(at("app/inventory/ItemDetailPanel.tsx"), "utf8");
+expect("photo viewer prints the eBay note under a copied photo", /ebayListingPhotoCopiedAt\(viewing\)[\s\S]{0,300}t\("Photo from the eBay listing"\)/.test(msrc));
+expect("item Photos tab prints the eBay note under a copied photo", /ebayListingPhotoCopiedAt\(photoPaths\[index\]\)[\s\S]{0,500}t\("Photo from the eBay listing"\)/.test(psrc));
+
 if (failures.length) { console.log(`ORDER-CHANNEL-PREVIEW FAIL ${failures.length}/${checks}`); for (const f of failures) console.log(`  ✗ ${f}`); process.exit(1); }
 console.log(`ORDER-CHANNEL-PREVIEW PASS ${checks}/${checks}`);
