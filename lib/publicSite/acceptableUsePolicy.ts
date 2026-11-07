@@ -117,7 +117,8 @@ export const ACCEPTABLE_USE_POLICY_SECTIONS: PrivacyPolicySection[] = [
     title: "8. Spam, communications, and misuse",
     paragraphs: [
       "You must not use NivaDesk to send spam, abusive communications, misleading messages, phishing attempts, or unwanted bulk communications.",
-      "If NivaDesk offers email, notification, sharing, invitation, or client communication features, you must use them responsibly and only where you have permission or a lawful basis to contact the recipient."
+      "If NivaDesk offers email, notification, sharing, invitation, or client communication features, you must use them responsibly and only where you have permission or a lawful basis to contact the recipient.",
+      "Text messages (SMS) sent through NivaDesk may only give your customers information about their orders, and only to customers who have agreed to receive them. They must not be used for marketing, advertising or promotions, including through the names you give to order stages, and you must not try to text a customer who has stopped texts."
     ]
   },
   {

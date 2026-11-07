@@ -106,11 +106,15 @@ export const SUBPROCESSORS_SECTIONS: PrivacyPolicySection[] = [
         ]
       },
       {
+        // Twilio SMS legal texts (7 Nov 2026, NIVADESK_HUKUK.md O-18; owner approval pending): provider entities, the
+        // real message content, Twilio's 30-day copy and the transfer mechanism. "(on trial)" goes on the day text
+        // messages open to Pro and Team workspaces (ROLLOUT=general), not before.
         title: "Twilio (on trial)",
         paragraphs: [
-          "Purpose: sending text messages to your customers about their orders, where your workspace uses this feature.",
-          "Data: your customer's phone number and the message (your business name, the item, its status and a link to your customer page).",
-          "Location: United States."
+          "Provider: Twilio Ireland Limited, our contracting party; messages are processed by Twilio Inc.",
+          "Purpose: sending text messages to your customers about their orders, where your workspace switches this feature on.",
+          "Data: your customer's phone number and the message (your business name, the stage of the order, a link to your customer's order page and a link to stop texts). Twilio's copy of each message is deleted 30 days after it is sent.",
+          "Location: United States. Twilio states that it is certified under the UK Extension to the EU-U.S. Data Privacy Framework; its data protection terms also include the UK International Data Transfer Addendum to the Standard Contractual Clauses."
         ]
       },
       {

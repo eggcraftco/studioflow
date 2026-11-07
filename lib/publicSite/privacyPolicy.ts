@@ -327,6 +327,33 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
           "Disconnecting. You can disconnect at any time from the calendar ('Your other calendars'). NivaDesk then deletes the connection record, the tokens and every copy of your meetings, and asks Google to withdraw NivaDesk's access; with Microsoft you can also remove NivaDesk from your account's app permissions. Nothing in your Google or Microsoft calendar is changed. If you leave a workspace or your access is suspended, NivaDesk removes the connection and its copies at the next sync.",
           "Google user data. NivaDesk's use and transfer to any other app of information received from Google APIs will adhere to the Google API Services User Data Policy (https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. NivaDesk uses this information only to show you your own meetings: it does not use it for advertising, does not sell it, does not use it to develop or train AI models, and people at NivaDesk do not read it unless you ask us to, for security, or where the law requires it."
         ]
+      },
+      {
+        // Twilio SMS legal texts (7 Nov 2026, NIVADESK_HUKUK.md O-18; owner approval pending). English only, like 7.3
+        // and 7.4. "Availability" changes on the day text messages open to Pro and Team workspaces.
+        title: "7.5 Text messages to your customers (SMS)",
+        paragraphs: [
+          "Availability. Text messages to customers are being tried out with EGGcraft before they are offered to other workspaces on NivaDesk Pro and Team. This section describes how they work for any workspace that uses them.",
+          "If your workspace switches on text updates, NivaDesk sends your customer a short text message when their order reaches a stage your workspace chose, for example when it is ready for collection. For these messages your business is the controller, and NivaDesk processes them on your behalf. Before your workspace's first text is sent, the workspace owner confirms once that your customers have agreed to receive these texts and that your workspace uses them only for information about orders, never for marketing.",
+          "A text is sent only to a customer whose agreement is recorded: a member of your team records that the customer agreed, or the customer switches texts on from their order page. Each text names your business, is sent under the sender name \"NivaDesk\" and contains a \"Stop texts\" link. The customer can stop texts at any time with that link or from their order page; after that, only the customer can switch them on again. A text that would be sent between 21:00 and 08:00 UK time waits until 08:00.",
+          "Texts are delivered through Twilio, our text message provider, to your customer's mobile network. Twilio receives your customer's phone number and the text: your business name, the stage of the order, a link to your customer's order page and the \"Stop texts\" link. Twilio processes them in the United States (see section 15 and our Subprocessors page). Twilio may also use this information under its own terms to keep its service secure and to prevent abuse.",
+          "A list NivaDesk keeps for its own purposes. So that a customer who stopped texts is not texted again by mistake, NivaDesk keeps a list of numbers that must not be texted. A number is stored on it only as a scrambled code (a one-way hash), not as a readable number. If our provider or the mobile network tells us that a number has refused texts from our sender, NivaDesk stops texting that number for every workspace. For this list NivaDesk is the controller; our legal basis is our legitimate interest in respecting a person's choice not to be texted, which our provider's rules also require. The list is kept for as long as NivaDesk provides text messages.",
+          "What NivaDesk keeps, and for how long:"
+        ],
+        bullets: [
+          "a record of each text NivaDesk sent (when, for which order, its delivery status, the number in shortened form and the text without the \"Stop texts\" link), kept for 13 months;",
+          "a record of each text that was not sent and why (for example because no agreement was recorded), kept for 90 days;",
+          "the record of a customer's agreement (that the customer gave it, or which team member recorded it, when, and which wording was shown), kept while it applies and for 2 years after it is withdrawn, so that it can be shown if the customer or our provider asks;",
+          "a text waiting for the morning, kept until it is sent and for 2 days at most;",
+          "Twilio's own copy of each text, deleted 30 days after it was sent; until then Twilio keeps it under its own terms;",
+          "deleted records can remain in NivaDesk's database backups for up to 14 days, until these expire."
+        ]
+      },
+      {
+        title: "",
+        paragraphs: [
+          "If your workspace's data is deleted, these records are deleted too, except your workspace's own list of customers who stopped texts, which is kept so that they are not texted again if they are added back. If your account is deleted, that list is deleted as well; numbers that refused texts from our sender for every workspace stay on the general list."
+        ]
       }
     ]
   },
@@ -471,6 +498,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "customer support tools;",
       "email delivery providers;",
       "messaging platforms your workspace connects, such as the WhatsApp Business Platform and Instagram, both operated by Meta, to receive and send your customers' messages;",
+      "our text message provider, Twilio, to deliver the text messages your workspace sends to your customers (section 7.5);",
       "AI assistants you choose to connect, such as ChatGPT (OpenAI) and Claude (Anthropic), which receive the results of the requests you make through them (section 10);",
       "error monitoring and crash reporting services;",
       "accountants, lawyers, or professional advisers;",
@@ -526,6 +554,7 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
       "technical logs may be kept for a limited period for security and troubleshooting;",
       "deleted data may remain in backups for a limited time before being permanently removed;",
       "your customers' WhatsApp and Instagram messages are kept for 90 days, and NivaDesk's copies of files they send on WhatsApp for 30 days, as described in sections 7.1 and 7.2;",
+      "records of the text messages your workspace sends to your customers are kept for 13 months, records of texts that were not sent for 90 days, and a customer's recorded agreement for 2 years after it is withdrawn; Twilio's copy of each text is deleted after 30 days, as described in section 7.5;",
       "copies of your Amazon orders held in NivaDesk's dedicated Amazon system are deleted 90 days after NivaDesk last saw them change, and on disconnection, as described in section 7.3;",
       "Client Files and cloud-stored message attachments whose paid access has ended may be retained for up to 90 days for restoration upon resubscription, after which they may be deleted;",
       "AI assistant connections stay active until disconnected, or until 90 days without use for an assistant that renews its access (30 days for one that does not); the records of their keys are removed after the keys expire or the connection ends, and when your account is deleted, as described in section 10.3."
