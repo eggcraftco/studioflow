@@ -188,3 +188,48 @@
   .mockRow>span:first-child{grid-column:1/-1;justify-self:start}
 }
 @media(prefers-reduced-motion:reduce){.faqMark{transition:none}}
+
+/* Cream theme (7 Nov 2026, owner: the whole site in one theme). Inside the public
+   site's cream shell (PublicShell's .public-site.public-cream) this page, and
+   /integrations/claude and /integrations/shopify, which share this module, take the
+   site's paper-and-ink palette and type, as integrations.module.css does for the
+   directory. Every colour is a cream token from globals.css (.public-site.public-cream)
+   or one of the cream theme's own pairs: green/blue/blush tags = the changelog's
+   new/improved/fixed tags, sage = --cream-sage. Inside the order drawings the
+   channel badges and status chips are the app's own and keep their colours, as the
+   ChatGPT window and the tracking card do on the other pages. Selectors that colour
+   a <p> carry three classes so they beat `.public-site.public-cream p`. Logical
+   properties only. */
+:global(.public-cream) .page{--ink:#251d1a;--muted:#6b5d55;--line:rgba(37,29,26,.12);--green:#251d1a;--soft:#f3dcb6;--amber:#8f4f32;background:transparent;font-family:var(--font-public-sans,var(--font-inter,Arial)),sans-serif}
+:global(.public-cream) .page h1,:global(.public-cream) .page h2,:global(.public-cream) .page h3,:global(.public-cream) .faqItem summary,:global(.public-cream) .factGrid dt,:global(.public-cream) .limitList dt,:global(.public-cream) .dataList dt,:global(.public-cream) .mockHead strong{font-family:var(--font-public-sans,var(--font-manrope,Arial)),sans-serif!important}
+:global(.public-cream) .page .eyebrow{font-family:var(--font-public-serif,Georgia),Georgia,serif;font-style:italic;font-size:19px;font-weight:400;letter-spacing:0;text-transform:none;color:#8f4f32}
+:global(.public-cream) .page .statusEyebrow{color:#8f4f32}
+:global(.public-cream) .page .lead,:global(.public-cream) .page .note,:global(.public-cream) .page .intro,:global(.public-cream) .page .shownText,:global(.public-cream) .page .small{color:#6b5d55}
+:global(.public-cream) .primary{border-radius:6px;color:#f8f0e4!important}
+:global(.public-cream) .primary:hover{background:#3a2e29}
+:global(.public-cream) .secondary{border-radius:6px;border-color:#251d1a;background:transparent}
+:global(.public-cream) .secondary:hover{background:rgba(37,29,26,.06)}
+:global(.public-cream) .checkIcon{color:#2f5a3a}
+:global(.public-cream) .crossIcon{color:#8f4f32}
+:global(.public-cream) .mockWindow,:global(.public-cream) .stripCard{background:#fffefb;border-color:#eed6c4;box-shadow:0 10px 16px -3px rgba(20,21,26,.08),0 1px 2px rgba(20,21,26,.05)}
+:global(.public-cream) .mockBar{background:#fcf6ee;border-color:rgba(37,29,26,.08)}
+:global(.public-cream) .mockBar span{background:#eed6c4}
+:global(.public-cream) .mockRow{background:#fdf9f3;border-color:rgba(37,29,26,.08)}
+:global(.public-cream) .mockItem small,:global(.public-cream) .mockCaption,:global(.public-cream) .code,:global(.public-cream) .stripCustomer{color:#6b5d55}
+:global(.public-cream) .statusBand{background:#fcf6ee;border-color:#eed6c4}
+:global(.public-cream) .statusBadge{background:#f3dcb6;color:#8f4f32}
+:global(.public-cream) .statusDot{background:#c17b58}
+:global(.public-cream) .page .statusInner>p{color:#3a2e29}
+:global(.public-cream) .job,:global(.public-cream) .fieldCol,:global(.public-cream) .factGrid>div,:global(.public-cream) .limitList>div,:global(.public-cream) .dataList>div,:global(.public-cream) .steps li,:global(.public-cream) .region,:global(.public-cream) .plan,:global(.public-cream) .faqItem,:global(.public-cream) .flowNode,:global(.public-cream) .links a{background:#fdf9f3;border-color:#eed6c4}
+:global(.public-cream) .links a:hover{background:rgba(37,29,26,.05)}
+:global(.public-cream) .fieldCol.fieldColNot{background:#fcf6ee;border-color:#eed0bf}
+:global(.public-cream) .strip{background:#fcf6ee;border-color:rgba(37,29,26,.08);color:#3a2e29}
+:global(.public-cream) .flow{--green:#c17b58}
+:global(.public-cream) .flowNode.flowNodeMid{background:#f3dcb6;border-color:#eed6c4}
+:global(.public-cream) .flowArrowLabel{color:#8f4f32}
+:global(.public-cream) .reads{background:#e9ebe4;border-color:#d5d8ca}
+:global(.public-cream) .writes{background:#fcf6ee;border-color:#eed0bf}
+:global(.public-cream) .stepNumber{color:#f8f0e4}
+:global(.public-cream) .regionLive,:global(.public-cream) .included{background:#dce8dd;color:#2f5a3a}
+:global(.public-cream) .countries li{border-color:rgba(37,29,26,.08)}
+:global(.public-cream) .page a:focus-visible,:global(.public-cream) .faqItem summary:focus-visible{outline-color:#c17b58}

@@ -41712,7 +41712,8 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
 .public-site.public-cream .changelog-tag { border-radius: 6px; font-weight: 700; }
 .public-site.public-cream .changelog-tag-new { background: #dce8dd; color: #2f5a3a; }
 .public-site.public-cream .changelog-tag-improved { background: #d9e8ee; color: #24585a; }
-.public-site.public-cream .changelog-tag-fixed { background: var(--cream-blush); color: var(--cream-terracotta-text); }
+/* The home page's rose tile: terracotta text on blush was 4.32:1, on this 4.78:1 (AA, 7 Nov 2026). */
+.public-site.public-cream .changelog-tag-fixed { background: #f7dad3; color: var(--cream-terracotta-text); }
 
 /* Legal and info pages: the text column on a quiet card. */
 .public-site.public-cream .public-legal-section,
@@ -41764,6 +41765,215 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
 .login-public-shell.public-cream button[type="submit"] {
   border-radius: 6px;
 }
+
+/* ==========================================================================
+   Cream theme, the rest of the site (7 Nov 2026, owner: "tüm site temaya uysun").
+   Parts that kept the older grey-green public palette after the 2 Nov redesign:
+   the plan comparison table (/pricing, /features), the pricing toggle's flag, the
+   shipping story band and the deep-feature panel (/features), the closing band of
+   /chatgpt (dark ink on dark green, unreadable), the Ads landing page
+   (/custom-order-management, now inside the cream shell) and the sign-in page.
+   Cream tokens only; logical directions only (check-etsy-ui-1 E3 reads to here).
+   The ChatGPT window, the tracking card and the order drawings keep their own
+   colours on purpose: they show other products' screens and the app.
+   ========================================================================== */
+
+/* ---- Plan comparison table, plan cards' limit tiles, /features order panels ---- */
+.public-site.public-cream .public-plan-matrix {
+  border-color: var(--cream-peach-line);
+  background: var(--cream-surface-2);
+  box-shadow: var(--cream-shadow);
+  color: var(--cream-ink);
+}
+.public-site.public-cream .public-plan-matrix-head { background: var(--cream-menu); }
+.public-site.public-cream .public-plan-matrix-row,
+.public-site.public-cream .public-plan-matrix-feature-head,
+.public-site.public-cream .public-plan-matrix-plan-head,
+.public-site.public-cream .public-plan-matrix-feature,
+.public-site.public-cream .public-plan-matrix-cell { border-color: var(--cream-line-soft); }
+.public-site.public-cream .public-plan-matrix-row:nth-child(odd) { background: rgba(252, 246, 238, 0.6); }
+.public-site.public-cream .public-plan-matrix-row:hover { background: rgba(193, 123, 88, 0.06); }
+.public-site.public-cream .public-plan-matrix-plan-head strong,
+.public-site.public-cream .public-plan-matrix-feature strong { color: var(--cream-ink); }
+.public-site.public-cream .public-plan-matrix-feature-head span,
+.public-site.public-cream .public-plan-matrix-plan-head small,
+.public-site.public-cream .public-plan-matrix-feature span { color: var(--cream-muted); }
+.public-site.public-cream .public-plan-matrix-cell span { background: rgba(37, 29, 26, 0.05); color: var(--cream-muted); }
+.public-site.public-cream .public-plan-matrix-cell.included span {
+  background: #dce8dd;
+  color: #2f5a3a;
+  box-shadow: inset 0 0 0 1px var(--cream-sage-line);
+}
+.public-site.public-cream .public-plan-toggle-flag { background: var(--cream-teal-deep); }
+.public-site.public-cream .public-plan-limits div { background: var(--cream-surface-2); }
+/* The plan cards' lists carry their own check mark; the generic .public-card li dot doubled it. */
+.public-site.public-cream .public-plan-bullets li::before { content: none; }
+.public-site.public-cream .public-plan-matrix-pop { background: var(--cream-teal); color: var(--cream-bg); }
+@media (max-width: 760px) {
+  .public-site.public-cream .public-plan-matrix-plan-head.popular {
+    background: var(--cream-sage);
+    box-shadow: inset 0 0 0 1.5px var(--cream-sage-line);
+  }
+}
+.public-site.public-cream .public-order-card-panel {
+  border-color: var(--cream-peach-line);
+  background: linear-gradient(135deg, var(--cream-surface-2), var(--cream-surface));
+}
+
+/* ---- /features: shipping story band, deep-feature panel --------------- */
+.public-site.public-cream .public-scroll-story { background: transparent; border-color: var(--cream-line-soft); }
+.public-site.public-cream .public-features-deep-copy {
+  border-color: var(--cream-peach-line);
+  background: linear-gradient(135deg, var(--cream-surface-2), var(--cream-surface));
+  box-shadow: var(--cream-shadow);
+}
+
+/* ---- /chatgpt closing band: a peach card like the directory's ---------- */
+.public-site.public-cream .public-cta-inner {
+  position: relative;
+  z-index: 1;
+  border: 1px solid var(--cream-peach-line);
+  background: var(--cream-peach-band);
+  box-shadow: var(--cream-shadow);
+  color: var(--cream-ink);
+}
+.public-site.public-cream .public-cta-inner h2 { color: var(--cream-ink); }
+.public-site.public-cream .public-cta-inner .public-button.ghost {
+  border-color: transparent;
+  background: var(--cream-surface-2);
+  color: var(--cream-ink);
+  box-shadow: inset 0 0 0 1px var(--cream-line);
+}
+.public-site.public-cream .public-cta-inner .public-button.secondary {
+  border-color: transparent;
+  background: transparent;
+  color: var(--cream-ink);
+  box-shadow: inset 0 0 0 1px var(--cream-ink);
+}
+
+/* ---- Ads landing (/custom-order-management) --------------------------- */
+.public-site.public-cream.lp { min-height: 0; }
+.public-site.public-cream .lp-hero,
+.public-site.public-cream .lp-footer { background: transparent; }
+.public-site.public-cream .lp-hero-shot-img { box-shadow: var(--cream-shadow-lift); }
+.public-site.public-cream .lp-section-soft {
+  background: var(--cream-surface);
+  border-color: var(--cream-line-soft);
+}
+.public-site.public-cream .lp-problem-pill,
+.public-site.public-cream .lp-problem-feature-icon,
+.public-site.public-cream .lp-ba-before .lp-ba-tag,
+.public-site.public-cream .lp-ba-before .lp-ba-mark { background: #f7dad3; color: var(--cream-terracotta-text); }
+.public-site.public-cream .lp-problem-feature,
+.public-site.public-cream .lp-ba-card,
+.public-site.public-cream .lp-midcta,
+.public-site.public-cream .lp-step,
+.public-site.public-cream .lp-audience-card {
+  border-color: var(--cream-peach-line);
+  background: var(--cream-surface-2);
+}
+.public-site.public-cream .lp-feature-card {
+  border-color: var(--cream-peach-line);
+  background: var(--cream-surface);
+  box-shadow: var(--cream-shadow);
+}
+.public-site.public-cream .lp-ba-card.lp-ba-after { border-color: var(--cream-sage-line); background: var(--cream-sage); }
+.public-site.public-cream .lp-ba-after .lp-ba-tag,
+.public-site.public-cream .lp-ba-after .lp-ba-mark { background: #dce8dd; color: #2f5a3a; }
+.public-site.public-cream .lp-feature-icon { background: var(--cream-sand); color: var(--cream-terracotta-text); }
+.public-site.public-cream .lp-step-num { background: var(--cream-ink); color: var(--cream-bg); }
+.public-site.public-cream .lp-final {
+  background: var(--cream-peach-band);
+  border-color: var(--cream-line-soft);
+}
+.public-site.public-cream .lp-footer-links a { color: var(--cream-muted); }
+.public-site.public-cream .lp-footer-links a:hover { color: var(--cream-ink); }
+.public-site.public-cream .lp-footer-legal { color: var(--cream-muted); }
+
+/* ---- Sign-in page: header and card on the cream palette ---------------
+   .login-public-shell is the public sign-in page only (scripts/mac-palette/scope.mjs
+   counts it as public); the card's own tokens are re-pointed inside it, the app
+   keeps its palette. The typing words above the card stay as they are: they
+   mirror the iPhone and Android sign-in screens.
+   Light in either app theme, like every public page: the app's dark layer
+   (body[data-studio-theme="dark"] .page-shell / .login-public-shell) painted #141414
+   round the cream card and light-grey text into it. `body` in front gives these the
+   same weight as those rules, and they come later. Status tokens keep the sign-in
+   page's own light values (html .login-public-shell). */
+body .login-public-shell.public-cream {
+  --text: #251d1a;
+  --public-text: #251d1a;
+  --public-muted: #6b5d55;
+  --muted: #6b5d55;
+  --border: rgba(37, 29, 26, 0.12);
+  --accent: #251d1a;
+  --accent-soft: rgba(37, 29, 26, 0.08);
+  --success: #34c759;
+  --success-soft: rgba(52, 199, 89, 0.14);
+  --warning: #ff9500;
+  --warning-rgb: 255, 149, 0;
+  --warning-soft: rgba(255, 149, 0, 0.14);
+  --danger: #9f2d2d;
+  --danger-soft: rgba(255, 59, 48, 0.12);
+  --background: #f8f0e4;
+  --panel: #fdf9f3;
+  background: #f8f0e4;
+}
+/* The dark theme's light logo lockup is for dark pages; the cream pages keep the dark-ink logo. */
+html[data-studio-theme="dark"] .public-cream .public-brand-logo,
+html[data-studio-theme="dark"] .public-cream .public-footer-logo,
+body[data-studio-theme="dark"] .public-cream .public-brand-logo,
+body[data-studio-theme="dark"] .public-cream .public-footer-logo { content: url("/brand/nivadesk-logo.png"); }
+.login-public-shell.public-cream .login-public-actions a:last-of-type {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.login-public-shell.public-cream .public-language-select {
+  border-color: transparent;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: #251d1a;
+}
+.login-public-shell.public-cream .public-language-select:hover { border-color: rgba(37, 29, 26, 0.12); background: #fdf9f3; }
+.login-public-shell.public-cream .public-language-select select { color: #251d1a; }
+.login-public-shell.public-cream .public-header-menu-btn {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #251d1a;
+}
+.login-public-shell.public-cream .login-card-frame .input { border-color: rgba(37, 29, 26, 0.12); background: #fffefb; color: #251d1a; }
+.login-public-shell.public-cream .login-card-frame .button { color: #f8f0e4; }
+.login-public-shell.public-cream .login-card-frame a { text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---- Cookie banner on the public pages --------------------------------
+   It is mounted by the root layout, outside the shell, so it takes the cream
+   values by :has(); the app and the customer pages keep it as it is. Same weight
+   as the app's dark-theme banner rules and later, so a public page shows it light
+   in either app theme, as the page itself. */
+body:has(.public-cream) .cookie-banner-inner {
+  border-color: #eed6c4;
+  background: #fdf9f3;
+  color: #251d1a;
+  box-shadow: 0 24px 48px -12px rgba(37, 29, 26, 0.2), 0 2px 4px rgba(37, 29, 26, 0.06);
+}
+body:has(.public-cream) .cookie-banner-copy p,
+body:has(.public-cream) .cookie-cat-desc { color: #6b5d55; }
+body:has(.public-cream) .cookie-cat-title { color: #251d1a; }
+body:has(.public-cream) .cookie-cat { border-color: rgba(37, 29, 26, 0.12); background: rgba(37, 29, 26, 0.02); }
+body:has(.public-cream) .cookie-cat-badge { background: rgba(37, 29, 26, 0.06); color: #6b5d55; }
+body:has(.public-cream) .cookie-banner-copy a,
+body:has(.public-cream) .cookie-banner-actions .cookie-link-btn { color: #8f4f32; }
+body:has(.public-cream) .cookie-btn { border-radius: 6px; }
+body:has(.public-cream) .cookie-btn-primary { border-color: #251d1a; background: #251d1a; color: #f8f0e4; }
+body:has(.public-cream) .cookie-btn-primary:hover { background: #3a2e29; }
+body:has(.public-cream) .cookie-btn-ghost { border-color: #251d1a; background: transparent; color: #251d1a; }
+body:has(.public-cream) .cookie-btn-ghost:hover { background: rgba(37, 29, 26, 0.06); }
 
 /* Cream theme: the ChatGPT showcase in the same paper-and-ink look (the window
    inside it stays a plain ChatGPT window, as before). */

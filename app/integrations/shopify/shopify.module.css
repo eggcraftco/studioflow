@@ -4,6 +4,16 @@
    the listing's #faq / #install links do not land under the sticky header.
    Overrides of amazon.module.css rules use two classes, so they win whatever
    order the two stylesheets load in. */
+/* Cream theme (7 Nov 2026): the live status band in the cream shell's palette,
+   alongside the cream block at the end of amazon.module.css (green = the
+   changelog's "new" pair, sage = --cream-sage). The Shopify badge and the
+   dispatched chip are drawn from the app and keep their colours. */
+:global(.public-cream) .statusLive.statusLive{background:#e9ebe4;border-color:#d5d8ca}
+:global(.public-cream) .statusLive.statusLive .liveEyebrow{color:#2f5a3a}
+:global(.public-cream) .statusLive .liveBadge{background:#dce8dd;color:#2f5a3a}
+:global(.public-cream) .statusLive .liveDot{background:#2f6f6d}
+:global(.public-cream) .statusLive.statusLive .liveBody{color:#3a2e29}
+:global(.public-cream) .clipCaption.clipCaption{color:#6b5d55}
 .badgeShopify{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:4px 8px;border-radius:6px;white-space:nowrap;background:#e7f3e3;color:#2f5f23;border:1px solid #c9e2c0}
 .toneDispatched{background:#ece8f8;color:#4a3d86}
 .statusLive.statusLive{background:#f1f7ef;border-color:#d4e6cf}

@@ -43,3 +43,27 @@
 .statusLive .liveBadge{background:#e2f0de;color:#2f5f23}
 .statusLive .liveDot{background:#3f8a3a}
 .statusLive .liveBody{color:#3d5238}
+
+/* Cream theme (7 Nov 2026): this page's own parts in the cream shell's palette,
+   alongside the cream block at the end of amazon.module.css. Read / write /
+   destructive keep three meanings in the changelog's new / improved / fixed pairs
+   (fixed on the home page's rose tile, #8f4f32 on it 4.78:1). */
+:global(.public-cream) .bubbleUser{background:#f3dcb6;color:#251d1a;border-color:#eed6c4}
+:global(.public-cream) .bubbleAssistant{background:#fffefb;color:#3a2e29;border-color:rgba(37,29,26,.08)}
+:global(.public-cream) .toolCall{color:#6b5d55;border-color:#eed6c4;background:#fcf6ee}
+:global(.public-cream) .toolDot{background:#c17b58}
+:global(.public-cream) .urlBox,:global(.public-cream) .group{background:#fdf9f3;border-color:#eed6c4}
+:global(.public-cream) .urlValue{background:rgba(37,29,26,.06)}
+:global(.public-cream) .urlPending{color:#8f4f32;background:#f3dcb6;border-color:#eed6c4}
+:global(.public-cream) .toolList li{border-color:rgba(37,29,26,.08)}
+:global(.public-cream) .modeRead{background:#dce8dd;color:#2f5a3a}
+:global(.public-cream) .modeWrite{background:#d9e8ee;color:#24585a}
+:global(.public-cream) .modeDestructive{background:#f7dad3;color:#8f4f32}
+:global(.public-cream) .examplesLabel.examplesLabel{color:#8f4f32}
+:global(.public-cream) .groupIntro.groupIntro{color:#6b5d55}
+:global(.public-cream) .examples li{background:#fcf6ee;color:#3a2e29}
+:global(.public-cream) .statusLive.statusLive{background:#e9ebe4;border-color:#d5d8ca}
+:global(.public-cream) .statusLive.statusLive .liveEyebrow{color:#2f5a3a}
+:global(.public-cream) .statusLive .liveBadge{background:#dce8dd;color:#2f5a3a}
+:global(.public-cream) .statusLive .liveDot{background:#2f6f6d}
+:global(.public-cream) .statusLive.statusLive .liveBody{color:#3a2e29}
