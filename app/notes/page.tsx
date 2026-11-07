@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -9,11 +9,23 @@ import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { formatLocalDateInput, parseLocalDateInput } from "@/lib/studioflow/localDate";
+import * as calendarCore from "@/lib/studioflow/calendarCore";
+import { listenToCalendarRange, listenToMyCalendarReminders, type CalendarReminderRow } from "@/lib/studioflow/calendarData";
+import {
+  allDayStorageMs,
+  buildReminders,
+  noteReminderIsAllDay,
+  noteReminderItem,
+  orderReminderLabel,
+  type ReminderCalendarInput,
+  type ReminderItem,
+} from "@/lib/studioflow/reminderCore";
 import { loadWorkspaceContext, loadRecentOrders, roleLabel, workspaceAccessAllows, type OrderListItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { pageAccessRedirectFor } from "@/lib/studioflow/pageAccess";
 import { fitTextAreaToContent } from "@/lib/studioflow/noteTextArea";
 import { canEditOrderDetailsForRole, updateOrderFromWeb } from "@/lib/studioflow/orders";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
+import { ReminderList, reminderDayLabel, reminderWhenLabel } from "@/components/ReminderList";
 import {
   clearNoteDraft,
   detectNoteConflict,
@@ -69,9 +81,15 @@ type TopTab = "personal" | "project";
 
 export default function NotesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading: authLoading, language } = useAuth();
   const t = (text: string) => studioT(text, language);
   const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
+  // One reminder list (lib/studioflow/reminderCore.ts): the person's calendar entries in a window around today
+  // (their daily notes show in Notes, their calendar reminders in Reminders) and their own calendarReminders rows.
+  const [calendarEntries, setCalendarEntries] = useState<calendarCore.CalendarEntry[]>([]);
+  const [calendarReminderRows, setCalendarReminderRows] = useState<Map<string, CalendarReminderRow>>(new Map());
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [notes, setNotes] = useState<StudioKeepNote[]>([]);
   const [topTab, setTopTab] = useState<TopTab>("personal");
@@ -214,6 +232,39 @@ export default function NotesPage() {
     });
     return unsub;
   }, [workspace, user]);
+
+  // Calendar daily notes and calendar reminders, read the way the Calendar reads them (the same rules decide who
+  // sees what). A window of 60 days back and 180 ahead; a refusal leaves the lists empty, never the page.
+  // The Calendar has no area key of its own (every member has one); the calendar rules decide each row.
+  const calendarAllowed = Boolean(workspace);
+  useEffect(() => {
+    if (!workspace || !user || !calendarAllowed) { setCalendarEntries([]); return; }
+    const today = calendarCore.localParts(Date.now(), calendarCore.deviceTimeZone()).dateKey;
+    return listenToCalendarRange(workspace.id, user.uid, calendarCore.addDays(today, -60), calendarCore.addDays(today, 180), (state) => {
+      setCalendarEntries(state.entries.filter((entry) => !state.meta.get(entry.id)?.archived));
+    });
+  }, [workspace, user, calendarAllowed]);
+  useEffect(() => {
+    if (!workspace || !user || !calendarAllowed) { setCalendarReminderRows(new Map()); return; }
+    return listenToMyCalendarReminders(workspace.id, user.uid, setCalendarReminderRows);
+  }, [workspace, user, calendarAllowed]);
+  // Overdue colouring moves on by itself while the page stays open.
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  // ?note=<id> (Calendar's "Open in Notes") opens that very note once it has arrived.
+  const openedFromLinkRef = useRef("");
+  useEffect(() => {
+    const wanted = searchParams?.get("note") || "";
+    if (!wanted || openedFromLinkRef.current === wanted) return;
+    const found = notes.find((n) => n.id === wanted);
+    if (!found) return;
+    openedFromLinkRef.current = wanted;
+    setTopTab("personal");
+    setSection(found.isDeleted ? "trash" : found.isArchived ? "archive" : "notes");
+    setEditing(found);
+  }, [searchParams, notes]);
 
   // A shared note that leaves this person's list while it is open — the owner took them off, they left on
   // another device, or their access ended — closes, and the device's draft of it goes too: their copy no
@@ -377,6 +428,45 @@ export default function NotesPage() {
     return Array.from(set).sort();
   }, [notes]);
 
+  // Every open reminder this person can see — their notes', the orders' Schedule & Alerts items and their calendar
+  // reminders — as ONE list, soonest first. The same builder feeds the Calendar and the order card.
+  const viewerTimeZone = useMemo(() => calendarCore.deviceTimeZone(), []);
+  const calendarReminderInputs = useMemo<ReminderCalendarInput[]>(() => {
+    const byId = new Map(calendarEntries.map((entry) => [entry.id, entry] as const));
+    const out: ReminderCalendarInput[] = [];
+    for (const row of calendarReminderRows.values()) {
+      if (!row.nextOccurrenceKey) continue;
+      const entry = byId.get(row.entryId);
+      const occ = entry ? calendarCore.occurrenceAt(entry, row.nextOccurrenceKey) : null;
+      if (!occ) continue;
+      out.push({ entryId: occ.entryId, title: occ.title || (occ.type === "note" ? calendarCore.autoNoteTitle(occ.description) : ""), type: occ.type,
+        allDay: occ.allDay, occurrenceKey: occ.dateKey, startTime: occ.startTime, timeZone: occ.timeZone, orderId: occ.orderId });
+    }
+    return out;
+  }, [calendarEntries, calendarReminderRows]);
+  const reminderItems = useMemo<ReminderItem[]>(() => buildReminders({
+    notes: notes.map((n) => ({ id: n.id, title: n.title, text: n.text, reminderMs: n.reminderDateMillis, reminderAllDay: n.reminderAllDay,
+      isDeleted: n.isDeleted, isArchived: n.isArchived, linkedOrderId: n.linkedOrderId, linkedOrderLabel: n.linkedOrderLabel })),
+    orders: orders.map((o) => ({ id: o.id, label: orderReminderLabel(o.customerName, o.designName), customFields: o.customFields })),
+    calendar: calendarReminderInputs,
+    nowMs,
+    viewerTimeZone,
+  }), [notes, orders, calendarReminderInputs, nowMs, viewerTimeZone]);
+  const visibleReminders = useMemo(() => {
+    const q = search.trim().toLocaleLowerCase();
+    if (!q) return reminderItems;
+    return reminderItems.filter((item) => item.title.toLocaleLowerCase().includes(q) || item.orderLabel.toLocaleLowerCase().includes(q));
+  }, [reminderItems, search]);
+  // Calendar daily notes are notes too: Notes lists the ones in the window (newest day first); they open in the Calendar.
+  const calendarNotes = useMemo(() => {
+    const q = search.trim().toLocaleLowerCase();
+    return calendarEntries
+      .filter((entry) => entry.type === "note" && entry.rowType === "entry")
+      .map((entry) => ({ id: entry.id, dateKey: entry.dateKey, title: entry.title || calendarCore.autoNoteTitle(entry.description), text: entry.description }))
+      .filter((n) => !q || n.title.toLocaleLowerCase().includes(q) || n.text.toLocaleLowerCase().includes(q))
+      .sort((a, b) => (a.dateKey < b.dateKey ? 1 : a.dateKey > b.dateKey ? -1 : 0));
+  }, [calendarEntries, search]);
+
   const counts = useMemo(() => {
     const c = { notes: 0, reminders: 0, archive: 0, trash: 0, labels: {} as Record<string, number> };
     notes.forEach((n) => {
@@ -384,12 +474,12 @@ export default function NotesPage() {
       else if (n.isArchived) c.archive++;
       else {
         c.notes++;
-        if (n.reminderDateMillis != null) c.reminders++;
         n.labels.forEach((l) => { c.labels[l] = (c.labels[l] || 0) + 1; });
       }
     });
+    c.reminders = reminderItems.length;
     return c;
-  }, [notes]);
+  }, [notes, reminderItems]);
 
   const pinned = visible.filter((n) => n.isPinned);
   const others = visible.filter((n) => !n.isPinned);
@@ -412,32 +502,6 @@ export default function NotesPage() {
     return Array.from(byOrder.values()).sort((a, b) => (b.order.paymentDate?.getTime() ?? 0) - (a.order.paymentDate?.getTime() ?? 0));
   }, [orders, notes]);
   const projectNoteCount = useMemo(() => projectGroups.reduce((acc, g) => acc + g.entries.length, 0), [projectGroups]);
-  // The other reminder system: order Schedule & Alerts items. Surfacing them
-  // here makes Reminders the one central place, instead of two disconnected
-  // lists (the gap the QA report called out).
-  const orderAlerts = useMemo(() => {
-    const SWIFT_REFERENCE_SECONDS = 978307200;
-    const out: Array<{ orderId: string; orderLabel: string; title: string; dueMs: number }> = [];
-    for (const o of orders) {
-      const raw = o.customFields?.["__scheduleAlertItemsV1"];
-      if (!raw) continue;
-      try {
-        const items = JSON.parse(raw) as Array<{ title?: string; dueAt?: number; completedAt?: number | null; status?: string }>;
-        if (!Array.isArray(items)) continue;
-        for (const item of items) {
-          if (!item || typeof item.dueAt !== "number" || item.completedAt) continue;
-          out.push({
-            orderId: o.id,
-            orderLabel: `${o.customerName}${o.designName && o.designName !== "Untitled design" ? ` · ${o.designName}` : ""}`,
-            title: String(item.title || "Reminder"),
-            dueMs: (item.dueAt + SWIFT_REFERENCE_SECONDS) * 1000,
-          });
-        }
-      } catch {}
-    }
-    return out.sort((a, b) => a.dueMs - b.dueMs);
-  }, [orders]);
-
   async function save(note: StudioKeepNote, options: { quiet?: boolean } = {}) {
     if (!workspace || !user) return;
     // The stored version before this save: decides whether this save invites the workspace.
@@ -713,7 +777,7 @@ export default function NotesPage() {
         <div style={{ display: "flex", alignItems: "center", marginBottom: 16, paddingInlineStart: isPhone ? 56 : 0 }}>
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: isPhone ? 21 : 28, fontWeight: 800, margin: 0 }}>{topTab === "project" ? t("Project Notes") : (labelFilter ? `#${labelFilter}` : (section === "notes" ? t("Notes") : section === "reminders" ? t("Reminders") : section === "archive" ? t("Archive") : t("Trash")))}</h1>
-            <div style={{ fontSize: 13, color: "#727272" }}>{studioCountLabel(topTab === "project" ? projectNoteCount : visible.length, "note", language)}</div>
+            <div style={{ fontSize: 13, color: "#727272" }}>{topTab === "personal" && section === "reminders" ? studioCountLabel(visibleReminders.length, "item", language) : studioCountLabel(topTab === "project" ? projectNoteCount : visible.length, "note", language)}</div>
           </div>
           <button
             onClick={() =>
@@ -859,51 +923,76 @@ export default function NotesPage() {
               </>
             )}
 
-            {/* Lists */}
-            {pinned.length > 0 && (
+            {/* Reminders: ONE list — notes, order Schedule & Alerts and calendar reminders, soonest first, each row
+                opening the record it lives on (the note here, the order, the calendar entry). */}
+            {section === "reminders" ? (
               <>
-                <SectionHeader title={t("PINNED")} />
-                <NotesGrid notes={pinned} isReadOnly={readOnlyNote} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} avatarsFor={avatarsFor} />
+                <div style={{ fontSize: 12, color: "var(--muted, #727272)", margin: "-6px 0 12px" }}>{t("Notes, order reminders and your calendar reminders, soonest first.")}</div>
+                <ReminderList
+                  items={visibleReminders}
+                  language={language}
+                  onOpen={(item) => {
+                    if (item.kind === "note" && item.noteId) {
+                      const note = notes.find((n) => n.id === item.noteId);
+                      if (note) setEditing(note);
+                    } else if (item.kind === "order" && item.orderId) {
+                      router.push(`/orders/${item.orderId}`);
+                    } else if (item.kind === "calendar" && item.entryId) {
+                      router.push(`/calendar?date=${item.dayKey}&entry=${encodeURIComponent(item.entryId)}`);
+                    }
+                  }}
+                />
+                {visibleReminders.length === 0 && (
+                  <div style={{ textAlign: "center", padding: 60, color: "#727272" }}>{search.trim() ? t("No notes match your search.") : t("No reminders.")}</div>
+                )}
               </>
-            )}
-            {pinned.length > 0 && others.length > 0 && <SectionHeader title={t("OTHERS")} />}
-            <NotesGrid notes={others} isReadOnly={readOnlyNote} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} avatarsFor={avatarsFor} />
-            {visible.length === 0 && !(section === "reminders" && orderAlerts.length > 0) && (
-              <div style={{ textAlign: "center", padding: 60, color: "#727272" }}>
-                {search.trim()
-                  ? t("No notes match your search.")
-                  : section === "trash"
-                  ? t("Trash is empty.")
-                  : section === "archive"
-                  ? t("No archived notes.")
-                  : section === "reminders"
-                  ? t("No reminders.")
-                  : labelFilter
-                  ? t("No notes carry this label.")
-                  : t("Click + New Note to create your first note.")}
-              </div>
-            )}
-            {section === "reminders" && orderAlerts.length > 0 && (
+            ) : (
               <>
-                <SectionHeader title={t("Order schedule alerts").toUpperCase()} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {orderAlerts.map((alert, index) => (
-                    <div
-                      key={`${alert.orderId}-${index}`}
-                      onClick={() => router.push(`/orders/${alert.orderId}`)}
-                      style={{ display: "flex", alignItems: "center", gap: 10, background: "white", border: "1px solid #e7e7e7", borderRadius: 12, padding: "10px 14px", cursor: "pointer" }}
-                    >
-                      <span style={{ fontSize: 15 }}>⏰</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{alert.title}</div>
-                        <div style={{ fontSize: 11, color: "#2D7BF4", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⛓ {alert.orderLabel}</div>
-                      </div>
-                      <div style={{ fontSize: 12, fontWeight: alert.dueMs < Date.now() ? 800 : 400, color: alert.dueMs < Date.now() ? "#dc2626" : "#727272", whiteSpace: "nowrap" }}>
-                        {new Date(alert.dueMs).toLocaleDateString()}
-                      </div>
+                {/* Lists */}
+                {pinned.length > 0 && (
+                  <>
+                    <SectionHeader title={t("PINNED")} />
+                    <NotesGrid notes={pinned} isReadOnly={readOnlyNote} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} avatarsFor={avatarsFor} />
+                  </>
+                )}
+                {pinned.length > 0 && others.length > 0 && <SectionHeader title={t("OTHERS")} />}
+                <NotesGrid notes={others} isReadOnly={readOnlyNote} onClick={(n) => { if (selectedIds.size > 0) { toggleSelect(n.id); } else { setEditing(n); } }} onSave={save} onDelete={destroyWithConfirm} onOpenImage={setViewerImage} onMove={moveKeepNote} canDrag={section === "notes"} onDuplicate={duplicate} onCopy={copyText} onToggleLabel={toggleLabel} allLabels={allLabels} selectedIds={selectedIds} onToggleSelect={toggleSelect} avatarsFor={avatarsFor} />
+                {/* Calendar daily notes are notes too (they live on the calendar entry and open there). */}
+                {section === "notes" && topTab === "personal" && !labelFilter && calendarNotes.length > 0 && (
+                  <>
+                    <SectionHeader title={t("From Calendar").toLocaleUpperCase(studioLocaleTag(language))} />
+                    <div data-testid="calendar-notes" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 280px), 1fr))", gap: 12, marginBottom: 12 }}>
+                      {calendarNotes.map((n) => (
+                        <button
+                          key={n.id}
+                          type="button"
+                          data-calendar-note={n.id}
+                          onClick={() => router.push(`/calendar?date=${n.dateKey}&entry=${encodeURIComponent(n.id)}`)}
+                          style={{ textAlign: "left", background: "var(--surface)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 14, padding: 14, cursor: "pointer", display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}
+                        >
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted, #727272)" }}>📅 {t("Daily note")} · {reminderDayLabel(n.dateKey, language)}</span>
+                          <span style={{ fontWeight: 800, fontSize: 15, overflowWrap: "anywhere" }}>{n.title || t("Untitled note")}</span>
+                          {n.text.trim() && n.text.trim() !== n.title && (
+                            <span style={{ fontSize: 13, whiteSpace: "pre-wrap", overflowWrap: "anywhere", display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{n.text}</span>
+                          )}
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                )}
+                {visible.length === 0 && !(section === "notes" && topTab === "personal" && !labelFilter && calendarNotes.length > 0) && (
+                  <div style={{ textAlign: "center", padding: 60, color: "#727272" }}>
+                    {search.trim()
+                      ? t("No notes match your search.")
+                      : section === "trash"
+                      ? t("Trash is empty.")
+                      : section === "archive"
+                      ? t("No archived notes.")
+                      : labelFilter
+                      ? t("No notes carry this label.")
+                      : t("Click + New Note to create your first note.")}
+                  </div>
+                )}
               </>
             )}
           </>
@@ -1494,11 +1583,16 @@ function NoteCard({
           ))}
         </div>
       )}
-      {note.reminderDateMillis && (
-        <div style={{ fontSize: 11, color: note.reminderDateMillis < Date.now() ? "#dc2626" : "#727272", fontWeight: note.reminderDateMillis < Date.now() ? 800 : 400 }}>
-          ⏰ {new Date(note.reminderDateMillis).toLocaleDateString()}
-        </div>
-      )}
+      {(() => {
+        // The same reading as every other screen (reminderCore): date AND time, or "All day".
+        const item = note.reminderDateMillis != null ? noteReminderItem({ id: note.id, title: note.title, text: note.text, reminderMs: note.reminderDateMillis, reminderAllDay: note.reminderAllDay }, Date.now(), calendarCore.deviceTimeZone()) : null;
+        if (!item) return null;
+        return (
+          <div data-note-reminder style={{ fontSize: 11, color: item.overdue ? "#dc2626" : "var(--muted)", fontWeight: item.overdue ? 800 : 600 }}>
+            ⏰ {reminderWhenLabel(item, language)}
+          </div>
+        );
+      })()}
       {avatars.length > 0 && <NoteAvatarStack people={avatars} />}
       {note.linkedOrderLabel && (
         <div style={{ fontSize: 11, color: "#2D7BF4", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>⛓ {note.linkedOrderLabel}</div>
@@ -1553,22 +1647,22 @@ function NoteCard({
           </IconBtn>
           {reminderOpen && (
             <div onClick={(e) => e.stopPropagation()} style={{ position: "absolute", bottom: 32, left: 0, background: "white", border: "1px solid #e7e7e7", borderRadius: 10, padding: 8, display: "flex", flexDirection: "column", gap: 4, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 10, minWidth: 160 }}>
-              <button onClick={() => { onSave({ ...note, reminderDateMillis: Date.now() + 24 * 60 * 60 * 1000 }); setReminderOpen(false); }} style={menuItemStyle}>{t("Tomorrow")}</button>
-              <button onClick={() => { onSave({ ...note, reminderDateMillis: Date.now() + 7 * 24 * 60 * 60 * 1000 }); setReminderOpen(false); }} style={menuItemStyle}>{t("Next week")}</button>
+              {/* Quick picks are a real time (09:00 where the person is); a picked date alone is an all-day reminder. */}
+              <button onClick={() => { onSave({ ...note, reminderDateMillis: nineAmInDays(1), reminderAllDay: false }); setReminderOpen(false); }} style={menuItemStyle}>{t("Tomorrow")} · 09:00</button>
+              <button onClick={() => { onSave({ ...note, reminderDateMillis: nineAmInDays(7), reminderAllDay: false }); setReminderOpen(false); }} style={menuItemStyle}>{t("Next week")} · 09:00</button>
               <input
                 type="date"
                 onChange={(e) => {
                   // A picked date means that day where the reader lives; new Date("2026-03-05")
                   // is UTC midnight, which is the evening BEFORE west of Greenwich.
-                  const picked = parseLocalDateInput(e.target.value, "noon");
-                  if (!picked) return;
-                  onSave({ ...note, reminderDateMillis: picked.getTime() });
+                  if (!parseLocalDateInput(e.target.value, "noon")) return;
+                  onSave({ ...note, reminderDateMillis: allDayStorageMs(e.target.value, calendarCore.deviceTimeZone()), reminderAllDay: true });
                   setReminderOpen(false);
                 }}
                 style={{ padding: 4, border: "1px solid #e7e7e7", borderRadius: 6, fontSize: 12 }}
               />
               {note.reminderDateMillis && (
-                <button onClick={() => { onSave({ ...note, reminderDateMillis: null }); setReminderOpen(false); }} style={{ ...menuItemStyle, color: "#dc2626" }}>{t("Remove reminder")}</button>
+                <button onClick={() => { onSave({ ...note, reminderDateMillis: null, reminderAllDay: null }); setReminderOpen(false); }} style={{ ...menuItemStyle, color: "#dc2626" }}>{t("Remove reminder")}</button>
               )}
             </div>
           )}
@@ -1624,6 +1718,29 @@ function NoteCard({
 // renders the previous day for evening timestamps east of UTC.
 function localDateInputValue(millis: number): string {
   return formatLocalDateInput(new Date(millis));
+}
+
+/** The YYYY-MM-DD the editor shows for a reminder: its own day for an all-day one (a legacy UTC-midnight one is that
+ *  UTC day), else the day of the instant where the person is. */
+function reminderEditorDayKey(millis: number, allDay: boolean): string {
+  // A legacy date-only reminder sits at UTC midnight of the day its writer picked; any other one is read where the
+  // person is (an all-day one written from 7 Nov sits at local noon, which never crosses a day).
+  if (allDay && millis % 86400000 === 0) return new Date(millis).toISOString().slice(0, 10);
+  return formatLocalDateInput(new Date(millis));
+}
+
+/** 09:00 on the day `days` from today, where the person is. */
+function nineAmInDays(days: number): number {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  date.setHours(9, 0, 0, 0);
+  return date.getTime();
+}
+
+/** "HH:mm" of an instant where the person is. */
+function localTimeInputValue(millis: number): string {
+  const date = new Date(millis);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
 // Thrown by the page's editor save when another device wrote a newer copy
@@ -1696,6 +1813,10 @@ function NoteEditor({
   const [memberSearch, setMemberSearch] = useState("");
   const [inviting, setInviting] = useState("");
   const [reminderMillis, setReminderMillis] = useState<number | null>(initial.reminderDateMillis);
+  // All-day or at a time — the same reading every screen uses (reminderCore). A reminder written before 7 Nov
+  // without a mode is read the legacy way (UTC midnight = all-day).
+  const [reminderAllDay, setReminderAllDay] = useState<boolean>(() =>
+    initial.reminderDateMillis != null && noteReminderIsAllDay(initial.reminderDateMillis, initial.reminderAllDay));
   // Images live in the editor until Save (B1): an upload adds its URL here,
   // Save writes it, Cancel deletes the uploaded object and writes nothing.
   const [links, setLinks] = useState<string[]>(initial.links);
@@ -1731,6 +1852,7 @@ function NoteEditor({
       colorName,
       labels,
       reminderDateMillis: reminderMillis,
+      reminderAllDay: reminderMillis == null ? null : reminderAllDay,
       noteType,
       linkedOrderId: noteType === "order" ? linkedOrderId : "",
       linkedOrderLabel: linkedOrder ? `${linkedOrder.customerName}${linkedOrder.designName && linkedOrder.designName !== "Untitled design" ? ` · ${linkedOrder.designName}` : ""}` : (noteType === "order" ? note.linkedOrderLabel : ""),
@@ -1760,7 +1882,7 @@ function NoteEditor({
   // Mirror every change to the device (memory + localStorage) while editing.
   // Untouched again → the mirror goes; a never-saved note keeps its draft for
   // as long as it has any content.
-  const draftSignature = JSON.stringify([title, text, colorName, labels, reminderMillis, noteType, linkedOrderId, customerName, visibility, links]);
+  const draftSignature = JSON.stringify([title, text, colorName, labels, reminderMillis, reminderAllDay, noteType, linkedOrderId, customerName, visibility, links]);
   useEffect(() => {
     if (saving || readOnly) return;
     // Untrimmed title/text: the draft restores exactly what was typed.
@@ -1879,6 +2001,7 @@ function NoteEditor({
     setVisibility(base.visibility);
     setLabels(base.labels);
     setReminderMillis(base.reminderDateMillis);
+    setReminderAllDay(base.reminderDateMillis != null && noteReminderIsAllDay(base.reminderDateMillis, base.reminderAllDay));
     setLinks(base.links);
     setRestoredHint(false);
     setStaleDraft(false);
@@ -1902,6 +2025,7 @@ function NoteEditor({
     setVisibility(theirs.visibility);
     setLabels(theirs.labels);
     setReminderMillis(theirs.reminderDateMillis);
+    setReminderAllDay(theirs.reminderDateMillis != null && noteReminderIsAllDay(theirs.reminderDateMillis, theirs.reminderAllDay));
     setRestoredHint(false);
     setStaleDraft(false);
     baseUpdatedAtRef.current = theirs.updatedAtMillis;
@@ -2124,35 +2248,81 @@ function NoteEditor({
 
         <div style={{ fontSize: 11, fontWeight: 800, color: notesSectionHeadingColor(), marginBottom: 6 }}>{t("Reminder").toLocaleUpperCase(studioLocaleTag(language))}</div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 14, flexWrap: "wrap" }}>
+          {/* Date, then a time — or All day. A date alone is an all-day reminder (stored at local noon so older apps
+              show the same day everywhere); a time makes it that very minute where the person is. */}
           <input
             type="date"
             aria-label={t("Reminder")}
-            value={reminderMillis != null && Number.isFinite(reminderMillis) ? localDateInputValue(reminderMillis) : ""}
+            value={reminderMillis != null && Number.isFinite(reminderMillis) ? reminderEditorDayKey(reminderMillis, reminderAllDay) : ""}
             onChange={(e) => {
-              // Parse the yyyy-mm-dd parts as a LOCAL date at noon. new Date(string)
-              // is UTC for ISO dates (off-by-one under BST) and NaN for anything
-              // else — and a NaN here used to be saved as "no reminder" without a
-              // word. Invalid partial input keeps the current value instead.
+              // Parse yyyy-mm-dd as THAT day where the person is (new Date(string) is UTC and NaN-prone); invalid
+              // partial input keeps the current value instead of silently saving "no reminder".
               const value = e.target.value;
               if (!value) {
                 setReminderMillis(null);
                 return;
               }
-              const picked = parseLocalDateInput(value, "noon");
-              if (!picked) return;
-              setReminderMillis(picked.getTime());
+              if (!parseLocalDateInput(value, "noon")) return;
+              if (reminderAllDay || reminderMillis == null) {
+                setReminderMillis(allDayStorageMs(value, calendarCore.deviceTimeZone()));
+                if (reminderMillis == null) setReminderAllDay(true);
+              } else {
+                const at = parseLocalDateInput(value, "start");
+                const [hh, mm] = localTimeInputValue(reminderMillis).split(":").map(Number);
+                if (at) { at.setHours(hh, mm, 0, 0); setReminderMillis(at.getTime()); }
+              }
             }}
             style={{ padding: 6, border: "1px solid var(--border)", borderRadius: 6 }}
           />
-          {reminderMillis && (
-            <button onClick={() => setReminderMillis(null)} style={{ padding: "4px 10px", border: "1px solid var(--border)", background: "var(--surface)", borderRadius: 6, cursor: "pointer" }}>
+          {reminderMillis != null && !reminderAllDay && (
+            <input
+              type="time"
+              aria-label={t("Reminder time")}
+              value={localTimeInputValue(reminderMillis)}
+              onChange={(e) => {
+                const m = /^(\d{2}):(\d{2})$/.exec(e.target.value);
+                if (!m) return;
+                const at = new Date(reminderMillis);
+                at.setHours(Number(m[1]), Number(m[2]), 0, 0);
+                setReminderMillis(at.getTime());
+              }}
+              style={{ padding: 6, border: "1px solid var(--border)", borderRadius: 6 }}
+            />
+          )}
+          {reminderMillis != null && (
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12 }}>
+              <input
+                type="checkbox"
+                data-reminder-all-day
+                checked={reminderAllDay}
+                onChange={(e) => {
+                  const dayKey = reminderEditorDayKey(reminderMillis, reminderAllDay);
+                  if (e.target.checked) {
+                    setReminderMillis(allDayStorageMs(dayKey, calendarCore.deviceTimeZone()));
+                    setReminderAllDay(true);
+                  } else {
+                    const at = parseLocalDateInput(dayKey, "start");
+                    if (at) { at.setHours(9, 0, 0, 0); setReminderMillis(at.getTime()); }
+                    setReminderAllDay(false);
+                  }
+                }}
+              />
+              {t("All day")}
+            </label>
+          )}
+          {reminderMillis != null && (
+            <button onClick={() => { setReminderMillis(null); setReminderAllDay(false); }} style={{ padding: "4px 10px", border: "1px solid var(--border)", background: "var(--surface)", borderRadius: 6, cursor: "pointer" }}>
               {t("Clear")}
             </button>
           )}
         </div>
         </>)}
         {readOnly && (liveNote ?? note).reminderDateMillis != null && (
-          <div style={{ fontSize: 12, color: "#727272", marginBottom: 14 }}>{t("Reminder")}: {new Date((liveNote ?? note).reminderDateMillis as number).toLocaleDateString()}</div>
+          <div style={{ fontSize: 12, color: "#727272", marginBottom: 14 }}>{t("Reminder")}: {(() => {
+            const shown = liveNote ?? note;
+            const item = noteReminderItem({ id: shown.id, title: shown.title, text: shown.text, reminderMs: shown.reminderDateMillis, reminderAllDay: shown.reminderAllDay }, Date.now(), calendarCore.deviceTimeZone());
+            return item ? reminderWhenLabel(item, language) : "";
+          })()}</div>
         )}
 
         {(!readOnly || shownLinks.length > 0) && (

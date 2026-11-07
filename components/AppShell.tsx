@@ -29,7 +29,6 @@ import { NotificationsDrawer } from "@/components/NotificationsDrawer";
 import { messagesNavHref } from "@/lib/studioflow/messagingAccess";
 import { PAGE_ACCESS_BY_PATH } from "@/lib/studioflow/pageAccess";
 import { dispatchStudioToast } from "@/components/StudioToastHost";
-import { endOfLocalDayMillis, isStoredAsPlainDate } from "@/lib/studioflow/localDate";
 import { db } from "@/lib/firebase/client";
 import { signOutAndWipe, UNSYNCED_SIGN_OUT_TEXT, wipeCacheAfterAccessLost } from "@/lib/auth/signOutSession";
 import { useAppConfirm } from "@/components/AppConfirmDialog";
@@ -1851,26 +1850,20 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     let cancelled = false;
     let unsub: (() => void) | null = null;
     (async () => {
-      const mod = await import("@/lib/studioflow/notes");
+      const [mod, reminders, calendar] = await Promise.all([
+        import("@/lib/studioflow/notes"),
+        import("@/lib/studioflow/reminderCore"),
+        import("@/lib/studioflow/calendarCore"),
+      ]);
       if (cancelled) return;
       unsub = mod.listenToKeepNotes(workspace.id, user.uid, (items) => {
+        // The same reading as Notes ▸ Reminders (reminderCore): a reminder with a time is late from that minute; an
+        // all-day one (or a date-only one from before 7 Nov) once its day is over where the person is.
         const now = Date.now();
+        const zone = calendar.deviceTimeZone();
         setNotesReminderCount(
-          items.filter(
-            (n) =>
-              !n.isDeleted &&
-              !n.isArchived &&
-              n.reminderDateMillis != null &&
-              // A date-only reminder is stored as UTC midnight, which west of
-              // Greenwich is the previous evening — counting it the instant the
-              // stored value passes flagged it a day early, so it is late once
-              // that local day is over. A reminder the user gave a TIME to is
-              // due at that time; running it to the end of the day made
-              // "tomorrow at 10:00" show up fourteen hours late.
-              (isStoredAsPlainDate(n.reminderDateMillis as number)
-                ? endOfLocalDayMillis(n.reminderDateMillis as number)
-                : (n.reminderDateMillis as number)) <= now
-          ).length
+          items.filter((n) => reminders.noteReminderItem({ id: n.id, title: n.title, text: n.text, reminderMs: n.reminderDateMillis,
+            reminderAllDay: n.reminderAllDay, isDeleted: n.isDeleted, isArchived: n.isArchived }, now, zone)?.overdue === true).length
         );
       });
     })();

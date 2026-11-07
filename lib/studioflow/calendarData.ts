@@ -422,7 +422,14 @@ function occurrenceStatusForWrite(map: Record<string, core.CalendarOccurrenceSta
 
 // ---------------------------------------------------------------- reminders (each person's own)
 
-export type CalendarReminderRow = { entryId: string; offsetMinutes: number; allDayTime: string; timeZone: string };
+export type CalendarReminderRow = {
+  entryId: string;
+  offsetMinutes: number;
+  allDayTime: string;
+  timeZone: string;
+  /** Server-computed (calendarReminderWritten / the sweep): the occurrence the reminder goes off for next, null when none. */
+  nextOccurrenceKey: string | null;
+};
 
 export function listenToMyCalendarReminders(companyId: string, uid: string, onChange: (rows: Map<string, CalendarReminderRow>) => void): Unsubscribe {
   return onSnapshot(
@@ -436,6 +443,7 @@ export function listenToMyCalendarReminders(companyId: string, uid: string, onCh
           offsetMinutes: Number(data.offsetMinutes),
           allDayTime: String(data.allDayTime || core.DEFAULT_ALL_DAY_REMINDER_TIME),
           timeZone: String(data.timeZone || ""),
+          nextOccurrenceKey: core.isDateKey(data.nextOccurrenceKey) ? data.nextOccurrenceKey : null,
         });
       }
       onChange(rows);

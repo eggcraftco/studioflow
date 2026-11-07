@@ -129,6 +129,7 @@ export function noteContentSignature(note: StudioKeepNote): string {
     labels: note.labels,
     collaboratorEmails: note.collaboratorEmails,
     reminderDateMillis: note.reminderDateMillis,
+    reminderAllDay: note.reminderAllDay ?? null,
     noteType: note.noteType,
     linkedOrderId: note.linkedOrderId,
     linkedCustomerName: note.linkedCustomerName,
