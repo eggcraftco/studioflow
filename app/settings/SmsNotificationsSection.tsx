@@ -291,7 +291,7 @@ export function SmsNotificationsSection({ workspace, language = "English" }: Pro
         headline: t("SMS is live."),
         detail: `${t("Texts go out from")} ${settings.senderId}. ${settings.attestationCurrent === undefined
           ? t("A customer only gets one when Automatic Updates and SMS are both switched on for their order.")
-          : t("A text goes only to a customer whose agreement is recorded on their order, and only when Automatic Updates and SMS are both on for that order.")}`
+          : (settings.confirmRequired ? t("A text goes only to a customer who confirmed from their own phone, and only when Automatic Updates and SMS are both on for that order.") : t("A text goes only to a customer whose agreement is recorded on their order, and only when Automatic Updates and SMS are both on for that order."))}`
       };
     }
     return {
