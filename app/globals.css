@@ -25789,6 +25789,13 @@ body[data-studio-theme="dark"] .appshell-brand-logo {
 .portal-switch span { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 999px; background: #fff; transition: left 0.15s ease; }
 .portal-switch.is-on span { left: 21px; }
 .portal-channels { display: flex; align-items: center; gap: 8px; font-size: 12px; flex-wrap: wrap; }
+/* Twilio SMS r4 (7 Nov 2026): the customer's agreement on the order's portal card. */
+.portal-sms-consent { display: grid; gap: 6px; margin-top: 8px; }
+.portal-consent-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; cursor: pointer; }
+.portal-consent-check input { margin-top: 3px; flex: 0 0 auto; }
+.portal-consent-check span { display: grid; gap: 2px; }
+.portal-consent-check small { opacity: 0.72; font-size: 12px; }
+.portal-hint.is-caution { color: var(--settings-caution-text, #b45309); opacity: 1; }
 .portal-pill { font-size: 11px; font-weight: 800; padding: 4px 12px; border-radius: 8px; border: none; cursor: pointer; }
 .portal-pill.is-on { background: rgba(22,163,74,0.16); color: #16a34a; }
 .portal-pill.is-off { background: rgba(107,114,128,0.16); color: #6b7280; }
@@ -25819,6 +25826,12 @@ body[data-studio-theme="dark"] .appshell-brand-logo {
 .portal-shell-photos img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 10px; }
 .portal-shell-footer { font-size: 12px; opacity: 0.65; white-space: pre-wrap; }
 .portal-shell-credit { font-size: 11px; opacity: 0.45; text-align: center; }
+.portal-sms-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 14px; }
+.portal-sms-button { font: inherit; font-size: 14px; font-weight: 700; padding: 8px 14px; border-radius: 10px; border: 0; cursor: pointer;
+  background: var(--portal-accent, #1d1d1f); color: #fff; }
+.portal-sms-button.is-secondary { background: transparent; color: inherit; border: 1px solid currentColor; opacity: 0.8; }
+.portal-sms-button:disabled { opacity: 0.5; cursor: default; }
+.portal-sms-foot { font-size: 12px; }
 
 /* --- Inventory ------------------------------------------------------------ */
 .inventory-page { display: flex; flex-direction: column; gap: 16px; padding: 4px 0 40px; }

@@ -35,6 +35,18 @@ type PortalView = {
   files?: { name: string; url: string; fileType: string; fileSize: number }[];
 };
 
+// Twilio SMS r4 (7 Nov 2026): the customer's own switch for text updates. Wording approved by the owner
+// (docs/legal/TWILIO-SMS-METINLER-2026-11-07.md §6.3, version below). The server reads the number from the
+// order and only returns it masked; this page never sends a number. An older server has no such callable,
+// and then the card simply does not appear.
+const SMS_PORTAL_TEXT_VERSION = "sms-consent-portal-2026-11";
+type PortalSmsView = {
+  ok?: boolean;
+  eligible: "ok" | "no_number" | "marketplace_order" | "sms_not_available";
+  consent: { state: "active" | "none" | "revoked" | "opted_out" | "global_stop" | "no_number"; number: string };
+  acceptedTextVersions: string[];
+};
+
 function money(currency: string, value: number) {
   return `${currency}${value.toFixed(2)}`;
 }
@@ -48,6 +60,9 @@ export function CustomerPortalContent({ token }: { token: string }) {
   const [portal, setPortal] = useState<PortalView | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [sms, setSms] = useState<PortalSmsView | null>(null);
+  const [smsBusy, setSmsBusy] = useState(false);
+  const [smsNotice, setSmsNotice] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,6 +88,45 @@ export function CustomerPortalContent({ token }: { token: string }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const host = typeof window !== "undefined" ? window.location.host : "";
+  useEffect(() => {
+    if (!portal) return;
+    let cancelled = false;
+    httpsCallable<{ token: string; host?: string }, PortalSmsView>(functions, "getSmsConsentForPortal")({ token, host })
+      .then(result => {
+        if (!cancelled) setSms(result.data?.ok ? result.data : null);
+      })
+      .catch(() => {
+        if (!cancelled) setSms(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [portal, token, host]);
+
+  async function chooseTexts(choice: "opt_in" | "opt_out") {
+    setSmsBusy(true);
+    setSmsNotice("");
+    try {
+      const callable = httpsCallable<
+        { token: string; host?: string; choice: string; consentTextVersion?: string },
+        { ok: boolean; reason?: string; consent: PortalSmsView["consent"] }
+      >(functions, "setSmsConsentFromPortal");
+      const result = await callable({
+        token,
+        host,
+        choice,
+        ...(choice === "opt_in" ? { consentTextVersion: SMS_PORTAL_TEXT_VERSION } : {})
+      });
+      setSms(current => (current ? { ...current, consent: result.data.consent } : current));
+      if (!result.data.ok) setSmsNotice("Texts could not be switched on for this number.");
+    } catch {
+      setSmsNotice("That did not work. Please try again in a moment.");
+    } finally {
+      setSmsBusy(false);
+    }
+  }
 
   // The page wears the studio's logo and colour; the browser tab did not. On a
   // connected domain that is the one place NivaDesk still showed through —
@@ -205,6 +259,40 @@ export function CustomerPortalContent({ token }: { token: string }) {
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {sms && sms.eligible === "ok" && sms.acceptedTextVersions.includes(SMS_PORTAL_TEXT_VERSION) ? (
+        <div className="portal-shell-card portal-sms-card" data-sms-portal={sms.consent.state}>
+          <span className="portal-shell-label">Text updates</span>
+          {sms.consent.state === "active" ? (
+            <div className="portal-sms-row">
+              <span>You&apos;re getting text updates at {sms.consent.number}.</span>
+              <button type="button" className="portal-sms-button is-secondary" disabled={smsBusy} onClick={() => void chooseTexts("opt_out")}>
+                Stop texts
+              </button>
+            </div>
+          ) : sms.consent.state === "global_stop" ? (
+            <span className="portal-shell-muted">Texts to this number are switched off.</span>
+          ) : (
+            <>
+              <strong>Get text updates about this order</strong>
+              <span className="portal-shell-muted">
+                We&apos;ll text you at {sms.consent.number} when your order reaches an important stage, for example when it is
+                ready to collect. You can stop the texts at any time.
+              </span>
+              <div>
+                <button type="button" className="portal-sms-button" disabled={smsBusy} onClick={() => void chooseTexts("opt_in")}>
+                  Text me updates
+                </button>
+              </div>
+            </>
+          )}
+          {smsNotice ? <span className="portal-shell-muted" role="alert">{smsNotice}</span> : null}
+          <span className="portal-shell-muted portal-sms-foot">
+            Texts are sent by NivaDesk for {portal.businessName}. Privacy notice:{" "}
+            <a href="https://nivadesk.app/privacy" target="_blank" rel="noreferrer">nivadesk.app/privacy</a>
+          </span>
         </div>
       ) : null}
 

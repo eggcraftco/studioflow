@@ -38,7 +38,15 @@ import {
   type PortalLinkLookup,
   type PortalVisibility
 } from "@/lib/studioflow/customerPortal";
-import { getWorkspaceSmsSettings, type WorkspaceSmsSettings } from "@/lib/studioflow/sms";
+import {
+  getOrderSmsStatus,
+  getWorkspaceSmsSettings,
+  recordSmsConsentStaff,
+  revokeSmsConsentStaff,
+  smsConsentLockedByCustomer,
+  type OrderSmsStatus,
+  type WorkspaceSmsSettings
+} from "@/lib/studioflow/sms";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { orderSourceLink, orderSourceLinkReasonText } from "@/lib/studioflow/orderSourceLink";
 import { orderSourceChipLabel } from "@/lib/studioflow/orderFilters";
@@ -6644,6 +6652,76 @@ export function OrderDetailContent({
     };
   }, [workspace, showsPortalSmsRow]);
 
+  // Twilio SMS r4 (7 Nov 2026; owner-approved wording, docs/legal/TWILIO-SMS-METINLER-2026-11-07.md §6.2):
+  // a text needs the CUSTOMER's recorded agreement as well as the switches above. The box records it for the
+  // order's number (the server reads the number from the order; nothing here sends one). A customer who stopped
+  // texts can only switch them back on themselves, so the box is locked then. An older server has no
+  // getOrderSmsStatus: the block simply stays hidden.
+  const [orderSms, setOrderSms] = useState<OrderSmsStatus | null>(null);
+  const [orderSmsBusy, setOrderSmsBusy] = useState(false);
+  const [orderSmsNotice, setOrderSmsNotice] = useState("");
+  const orderPhone = String(order.whatsappNumber || "");
+  useEffect(() => {
+    if (!showsPortalSmsRow || workspaceSms?.available !== true) return;
+    let cancelled = false;
+    getOrderSmsStatus(workspace, order.id)
+      .then(result => {
+        if (!cancelled) setOrderSms(result?.ok ? result : null);
+      })
+      .catch(() => {
+        if (!cancelled) setOrderSms(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace, order.id, orderPhone, showsPortalSmsRow, workspaceSms?.available]);
+
+  async function toggleSmsConsent(next: boolean) {
+    setOrderSmsBusy(true);
+    setOrderSmsNotice("");
+    try {
+      const result = next ? await recordSmsConsentStaff(workspace, order.id) : await revokeSmsConsentStaff(workspace, order.id);
+      setOrderSms(current => (current ? { ...current, consent: result.consent } : current));
+      if (!result.ok) {
+        setOrderSmsNotice(
+          result.reason === "customer_opted_out" || result.reason === "global_stop" || result.reason === "customer_revoked"
+            ? "This customer stopped texts. Only they can switch texts back on, from their order page."
+            : result.reason === "staff_consent_disabled"
+              ? "Recording a customer's agreement opens when text messages open to every workspace."
+              : result.reason === "no_number"
+                ? "Add the customer's mobile number to this order to send text updates."
+                : "The customer's agreement could not be saved."
+        );
+      }
+    } catch (failure) {
+      setOrderSmsNotice(failure instanceof Error ? failure.message : "The customer's agreement could not be saved.");
+    } finally {
+      setOrderSmsBusy(false);
+    }
+  }
+
+  // One plain sentence about the most recent thing that happened to this order's texts.
+  function orderSmsLine(status: OrderSmsStatus): { key: string; atMs: number } | null {
+    const sms = status.lastSms;
+    const skip = status.lastSkip;
+    if (skip && (!sms || skip.atMs > sms.createdAtMs)) {
+      const byClass: Record<string, string> = {
+        waiting: "A text is waiting for the morning: texts are not sent at night.",
+        consent: "No text was sent: the customer's agreement is not recorded.",
+        setup: "No text was sent: the workspace owner has not confirmed Customer SMS yet.",
+        opt_out: "No text was sent: the customer stopped texts.",
+        quota: "No text was sent: this month's text allowance is used up."
+      };
+      return byClass[skip.reasonClass] ? { key: byClass[skip.reasonClass], atMs: skip.atMs } : null;
+    }
+    if (!sms) return null;
+    if (sms.statusClass === "delivered") return { key: "Last text delivered on {date}.", atMs: sms.deliveredAtMs || sms.createdAtMs };
+    if (sms.statusClass === "failed" || sms.statusClass === "undelivered") {
+      return { key: "The last text could not be delivered ({date}). It is not sent again automatically.", atMs: sms.createdAtMs };
+    }
+    return { key: "Last text sent on {date}.", atMs: sms.createdAtMs };
+  }
+
   async function createPortalLink() {
     setPortalBusy(true);
     setPortalNotice("");
@@ -7261,9 +7339,48 @@ export function OrderDetailContent({
                       : !workspaceSms.sendingLive
                         ? t("Switch it on now if you want it: the sender ID is still waiting on approval from the mobile networks, so until that lands this order updates by email only.")
                         : `${t("Texts arrive from")} ${workspaceSms.senderId}. ${t("Which moments send one is a workspace setting.")}`}
+                  {workspaceSms?.available && workspaceSms.pilotIncluded === false
+                    ? ` ${t("Text messages are being tried out first and open to every Pro and Team workspace soon.")}`
+                    : workspaceSms?.available && workspaceSms.attestationCurrent === false
+                      ? ` ${t("The workspace owner still needs to confirm Customer SMS in Settings.")}`
+                      : ""}
                   {" "}
                   <a href="/settings?section=sms-notifications">{t("Customer SMS settings")}</a>
                 </p>
+                {workspaceSms?.available && orderSms ? (
+                  <div className="portal-sms-consent" data-sms-consent={orderSms.consent.state}>
+                    {smsConsentLockedByCustomer(orderSms.consent) ? (
+                      <p className="portal-hint" role="note">
+                        {t("This customer stopped texts. Only they can switch texts back on, from their order page.")}
+                      </p>
+                    ) : orderSms.consent.state === "no_number" ? (
+                      <p className="portal-hint">{t("Add the customer's mobile number to this order to send text updates.")}</p>
+                    ) : (
+                      <label className="portal-consent-check">
+                        <input
+                          type="checkbox"
+                          checked={orderSms.consent.state === "active"}
+                          disabled={!canEditPortal || orderSmsBusy}
+                          onChange={event => void toggleSmsConsent(event.target.checked)}
+                        />
+                        <span>
+                          <strong>{t("The customer agreed to receive text updates about their orders")}</strong>
+                          <small>{t("Tick only if the customer said yes. They can stop texts at any time with the link in each text.")}</small>
+                        </span>
+                      </label>
+                    )}
+                    {orderSms.consent.state === "active" && orderSms.consent.source === "customer_portal_opt_in" ? (
+                      <p className="portal-hint">{t("The customer switched texts on from their order page.")}</p>
+                    ) : null}
+                    {(() => {
+                      const line = orderSmsLine(orderSms);
+                      if (!line) return null;
+                      const when = line.atMs ? new Date(line.atMs).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "";
+                      return <p className="portal-hint" data-sms-last="1">{t(line.key).replace("{date}", when)}</p>;
+                    })()}
+                    {orderSmsNotice ? <p className="portal-hint is-caution" role="alert">{t(orderSmsNotice)}</p> : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           </section>
