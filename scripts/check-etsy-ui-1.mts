@@ -309,6 +309,15 @@ await check("D1 the jump bar sits under the order header (inside the sticky head
   assert.doesNotMatch(detail, /renderOrderTabs\(\)/, "the design-preview tab bar is gone");
   assert.match(detail, /<nav (ref=\{jumpNavRef\} )?className=\{jumpFadeEnd \? "order-jump-bar__links is-fading-end" : "order-jump-bar__links"\} aria-label=\{t\("Jump to a card"\)\}>/);
 });
+await check("D1b no jump bar on the phone (owner, 7 Nov 2026): hidden at <= 640 px wherever the card stack carries Customize", () => {
+  const css = read("app/globals.css");
+  const anchor = css.indexOf(".order-jump-bar[data-has-stack-entry] .order-jump-customize { display: none; }");
+  const open = css.lastIndexOf("@media (max-width: 640px) {", anchor);
+  assert.ok(anchor > 0 && open > 0, "the phone's jump bar rules are not in a <= 640 px block");
+  const block = css.slice(open, css.indexOf("\n}\n", anchor) + 3);
+  assert.match(block, /\.order-jump-bar\[data-has-stack-entry\] \{ display: none; \}/, "the phone's jump bar is still drawn");
+  assert.match(detail, /data-has-stack-entry=\{allCardsHidden \? undefined : ""\}/, "the bar no longer says when the stack carries Customize");
+});
 await check("D2 it is built from the cards the page draws (desktop columns / phone stack incl. the Etsy fold) and their own titles", () => {
   assert.match(detail, /: desktopColumns\.flatMap\(column => column\.cards\)/);
   assert.match(detail, /\? \[\.\.\.mobileCardFold\.main, \.\.\.mobileCardFold\.folded\]/);

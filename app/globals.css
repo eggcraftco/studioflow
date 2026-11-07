@@ -37001,6 +37001,10 @@ body[data-studio-theme="dark"] .app-work-session-row small.app-work-session-corr
   .order-jump-link { min-height: 44px; }
   .order-jump-customize { min-height: 40px; }
   .order-jump-bar[data-has-stack-entry] .order-jump-customize { display: none; }
+  /* Owner, 7 Nov 2026: no jump bar on the phone ("the row of names side by side, the shortcut part, is unnecessary on
+     the phone"; the iPhone and Android apps the same). Customize cards is at the end of the card stack; with every
+     card hidden there is no stack entry and the bar stays, holding Customize alone. */
+  .order-jump-bar[data-has-stack-entry] { display: none; }
 }
 /* The phone's Customize cards entry at the end of the card stack (the phone stack only exists at <= 640 px). */
 .order-jump-customize.is-stack-end { width: 100%; min-height: 44px; border-style: dashed; background: transparent; color: var(--text); }
