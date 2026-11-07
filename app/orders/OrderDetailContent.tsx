@@ -213,7 +213,6 @@ import {
   type ChannelShippingAction
 } from "@/lib/studioflow/channelShippingCost";
 import { decodeOrderFinancialItems, decodeOrderFinancialItemsFromRaw, orderBaseCostLabel, orderCustomExpenseTotalLocal, orderCustomRemainingTotal, orderDetailFinance, platformFeeLabel, type FinancialItemWithId } from "@/lib/studioflow/finance";
-import { FIRST_PROJECT_GUIDE_EVENT, readCurrentFirstProjectGuideState, updateFirstProjectGuideState, type FirstProjectGuideState } from "@/lib/studioflow/firstProjectGuide";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
 import { ORDER_CARD_FOCUS_EVENT, orderCardForFocus } from "@/lib/studioflow/notificationSettings";
 import { escapeHtml } from "@/lib/security/escapeHtml";
@@ -2177,6 +2176,8 @@ export function OrderDetailContent({
       if (!cardId) return;
       let tries = 0;
       const attempt = () => {
+        // Card frames are found by `data-first-project-guide-card`: the attribute outlived the
+        // first-project tour that introduced it (removed 7 Nov 2026) and is now only this lookup.
         const frame = document.querySelector<HTMLElement>(`[data-first-project-guide-card="${cardId}"]`);
         if (frame) {
           frame.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -2315,8 +2316,6 @@ export function OrderDetailContent({
   useEffect(() => {
     if (customizeOpen) setCustomizeSearch("");
   }, [customizeOpen]);
-  const [firstProjectGuide, setFirstProjectGuide] = useState<FirstProjectGuideState | null>(null);
-  const [customerGuideStyle, setCustomerGuideStyle] = useState<CSSProperties | null>(null);
   const [orderActionsOpen, setOrderActionsOpen] = useState(false);
   // Phone: the sticky header condenses to the name and Actions once scrolled past (review N14).
   const orderHeadRef = useRef<HTMLDivElement | null>(null);
@@ -2365,31 +2364,7 @@ export function OrderDetailContent({
   const [measuredCardMinimums, setMeasuredCardMinimums] = useState<Partial<Record<OrderDetailCardId, number>>>({});
   const desktopCardFrameRefs = useRef(new Map<OrderDetailCardId, HTMLDivElement>());
   const mobileCardFrameRefs = useRef(new Map<OrderDetailCardId, HTMLDivElement>());
-  const customizeCardRowRefs = useRef(new Map<OrderDetailCardId, HTMLDivElement>());
 
-  useEffect(() => {
-    setFirstProjectGuide(readCurrentFirstProjectGuideState());
-    function handleGuideUpdate(event: Event) {
-      const next = (event as CustomEvent<FirstProjectGuideState>).detail ?? readCurrentFirstProjectGuideState();
-      setFirstProjectGuide(next);
-    }
-    window.addEventListener(FIRST_PROJECT_GUIDE_EVENT, handleGuideUpdate);
-    window.addEventListener("storage", handleGuideUpdate);
-    return () => {
-      window.removeEventListener(FIRST_PROJECT_GUIDE_EVENT, handleGuideUpdate);
-      window.removeEventListener("storage", handleGuideUpdate);
-    };
-  }, []);
-
-  const firstProjectGuideStep =
-    firstProjectGuide && !firstProjectGuide.completed && firstProjectGuide.orderId === order.id
-      ? firstProjectGuide.step
-      : 0;
-  const guideForcesCustomerVisible = firstProjectGuideStep === 2 || firstProjectGuideStep === 3 || firstProjectGuideStep === 4;
-  const guideHighlightsCustomer = firstProjectGuideStep === 3;
-  const guideRestrictsToCustomerOnly = firstProjectGuideStep === 2 || firstProjectGuideStep === 3 || firstProjectGuideStep === 4;
-  const guideForcesFinancialVisible = firstProjectGuideStep >= 6;
-  const showCustomerGuideBubble = guideHighlightsCustomer;
   const workspacePanRef = useRef<{
     pointerId: number;
     startX: number;
@@ -2812,11 +2787,7 @@ export function OrderDetailContent({
     });
   }
 
-  // The first-project tour points at a card's contents (step 3: fill in the customer, step 6: Financial
-  // Info), so in the sections view the section it points at stays open while that step is on screen.
   function isStackSectionOpen(cardId: OrderDetailCardId) {
-    if (guideHighlightsCustomer && cardId === "customer") return true;
-    if (firstProjectGuideStep === 6 && cardId === "financial") return true;
     return openStackSections.includes(cardId);
   }
 
@@ -2878,56 +2849,6 @@ export function OrderDetailContent({
     setMeasuredCardMinimums(current => sameMeasuredMinimums(current, next) ? current : next);
   }
 
-
-  useEffect(() => {
-    if (!showCustomerGuideBubble) {
-      setCustomerGuideStyle(null);
-      return;
-    }
-
-    let frame = 0;
-    let interval = 0;
-    function updateCustomerGuidePosition() {
-      const refs = isNarrowLayout ? mobileCardFrameRefs.current : desktopCardFrameRefs.current;
-      const node = (orderDetailView === "stack" ? stackSectionRefs.current.get("customer") : null)
-        ?? refs.get("customer") ?? desktopCardFrameRefs.current.get("customer") ?? mobileCardFrameRefs.current.get("customer");
-      if (!node) return;
-      node.scrollIntoView({ block: "nearest", inline: "nearest" });
-      const rect = node.getBoundingClientRect();
-      if (rect.width < 40 || rect.height < 40) return;
-      const bubbleWidth = Math.min(340, Math.max(280, window.innerWidth - 32));
-      const preferredLeft = rect.right + 14;
-      const left = preferredLeft + bubbleWidth <= window.innerWidth - 16
-        ? preferredLeft
-        : Math.max(16, rect.left);
-      const top = preferredLeft + bubbleWidth <= window.innerWidth - 16
-        ? Math.max(16, rect.top + 18)
-        : Math.min(window.innerHeight - 220, rect.bottom + 14);
-      setCustomerGuideStyle({
-        position: "fixed",
-        left,
-        top: Math.max(16, top),
-        width: bubbleWidth,
-        zIndex: 2147483000
-      });
-    }
-
-    function scheduleUpdate() {
-      window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(updateCustomerGuidePosition);
-    }
-
-    scheduleUpdate();
-    interval = window.setInterval(scheduleUpdate, 250);
-    window.addEventListener("resize", scheduleUpdate);
-    window.addEventListener("scroll", scheduleUpdate, true);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.clearInterval(interval);
-      window.removeEventListener("resize", scheduleUpdate);
-      window.removeEventListener("scroll", scheduleUpdate, true);
-    };
-  }, [showCustomerGuideBubble, isNarrowLayout, order.id, orderDetailView]);
 
   function shouldStartWorkspacePan(target: EventTarget | null) {
     if (!(target instanceof HTMLElement)) return false;
@@ -3319,29 +3240,15 @@ export function OrderDetailContent({
   };
 
   const desktopColumns = useMemo(() => {
-    let sourceColumns = (cardLayout.columns.length > 0 ? cardLayout.columns : [cardLayout.cardOrder])
+    const sourceColumns = (cardLayout.columns.length > 0 ? cardLayout.columns : [cardLayout.cardOrder])
       .slice(0, MAX_DESKTOP_CARD_COLUMNS)
       .map(column => [...column]);
-
-    if (guideRestrictsToCustomerOnly) {
-      sourceColumns = [["customer"]];
-    } else if (guideForcesFinancialVisible) {
-      const withoutFinancial = sourceColumns.map(column => column.filter(cardId => cardId !== "financial")) as OrderDetailCardId[][];
-      while (withoutFinancial.length < 2) withoutFinancial.push([]);
-      withoutFinancial[1] = ["financial", ...withoutFinancial[1]];
-      sourceColumns = withoutFinancial;
-    }
 
     const columns = sourceColumns.map((column, index) => ({
       id: `column-${index}`,
       index,
       width: clampColumnWidth(cardLayout.columnWidths[index]),
-      cards: column.filter(cardId => {
-        const forcedByGuide =
-          (guideForcesCustomerVisible && cardId === "customer") ||
-          (guideForcesFinancialVisible && cardId === "financial");
-        return (cardLayout.visibility[cardId] || forcedByGuide) && canShowOrderCard(cardId);
-      })
+      cards: column.filter(cardId => cardLayout.visibility[cardId] && canShowOrderCard(cardId))
     }));
 
     let lastVisibleIndex = columns.findIndex(column => column.cards.length > 0);
@@ -3367,32 +3274,14 @@ export function OrderDetailContent({
     }
 
     return columns.slice(0, columnCount);
-  }, [canSeeFinance, cardLayout, draggingCardId, workspace.memberAccess, guideRestrictsToCustomerOnly, guideForcesCustomerVisible, guideHighlightsCustomer, guideForcesFinancialVisible]);
+  }, [canSeeFinance, cardLayout, draggingCardId, workspace.memberAccess]);
   const visibleMobileCards = useMemo(() => {
-    if (guideRestrictsToCustomerOnly) return canShowOrderCard("customer") ? ["customer" as OrderDetailCardId] : [];
-    const orderIds = guideForcesFinancialVisible && !cardLayout.mobileCardOrder.includes("financial")
-      ? [...cardLayout.mobileCardOrder, "financial" as OrderDetailCardId]
-      : cardLayout.mobileCardOrder;
-    return orderIds.filter(cardId => {
-      const forcedByGuide =
-        (guideForcesCustomerVisible && cardId === "customer") ||
-        (guideForcesFinancialVisible && cardId === "financial");
-      return (cardLayout.visibility[cardId] || forcedByGuide) && canShowOrderCard(cardId);
-    });
-  }, [canSeeFinance, cardLayout, workspace.memberAccess, guideRestrictsToCustomerOnly, guideForcesCustomerVisible, guideHighlightsCustomer, guideForcesFinancialVisible]);
+    return cardLayout.mobileCardOrder.filter(cardId => cardLayout.visibility[cardId] && canShowOrderCard(cardId));
+  }, [canSeeFinance, cardLayout, workspace.memberAccess]);
   const allCardsHidden = visibleMobileCards.length === 0;
   const customizeCardOrder = visibleActionCardsFor(workspace.memberAccess, isNarrowLayout || isStackView ? cardLayout.mobileCardOrder : cardLayout.cardOrder)
     .filter(cardId => canShowOrderCard(cardId))
     .sort((first, second) => cardLabel(first).localeCompare(cardLabel(second), undefined, { sensitivity: "base" }));
-
-  useEffect(() => {
-    if (!customizeOpen || firstProjectGuideStep !== 5) return;
-    const scrollToFinancialRow = window.setTimeout(() => {
-      const financialRow = customizeCardRowRefs.current.get("financial");
-      financialRow?.scrollIntoView({ block: "center", inline: "nearest", behavior: "smooth" });
-    }, 120);
-    return () => window.clearTimeout(scrollToFinancialRow);
-  }, [customizeOpen, firstProjectGuideStep, customizeCardOrder.length]);
 
   function cardLabel(cardId: OrderDetailCardId) {
     // The workshop's own word wins over ours. Set during setup from the trades
@@ -3713,33 +3602,14 @@ export function OrderDetailContent({
   }
 
   function toggleCardVisibility(cardId: OrderDetailCardId) {
-    // Step 5 of the first-project tour asks the user to open Financial Info. The
-    // card is usually already visible, so a plain toggle turned it OFF: the tour
-    // then force-showed it for step 6 and, once finished, the card vanished — the
-    // tour ended by hiding the thing it had just explained. Here the step always
-    // opens the card instead of flipping it.
-    const guideOpensFinancial =
-      firstProjectGuideStep === 5 && cardId === "financial";
     const nextLayout = {
       ...cardLayout,
       visibility: {
         ...cardLayout.visibility,
-        [cardId]: guideOpensFinancial ? true : !cardLayout.visibility[cardId]
+        [cardId]: !cardLayout.visibility[cardId]
       }
     };
     void persistLayout(nextLayout);
-
-    if (firstProjectGuideStep === 5 && cardId === "financial") {
-      const nextGuide: FirstProjectGuideState = {
-        ...(firstProjectGuide ?? {}),
-        step: 6,
-        orderId: order.id,
-        completed: false
-      };
-      updateFirstProjectGuideState(nextGuide);
-      setFirstProjectGuide(nextGuide);
-      setCustomizeOpen(false);
-    }
   }
 
   function hideCard(cardId: OrderDetailCardId) {
@@ -6047,66 +5917,15 @@ export function OrderDetailContent({
     return (
                 <div
                   key={cardId}
-                  ref={element => {
-                    if (element) customizeCardRowRefs.current.set(cardId, element);
-                    else customizeCardRowRefs.current.delete(cardId);
-                  }}
                   className={[
                     "customize-card-row",
                     draggingCardId === cardId ? "is-dragging" : "",
-                    dragOverCardId === cardId ? "is-drop-target" : "",
-                    firstProjectGuideStep === 5 && cardId === "financial" ? "first-project-guide-target" : ""
+                    dragOverCardId === cardId ? "is-drop-target" : ""
                   ].filter(Boolean).join(" ")}
-                  style={firstProjectGuideStep === 5 && cardId === "financial" ? {
-                    borderRadius: 18,
-                    background: "rgba(239, 246, 255, 0.96)",
-                    color: "#181818"
-                  } : undefined}
                   onDragOver={event => handleCardDragOver(event, cardId)}
                   onDragLeave={event => handleCardDragLeave(event, cardId)}
                   onDrop={event => handleCardDrop(event, cardId)}
                 >
-                  {firstProjectGuideStep === 5 && cardId === "financial" ? (
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: "50%",
-                        top: "calc(100% + 12px)",
-                        transform: "translateX(-50%)",
-                        zIndex: 150,
-                        width: "min(360px, calc(100vw - 48px))",
-                        display: "grid",
-                        gap: 8,
-                        padding: 16,
-                        borderRadius: 20,
-                        border: "4px solid #2563eb",
-                        background: "linear-gradient(180deg, rgba(239, 246, 255, 0.99), rgba(255, 255, 255, 0.99))",
-                        color: "#181818",
-                        boxShadow: "0 24px 64px rgba(37, 99, 235, 0.34), 0 0 0 7px rgba(37, 99, 235, 0.14)",
-                        pointerEvents: "auto"
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: "fit-content",
-                          padding: "4px 9px",
-                          borderRadius: 999,
-                          background: "#2563eb",
-                          color: "white",
-                          fontSize: 11,
-                          fontWeight: 800,
-                          letterSpacing: "0.04em",
-                          textTransform: "uppercase"
-                        }}
-                      >
-                        {`${t("Step")} 5 / 6`}
-                      </span>
-                      <strong style={{ fontSize: 16, color: "#181818" }}>{t("Open Financial Info")}</strong>
-                      <span style={{ fontSize: 13, lineHeight: 1.45, color: "#404040" }}>
-                        {t("Turn on Financial Info to track paid amount, costs, remaining balance and profit for this project.")}
-                      </span>
-                    </div>
-                  ) : null}
                   <div className="customize-card-main">
                     <span className="customize-card-icon" aria-hidden="true">
                       <CardIconGlyph icon={cardIcon(cardId)} />
@@ -7003,10 +6822,7 @@ export function OrderDetailContent({
   );
 
   function renderCard(cardId: OrderDetailCardId) {
-    const forcedByGuide =
-      (guideForcesCustomerVisible && cardId === "customer") ||
-      (guideForcesFinancialVisible && cardId === "financial");
-    if (!cardLayout.visibility[cardId] && !forcedByGuide) return null;
+    if (!cardLayout.visibility[cardId]) return null;
 
     switch (cardId) {
       case "estimate": {
@@ -10013,11 +9829,7 @@ export function OrderDetailContent({
     const renderedHeight = renderedCardHeight(cardId);
     const frameStyle: CSSProperties = {
       height: `${renderedHeight}px`,
-      minHeight: `${renderedHeight}px`,
-      ...(firstProjectGuideStep === 6 && cardId === "financial" ? { position: "relative" as const, overflow: "visible" as const } : {}),
-      ...(((guideHighlightsCustomer && cardId === "customer") || (guideForcesFinancialVisible && cardId === "financial"))
-        ? { outline: "4px solid #2563eb", boxShadow: "0 0 0 8px rgba(37, 99, 235, 0.16), 0 18px 45px rgba(37, 99, 235, 0.22)" }
-        : {})
+      minHeight: `${renderedHeight}px`
     };
     const frameCanMoveResize = canMoveResizeCards && !savingLayout;
     const frameClassName = [
@@ -10028,9 +9840,7 @@ export function OrderDetailContent({
       cardsLocked ? "is-layout-locked" : "",
       draggingCardId === cardId ? "is-dragging" : "",
       dragOverCardId === cardId ? "is-drop-target" : "",
-      resizingCardId === cardId ? "is-resizing" : "",
-      guideHighlightsCustomer && cardId === "customer" ? "first-project-guide-target" : "",
-      guideForcesFinancialVisible && cardId === "financial" ? "first-project-guide-target" : ""
+      resizingCardId === cardId ? "is-resizing" : ""
     ].filter(Boolean).join(" ");
 
     return (
@@ -10078,7 +9888,6 @@ export function OrderDetailContent({
           ) : null;
         })()}
         {renderCard(cardId)}
-        {cardId === "financial" ? renderFinancialInfoGuideBubble() : null}
         {draggingCardId && draggingCardId !== cardId ? (
           <div
             className="order-detail-card-after-drop-strip"
@@ -10140,20 +9949,14 @@ export function OrderDetailContent({
     const renderedHeight = renderedCardHeight(cardId);
     const frameStyle: CSSProperties = {
       height: `${renderedHeight}px`,
-      minHeight: `${renderedHeight}px`,
-      ...(firstProjectGuideStep === 6 && cardId === "financial" ? { position: "relative" as const, overflow: "visible" as const } : {}),
-      ...(((guideHighlightsCustomer && cardId === "customer") || (guideForcesFinancialVisible && cardId === "financial"))
-        ? { outline: "4px solid #2563eb", boxShadow: "0 0 0 8px rgba(37, 99, 235, 0.16), 0 18px 45px rgba(37, 99, 235, 0.22)" }
-        : {})
+      minHeight: `${renderedHeight}px`
     };
     const frameClassName = [
       "order-detail-card-frame",
       "order-detail-mobile-card-frame",
       canMoveResizeCards ? "can-resize" : "",
       cardsLocked ? "is-layout-locked" : "",
-      resizingCardId === cardId ? "is-resizing" : "",
-      guideHighlightsCustomer && cardId === "customer" ? "first-project-guide-target" : "",
-      guideForcesFinancialVisible && cardId === "financial" ? "first-project-guide-target" : ""
+      resizingCardId === cardId ? "is-resizing" : ""
     ].filter(Boolean).join(" ");
 
     return (
@@ -10175,7 +9978,6 @@ export function OrderDetailContent({
           ) : null;
         })()}
         {renderCard(cardId)}
-        {cardId === "financial" ? renderFinancialInfoGuideBubble() : null}
         {canMoveResizeCards ? (
           <button
             aria-label={`Resize ${cardLabel(cardId)} height`}
@@ -10232,140 +10034,6 @@ export function OrderDetailContent({
           </button>
         ))}
       </>
-    );
-  }
-
-  function renderFirstProjectGuideBubble() {
-    return (
-      <div
-        className="first-project-guide-bubble"
-        style={{
-          background: "linear-gradient(180deg, rgba(239, 246, 255, 0.99), rgba(255, 255, 255, 0.99))",
-          border: "4px solid #2563eb",
-          borderRadius: 20,
-          boxShadow: "0 22px 60px rgba(37, 99, 235, 0.34), 0 0 0 7px rgba(37, 99, 235, 0.14)",
-          color: "#181818",
-          padding: 18,
-          pointerEvents: "auto"
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-          <span
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 34,
-              height: 34,
-              borderRadius: 999,
-              background: "#2563eb",
-              color: "white",
-              fontWeight: 800
-            }}
-          >
-            3
-          </span>
-          <strong style={{ fontSize: 16, color: "#181818" }}>{t("Customer & Communication")}</strong>
-        </div>
-        <p style={{ margin: "0 0 14px", lineHeight: 1.45, color: "#404040" }}>
-          {t("This card is where you add the customer name, design details and contact information for the project.")}
-        </p>
-        <button
-          className="button primary"
-          type="button"
-          onClick={() => {
-            const nextGuide: FirstProjectGuideState = {
-              ...(firstProjectGuide ?? {}),
-              step: 4,
-              orderId: order.id,
-              completed: false
-            };
-            updateFirstProjectGuideState(nextGuide);
-            setFirstProjectGuide(nextGuide);
-          }}
-        >
-          {t("Next")}
-        </button>
-      </div>
-    );
-  }
-
-  function renderFinancialInfoGuideBubble() {
-    if (firstProjectGuideStep !== 6) return null;
-    return (
-      <div
-        className="first-project-guide-bubble finance-guide-bubble"
-        style={{
-          position: "absolute",
-          left: 24,
-          right: 24,
-          top: 116,
-          zIndex: 160,
-          display: "grid",
-          gap: 8,
-          padding: 16,
-          borderRadius: 20,
-          border: "4px solid #2563eb",
-          background: "linear-gradient(180deg, rgba(239, 246, 255, 0.99), rgba(255, 255, 255, 0.99))",
-          color: "#181818",
-          boxShadow: "0 24px 64px rgba(37, 99, 235, 0.34), 0 0 0 7px rgba(37, 99, 235, 0.14)",
-          pointerEvents: "auto"
-        }}
-      >
-        <span
-          style={{
-            width: "fit-content",
-            padding: "4px 9px",
-            borderRadius: 999,
-            background: "#2563eb",
-            color: "white",
-            fontSize: 11,
-            fontWeight: 800,
-            letterSpacing: "0.04em",
-            textTransform: "uppercase"
-          }}
-        >
-          {`${t("Step")} 6 / 6`}
-        </span>
-        <strong style={{ fontSize: 16, color: "#181818" }}>{t("Financial Info is now open")}</strong>
-        <span style={{ fontSize: 13, lineHeight: 1.45, color: "#404040" }}>
-          {t("This card is where paid amount, costs, remaining balance and profit are tracked for the project.")}
-        </span>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 2 }}>
-          <button
-            className="button primary"
-            type="button"
-            onClick={() => {
-              const nextGuide: FirstProjectGuideState = {
-                ...(firstProjectGuide ?? {}),
-                step: 6,
-                orderId: order.id,
-                completed: true
-              };
-              updateFirstProjectGuideState(nextGuide);
-              setFirstProjectGuide(nextGuide);
-            }}
-          >
-            {t("Done")}
-          </button>
-          <button
-            className="button secondary"
-            type="button"
-            onClick={() => {
-              const nextGuide: FirstProjectGuideState = {
-                ...(firstProjectGuide ?? {}),
-                step: 6,
-                orderId: order.id,
-                completed: true
-              };
-              updateFirstProjectGuideState(nextGuide);
-              setFirstProjectGuide(nextGuide);
-            }}
-          >
-            {t("Skip")}
-          </button>
-        </div>
-      </div>
     );
   }
 
@@ -10543,20 +10211,10 @@ export function OrderDetailContent({
     );
   }
 
-  // The Customize cards entry (Actions menu and the jump bar): one way in, the first-project tour advances either way.
+  // The Customize cards entry (Actions menu and the jump bar): one way in.
   function openCustomizeCards() {
     setOrderActionsOpen(false);
     setCustomizeOpen(true);
-    if (firstProjectGuideStep === 4) {
-      const nextGuide: FirstProjectGuideState = {
-        ...(firstProjectGuide ?? {}),
-        step: 5,
-        orderId: order.id,
-        completed: false
-      };
-      updateFirstProjectGuideState(nextGuide);
-      setFirstProjectGuide(nextGuide);
-    }
   }
 
   // ETSY-E2E night: on an Etsy order the cards it does not use yet (preview, repair intake, estimate,
@@ -10910,7 +10568,6 @@ export function OrderDetailContent({
         </div>
         <div id={`order-stack-body-${cardId}`} className="order-stack-body" data-stack-card={cardId} hidden={!open}>
           {renderCard(cardId)}
-          {cardId === "financial" ? renderFinancialInfoGuideBubble() : null}
         </div>
       </div>
     );
@@ -11169,78 +10826,9 @@ export function OrderDetailContent({
                 event.stopPropagation();
                 setOrderActionsOpen(open => !open);
               }}
-              style={firstProjectGuideStep === 4 ? {
-                position: "relative",
-                zIndex: 90,
-                outline: "3px solid #2563eb",
-                outlineOffset: 3,
-                boxShadow: "0 0 0 4px rgba(37, 99, 235, 0.18), 0 18px 42px rgba(37, 99, 235, 0.24)"
-              } : undefined}
             >
               {t("Actions")}
             </button>
-            {firstProjectGuideStep === 4 ? (
-              <span
-                style={{
-                  position: "absolute",
-                  top: "calc(100% + 14px)",
-                  right: "calc(100% + 14px)",
-                  transform: "none",
-                  zIndex: 120,
-                  width: "min(340px, calc(100vw - 32px))",
-                  display: "grid",
-                  gap: 8,
-                  padding: 16,
-                  borderRadius: 20,
-                  border: "4px solid #2563eb",
-                  background: "linear-gradient(180deg, rgba(239, 246, 255, 0.99), rgba(255, 255, 255, 0.99))",
-                  color: "#181818",
-                  boxShadow: "0 24px 64px rgba(37, 99, 235, 0.34), 0 0 0 7px rgba(37, 99, 235, 0.14)",
-                  textAlign: "left",
-                  pointerEvents: "auto"
-                }}
-              >
-                <span
-                  style={{
-                    width: "fit-content",
-                    padding: "4px 9px",
-                    borderRadius: 999,
-                    background: "#2563eb",
-                    color: "white",
-                    fontSize: 11,
-                    fontWeight: 800,
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase"
-                  }}
-                >
-                  {`${t("Step")} 4 / 6`}
-                </span>
-                <strong style={{ fontSize: 16, color: "#181818" }}>{t("Open Customize cards")}</strong>
-                <span style={{ fontSize: 13, lineHeight: 1.45, color: "#404040" }}>
-                  {t("Use Customize cards to choose which project cards are visible. Next, open Financial Info.")}
-                </span>
-                {/* This step waits for the user to open Customize cards, so without a
-                    way out the tour blocks anyone who cannot find that control — and
-                    it resumes here on every reload. */}
-                <button
-                  className="button secondary"
-                  type="button"
-                  style={{ width: "fit-content", marginTop: 2 }}
-                  onClick={() => {
-                    const nextGuide: FirstProjectGuideState = {
-                      ...(firstProjectGuide ?? {}),
-                      step: 4,
-                      orderId: order.id,
-                      completed: true
-                    };
-                    updateFirstProjectGuideState(nextGuide);
-                    setFirstProjectGuide(nextGuide);
-                  }}
-                >
-                  {t("Skip")}
-                </button>
-              </span>
-            ) : null}
             {orderActionsOpen ? (
               <div id="order-actions-menu" className="order-actions-menu-panel" role="dialog" aria-label={t("Actions")} style={{ zIndex: 130 }}>
                 {/* Grouped per the card report: what the header shows, the
@@ -11697,9 +11285,6 @@ export function OrderDetailContent({
           </div>
         </>
       )}
-      {showCustomerGuideBubble && customerGuideStyle ? (
-        <div style={customerGuideStyle}>{renderFirstProjectGuideBubble()}</div>
-      ) : null}
     </div>
     </DetailLanguageContext.Provider>
   );

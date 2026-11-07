@@ -59,7 +59,9 @@ const SETUP_STEP_LABELS: Record<string, string> = {
   goal: "3 · First goal",
   work: "4 · Your work",
   plan: "5 · Plan",
-  ready: "Ready screen",
+  // Not sent since 7 Nov 2026: the ready screen and its three starting tasks were
+  // removed with every other informational step screen. Older accounts keep it.
+  ready: "Ready screen (removed 7 Nov 2026)",
   never_shown: "Setup never shown"
 };
 const PLATFORM_LABELS: Record<string, string> = {

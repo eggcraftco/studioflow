@@ -87,13 +87,6 @@ import { OrderDetailContent } from "./OrderDetailContent";
 import { projectAssigneeOptions } from "@/lib/studioflow/projectAssignees";
 import { assigneeDetailsPatch, isOrderAssignee, orderAssigneeUids, toggledAssigneeUids } from "@/lib/studioflow/orderAssignees";
 import { displayOrderTitle } from "@/lib/studioflow/orderTitle";
-import {
-  getFirstProjectGuideState,
-  isFirstProjectGuideDeviceEligible,
-  setFirstProjectGuideState,
-  subscribeFirstProjectGuideState,
-  type FirstProjectGuideState
-} from "@/lib/studioflow/firstProjectGuide";
 
 function applyOrderListPatch(order: OrderListItem, patch: Partial<OrderDetail>): OrderListItem {
   return {
@@ -175,7 +168,6 @@ export default function OrdersPage() {
   const [heldOrders, setHeldOrders] = useState<HeldIntegrationOrders | null>(null);
   const [releasingHeld, setReleasingHeld] = useState(false);
   const [deletedOrders, setDeletedOrders] = useState<OrderListItem[]>([]);
-  const ordersCountRef = useRef(0);
   const [teamMembers, setTeamMembers] = useState<TeamMemberDetail[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(null);
@@ -188,7 +180,6 @@ export default function OrdersPage() {
   // being fetched. It holds the "selection must exist in the list" guard off;
   // it is NOT `loadingOrders`, so the full-screen loading card stays down.
   const [resolvingRequestedOrder, setResolvingRequestedOrder] = useState(false);
-  const [firstProjectGuide, setFirstProjectGuide] = useState<FirstProjectGuideState | null>(null);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderFilter, setOrderFilter] = useState<OrderQuickFilterId>("all");
   // WOO-STORES: a platform, or one WooCommerce store when the list holds two or more (orderSourceChoices).
@@ -242,7 +233,7 @@ export default function OrdersPage() {
     // word the source menu knows is taken, anything else leaves the filter alone.
     const source = searchParams.get("source");
     if (source && ORDER_SOURCE_FILTERS.some(item => item.id === source)) setOrderSource(source as OrderSourceId);
-    // A link that names one order (a notification, the bell, Getting started)
+    // A link that names one order (a notification, the bell)
     // lands on that order: a search, quick filter or source picked earlier in
     // this tab would hide it, and the list guard below then opened the first
     // row instead — a delivered parcel's order under "Active", say.
@@ -256,9 +247,8 @@ export default function OrdersPage() {
     if (linkedOrderId && searchParams.get("focus")) window.dispatchEvent(new Event(ORDER_CARD_FOCUS_EVENT));
   }, [searchParams]);
 
-  // "/orders?new=1" opens Quick Create on arrival (review N08): the onboarding
-  // "Create your first order" task, the Getting started "add an order" step and
-  // Production's "New project" all link here, and used to land on the list and
+  // "/orders?new=1" opens Quick Create on arrival (review N08): Production's
+  // "New project" links here, and used to land on the list and
   // wait for a second press. Read from searchParams, not once on mount, so a
   // link followed while already on /orders works too; the parameter is dropped
   // first so a reload does not reopen a form that was dismissed. AppShell owns
@@ -271,11 +261,6 @@ export default function OrdersPage() {
     window.history.replaceState(window.history.state, "", url.pathname + url.search);
     dispatchQuickAction("order", { origin: "orders" });
   }, [wantsNewOrder, workspace]);
-
-  useEffect(() => {
-    setFirstProjectGuide(getFirstProjectGuideState());
-    return subscribeFirstProjectGuideState(setFirstProjectGuide);
-  }, []);
 
   // Read by the workspace load below WITHOUT being one of its dependencies.
   // It used to be: opening a project (or creating one, which pushes
@@ -467,10 +452,6 @@ export default function OrdersPage() {
     [orderFilter, orderSearch, orderSortMode, orderSource, visibleOrders, deletedOrders]
   );
   useEffect(() => {
-    ordersCountRef.current = orders.length;
-  }, [orders]);
-
-  useEffect(() => {
     if (loadingOrders) return;
     // A requested order still being fetched is not "missing" — bouncing the
     // selection here is what used to open an unrelated project on a deep link.
@@ -549,14 +530,6 @@ export default function OrdersPage() {
     async function handleCreatedOrder(event: Event) {
       const orderId = (event as CustomEvent<{ orderId?: string }>).detail?.orderId;
       if (!orderId || !workspace) return;
-      // Only run the first-project guide for a genuinely new user: their very
-      // first project (no existing orders) and the guide not already completed.
-      // Otherwise creating any project would keep re-triggering the info cards.
-      const existingGuide = getFirstProjectGuideState();
-      const isFirstEverProject = ordersCountRef.current === 0;
-      if (isFirstEverProject && isFirstProjectGuideDeviceEligible() && !existingGuide?.completed) {
-        setFirstProjectGuideState({ step: 2, orderId, completed: false });
-      }
       const loadedOrders = await loadRecentOrders(workspace.id, workspace, uid);
       setOrders(loadedOrders);
       setSelectedOrderId(orderId);
@@ -1343,8 +1316,6 @@ export default function OrdersPage() {
                   showStatusBadges={showOrderStatusBadges}
                   assigneeName={assigneeNameForOrder(order)}
                   assigneePhotoURL={assigneePhotoForOrder(order)}
-                  showFirstProjectGuideProjectBubble={firstProjectGuide?.step === 2 && firstProjectGuide.orderId === order.id}
-                  onFirstProjectGuideProjectNext={() => setFirstProjectGuideState({ step: 3, orderId: order.id, completed: false })}
                   onSelect={event => handleOrderCardClick(order, event)}
                   multiSelected={selectedOrderIds.has(order.id)}
                   selectionActive={selectionActive}

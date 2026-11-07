@@ -1,4 +1,4 @@
-// Order-card "i" removed (N13, 15 Oct 2026) + the Getting-started owner gate.
+// Order-card "i" removed (N13, 15 Oct 2026) + Getting started removed (7 Nov 2026).
 //
 // The card purposes of 8 Oct ("What is this card for?": a popover on a
 // desktop, a blue box under the card title on a phone) were removed by the
@@ -10,9 +10,9 @@
 // 2. The order view has no header "i", no purpose element, no inline blue box
 //    and no popover; the old per-option menu descriptions stay gone; the "..."
 //    menu is still there. The CSS for both is gone.
-// 3. canSeeGettingStarted (lib/studioflow/homeCards.ts) is false for member,
-//    viewer, workflow, admin and a custom role, true for owner only; the
-//    gettingStarted card is ownerOnly; the dashboard and Home read the gate.
+// 3. The Getting started card is gone (the owner took every informational
+//    step-by-step screen out, 7 Nov 2026): no card, no owner gate, a stored
+//    layout that still names it loads without it, and nobody is offered it.
 //
 //   node scripts/check-card-purposes.mjs
 import fs from "fs";
@@ -101,27 +101,18 @@ const all = ["app", "components", "lib"].flatMap((dir) => {
 });
 ok("no source file mentions the card purpose any more", !all.some((rel) => /orderCardPurpose|order-card-purpose|What is this card for\?/.test(read(rel))));
 
-// 3. Getting started is the owner's.
+// 3. Getting started is gone.
 const homeCardsPath = "lib/studioflow/homeCards.ts";
 compile(homeCardsPath, "homeCards", (js) => js.replace('from "@/lib/studioflow/firestore"', 'from "./firestoreStub.mjs"'));
 fs.writeFileSync(path.join(tmp, "firestoreStub.mjs"), "export const workspaceAccessAllows = () => true;\n");
 const home = await import(pathToFileURL(path.join(tmp, "homeCards.mjs")).href);
-ok("canSeeGettingStarted is exported", typeof home.canSeeGettingStarted === "function");
-if (typeof home.canSeeGettingStarted === "function") {
-  for (const role of ["member", "workflow", "viewer", "admin", "custom-role", "custom:abc123", "", null, undefined, "Owner ", "OWNER"]) {
-    const want = typeof role === "string" && role.trim().toLowerCase() === "owner";
-    ok(`canSeeGettingStarted(${JSON.stringify(role)}) === ${want}`, home.canSeeGettingStarted(role) === want);
-  }
-  ok("canSeeGettingStarted(\"owner\") === true", home.canSeeGettingStarted("owner") === true);
-  const card = home.HOME_CARDS.find((c) => c.id === "gettingStarted");
-  ok("gettingStarted card is ownerOnly", Boolean(card && card.ownerOnly === true));
-  const fullAccess = { role: "member", memberAccess: {} };
-  ok("visibleHomeCards hides gettingStarted from a member with every key", !home.visibleHomeCards(home.DEFAULT_HOME_LAYOUT, fullAccess).some((c) => c.definition.id === "gettingStarted"));
-  ok("visibleHomeCards shows gettingStarted to the owner", home.visibleHomeCards(home.DEFAULT_HOME_LAYOUT, { role: "owner", memberAccess: {} }).some((c) => c.definition.id === "gettingStarted"));
-  ok("availableHomeCards does not offer gettingStarted to a member", !home.availableHomeCards({ ...home.DEFAULT_HOME_LAYOUT, cards: [], hidden: [] }, fullAccess).some((c) => c.id === "gettingStarted"));
-}
-ok("dashboard gates the Getting started card by the helper", read("app/dashboard/page.tsx").includes("workspace && canSeeGettingStarted(workspace.role) ? ("));
-ok("Home asks for the checklist only for the owner", read("app/home/page.tsx").includes("canSeeGettingStarted(workspace?.role)"));
+ok("no Getting started card in the registry", !home.HOME_CARDS.some((c) => c.id === "gettingStarted"));
+ok("no Getting started card in the default layout", !home.DEFAULT_HOME_LAYOUT.cards.some((c) => c.id === "gettingStarted"));
+ok("the owner gate is gone", typeof home.canSeeGettingStarted === "undefined");
+const stored = home.normaliseHomeLayout({ version: 1, cards: [{ id: "gettingStarted", size: "2x1" }, { id: "money", size: "1x1" }], hidden: ["gettingStarted"] });
+ok("a stored layout that names it loads without it, keeping the rest", !stored.cards.some((c) => c.id === "gettingStarted") && stored.cards[0].id === "money" && stored.hidden.length === 0);
+ok("nobody is offered it", !home.availableHomeCards({ ...home.DEFAULT_HOME_LAYOUT, cards: [], hidden: [] }, { role: "owner", memberAccess: {} }).some((c) => c.id === "gettingStarted"));
+ok("dashboard and Home no longer read a checklist", !read("app/dashboard/page.tsx").includes("GettingStarted") && !read("app/home/page.tsx").includes("GettingStarted"));
 
 if (failures.length) {
   console.error(`FAIL ${failures.length}/${checks}`);

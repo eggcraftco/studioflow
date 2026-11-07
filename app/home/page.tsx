@@ -13,7 +13,6 @@ import {
   BankingCardBody,
   CustomersCardBody,
   FilesCardBody,
-  GettingStartedCardBody,
   InventoryCardBody,
   MoneyCardBody,
   NotesCardBody,
@@ -53,7 +52,6 @@ import {
   setHomeCardTone,
   showHomeCard,
   visibleHomeCards,
-  canSeeGettingStarted,
   type HomeCardId,
   type HomeCardPeriod,
   type HomeCardSize,
@@ -63,14 +61,9 @@ import {
 import { saveHomeLayout, subscribeHomeLayout } from "@/lib/studioflow/homeLayout";
 import { useHomeData, type HomeDomain } from "@/lib/studioflow/useHomeData";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
-import { loadSetupChecklist, type SetupChecklist } from "@/lib/studioflow/setupChecklist";
-import { gettingStartedAccess, skipGettingStarted } from "@/lib/studioflow/gettingStarted";
-import { BringInOrdersSheet } from "@/components/home/GettingStartedChecklist";
-import { dispatchStudioToast } from "@/components/StudioToastHost";
 
 /** Which shared domain each card reads, so a card shows its own domain's state. */
 const CARD_DOMAIN: Record<HomeCardId, HomeDomain> = {
-  gettingStarted: "orders",
   quickActions: "orders",
   recentActivity: "orders",
   money: "orders",
@@ -92,8 +85,6 @@ function greeting(t: (text: string) => string) {
 
 export default function HomePage() {
   const { user, loading: authLoading, language } = useAuth();
-  // The "Bring in your orders" sheet, opened by Getting started's first-order step.
-  const [bringInOpen, setBringInOpen] = useState(false);
   const router = useRouter();
   const t = useCallback((text: string) => studioT(text, language), [language]);
   const { hideNumbers } = usePricePrivacy();
@@ -191,32 +182,6 @@ export default function HomePage() {
   const data = useHomeData(workspace, user?.uid ?? "", user?.email ?? "", wantsInventoryItems);
 
   /**
-   * This workspace's own setup steps.
-   *
-   * The card used to invent six of its own, the same for everybody, with the
-   * first one hardcoded ticked. Asked for only when the card is actually on the
-   * grid — a workspace that has hidden it should not be paying for the call —
-   * and it fails silently: somebody opening Home should not be shown an error
-   * about a checklist, and the card's own six steps are a better answer than
-   * one.
-   */
-  const wantsSetupChecklist = useMemo(
-    () => canSeeGettingStarted(workspace?.role)
-      && layout.cards.some((card) => card.id === "gettingStarted")
-      && !layout.hidden.includes("gettingStarted"),
-    [layout, workspace?.role],
-  );
-  const [setupChecklist, setSetupChecklist] = useState<SetupChecklist | null>(null);
-  useEffect(() => {
-    if (!workspace?.id || !wantsSetupChecklist) return;
-    let cancelled = false;
-    void loadSetupChecklist(workspace.id).then((next) => {
-      if (!cancelled && next) setSetupChecklist(next);
-    });
-    return () => { cancelled = true; };
-  }, [workspace?.id, wantsSetupChecklist]);
-
-  /**
    * Optimistic layout (§19): the grid moves under the hand immediately and the
    * write follows. If the write fails the previous layout comes back, because a
    * card that appears to move and silently does not is worse than one that
@@ -238,24 +203,6 @@ export default function HomePage() {
     },
     [layout, workspace?.id, t],
   );
-
-  /**
-   * Getting started's "Skip for now": the card leaves this member's Home in this
-   * workspace — the same synced layout a hidden card has always lived in, so the
-   * phone and the Mac drop it too — and Undo puts back exactly the layout it
-   * left, in its old place. The checklist itself stays in Settings ▸ Getting
-   * started, which the toast says.
-   */
-  const handleSkipGettingStarted = useCallback(() => {
-    const before = lastSaved.current ?? layout;
-    void commit(skipGettingStarted(before));
-    dispatchStudioToast({
-      message: `${t("Getting started is hidden from Home.")} ${t("Open it again any time from Settings → Getting started.")}`,
-      actionLabel: t("Undo"),
-      onAction: () => { void commit(before); },
-      durationMs: 9000,
-    });
-  }, [commit, layout, t]);
 
   const cards = useMemo(() => visibleHomeCards(layout, workspace), [layout, workspace]);
   // Where each card lands, and where the holes are. Same arithmetic as the Mac
@@ -381,20 +328,6 @@ export default function HomePage() {
       case "files": return <FilesCardBody {...props} />;
       case "notes": return <NotesCardBody {...props} />;
       case "quickActions": return <QuickActionsCardBody {...props} />;
-      case "gettingStarted":
-        return (
-          <GettingStartedCardBody
-            {...props}
-            onSkipCard={handleSkipGettingStarted}
-            onOpenBringIn={() => setBringInOpen(true)}
-            checklist={setupChecklist}
-            access={workspace ? gettingStartedAccess({ role: workspace.role, billingPlan: workspace.billingPlan, canOpenSettings: true }) : undefined}
-            // Strictly the boolean, so the fallback's first step does not tick
-            // for somebody who pressed Skip. Only read when the call did not
-            // answer; the server's own list carries its own doneness.
-            setupFinished={settings?.businessOnboardingFinished ?? false}
-          />
-        );
       default: return null;
     }
   }
@@ -715,9 +648,6 @@ export default function HomePage() {
           </section>
         ) : null}
       </div>
-      {bringInOpen && workspace ? (
-        <BringInOrdersSheet workspace={workspace} t={t} onClose={() => setBringInOpen(false)} />
-      ) : null}
     </AppShell>
   );
 }

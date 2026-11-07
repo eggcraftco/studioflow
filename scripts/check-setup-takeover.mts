@@ -171,9 +171,10 @@ function statement(source: string, start: string): string {
     assert.ok(/uid: user\?\.uid/.test(decision) && /companyId: workspace\?\.id/.test(decision), "scoped to the account and workspace on screen");
     assert.ok(!/financeOrders\.length === 0/.test(decision), "not the raw length of whatever list is in state");
   });
-  await check("3b the Continue setup card and the first-project guide use the same counted evidence", () => {
+  // 7 Nov 2026: the first-project guide (showAddProjectGuide) is gone with the info tours (575659a54), so only the
+  // Continue setup card is left to read the counted evidence.
+  await check("3b the Continue setup card uses the counted evidence", () => {
     assert.ok(statement(shell, "const showContinueSetupCard =").includes("continueSetupCardShows("));
-    assert.ok(statement(shell, "const showAddProjectGuide =").includes("workspaceCountedEmpty(orderCount, user?.uid, workspace?.id)"));
   });
   await check("3c no 'loaded' flag survives that a failed or uncounted load could set", () => {
     assert.ok(!/financeOrdersLoaded|setFinanceOrdersLoaded|financeOrdersTrusted/.test(shell), "financeOrdersLoaded / financeOrdersTrusted are gone");

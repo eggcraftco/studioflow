@@ -1,6 +1,5 @@
 "use client";
 
-import { GettingStartedChecklist } from "@/components/home/GettingStartedChecklist";
 import WebAboutVersion from "@/components/WebAboutVersion";
 import { WEB_BUILD_ID } from "@/lib/studioflow/webBuild";
 import { clearDeviceLocalWorkspaceCache } from "@/lib/studioflow/deviceLocalCache";
@@ -193,7 +192,6 @@ type SettingsSectionId =
   | "message-settings"
   | "sms-notifications"
   | "support-tickets"
-  | "getting-started"
   | "client-domain"
   | "sales"
   | "online-booking";
@@ -327,11 +325,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "plan-access", title: "Plan & Access", appKey: "Plan & Access", description: "Billing, limits and feature access.", icon: "plan", group: "billing" },
   { id: "integrations", title: "Integrations", appKey: "Integrations", description: "Connect the tools you use to run your business.", icon: "cart", group: "integrations" },
   { id: "support-tickets", title: "Support / Tickets", appKey: "Support / Tickets", description: "Contact your workspace owner or NivaDesk support.", icon: "reply", group: "supportGroup" },
-  // The full Getting started checklist (16 Oct 2026): where Home's "View
-  // checklist" goes, and the way back to it after "Skip for now" took the card
-  // off Home. The owner's, like the card.
-  { id: "getting-started", title: "Getting started", appKey: "Getting started", description: "Your setup checklist, step by step.", icon: "checklist", group: "supportGroup" }
-];
+]
 
 // Settings search (settings report): each section carries the terms a user
 // actually types — "VAT", "logo", "password" — beyond its title words.
@@ -355,8 +349,7 @@ const SETTINGS_SEARCH_KEYWORDS: Record<SettingsSectionId, string> = {
   data: "backup export import csv restore delete archive audit history change log who changed",
   "plan-access": "billing plan storage subscription upgrade seat",
   integrations: "integration connect webhook woocommerce shopify etsy square ebay marketplace pos wix squarespace amazon zapier make stripe paypal quickbooks xero pandle dropbox google drive open banking store sync api whatsapp instagram channel number reconnect inbox customer messages meta",
-  "support-tickets": "ticket help support contact",
-  "getting-started": "getting started checklist setup onboarding first order import shop skip home card"
+  "support-tickets": "ticket help support contact"
 };
 
 const SETTINGS_GROUP_LABELS: Record<SettingsGroup, string> = {
@@ -580,9 +573,6 @@ function canSeeSettingsSection(workspace: WorkspaceContext | null, sectionId: Se
   // everyone (owners included) otherwise, matching the Messages nav gate and Mac/Android.
   if (sectionId === "message-settings" && workspace.entitlements.features.messages !== true) return false;
   if (normalizeWorkspaceRole(workspace.role) === "owner") return true;
-  // Setting the workspace up is the owner's job; the Home card is the owner's too.
-  if (sectionId === "getting-started") return false;
-
   const allowed = (key: keyof NonNullable<WorkspaceContext["memberAccess"]>) => workspaceAccessAllows(workspace.memberAccess, key);
   const isWorkflowOnly = normalizeWorkspaceRole(workspace.role) === "workflow";
 
@@ -747,7 +737,7 @@ export default function SettingsPage() {
 
   // The Integrations hub reads three things out of the URL: which provider an
   // old ?section=shopify link meant, which category to lead with, and whether
-  // the Getting started card sent this person here to connect a shop.
+  // the link asked to connect a shop (?intent=connect-shop).
   const [integrationIntent, setIntegrationIntent] = useState("");
   const [integrationCategory, setIntegrationCategory] = useState("");
   const [integrationProvider, setIntegrationProvider] = useState<IntegrationManageTarget>("");
@@ -1423,8 +1413,6 @@ function renderSettingsSection({
       return <SupportTicketsSection workspace={workspace} language={language} supportUnreadCount={supportUnreadCount} onSupportUnreadChanged={onSupportUnreadChanged} />;
     case "about":
       return <AboutSection workspace={workspace} language={language} />;
-    case "getting-started":
-      return <GettingStartedChecklist workspace={workspace} language={language} />;
   }
 }
 
@@ -5838,7 +5826,7 @@ function IntegrationsSection({
 }: {
   workspace: WorkspaceContext;
   language?: string;
-  /** From the Getting started card: lead with the shop platforms. */
+  /** ?intent=connect-shop: lead with the shop platforms. */
   intent?: string;
   category?: string;
   /** An old ?section=shopify link opens that provider's screen directly. */
@@ -5960,8 +5948,8 @@ function IntegrationsSection({
     return true;
   };
   const shown = resolved.filter(matches);
-  // The Getting started card sends people here to connect a shop. Leading with
-  // the two platforms NivaDesk talks to itself is the whole point of the link.
+  // A link that asks to connect a shop leads with the two platforms NivaDesk
+  // talks to itself.
   const shopFirst = intent === "connect-shop";
   const highlighted = new Set(shopFirst ? ["shopify", "woocommerce"] : []);
 
@@ -5983,20 +5971,6 @@ function IntegrationsSection({
 
   return (
     <div className="settings-card-stack settings-integrations-page">
-      {shopFirst ? (
-        <Link className="integrations-intent" href="/home">
-          <span className="integrations-intent-mark" aria-hidden="true">
-            <SettingsSectionIcon icon="cart" />
-          </span>
-          <span>
-            <em>{t("Getting started")}</em>
-            <strong>{t("Connect your shop")}</strong>
-            <small>{t("Choose where you sell. Orders and customers will import automatically.")}</small>
-          </span>
-          <span className="integrations-intent-back">{t("Back to checklist")} →</span>
-        </Link>
-      ) : null}
-
       <div className="settings-integrations-toolbar">
         <label className="settings-search settings-integrations-search">
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="9" cy="9" r="5.5" /><path d="m13.5 13.5 3 3" /></svg>

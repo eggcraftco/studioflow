@@ -19,7 +19,6 @@ import {
  */
 
 export type HomeCardId =
-  | "gettingStarted"
   | "quickActions"
   | "recentActivity"
   | "money"
@@ -68,8 +67,6 @@ export type HomeCardDefinition = {
   access?: WorkspaceMemberAccessKey;
   /** Owner-only cards: money and banking are workspace finances. */
   financeOnly?: boolean;
-  /** Shown to the workspace OWNER only, whatever access keys a member holds. */
-  ownerOnly?: boolean;
   /** The card reports a total, so its header offers the range that total covers. */
   periods?: boolean;
   /** Where the card's single footer link goes. Deep links, filters pre-applied. */
@@ -98,23 +95,6 @@ export function openActivityCentre() {
  * layout below decides where they start.
  */
 export const HOME_CARDS: HomeCardDefinition[] = [
-  {
-    id: "gettingStarted",
-    title: "Getting started",
-    icon: "checklist",
-    // Setting the workspace up is the owner's job; a member, viewer, workflow
-    // or custom-role member is not shown the checklist (8 Oct 2026).
-    ownerOnly: true,
-    sizes: ["1x1", "2x1", "2x2"],
-    defaultSize: "2x1",
-    // The full checklist (Settings ▸ Getting started), not Settings as a whole:
-    // "/settings" opened on Profile & Security, and the owner could not tell
-    // why "View checklist" had taken them there (16 Oct 2026). Spelled out
-    // rather than imported, because lib/studioflow/gettingStarted.ts imports
-    // this module (GETTING_STARTED_HREF there is the same string).
-    href: "/settings?section=getting-started",
-    linkLabel: "View checklist",
-  },
   {
     id: "quickActions",
     title: "Quick actions",
@@ -298,7 +278,7 @@ export type HomeLayout = {
 /**
  * §3's suggested starting layout, in reading order across a four-column grid:
  *
- *   Getting started 2×1 · Quick actions 1×1 · Recent activity 1×1
+ *   Quick actions 2×1 · Recent activity 2×1
  *   Money 1×1 · Banking 1×1 · Inventory 1×1 · Customers 1×1
  *   Orders & production 2×1 · Schedule 2×1
  *   Files 2×1 · Notes 2×1
@@ -306,9 +286,10 @@ export type HomeLayout = {
 export const DEFAULT_HOME_LAYOUT: HomeLayout = {
   version: HOME_LAYOUT_VERSION,
   cards: [
-    { id: "gettingStarted", size: "2x1" },
-    { id: "quickActions", size: "1x1" },
-    { id: "recentActivity", size: "1x1" },
+    // Two wide cards on the first row since Getting started left it (7 Nov 2026):
+    // the owner took every informational step-by-step card out of the product.
+    { id: "quickActions", size: "2x1" },
+    { id: "recentActivity", size: "2x1" },
     { id: "money", size: "1x1" },
     { id: "banking", size: "1x1" },
     { id: "inventory", size: "1x1" },
@@ -382,21 +363,11 @@ export function normaliseHomeLayout(raw: unknown): HomeLayout {
  * a member whose role cannot see financial info must not read the net profit off
  * the Home screen instead.
  */
-/**
- * The "Getting started" gate: the workspace role is "owner", nothing else.
- * Not an access key — a member granted every key is still not the owner.
- * Pure, so scripts/check-card-purposes.mjs can run it on every role.
- */
-export function canSeeGettingStarted(role: string | null | undefined): boolean {
-  return typeof role === "string" && role.trim().toLowerCase() === "owner";
-}
-
 export function canSeeHomeCard(
   card: HomeCardDefinition,
   workspace: WorkspaceContext | null,
 ): boolean {
   if (!workspace) return false;
-  if (card.ownerOnly && !canSeeGettingStarted(workspace.role)) return false;
   if (card.access && !workspaceAccessAllows(workspace.memberAccess, card.access)) return false;
   if (card.financeOnly && !workspaceAccessAllows(workspace.memberAccess, "financialInfo")) return false;
   return true;
