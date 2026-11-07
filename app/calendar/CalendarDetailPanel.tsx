@@ -85,7 +85,12 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
 
   const meta = TYPE_META[item.kind];
   const when = (() => {
-    if (!occ) return item.days[0] ? dayLabel(item.days[0], locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "";
+    if (!occ) {
+      // A note or order reminder: its day, then its time (or All day) — the detail used to drop the time.
+      const day = item.days[0] ? dayLabel(item.days[0], locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "";
+      if (item.kind !== "noteReminder" && item.kind !== "orderReminder") return day;
+      return `${day} · ${item.allDay || item.startMs == null ? t("All day") : timeLabel(item.startMs, locale, timeZone)}`;
+    }
     const first = dayLabel(occ.dateKey, locale, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
     const last = occ.endDateKey !== occ.dateKey ? ` – ${dayLabel(occ.endDateKey, locale, { day: "numeric", month: "long", year: "numeric" })}` : "";
     if (occ.allDay) return `${first}${last} · ${t("All day")}`;
@@ -145,7 +150,14 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
           <Link className="button secondary" href={`/orders?orderId=${encodeURIComponent(item.orderId)}`}>{t("Open order")}</Link>
         </div>
       ) : null}
-      {item.kind !== "orderDue" && item.orderId ? (
+      {item.kind === "orderReminder" && item.orderId ? (
+        <div className="cal-detail-block">
+          {item.subtitle ? <p>⛓ {item.subtitle}</p> : null}
+          <p className="muted-copy">{t("This reminder belongs to the order. Change it in the order's Schedule & Alerts.")}</p>
+          <Link className="button secondary" href={`/orders/${encodeURIComponent(item.orderId)}`}>{t("Open order")}</Link>
+        </div>
+      ) : null}
+      {item.kind !== "orderDue" && item.kind !== "orderReminder" && item.orderId ? (
         <div className="cal-detail-block">
           <strong>{t("Linked order")}:</strong>{" "}
           {orderTitles.has(item.orderId)
@@ -155,7 +167,8 @@ export function CalendarDetailPanel({ item, uid, access, members, orderTitles, r
       ) : null}
       {item.kind === "noteReminder" ? (
         <div className="cal-detail-block">
-          <Link className="button secondary" href="/notes">{t("Open in Notes")}</Link>
+          {/* Opens THIS note (its reminder, time and text are edited there and show here at once). */}
+          <Link className="button secondary" href={`/notes?note=${encodeURIComponent(item.noteId || "")}`}>{t("Open in Notes")}</Link>
         </div>
       ) : null}
 

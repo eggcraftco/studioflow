@@ -155,6 +155,33 @@ check("filters: nothing saved = defaults", JSON.stringify(v.parseCalendarFilters
   check("filters: a saved external type is read back", JSON.stringify(v.parseCalendarFilters({ types: ["external"] }).types) === JSON.stringify(["external"]));
 }
 
+// One reminder list (7 Nov 2026): order Schedule & Alerts reminders are on the Calendar at their own time, opening
+// their order; a date-only note reminder is an all-day card (not 00:00) and names its linked order.
+{
+  const now = Date.parse("2026-10-28T09:00:00Z");
+  const swift = (iso: string) => Date.parse(iso) / 1000 - 978307200;
+  const alerts = JSON.stringify([
+    { id: "a1", title: "Follow up customer", dueAt: swift("2026-10-29T10:30:00Z"), status: "Pending" },
+    { id: "a2", title: "Done already", dueAt: swift("2026-10-29T11:00:00Z"), status: "Done" },
+    { id: "a3", title: "Outside the range", dueAt: swift("2026-12-01T10:00:00Z"), status: "Pending" },
+  ]);
+  const its = build({ nowMs: now, orders: [{ id: "o9", title: "Dial painting", customerName: "Maisie", paymentDate: null, deliveryTime: 0, isDelivered: false, customFields: { __scheduleAlertItemsV1: alerts } }],
+    notes: [
+      { id: "nd", title: "Order glass", text: "", reminderMs: Date.parse("2026-10-30T00:00:00Z"), linkedOrderId: "o9", linkedOrderLabel: "" },
+      { id: "nt", title: "Call", text: "", reminderMs: Date.parse("2026-10-30T14:30:00Z"), reminderAllDay: false },
+    ] });
+  const or = its.filter((i) => i.kind === "orderReminder");
+  check("order reminder: the open one shows, once, on its day at its time", or.length === 1 && or[0].days.join() === "2026-10-29" && or[0].startMs === Date.parse("2026-10-29T10:30:00Z"), JSON.stringify(or.map((i) => [i.title, i.days])));
+  check("order reminder: opens its order, read only, named after the order", or[0]?.orderId === "o9" && or[0]?.readOnly === true && or[0]?.subtitle === "Maisie · Dial painting", or[0]?.subtitle);
+  const nd = its.find((i) => i.id === "note:nd");
+  check("note reminder: a date-only one is an all-day card, not 00:00", nd?.allDay === true && nd?.startMs === null && nd?.days.join() === "2026-10-30");
+  check("note reminder: names its linked order", nd?.orderId === "o9" && nd?.subtitle === "Maisie · Dial painting", nd?.subtitle);
+  const nt = its.find((i) => i.id === "note:nt");
+  check("note reminder: a timed one keeps its time", nt?.allDay === false && nt?.startMs === Date.parse("2026-10-30T14:30:00Z"));
+  check("filters: order reminders can be picked and are read back", v.applyCalendarFilters(its, { ...v.DEFAULT_CALENDAR_FILTERS, types: ["orderReminder"] }).length === 1
+    && JSON.stringify(v.parseCalendarFilters({ types: ["orderReminder"] }).types) === JSON.stringify(["orderReminder"]));
+}
+
 for (const f of fails) console.log(`FAIL ${f}`);
 console.log(`calendar view (web): ${pass}/${pass + fails.length} pass${fails.length ? "" : "; reds: none"}`);
 process.exit(fails.length ? 1 : 0);

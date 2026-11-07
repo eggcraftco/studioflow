@@ -57,7 +57,8 @@ const panel = src("app/calendar/CalendarDetailPanel.tsx");
 check("Calendar note reminder opens that note", /\/notes\?note=/.test(panel));
 check("Calendar order reminder opens its order", /orderReminder/.test(panel));
 const order = src("app/orders/OrderDetailContent.tsx");
-check("order card lists linked reminders", /remindersForOrder\(/.test(order));
+const linked = src("components/OrderLinkedReminders.tsx");
+check("order card lists linked reminders", /<OrderLinkedReminders/.test(order) && /remindersForOrder\(/.test(linked) && /linkedOrderId === orderId/.test(linked) && /entry\.orderId === orderId/.test(linked));
 const doc = src("lib/studioflow/noteDocument.ts");
 check("note documents read and write reminderMode", /resolveReminderAllDay\(/.test(doc) && /reminderModeFor\(/.test(doc));
 

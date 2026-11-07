@@ -79,7 +79,7 @@ import { PROVIDER_META, TASK_STATE_META, TYPE_META, dayLabel, iconFor, timeLabel
 
 const VIEW_KEY = (uid: string) => `nivadesk.calendar.view.v1.${uid}`;
 const SEARCH_SPAN_DAYS = 180;
-const KINDS: CalendarItemKind[] = ["event", "task", "note", "workday", "unavailable", "orderDue", "noteReminder", "external"];
+const KINDS: CalendarItemKind[] = ["event", "task", "note", "workday", "unavailable", "orderDue", "orderReminder", "noteReminder", "external"];
 
 /** QA only: an emulator build on this computer (localhost + NEXT_PUBLIC_FIREBASE_EMULATOR=1) may show the calendar in
  *  another zone (`localStorage["nivadesk.qa.timeZone"]`) so a screen check needs no change to the computer's settings.
@@ -293,6 +293,8 @@ export default function CalendarPage() {
           paymentDate: o.paymentDate,
           deliveryTime: o.deliveryTime,
           isDelivered: o.isDelivered,
+          // Its Schedule & Alerts reminders, shown at their own time (read from the order, never copied).
+          customFields: o.customFields,
         })));
       }).catch(() => { if (!cancelled) setOrders([]); });
     }
@@ -315,7 +317,8 @@ export default function CalendarPage() {
   useEffect(() => {
     if (!workspace || !user || !workspaceAccessAllows(workspace.memberAccess, "notes")) return;
     return listenToKeepNotes(workspace.id, user.uid, (rows) => {
-      setNotes(rows.map((n) => ({ id: n.id, title: n.title, text: n.text, reminderMs: n.reminderDateMillis || null, isDeleted: n.isDeleted, isArchived: n.isArchived })));
+      setNotes(rows.map((n) => ({ id: n.id, title: n.title, text: n.text, reminderMs: n.reminderDateMillis || null, reminderAllDay: n.reminderAllDay,
+        isDeleted: n.isDeleted, isArchived: n.isArchived, linkedOrderId: n.linkedOrderId || null, linkedOrderLabel: n.linkedOrderLabel || null })));
     }, () => setNotes([]));
   }, [workspace, user]);
 
@@ -393,7 +396,7 @@ export default function CalendarPage() {
     if (!user) return [];
     // An archived entry (a former member's, archived by the business owner) shows only when asked for.
     const entries = rangeState.entries.filter((e) => showArchived || !rangeState.meta.get(e.id)?.archived);
-    return buildCalendarItems({ entries, orders, notes, uid: user.uid, fromKey: range.fromKey, toKey: range.toKey, viewerTimeZone: viewerTz, todayKey, externals });
+    return buildCalendarItems({ entries, orders, notes, uid: user.uid, fromKey: range.fromKey, toKey: range.toKey, viewerTimeZone: viewerTz, todayKey, externals, nowMs: Date.now() });
   }, [rangeState.entries, rangeState.meta, showArchived, orders, notes, user, range.fromKey, range.toKey, viewerTz, todayKey, externals]);
   const shown = useMemo(() => searchCalendarItems(applyCalendarFilters(items, filters), searchText), [items, filters, searchText]);
   // The Today view (V1.1): open tasks planned in the last OVERDUE_WINDOW_DAYS days, from the entries already loaded for the

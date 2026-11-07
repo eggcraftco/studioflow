@@ -10,6 +10,7 @@ export const TYPE_META: Record<CalendarItemKind, { label: string; icon: string; 
   workday: { label: "Work day", icon: "🛠", tone: "workday" },
   unavailable: { label: "Unavailable", icon: "⛔", tone: "unavailable" },
   orderDue: { label: "Order due", icon: "📦", tone: "order" },
+  orderReminder: { label: "Order reminder", icon: "⏰", tone: "order" },
   noteReminder: { label: "Note reminder", icon: "🔔", tone: "noteReminder" },
   external: { label: "From your calendar", icon: "🌐", tone: "external" },
 };

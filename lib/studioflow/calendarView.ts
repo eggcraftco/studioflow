@@ -5,12 +5,16 @@
 //   - order due dates, read from the orders this person can already open (loadScheduleOrders follows
 //     Workflow Only / assigned-only scope). Nothing is copied into the calendar: the card is the order's
 //     own date (paymentDate + deliveryTime days; deliveryTime 0 means the order has no due date);
-//   - the person's OWN notes that carry a reminder date (their personal_notes; nobody else's).
+//   - the person's OWN notes that carry a reminder date (their personal_notes; nobody else's), read by reminderCore
+//     (date AND time, or all-day; linked order named);
+//   - the orders' Schedule & Alerts reminders (7 Nov 2026: they were never on the Calendar), from the same orders the
+//     person can already open, each at its own time and opening its order. Nothing is copied: the item is the order's.
 // Filters only hide items; they never decide who may read anything (the rules do).
 import * as core from "./calendarCore";
 import type { CalendarEntry, CalendarEntryType, CalendarOccurrence, CalendarTaskState } from "./calendarCore";
+import { noteReminderItem, orderReminderItems, orderReminderLabel } from "./reminderCore";
 
-export type CalendarItemKind = CalendarEntryType | "orderDue" | "noteReminder" | "external";
+export type CalendarItemKind = CalendarEntryType | "orderDue" | "orderReminder" | "noteReminder" | "external";
 export type CalendarProvider = "google" | "microsoft";
 export type CalendarScope = "mine" | "shared" | "team";
 
@@ -62,9 +66,21 @@ export type CalendarOrderLike = {
   paymentDate: Date | null;
   deliveryTime: number;
   isDelivered: boolean;
+  /** The order's custom fields: its Schedule & Alerts reminders live in `__scheduleAlertItemsV1`. */
+  customFields?: Record<string, string> | null;
 };
 
-export type CalendarNoteLike = { id: string; title: string; text: string; reminderMs: number | null; isDeleted?: boolean; isArchived?: boolean };
+export type CalendarNoteLike = {
+  id: string;
+  title: string;
+  text: string;
+  reminderMs: number | null;
+  reminderAllDay?: boolean | null;
+  isDeleted?: boolean;
+  isArchived?: boolean;
+  linkedOrderId?: string | null;
+  linkedOrderLabel?: string | null;
+};
 
 export function localDayKey(date: Date): string {
   return `${String(date.getFullYear()).padStart(4, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -92,6 +108,8 @@ export type BuildInput = {
   viewerTimeZone: string;
   todayKey: string;
   externals?: CalendarExternalLike[];
+  /** For "overdue" on order reminders; the screen passes Date.now(). */
+  nowMs?: number;
 };
 
 export function buildCalendarItems(input: BuildInput): CalendarItem[] {
@@ -171,22 +189,49 @@ export function buildCalendarItems(input: BuildInput): CalendarItem[] {
       readOnly: true,
     });
   }
+  for (const order of input.orders) {
+    const label = orderReminderLabel(order.customerName, order.title);
+    for (const r of orderReminderItems({ id: order.id, label, customFields: order.customFields || null }, input.nowMs ?? Date.now(), viewerTimeZone)) {
+      if (r.dayKey < fromKey || r.dayKey > toKey) continue;
+      items.push({
+        id: `orderReminder:${order.id}:${r.orderItemId}`,
+        kind: "orderReminder",
+        title: r.title,
+        subtitle: label,
+        days: [r.dayKey],
+        allDay: false,
+        startMs: r.dueMs,
+        endMs: r.dueMs,
+        occurrence: null,
+        entry: null,
+        orderId: order.id,
+        noteId: null,
+        taskState: null,
+        scope: "team",
+        personUid: null,
+        personLabel: null,
+        completedDay: null,
+        readOnly: true,
+      });
+    }
+  }
+  const orderLabels = new Map(input.orders.map((o) => [o.id, orderReminderLabel(o.customerName, o.title)] as const));
   for (const note of input.notes) {
-    if (!note.reminderMs || note.isDeleted || note.isArchived) continue;
-    const day = core.localParts(note.reminderMs, viewerTimeZone).dateKey;
-    if (day < fromKey || day > toKey) continue;
+    const r = noteReminderItem({ id: note.id, title: note.title, text: note.text, reminderMs: note.reminderMs, reminderAllDay: note.reminderAllDay,
+      isDeleted: note.isDeleted, isArchived: note.isArchived, linkedOrderId: note.linkedOrderId, linkedOrderLabel: note.linkedOrderLabel }, input.nowMs ?? Date.now(), viewerTimeZone);
+    if (!r || r.dayKey < fromKey || r.dayKey > toKey) continue;
     items.push({
       id: `note:${note.id}`,
       kind: "noteReminder",
-      title: note.title.trim() || core.autoNoteTitle(note.text),
-      subtitle: "",
-      days: [day],
-      allDay: false,
-      startMs: note.reminderMs,
-      endMs: note.reminderMs,
+      title: r.title,
+      subtitle: r.orderId ? (r.orderLabel || orderLabels.get(r.orderId) || "") : "",
+      days: [r.dayKey],
+      allDay: r.allDay,
+      startMs: r.allDay ? null : r.dueMs,
+      endMs: r.allDay ? null : r.dueMs,
       occurrence: null,
       entry: null,
-      orderId: null,
+      orderId: r.orderId,
       noteId: note.id,
       taskState: null,
       scope: "mine",
@@ -308,7 +353,7 @@ export function parseCalendarFilters(raw: unknown): CalendarFilters {
   const d = DEFAULT_CALENDAR_FILTERS;
   if (!raw || typeof raw !== "object") return d;
   const r = raw as Record<string, unknown>;
-  const kinds: CalendarItemKind[] = ["event", "task", "note", "workday", "unavailable", "orderDue", "noteReminder", "external"];
+  const kinds: CalendarItemKind[] = ["event", "task", "note", "workday", "unavailable", "orderDue", "orderReminder", "noteReminder", "external"];
   return {
     mine: typeof r.mine === "boolean" ? r.mine : d.mine,
     shared: typeof r.shared === "boolean" ? r.shared : d.shared,
