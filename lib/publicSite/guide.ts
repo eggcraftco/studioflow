@@ -62,6 +62,7 @@ const TREE_EN: GuideNode[] = [
             "Your plan: the 14 trial days are free on any of them, nothing is charged until they end, and you can change plan at any time."
           ] },
           { kind: "para", text: "The setup runs once per workspace. If you have already been through it, everything it set is in Settings." },
+          { kind: "sub", text: "After the setup questions: no tour and no checklist" },
           { kind: "para", text: "When you finish, you go straight into your workspace. There is no guided tour, no step-by-step checklist and no list of starting tasks to work through. When you want the steps for something, this guide has them, and on Starter, Pro and Team the How do I…? button answers from it." }
         ]
       },
@@ -1858,7 +1859,8 @@ const TREE_TR: GuideNode[] = [
             "Planınız: 14 günlük deneme hepsinde ücretsizdir, deneme bitmeden hiçbir ücret alınmaz ve planı istediğiniz zaman değiştirebilirsiniz."
           ] },
           { kind: "para", text: "Kurulum her çalışma alanı için bir kez çalışır. Daha önce geçtiyseniz, kurduğu her şey Settings içindedir." },
-          { kind: "para", text: "Kurulumu bitirince doğrudan çalışma alanınıza geçersiniz. Rehberli tur, adım adım kontrol listesi ya da sırayla yapılacak başlangıç görevleri yoktur. Bir şeyin adımlarını öğrenmek istediğinizde bu rehbere bakın; Starter, Pro ve Team planlarında How do I…? düğmesi de buradan cevap verir." }
+          { kind: "sub", text: "Kurulum sorularından sonra: tur yok, Başlarken kontrol listesi yok" },
+          { kind: "para", text: "Kurulumu bitirince doğrudan çalışma alanınıza geçersiniz. Rehberli tur, adım adım kontrol listesi ya da sırayla yapılacak başlangıç görevleri yoktur; bu yüzden tekrar başlatılacak bir kurulum turu da yoktur. Bir şeyin adımlarını öğrenmek istediğinizde bu rehbere bakın; Starter, Pro ve Team planlarında How do I…? düğmesi de buradan cevap verir." }
         ]
       },
       {
