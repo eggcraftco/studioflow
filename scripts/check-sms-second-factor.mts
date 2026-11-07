@@ -21,6 +21,7 @@ import {
   maskPhoneNumber,
   phoneCheckMessage,
   resendSecondsLeft,
+  smsErrorFrom,
   smsErrorMessage,
   smsFactorDisplayName
 } from "../lib/auth/smsSecondFactorRules.ts";
@@ -82,6 +83,11 @@ ok("S4 error sentences", () => {
   assert.equal(smsErrorMessage("auth/network-request-failed"), "", "network errors keep the normal path");
   assert.equal(smsErrorMessage(""), "");
   assert.match(smsErrorMessage("auth/too-many-requests"), /recovery code/, "a blocked text points to the other ways in");
+  // The server guard (sms-guard, beforeSmsSent) arrives as auth/internal-error with its marker.
+  assert.match(smsErrorFrom({ code: "auth/internal-error", message: "Firebase: nivadesk-sms-guard: text messages are not available (auth/internal-error)." }), /cannot be sent right now/);
+  assert.equal(smsErrorFrom({ code: "auth/internal-error", message: "something else" }), "");
+  assert.equal(smsErrorFrom({ code: "auth/quota-exceeded" }), smsErrorMessage("auth/quota-exceeded"));
+  assert.equal(smsErrorFrom(null), "");
 });
 
 ok("S5 wrapper rules (source)", () => {

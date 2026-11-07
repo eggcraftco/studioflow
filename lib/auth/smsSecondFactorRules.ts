@@ -116,3 +116,20 @@ export function smsErrorMessage(code: string): string {
       return "";
   }
 }
+
+/**
+ * The sms-guard blocking function (server package sms-guard, beforeSmsSent) refuses a text with this marker in
+ * its message; Firebase passes it on as auth/internal-error. Shown as the "cannot send right now" sentence.
+ */
+export const SMS_GUARD_MARKER = "nivadesk-sms-guard";
+
+/** smsErrorMessage for a thrown error, including the sms-guard refusal. */
+export function smsErrorFrom(error: unknown): string {
+  const e = (error || {}) as { code?: string; message?: string };
+  const byCode = smsErrorMessage(String(e.code || ""));
+  if (byCode) return byCode;
+  if (String(e.message || "").includes(SMS_GUARD_MARKER)) {
+    return "Text messages cannot be sent right now. Try again later, or use your authenticator app or a recovery code.";
+  }
+  return "";
+}

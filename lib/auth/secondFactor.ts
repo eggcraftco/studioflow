@@ -48,6 +48,7 @@ import {
   checkSmsPhoneNumber,
   maskPhoneNumber,
   phoneCheckMessage,
+  smsErrorFrom,
   smsErrorMessage,
   smsFactorDisplayName
 } from "@/lib/auth/smsSecondFactorRules";
@@ -234,7 +235,7 @@ export async function withSecondFactor<T extends UserCredential>(
             resendAtMs = textsSent >= SMS_MAX_TEXTS_PER_PROMPT ? Number.POSITIVE_INFINITY : Date.now() + SMS_RESEND_COOLDOWN_SECONDS * 1000;
             lastError = "";
           } catch (sendError) {
-            const message = smsErrorMessage(errorCode(sendError));
+            const message = smsErrorFrom(sendError);
             if (!message) throw sendError; // network, internal…: the caller's normal error path
             lastError = message;
             resendAtMs = Date.now() + SMS_RESEND_COOLDOWN_SECONDS * 1000;

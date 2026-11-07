@@ -62,7 +62,7 @@ import {
   SMS_RESEND_COOLDOWN_SECONDS,
   maskPhoneNumber,
   resendSecondsLeft,
-  smsErrorMessage
+  smsErrorFrom
 } from "@/lib/auth/smsSecondFactorRules";
 
 type Then = "enroll" | "enroll-sms" | "remove" | "codes";
@@ -141,7 +141,8 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
 
   function fail(err: unknown, fallback: string) {
     if (code(err) === SECOND_FACTOR_CANCELLED) return;
-    setError(t(smsErrorMessage(code(err))) || friendlyErrorMessage(err, t) || t(fallback));
+    const sms = smsErrorFrom(err);
+    setError((sms && t(sms)) || friendlyErrorMessage(err, t) || t(fallback));
   }
 
   async function beginEnroll() {
