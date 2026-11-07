@@ -1,5 +1,6 @@
 "use client";
 
+import { effectivePreviewLink } from "@/lib/studioflow/orderPreview";
 import Link from "next/link";
 import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useCondensedHeader } from "@/lib/studioflow/useCondensedHeader";
@@ -6006,7 +6007,7 @@ export function OrderDetailContent({
         canSeeFinance,
         canSeeAdvancedFinance,
         hideNumbers,
-        previewUrl: order.designLink,
+        previewUrl: effectivePreviewLink(order.designLink, order.channelPreviewUrl),
         statusSteps,
         statusToggles,
         materialItems: [...materialChecks, ...materialToggles],
@@ -6472,6 +6473,12 @@ export function OrderDetailContent({
   // and a warning next to every customer link the seller can copy.
   const etsyBuyerMessagingBlocked = orderComesFromEtsy({ id: order.id, commerce: order.commerce, customFields: order.customFields, etsySource });
   // A fresh photo first (6 h rule); otherwise any row Etsy named, drawn as the placeholder + "View on Etsy".
+  // siparis-onizleme (7 Nov 2026): the shop photo the server copied, shown only when designLink is a link that is
+  // not a picture (lib/studioflow/orderPreview.ts). A picture in designLink — the studio's or the server's — wins.
+  const shopPreviewLink = (() => {
+    const shown = effectivePreviewLink(order.designLink, order.channelPreviewUrl);
+    return shown && shown !== order.designLink.trim() ? shown : "";
+  })();
   const etsyFirstPhoto = etsyPhotos.photos.find((row) => etsyPhotoIsShowable(row, Date.now(), true))
     ?? etsyPhotos.photos.find((row) => Boolean(etsyListingLink(row)));
   const etsyFirstPhotoLink = etsyListingLink(etsyFirstPhoto);
@@ -7555,6 +7562,10 @@ export function OrderDetailContent({
               />
               {order.designLink && isProbablyImageUrl(order.designLink) ? (
                 <img src={order.designLink} alt={order.designName || t("Order preview")} className="app-preview-image" />
+              ) : shopPreviewLink ? (
+                // siparis-onizleme: the shop's product photo the server copied, shown when designLink is a link
+                // that is not a picture (Shopify's status page). The menu below still edits designLink only.
+                <img src={shopPreviewLink} alt={order.designName || t("Order preview")} className="app-preview-image" data-preview-source="channel" />
               ) : !order.designLink && etsyFirstPhoto ? (
                 // ETSY-E2E night: Etsy's product photo, fetched when the order opens (API Terms: <= 6 h old, not stored).
                 <EtsySafe>
@@ -10524,7 +10535,7 @@ export function OrderDetailContent({
   const mobileCardFold = etsyCardFold(visibleMobileCards, {
     isEtsy: isEtsyOrder,
     used: {
-      preview: Boolean(order.designLink) || etsyPhotos.loading || Boolean(etsyFirstPhoto),
+      preview: Boolean(order.designLink) || Boolean(shopPreviewLink) || etsyPhotos.loading || Boolean(etsyFirstPhoto),
       repairIntake: order.orderType === "repair" || Object.values(repairIntake?.fields ?? {}).some(v => String(v ?? "").trim()) || intakePhotos.length > 0,
       estimate: Boolean(currentEstimate),
       customerPortal: Boolean(portal.active)
@@ -13841,6 +13852,7 @@ export function pdfPreviewSampleOrder(): OrderDetail {
     customerName: "Alex Carter",
     designName: "Engraved Signet Ring",
     designLink: "",
+    channelPreviewUrl: "",
     watchRef: "SAMPLE-1042",
     status: "In Progress",
     designStatus: "In Progress",
