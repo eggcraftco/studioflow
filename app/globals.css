@@ -41712,7 +41712,8 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
 .public-site.public-cream .changelog-tag { border-radius: 6px; font-weight: 700; }
 .public-site.public-cream .changelog-tag-new { background: #dce8dd; color: #2f5a3a; }
 .public-site.public-cream .changelog-tag-improved { background: #d9e8ee; color: #24585a; }
-.public-site.public-cream .changelog-tag-fixed { background: var(--cream-blush); color: var(--cream-terracotta-text); }
+/* The home page's rose tile: terracotta text on blush was 4.32:1, on this 4.78:1 (AA, 7 Nov 2026). */
+.public-site.public-cream .changelog-tag-fixed { background: #f7dad3; color: var(--cream-terracotta-text); }
 
 /* Legal and info pages: the text column on a quiet card. */
 .public-site.public-cream .public-legal-section,
@@ -41848,7 +41849,7 @@ html[data-studio-theme="dark"] .order-stack-body[data-stack-card="clientFiles"] 
 .public-site.public-cream .lp-problem-pill,
 .public-site.public-cream .lp-problem-feature-icon,
 .public-site.public-cream .lp-ba-before .lp-ba-tag,
-.public-site.public-cream .lp-ba-before .lp-ba-mark { background: var(--cream-blush); color: var(--cream-terracotta-text); }
+.public-site.public-cream .lp-ba-before .lp-ba-mark { background: #f7dad3; color: var(--cream-terracotta-text); }
 .public-site.public-cream .lp-problem-feature,
 .public-site.public-cream .lp-ba-card,
 .public-site.public-cream .lp-midcta,
