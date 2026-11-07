@@ -2191,7 +2191,7 @@ const ONBOARDING_ANSWER_LABELS: Record<string, string> = {
 const ONBOARDING_SECTIONS: { key: string; title: string; blurb: string }[] = [
   { key: "workKind", title: "What they make", blurb: "The first work kind, which is the one the preset reads." },
   { key: "workflow", title: "How they work", blurb: "Decides the production board's lanes." },
-  { key: "mainGoal", title: "What they want first", blurb: "Decides the starting task list." },
+  { key: "mainGoal", title: "What they want first", blurb: "Chose the starting task list until 7 Nov 2026, when that list was removed." },
   { key: "teamSize", title: "Team size", blurb: "Also picks the trial plan we recommend." },
   { key: "volume", title: "Orders a month", blurb: "" },
   { key: "businessAge", title: "Business age", blurb: "" },

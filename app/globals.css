@@ -3727,44 +3727,6 @@ body[data-studio-theme="dark"] .orders-rail-dot {
   margin: 4px 14px 14px;
 }
 
-/* First-project tour: whatever the current step is pointing at.
-   Both class names were applied in the markup but never had a rule behind them,
-   so each site inlined its own slightly different ring — and the toolbar button
-   in step 1, the very first thing the tour asks you to click, was left with no
-   highlight at all. One rule now drives every step. */
-.studio-guide-target,
-.first-project-guide-target {
-  position: relative;
-  z-index: 130;
-  outline: 3px solid #0569dc;
-  outline-offset: 3px;
-  box-shadow:
-    0 0 0 6px rgba(5, 105, 220, 0.16),
-    0 16px 40px rgba(5, 105, 220, 0.22);
-  animation: studio-guide-pulse 1.9s ease-in-out infinite;
-}
-
-@keyframes studio-guide-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 0 6px rgba(5, 105, 220, 0.16),
-      0 16px 40px rgba(5, 105, 220, 0.22);
-  }
-  50% {
-    box-shadow:
-      0 0 0 11px rgba(5, 105, 220, 0.08),
-      0 16px 40px rgba(5, 105, 220, 0.28);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .studio-guide-target,
-  .first-project-guide-target {
-    animation: none;
-  }
-}
-
 .order-list-context-menu {
   position: fixed;
   z-index: 90;
@@ -28154,37 +28116,6 @@ body[data-studio-theme="dark"] .permission-matrix-table td.is-approval {
   gap: 2px;
 }
 
-/* Dashboard getting-started checklist (activation wave). */
-.getting-started-card { border-color: rgba(47, 111, 109, 0.3); }
-.getting-started-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.getting-started-meta { display: flex; align-items: center; gap: 10px; }
-.getting-started-hide {
-  border: none; background: none; color: inherit; opacity: 0.6;
-  font-size: 12px; font-weight: 600; cursor: pointer; text-decoration: underline;
-}
-.getting-started-steps { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
-.getting-started-steps button {
-  width: 100%; display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; border: 1px solid var(--app-border, rgba(0,0,0,0.12));
-  border-radius: 10px; background: transparent; color: inherit;
-  font-size: 13.5px; font-weight: 600; cursor: pointer; text-align: left;
-}
-.getting-started-steps li[data-done="true"] button { opacity: 0.6; text-decoration: line-through; }
-/* The first line of the personalised list is the answer they already gave, and
-   there is nowhere to send them for it — so it reads as a statement rather than
-   sitting there looking like a button that does nothing. */
-.getting-started-steps button:disabled { cursor: default; border-style: dashed; opacity: 0.75; }
-.getting-started-steps button:disabled .getting-started-arrow { display: none; }
-.getting-started-tick {
-  width: 20px; height: 20px; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 999px; border: 1.5px solid rgba(47, 111, 109, 0.5); color: #16a34a; font-size: 11px; font-weight: 800;
-}
-.getting-started-steps li[data-done="true"] .getting-started-tick { background: rgba(22, 163, 74, 0.14); border-color: #16a34a; }
-.getting-started-arrow { margin-left: auto; opacity: 0.45; }
-@media (min-width: 900px) {
-  .getting-started-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
 /* PDF section presets — one-tap starting points above the toggle grid. */
 .pdf-preset-row {
   display: flex;
@@ -29287,24 +29218,6 @@ body[data-studio-theme="dark"] .block-custom-color.is-selected {
 
 /* The three first tasks. Each row is a button now — the step it names is one
    click away instead of an instruction to go and find the page yourself. */
-.onboard-tasks { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 9px; }
-.onboard-tasks li { display: flex; font-size: 14px; }
-.onboard-tasks li button {
-  display: flex; align-items: center; gap: 11px; width: 100%; text-align: start;
-  padding: 9px 12px; border-radius: 11px; border: 1px solid var(--border);
-  background: var(--surface); color: var(--text);
-  font-size: 14px; font-weight: 500; font-family: inherit; cursor: pointer;
-}
-.onboard-tasks li button:hover { border-color: var(--accent); }
-.onboard-tasks li button:focus-visible { outline: 2px solid #0569dc; outline-offset: 1px; }
-.onboard-tasks .onboard-task-index {
-  display: grid; place-items: center; width: 24px; height: 24px; flex: 0 0 24px;
-  border-radius: 999px; background: var(--accent-soft); color: var(--accent);
-  font-size: 12px; font-weight: 700;
-}
-.onboard-tasks .onboard-task-label { flex: 1 1 auto; min-width: 0; }
-.onboard-tasks .onboard-task-arrow { flex: 0 0 auto; color: var(--muted); font-size: 16px; }
-[dir="rtl"] .onboard-tasks .onboard-task-arrow { transform: scaleX(-1); }
 
 .onboard-foot {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
@@ -30937,9 +30850,9 @@ body[data-studio-theme="dark"] .home-avatar { background: rgba(96, 165, 250, 0.2
 .home-card-1x1 .home-card-head.has-title-badge > .home-pill { display: none; }
 .home-card-1x1 .home-card-badge { width: 30px; height: 30px; border-width: 1.8px; }
 .home-card-1x1 .home-card-badge svg { width: 15px; height: 15px; }
-/* "Getting started" is 112px of a 107px slot at 15px, so the card could not
-   show its own name. The header's gap gives up four of the five and the type
-   the last one — measured, not guessed. */
+/* A long card name ("Recent activity") needs 112px of a 107px slot at 15px. The
+   header's gap gives up four of the five and the type the last one — measured,
+   not guessed. */
 .home-card-1x1 .home-card-title { font-size: 14.5px; }
 .home-card-1x1 .home-card-head { gap: 6px; }
 
@@ -31330,100 +31243,10 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
   font-size: 11.5px; opacity: 0.6; display: flex; align-items: center; gap: 6px;
 }
 
-/* ---- Getting started ------------------------------------------------- */
-.home-setup { display: flex; flex-direction: column; gap: 10px; height: 100%; }
-.home-setup.is-square { gap: 3px; }
-/* Six rows, a heading, the count, the bar and a panel share 283px. */
-.home-setup.is-large { gap: 5px; }
-.home-setup.is-large .home-eyebrow.is-strong { font-size: 12px; }
-.home-setup.is-large .home-progress { margin: 0; }
-.home-setup.is-large .home-next-panel.is-large { padding: 9px 12px; }
-.home-setup.is-large .home-next-body p { font-size: 11.5px; line-height: 1.3; }
-.home-setup.is-large .home-next-button { padding: 6px 14px; font-size: 12px; }
-.home-setup.is-large .home-setup-skip { margin-top: 4px; align-self: center; }
-.home-setup-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-height: 0; }
-/* The rule between the panel and what is left after it, as the sheet draws it. */
-.home-setup-columns > .home-check-list.is-ruled { border-left: 1px solid var(--border); padding-left: 16px; margin-top: 0; }
-.home-setup-next { display: flex; flex-direction: column; min-width: 0; }
-.home-setup-next .home-next-panel { flex: 1 1 auto; }
-/* The panel stacks here, as the sheet draws it: side by side the step's own
-   name and its blurb share about 150px and both wrap to four lines. */
-.home-setup-next .home-next-body { flex-direction: column; align-items: stretch; gap: 7px; }
-.home-setup-next .home-next-button { align-self: stretch; text-align: center; padding: 7px 14px; }
-/* Two lines and no more: the sentence is a hint, and a third line in German
-   pushes the button off the bottom of a card whose height is fixed. */
-.home-setup-next .home-next-body p {
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
-}
-.home-setup-next .home-next-panel.is-inline { padding: 8px 12px; }
-/* Three things share a 240px card: the count, the bar and the columns. */
-.home-setup.is-split { gap: 4px; }
-/* Measured: the wide card gives its columns 99px and the panel alone wanted
-   122, so both columns overflowed their own box and the card clipped them. The
-   sentence goes to one line for the reason the square gives for dropping it
-   altogether — the page the button opens explains itself — and the rows that
-   are left give up the padding of a list you were meant to tick here. */
-.home-setup.is-split .home-setup-next .home-next-body p { -webkit-line-clamp: 1; }
-.home-setup.is-split .home-next-panel.is-inline { padding: 5px 10px; }
-.home-setup.is-split .home-next-body { gap: 5px; }
-.home-setup.is-split .home-next-button { padding: 4px 12px; font-size: 12px; }
-.home-setup.is-split .home-setup-skip { margin-top: 2px; }
-.home-setup.is-split .home-check-list li { padding: 2px 0; font-size: 11.5px; }
-.home-setup.is-split .home-setup-skip { margin-top: 3px; }
-/* The "Up next" label goes. A single tinted panel under a progress bar does not
-   need to be told it is what comes next, and the line that says why — which the
-   card measured at 240px tall has no room for otherwise — earns the space. */
-.home-setup-next .home-next-panel .home-eyebrow.is-accent { display: none; }
-.home-setup-allset { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-/* What was done, once there is nothing left to do. Tighter than the live list:
-   it is a receipt, not a thing to act on. */
-.home-check-list.is-recap { border-left: 0; padding-left: 0; margin-top: 2px; }
-.home-check-list.is-recap li {
-  padding: 0; font-size: 11px; line-height: 13.5px; opacity: 0.72;
-  border-bottom: 0; gap: 6px;
-}
-/* A receipt's tick does not need to be the size of one you are about to press. */
-.home-check-list.is-recap .home-check { width: 11px; height: 11px; flex: 0 0 auto; }
-.home-check-list.is-two-up { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; margin-top: 0; }
-
 /* A 2x1 on a phone is 359x174 with a 46px header — the sheet's card is drawn
    nearly five times that wide. Measured, the panel as drawn overshoots the
    bottom by 114px, so on a narrow card it gives up the label above it and the
    line that explains why, and keeps the step, the button and the way past it. */
-@container (max-width: 420px) {
-  .home-setup.is-split { gap: 6px; }
-  /* One square tall on a phone (181px), the step and the list need the 19px
-     the count's own line took; the count sits beside its bar instead. */
-  .home-setup.is-split {
-    display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; align-items: center;
-    column-gap: 10px; row-gap: 6px;
-  }
-  .home-setup.is-split > :not(.home-metric-label):not(.home-progress) { grid-column: 1 / -1; }
-  .home-setup.is-split .home-metric-label { font-size: 10.5px; }
-  .home-setup.is-split .home-progress { margin: 0; }
-  .home-setup-columns { gap: 10px; }
-  .home-setup-columns > .home-check-list.is-ruled { padding-left: 10px; }
-  /* Scoped to the wide card: a phone 2x2 is also under 420px, and it is the
-     card that has room for the line these rules take away. */
-  .home-setup.is-split .home-next-panel.is-inline { padding: 8px 10px; }
-  .home-setup.is-split .home-next-body { gap: 6px; }
-  .home-setup.is-split .home-next-body strong { font-size: 12.5px; line-height: 1.15; }
-  .home-setup.is-split .home-next-body p { display: none; }
-  .home-setup.is-split .home-next-button { align-self: stretch; text-align: center; padding: 4px 10px; font-size: 11px; }
-
-  /* The big card on a phone: six rows, the panel and the way past it share
-     283px. The "Your checklist" heading goes rather than the rows getting
-     tighter — the card is already titled "Getting started", and six rows you
-     can read is the whole point of the single column. */
-  .home-setup.is-large .home-eyebrow.is-strong { display: none; }
-  .home-setup.is-large .home-check-list.is-full { gap: 2px; }
-  .home-setup.is-large .home-next-panel.is-large { padding: 7px 11px; }
-  .home-setup.is-large .home-next-button { padding: 5px 12px; }
-  .home-setup.is-split .home-setup-skip { margin-top: 4px; font-size: 11px; }
-  .home-setup-columns .home-check-list li { padding: 4px 0; font-size: 11px; gap: 7px; }
-  .home-setup-columns .home-check { width: 14px; height: 14px; }
-}
-.home-setup.is-large .home-setup-columns { gap: 14px; }
 .home-setup-panel { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; }
 
 .home-eyebrow { margin: 2px 0 0; font-size: 11.5px; opacity: 0.6; }
@@ -31435,93 +31258,6 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
    its whole job is to show. */
 .home-progress { height: 6px; flex: 0 0 auto; border-radius: 999px; background: rgba(130, 130, 130, 0.18); overflow: hidden; }
 .home-progress > span { display: block; height: 100%; border-radius: 999px; background: #0569dc; }
-
-/* The checklist: a filled green tick for done, a blue arrow for the step you
-   are on, a hollow ring for the rest. Never colour alone — the ring shape and
-   the strikethrough carry the same information (§20). */
-.home-check-list { list-style: none; margin: 6px 0 0; padding: 0; }
-.home-check-list li {
-  display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 12.5px;
-  border-bottom: 1px solid var(--border); min-width: 0;
-}
-.home-check-list li:last-child { border-bottom: 0; }
-/* Every step is its own bordered row, as the sheet draws it: a list of six
-   divided by hairlines reads as one block, and the current step has nothing to
-   stand out against. */
-/* Never 0 1 auto: a list that shrinks below its own rows does not clip them, it
-   lets them paint over whatever is underneath — and nothing reports it as
-   overflow. It keeps its height and the card is sized to hold it. */
-.home-check-list.is-full {
-  display: flex; flex-direction: column; gap: 3px; margin-top: 2px;
-  flex: 0 0 auto;
-}
-.home-check-list.is-full li {
-  padding: 3px 10px; border: 1px solid var(--border); border-radius: 9px;
-  font-size: 12px; flex: 0 0 auto;
-}
-.home-check-list li.is-current {
-  color: #0569dc; font-weight: 700; background: rgba(5, 105, 220, 0.07);
-  border-radius: 10px; border-color: rgba(5, 105, 220, 0.45);
-}
-
-.home-check { width: 17px; height: 17px; border-radius: 999px; flex: 0 0 auto; position: relative; }
-.home-check.is-done { background: #16a34a; }
-.home-check.is-done::after {
-  content: ""; position: absolute; left: 5px; top: 4px; width: 4px; height: 8px;
-  border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(42deg);
-}
-.home-check.is-todo { border: 1.5px solid rgba(130, 130, 130, 0.45); }
-.home-check.is-current { border: 1.5px solid #0569dc; }
-.home-check.is-current::after {
-  content: ""; position: absolute; left: 4.5px; top: 5.5px; width: 5px; height: 5px;
-  border: solid #0569dc; border-width: 2px 2px 0 0; transform: rotate(45deg);
-}
-
-/* The recommendation panel. Blue enough to be the obvious next thing, calm
-   enough that it is not a payment prompt (§15). */
-/* The way out of a step that is not for this workshop. Quiet, under the panel,
-   never competing with the one thing the card is asking for. */
-.home-setup-skip {
-  align-self: flex-start; margin-top: 6px; padding: 0;
-  background: none; border: 0; cursor: pointer;
-  font-size: 12px; font-weight: 600; color: #0569dc;
-}
-.home-setup-skip:hover { text-decoration: underline; }
-
-.home-next-panel { background: rgba(5, 105, 220, 0.07); border-radius: 12px; padding: 12px 14px; }
-.home-next-panel.is-large { display: flex; flex-direction: column; gap: 4px; }
-/* On the square the button goes under the words, not beside them: side by side
-   leaves the step's own name about 90px, which truncates every one of them. */
-.home-next-panel.is-stacked { padding: 7px 10px; }
-.home-next-panel.is-stacked .home-next-body { flex-direction: column; align-items: flex-start; gap: 5px; }
-.home-next-panel.is-stacked .home-next-body strong { font-size: 12.5px; line-height: 1.2; }
-.home-next-panel.is-stacked .home-next-body p { font-size: 10.5px; margin-top: 2px; line-height: 1.25; }
-.home-next-panel.is-stacked .home-next-button { align-self: flex-start; padding: 4px 11px; font-size: 11px; }
-
-/* A 174px square holds the count, the bar, the step and the way past it — and
-   only just. The sheet's "Up next" label goes: a single panel under a progress
-   bar does not need to be told it is what comes next. */
-.home-setup.is-square { gap: 4px; }
-.home-setup.is-square .home-metric-label { font-size: 10.5px; }
-.home-setup.is-square .home-progress { margin: 0; }
-/* The card is a fixed square: pin the way out to the bottom so the space the
-   dropped blurb left shows as air under the panel, not as a card that stops
-   half way down. */
-.home-setup.is-square .home-setup-skip { margin-top: auto; font-size: 11.5px; }
-.home-next-body { display: flex; align-items: flex-start; gap: 12px; }
-.home-next-panel.is-large .home-next-body { flex-direction: column; align-items: stretch; gap: 10px; }
-.home-next-body strong { display: block; font-size: 14.5px; font-weight: 800; }
-.home-next-body p { margin: 3px 0 0; font-size: 12px; opacity: 0.7; line-height: 1.4; }
-.home-next-button {
-  flex: 0 0 auto; align-self: center; text-decoration: none; white-space: nowrap;
-  background: #0569dc; color: #fff; font-size: 12.5px; font-weight: 700;
-  padding: 8px 16px; border-radius: 9px;
-  /* The step's own action ("Connect shop", "Choose how") in every language:
-     never wider than the panel, a long one ends in an ellipsis. */
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box;
-}
-.home-next-panel.is-large .home-next-button { align-self: stretch; text-align: center; }
-.home-next-button:hover { background: #0159bc; }
 
 .home-tip {
   display: flex; align-items: center; gap: 10px; margin-top: auto;
@@ -31728,11 +31464,8 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
 .home-progress span { display: block; height: 100%; background: #0569dc; border-radius: 999px; }
 .home-next-step { display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; border-radius: 10px; background: rgba(5, 105, 220, 0.08); }
 .home-next-label { font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #0159bc; }
-.home-check-list { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
-.home-check-list li { display: flex; align-items: center; gap: 8px; }
 /* Ticked, not crossed out: six struck-through lines read as a list of
    mistakes rather than a list of things done. */
-.home-check-list li.is-done { opacity: 0.65; }
 
 .home-notes { display: flex; gap: 8px; flex-wrap: wrap; padding-top: 4px; }
 .home-note {
@@ -32096,21 +31829,6 @@ body[data-studio-theme="dark"] .home-money-tile.tone-teal b { color: #5eead4 !im
 .integrations-crumb button:hover { text-decoration: underline; }
 .integrations-crumb span { opacity: 0.45; }
 
-/* The Getting started card sent them here; the way back has to be visible. */
-.integrations-intent {
-  display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit;
-  background: rgba(5, 105, 220, 0.07); border-radius: 14px; padding: 14px 18px;
-}
-.integrations-intent > span:nth-child(2) { flex: 1 1 auto; min-width: 0; }
-.integrations-intent em { display: inline-block; font-style: normal; font-size: 11px; font-weight: 700; color: #0159bc; background: rgba(5, 105, 220, 0.12); padding: 2px 8px; border-radius: 999px; }
-.integrations-intent strong { display: block; font-size: 16px; font-weight: 800; margin-top: 4px; }
-.integrations-intent small { display: block; font-size: 12.5px; opacity: 0.7; margin-top: 2px; }
-.integrations-intent-back { flex: 0 0 auto; color: #0569dc; font-weight: 700; font-size: 13px; white-space: nowrap; }
-.integrations-intent-mark {
-  flex: 0 0 auto; width: 48px; height: 48px; border-radius: 12px; background: #fff;
-  display: flex; align-items: center; justify-content: center; color: #0569dc;
-}
-.integrations-intent-mark svg { width: 24px; height: 24px; }
 
 .integrations-filters { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .integrations-search { flex: 1 1 240px; min-width: 0; }
@@ -33852,19 +33570,6 @@ body[data-studio-theme="dark"] .settings-ticket-thread { background: var(--setti
 .feedback-history { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; }
 .feedback-history li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
-/* Retention nudge: one card with the next step, in the same band the
-   "Continue setup" banner uses; never shown while the feedback invitation is. */
-.retention-nudge { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 9px 14px; background: var(--surface, #fff); border-bottom: 1px solid var(--border, rgba(122, 122, 122, 0.18)); font-size: 13px; }
-.retention-nudge-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; background: rgba(5, 105, 220, 0.12); color: var(--accent, #0569dc); font-size: 14px; font-weight: 700; }
-.retention-nudge-text { flex: 1; min-width: 220px; }
-.retention-nudge-text strong { display: block; font-size: 12.5px; }
-.retention-nudge-text span { font-size: 11px; opacity: 0.7; }
-.retention-nudge-primary { border: 0; background: var(--accent, #0569dc); color: #fff; border-radius: 8px; padding: 7px 12px; font-weight: 700; font-size: 12px; cursor: pointer; }
-.retention-nudge-secondary { border: 0; background: rgba(122, 122, 122, 0.12); color: inherit; border-radius: 8px; padding: 7px 10px; font-weight: 600; font-size: 12px; cursor: pointer; }
-.retention-nudge-close { border: 0; background: rgba(122, 122, 122, 0.12); color: inherit; border-radius: 999px; width: 26px; height: 26px; font-weight: 700; font-size: 12px; cursor: pointer; }
-.retention-nudge button:disabled { opacity: 0.6; cursor: default; }
-.retention-nudge button:focus-visible { outline: 2px solid var(--accent, #0569dc); outline-offset: 2px; }
-@media (max-width: 640px) { .retention-nudge { padding: 8px 12px; } .retention-nudge-text { min-width: 0; flex-basis: 100%; } }
 
 
 /* Phones (coarse pointer): iOS Safari zooms the page into any focused field
@@ -36034,9 +35739,7 @@ body[data-studio-theme="dark"] .upload-queue-track {
 
   /* N14: page modals (z 40) sat under the sticky toolbar (z 55). On a short
      screen — a phone with the keyboard up — a tall sheet starts at the top, and
-     Quick Create's title and Close were behind the toolbar. Phones only: the
-     desktop first-project tour lifts the toolbar button above the backdrop on
-     purpose, and the tour does not run below 768 px. */
+     Quick Create's title and Close were behind the toolbar. Phones only. */
   .modal-backdrop {
     z-index: calc(var(--z-topbar) + 1);
   }
@@ -36172,76 +35875,7 @@ body[data-studio-theme="dark"] .upload-queue-track {
   }
 }
 
-/* ---- Getting started: Settings ▸ Getting started and the "Bring in your
-   orders" sheet (16 Oct 2026). The checklist reuses the Home card's ticks and
-   bar so a step looks the same in both places. ---- */
-.gs-checklist { display: grid; gap: 14px; }
-.gs-progress { display: grid; gap: 6px; }
-.gs-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.gs-steps li {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
-  border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
-}
-.gs-steps li.is-current { border-color: rgba(5, 105, 220, 0.45); background: rgba(5, 105, 220, 0.05); }
-.gs-steps li[data-done="true"] .gs-step-text strong { opacity: 0.7; }
-.gs-step-text { display: grid; gap: 2px; min-width: 0; }
-.gs-step-text strong { font-size: 14px; font-weight: 800; }
-.gs-step-text em { font-style: normal; font-size: 12.5px; opacity: 0.72; line-height: 1.4; }
-.gs-step-action { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.gs-step-action .button, .gs-store-action .button { white-space: nowrap; text-decoration: none; }
-.gs-tag {
-  display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 9px;
-  font-size: 11.5px; font-weight: 700; white-space: nowrap;
-}
-.gs-tag.is-done { background: rgba(22, 163, 74, 0.12); color: #15803d; }
-.gs-tag.is-warning { background: rgba(217, 119, 6, 0.14); color: #b45309; }
-body[data-studio-theme="dark"] .gs-tag.is-done { color: #4ade80; }
-body[data-studio-theme="dark"] .gs-tag.is-warning { color: #fbbf24; }
-.gs-home-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-  border-top: 1px solid var(--border); padding-top: 12px;
-}
-.gs-home-row > span { display: grid; gap: 2px; }
-.gs-home-row em { font-style: normal; font-size: 12.5px; opacity: 0.72; }
 
-.gs-sheet {
-  width: min(560px, 100%); max-height: calc(100vh - 36px); overflow: auto;
-  display: grid; gap: 10px; padding: 18px 18px 16px; border-radius: 16px;
-  background: rgba(255, 255, 255, 0.98); color: var(--text);
-  box-shadow: 0 24px 60px rgba(23, 23, 23, 0.25);
-}
-body[data-studio-theme="dark"] .gs-sheet { background: rgba(31, 31, 31, 0.98); border: 1px solid var(--border); }
-.gs-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.gs-sheet-head h2 { margin: 0; font-size: 18px; font-weight: 800; }
-.gs-sheet-close {
-  border: 0; background: transparent; color: inherit; cursor: pointer;
-  font-size: 22px; line-height: 1; padding: 2px 6px; opacity: 0.6;
-}
-.gs-sheet-close:hover { opacity: 1; }
-.gs-sheet-intro { margin: 0; font-size: 13.5px; line-height: 1.45; opacity: 0.85; }
-.gs-sheet-section { margin: 6px 0 0; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.6; }
-.gs-sheet-note { margin: 4px 0 0; font-size: 12px; opacity: 0.65; line-height: 1.4; }
-.gs-store-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.gs-store {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
-  border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px;
-}
-.gs-store.gs-hand { grid-template-columns: 1fr auto; }
-.gs-store-mark {
-  width: 34px; height: 34px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
-  background: rgba(130, 130, 130, 0.12); overflow: hidden;
-}
-.gs-store-mark img { width: 26px; height: 26px; object-fit: contain; }
-.gs-store-mark b { font-size: 15px; font-weight: 800; }
-.gs-store-text { display: grid; gap: 2px; min-width: 0; }
-.gs-store-text strong { font-size: 14px; font-weight: 800; }
-.gs-store-text em { font-style: normal; font-size: 12px; opacity: 0.72; line-height: 1.35; }
-.gs-store-action { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-@media (max-width: 640px) {
-  .gs-steps li, .gs-store { grid-template-columns: auto 1fr; }
-  .gs-step-action, .gs-store-action { grid-column: 1 / -1; justify-content: flex-start; }
-  .gs-store.gs-hand { grid-template-columns: 1fr; }
-}
 
 /* ==== Schedule / Team Schedule on phones (review N15, 17 Oct 2026) ====
    New Project stays in the header; Open Order and Calendar File act on the

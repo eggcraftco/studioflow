@@ -21,8 +21,6 @@ import { useEffect, useMemo, useState } from "react";
 import { trackOnboarding } from "@/lib/studioflow/onboardingEvents";
 import {
   ONBOARDING_GOALS,
-  ONBOARDING_GOAL_TASKS,
-  onboardingWorkspaceHref,
   ONBOARDING_INTEGRATIONS,
   ONBOARDING_STARTS,
   ONBOARDING_TEAM_SIZES,
@@ -123,7 +121,7 @@ const STEP_TITLE: Record<OnboardingStepKey, string> = {
 const STEP_LEDE: Record<OnboardingStepKey, string> = {
   basics: "We've suggested these from your location. You can change them now or later in Settings.",
   bringWork: "Pick how you'd like to start. You can do any of the others later.",
-  goal: "Your answer decides what your dashboard and first tasks show.",
+  goal: "Pick the one that matters most right now.",
   work: "This sets up your order cards, production stages and labels.",
   plan: "Your 14 days are free on any of these. Nothing is charged until they end, and you can change plan at any time.",
 };
@@ -692,82 +690,6 @@ export function OnboardingWizard({
               }}
             >
               {saving ? t("Setting up…") : step < TOTAL_STEPS ? t("Continue") : t("Open my workspace")}
-            </button>
-          </div>
-        </footer>
-      </div>
-    </section>
-  );
-}
-
-/** Shown once the answers are saved: what we prepared, and the three things
- *  worth doing first — drawn from the goal they picked, not a generic list.
- *
- *  Each of the three goes somewhere now, and so does the main button. They were
- *  dead text: the product had already worked out the right next step and then
- *  made the person go and find it. `onOpen` takes the destination so the shell can
- *  finish the setup state and route in one go — pressing any of them means the
- *  same thing ("I am done here, take me there"), and leaving the wizard by two
- *  different code paths is how the finish state drifts. */
-export function OnboardingReady({
-  answers,
-  t,
-  onOpen,
-}: {
-  answers: OnboardingAnswers;
-  t: (text: string) => string;
-  onOpen: (href?: string) => void;
-}) {
-  const workflowLabel = ONBOARDING_WORKFLOWS.find(entry => entry.id === answers.workflow)?.label ?? "";
-  const rawKindLabel = ONBOARDING_WORK_KINDS.find(entry => entry.id === answers.workKinds[0])?.label ?? "";
-  // A repair shop that picked the repairs workflow would otherwise read "a
-  // repairs and servicing workspace for repairs & servicing".
-  const kindLabel = rawKindLabel.toLowerCase().startsWith(workflowLabel.toLowerCase().slice(0, 7))
-    ? ""
-    : rawKindLabel;
-  const tasks = ONBOARDING_GOAL_TASKS[(answers.mainGoal || "orders_customers") as OnboardingGoal];
-  // One sentence per language, not glued-together fragments: English word order
-  // does not survive Turkish, Japanese or Arabic.
-  const summary = (kindLabel
-    ? t("We've set up your workspace for {workflow} - {kind}.")
-    : t("We've set up your workspace for {workflow}."))
-    .replace("{workflow}", t(workflowLabel))
-    .replace("{kind}", t(kindLabel));
-
-  useEffect(() => {
-    trackOnboarding("setup_step_viewed", { step: "ready" });
-  }, []);
-
-  return (
-    <section className="onboard-shell" aria-label={t("Your workspace is ready")}>
-      <div className="onboard-card">
-        <header className="onboard-head">
-          <h1>{t("Your workspace is ready")}</h1>
-          <p>{summary}</p>
-        </header>
-        <ol className="onboard-tasks">
-          {tasks.map((task, index) => (
-            <li key={task.label}>
-              <button type="button" onClick={() => onOpen(task.href)}>
-                <span className="onboard-task-index" aria-hidden="true">{index + 1}</span>
-                <span className="onboard-task-label">{t(task.label)}</span>
-                <span className="onboard-task-arrow" aria-hidden="true">›</span>
-              </button>
-            </li>
-          ))}
-        </ol>
-        <footer className="onboard-foot">
-          <span className="onboard-saved">{t("You can change all of this later in Settings.")}</span>
-          <div className="onboard-actions">
-            {/* Lands on the first task rather than wherever the tab happened to
-                be. The old button dropped everybody on the dashboard, which is
-                a wall of empty KPIs on day one. */}
-            <button
-              type="button"
-              className="onboard-btn onboard-btn-primary"
-              onClick={() => onOpen(onboardingWorkspaceHref(tasks[0]?.href))}
-            >
-              {t("Open my workspace")}
             </button>
           </div>
         </footer>

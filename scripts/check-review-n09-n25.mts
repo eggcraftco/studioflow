@@ -9,7 +9,7 @@
 //   N25  the bank lists stack at phone width
 //
 // Run: npx tsx scripts/check-review-n09-n25.mts
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 process.env.NEXT_PUBLIC_FIREBASE_API_KEY ||= "check-only-not-a-key";
@@ -58,15 +58,12 @@ expect("N09 Schedule copy removed", /return "New Project";/.test(read("app/sched
 expect("N09 Orders page no `|| t(\"New Project\")`", read("app/orders/page.tsx").includes('customerName.trim() || t("New Project")'), false);
 expect("N09 detail header goes through the helper", read("app/orders/OrderDetailContent.tsx").includes("<h1>{displayOrderTitle(order.customerName, t)}</h1>"), true);
 
-// Getting started: every step the server or the fallback can show has a row.
-// The fallback list moved to lib/studioflow/gettingStarted.ts (16 Oct 2026), where
-// the Home card, the Settings checklist and the Dashboard card all read it.
-const checklist = read("lib/studioflow/gettingStarted.ts");
-const fallbackSteps = [...checklist.slice(checklist.indexOf("const SETUP_STEPS"), checklist.indexOf("] as const;")).matchAll(/(?:label|blurb|cta): "([^"]+)"/g)].map((m) => m[1]);
-expect("N09 fallback checklist found", fallbackSteps.length, 18);
-for (const text of fallbackSteps) expect(`N09 checklist translated: ${text}`, untranslated(text), []);
-const serverSteps = ["Import your first order", "Create your first project", "Add your first customer", "Match your first transaction", "Add your first item", "Use stock on a job", "Ask the assistant something", "Connect your accounting", "Complete your first project", "Connect your first sales channel", "Connect your bank", "Give the assistant your data", "Tell us what you'd like help with", "You're set up", "Your NivaDesk setup", "Getting started", "Continue", "Skip for now", "{done} of {total} complete"];
-for (const text of serverSteps) expect(`N09 server checklist translated: ${text}`, untranslated(text), []);
+// Getting started was removed on 7 Nov 2026 (no informational step screens), and
+// its words with it: none of the server's step titles may still translate.
+expect("N09 the checklist module is gone", existsSync(path.join(root, "lib/studioflow/gettingStarted.ts")), false);
+for (const text of ["Import your first order", "Create your first project", "Add your first customer", "Match your first transaction", "Complete your first project", "Connect your first sales channel", "{done} of {total} complete"]) {
+  expect(`N09 removed checklist words are gone: ${text}`, untranslated(text).length, LANGS.length);
+}
 
 // ---------------------------------------------------------------- N10
 const line = (name: string, lineTotal: number) => ({ id: name || String(lineTotal), name, quantity: 1, unitPrice: lineTotal, lineTotal });

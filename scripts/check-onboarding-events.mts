@@ -65,7 +65,13 @@ check("wired: app opened + section in AppShell, every setup step, finish and its
   assert.ok(shell.includes('trackOnboarding("store_connect_started"'));
   const wizard = read("components/OnboardingWizard.tsx");
   assert.ok(wizard.includes('trackOnboarding("setup_step_viewed", { step: stepKey })'));
-  assert.ok(wizard.includes('trackOnboarding("setup_step_viewed", { step: "ready" })'));
+  // The "Your workspace is ready" screen with three starting tasks was removed on
+  // 7 Nov 2026 (no informational step screens), so "ready" is never sent again;
+  // the Drop-off page keeps the label for accounts that saw it before.
+  assert.ok(!wizard.includes('step: "ready"'), "the ready screen is back");
+  assert.ok(!wizard.includes("OnboardingReady"), "the ready screen is back");
+  const rules = read("lib/studioflow/onboardingEventRules.ts");
+  assert.ok(!rules.includes("checklist_item_opened"), "the removed checklist's event is back");
 });
 
 check("wired: the one create-order funnel and the Stripe checkout", () => {

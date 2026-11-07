@@ -14,7 +14,6 @@ export type OnboardingEventName =
   | "setup_finished"
   | "screen_viewed"
   | "order_form_opened"
-  | "checklist_item_opened"
   | "store_connect_started"
   | "plan_page_viewed"
   | "checkout_started"

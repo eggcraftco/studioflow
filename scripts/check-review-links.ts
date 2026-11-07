@@ -33,33 +33,15 @@ function check(name: string, run: () => void) {
 
 (async () => {
   const wizard = await import("../lib/studioflow/onboardingWizard");
-  const checklist = await import("../lib/studioflow/setupChecklist");
   const homeCards = await import("../lib/studioflow/homeCards");
 
-  const tasks = wizard.ONBOARDING_GOAL_TASKS as Record<string, Array<{ label: string; href: string }>>;
-  const hrefOf = (goal: string, label: string) => tasks[goal]?.find(task => task.label === label)?.href;
-
-  for (const [goal, label] of [
-    ["orders_customers", "Create your first order"],
-    ["other", "Create your first order"],
-    ["estimates", "Send your first estimate"],
-    ["repairs_service", "Open a repair intake"],
-  ] as const) {
-    check(`N08 ${goal} · "${label}" opens Quick Create`, () => assert.equal(hrefOf(goal, label), "/orders?new=1"));
-  }
-  for (const goal of ["orders_customers", "other"]) {
-    check(`N08 ${goal} · "Add a customer" opens the customer form`, () => assert.equal(hrefOf(goal, "Add a customer"), "/customers?new=1"));
-  }
-  check("N08 Getting started add-order / add-customer steps open their forms", () => {
-    assert.equal(checklist.SETUP_STEP_HREFS.new_order, "/orders?new=1");
-    assert.equal(checklist.SETUP_STEP_HREFS.new_customer, "/customers?new=1");
-  });
-  check("N08 'Open my workspace' lands on the page without opening the form", () => {
-    const fn = (wizard as Record<string, unknown>).onboardingWorkspaceHref as ((href?: string) => string | undefined) | undefined;
-    assert.equal(typeof fn, "function", "onboardingWorkspaceHref is exported");
-    assert.equal(fn!("/orders?new=1"), "/orders");
-    assert.equal(fn!("/customers?new=1&x=2"), "/customers?x=2");
-    assert.equal(fn!("/settings?section=workflow"), "/settings?section=workflow");
+  // N08's starting tasks ("Your workspace is ready" + three numbered tasks) and the
+  // Getting started steps were removed on 7 Nov 2026 (the owner took every
+  // informational step-by-step screen out); this keeps them from coming back.
+  check("N08 the wizard no longer carries a starting-task list or its landing helper", () => {
+    const exported = wizard as Record<string, unknown>;
+    assert.equal(exported.ONBOARDING_GOAL_TASKS, undefined);
+    assert.equal(exported.onboardingWorkspaceHref, undefined);
   });
 
   check("N17 Home 'View all activity' opens the Activity centre, not /orders", () => {

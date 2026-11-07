@@ -56,23 +56,23 @@ const TREE_EN: GuideNode[] = [
           { kind: "para", text: "When you first open NivaDesk, a five-step setup gets your workspace ready for your kind of work. There is no Skip: every step is answerable, and the step that asks how you want to start offers \"Start empty\" and \"I'll set this up later\" as real choices. Back is there from step two onwards." },
           { kind: "steps", items: [
             "Workspace basics: country, currency and time zone, suggested from where you are and changeable now or later in Settings.",
-            "What NivaDesk should help with first: your answer decides the three starting tasks you see when setup finishes.",
+            "What NivaDesk should help with first: pick the one that matters most right now.",
             "Tell us about your work: what you make or repair, which sets your order cards, your production stages and your labels.",
             "Bring your work in: connect Shopify, WooCommerce or Etsy — or start another way, with your first order, a sample workspace, a spreadsheet import, an empty workspace, or \"I'll set this up later\".",
             "Your plan: the 14 trial days are free on any of them, nothing is charged until they end, and you can change plan at any time."
           ] },
-          { kind: "para", text: "The setup runs once per workspace. If you have already been through it, everything it set is in Settings." }
+          { kind: "para", text: "The setup runs once per workspace. If you have already been through it, everything it set is in Settings." },
+          { kind: "para", text: "When you finish, you go straight into your workspace. There is no guided tour, no step-by-step checklist and no list of starting tasks to work through. When you want the steps for something, this guide has them, and on Starter, Pro and Team the How do I…? button answers from it." }
         ]
       },
       {
         id: "what-the-setup-changes",
         title: "What your setup answers change",
         blocks: [
-          { kind: "para", text: "The questions are not a survey: each answer changes the workspace you get." },
+          { kind: "para", text: "The answers below change the workspace you get." },
           { kind: "bullets", items: [
             "What you make or repair picks your order card layout, your fields and your labels.",
             "How you mainly work picks your production board's lanes — a repair shop gets Intake, In Repair, Waiting, Testing and Ready for Collection instead of Ready to Ship.",
-            "What you want help with first picks the three starting tasks on the ready screen.",
             "How many people will use NivaDesk decides whether your free fortnight runs on Pro or on Team."
           ] },
           { kind: "para", text: "Nothing here is permanent: your business type, workflow steps, labels and production stages can all be changed later in Settings." }
@@ -148,7 +148,6 @@ const TREE_EN: GuideNode[] = [
       { kind: "para", text: "Home is the screen you land on, and it is yours: a wall of cards showing the state of the workshop at a glance — what needs doing, what is coming, what came in. You choose which cards are there, how big each one is and in what order they sit." },
       { kind: "sub", text: "The cards" },
       { kind: "bullets", items: [
-        "Getting started — the setup checklist, with the next step first. Steps you wave off stay waved off for you and stay put for everyone else.",
         "Quick actions — the handful of things you start most often.",
         "Recent activity — what has happened in the workspace lately.",
         "Money — what has been invoiced, paid and is still owed, over the months it is counting.",
@@ -184,9 +183,6 @@ const TREE_EN: GuideNode[] = [
         "Quick stats on active orders, what is due soon and recent activity.",
         "Spot overdue or at-risk jobs early so they don't slip.",
         "Jump straight to an order that needs you."
-      ] },
-      { kind: "bullets", items: [
-        "New workspaces see a Getting started checklist at the top of the Dashboard: create your first order, add a customer, import old orders with ChatGPT, connect a store and claim your customer-link name. The first two tick themselves as your data appears; Hide this checklist puts it away."
       ] },
       { kind: "sub", text: "Reading the money cards" },
       { kind: "bullets", items: [
@@ -1525,7 +1521,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "para", text: "Invite people to your workspace by email or let them ask to join, choose what each of them can see and do, and take a member's access away — for a while or for good — without losing anything they did. Adding and managing people is for the workspace owner, on the Team plan." },
           { kind: "sub", text: "Inviting someone by email (invitation link)" },
           { kind: "steps", items: [
-            "Settings ▸ Team Access ▸ Advanced: connect with Company ID › opens the Team page (Getting started ▸ Invite a team member opens it too).",
+            "Settings ▸ Team Access ▸ Advanced: connect with Company ID › opens the Team page.",
             "Press Invite Member, choose By email, enter their email, pick a role and press Send Invitation.",
             "They get an email with a link to nivadesk.app/invite/…, valid for 14 days. They sign in (or press I do not have an account yet and create one with the invited email) and press Accept Invitation."
           ] },
@@ -1793,7 +1789,6 @@ const TREE_EN: GuideNode[] = [
       { kind: "sub", text: "Where the help assistant is" },
       { kind: "bullets", items: [
         "Press How do I…? — the button at the bottom right of the screen, in the web app and in the Mac, iPhone, iPad and Android apps.",
-        "Getting started ▸ Ask the help assistant a question opens it too.",
         "On nivadesk.app the chat in the corner answers as well; signed in on Starter, Pro or Team it gives the same steps as the assistant in the app."
       ] },
       { kind: "sub", text: "What it can and cannot answer" },
@@ -1857,23 +1852,23 @@ const TREE_TR: GuideNode[] = [
           { kind: "para", text: "NivaDesk'i ilk açtığınızda beş adımlık bir kurulum, çalışma alanınızı yaptığınız işe göre hazırlar. Atlama (Skip) yoktur: her adım cevaplanabilir ve nasıl başlamak istediğinizi soran adımda \"Boş başla\" ile \"Bunu sonra ayarlayacağım\" gerçek birer seçenektir. Geri düğmesi ikinci adımdan itibaren hep oradadır." },
           { kind: "steps", items: [
             "Çalışma alanı temelleri: ülke, para birimi ve saat dilimi. Konumunuzdan önerilir; şimdi ya da sonra Ayarlar'dan değiştirilebilir.",
-            "NivaDesk önce neye yardım etsin: cevabınız, kurulum bitince göreceğiniz üç başlangıç görevini belirler.",
+            "NivaDesk önce neye yardım etsin: şu an sizin için en önemli olanı seçin.",
             "İşinizi anlatın: ne ürettiğiniz ya da onardığınız. Bu, sipariş kartlarınızı, üretim aşamalarınızı ve etiketlerinizi belirler.",
             "İşinizi içeri alın: Shopify, WooCommerce veya Etsy bağlayın — ya da başka türlü başlayın: ilk siparişiniz, örnek bir çalışma alanı, tablo içe aktarma, boş çalışma alanı veya \"Bunu sonra ayarlayacağım\".",
             "Planınız: 14 günlük deneme hepsinde ücretsizdir, deneme bitmeden hiçbir ücret alınmaz ve planı istediğiniz zaman değiştirebilirsiniz."
           ] },
-          { kind: "para", text: "Kurulum her çalışma alanı için bir kez çalışır. Daha önce geçtiyseniz, kurduğu her şey Settings içindedir." }
+          { kind: "para", text: "Kurulum her çalışma alanı için bir kez çalışır. Daha önce geçtiyseniz, kurduğu her şey Settings içindedir." },
+          { kind: "para", text: "Kurulumu bitirince doğrudan çalışma alanınıza geçersiniz. Rehberli tur, adım adım kontrol listesi ya da sırayla yapılacak başlangıç görevleri yoktur. Bir şeyin adımlarını öğrenmek istediğinizde bu rehbere bakın; Starter, Pro ve Team planlarında How do I…? düğmesi de buradan cevap verir." }
         ]
       },
       {
         id: "what-the-setup-changes",
         title: "Kurulum cevaplarınız neyi değiştirir",
         blocks: [
-          { kind: "para", text: "Sorular anket değildir: her cevap elinize geçen çalışma alanını değiştirir." },
+          { kind: "para", text: "Aşağıdaki cevaplar elinize geçen çalışma alanını değiştirir." },
           { kind: "bullets", items: [
             "Ne ürettiğiniz ya da onardığınız; sipariş kartı düzeninizi, alanlarınızı ve etiketlerinizi belirler.",
             "Ağırlıklı olarak nasıl çalıştığınız; üretim panosu şeritlerinizi belirler — bir onarım atölyesi \"Ready to Ship\" yerine Intake, In Repair, Waiting, Testing ve Ready for Collection alır.",
-            "Önce neye yardım istediğiniz; hazır ekranındaki üç başlangıç görevini belirler.",
             "NivaDesk'i kaç kişinin kullanacağı; ücretsiz iki haftanızın Pro mu Team mi olacağını belirler."
           ] },
           { kind: "para", text: "Burada hiçbir şey kalıcı değildir: iş türünüzü, iş akışı adımlarınızı, etiketlerinizi ve üretim aşamalarınızı sonradan Settings'ten değiştirebilirsiniz." }
@@ -1949,7 +1944,6 @@ const TREE_TR: GuideNode[] = [
       { kind: "para", text: "Home, uygulamayı açtığınızda indiğiniz ekrandır ve size aittir: atölyenin durumunu tek bakışta gösteren bir kart duvarı — yapılması gereken, yaklaşan ve gelen. Hangi kartların orada olacağına, her birinin ne kadar büyük olacağına ve hangi sırada duracağına siz karar verirsiniz." },
       { kind: "sub", text: "Kartlar" },
       { kind: "bullets", items: [
-        "Getting started — kurulum kontrol listesi, sıradaki adım en başta. Geçtiğiniz adımlar sizin için geçilmiş kalır, başkalarında yerinde durur.",
         "Quick actions — en sık başlattığınız birkaç iş.",
         "Recent activity — çalışma alanında son olanlar.",
         "Money — faturalanan, tahsil edilen ve hâlâ beklenen tutarlar; saydığı aylarla birlikte.",
@@ -1985,9 +1979,6 @@ const TREE_TR: GuideNode[] = [
         "Aktif siparişler, yakında teslim edilecekler ve son etkinlik hakkında hızlı istatistikler.",
         "Geciken veya riskli işleri erkenden fark edin; kaçmasınlar.",
         "Sizi bekleyen bir siparişe doğrudan gidin."
-      ] },
-      { kind: "bullets", items: [
-        "Yeni çalışma alanları Dashboard'ın üstünde bir Başlarken listesi görür: ilk siparişi oluştur, müşteri ekle, eski siparişleri ChatGPT ile aktar, mağaza bağla ve müşteri bağlantısı adını al. İlk ikisi veriniz oluştukça kendiliğinden işaretlenir; Hide this checklist listeyi kaldırır."
       ] },
       { kind: "sub", text: "Para kartlarını okumak" },
       { kind: "bullets", items: [
@@ -3313,7 +3304,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "para", text: "İnsanları çalışma alanınıza e-postayla davet edin ya da katılmak istemelerine izin verin, her birinin neyi görüp yapabileceğini seçin ve bir üyenin erişimini — bir süreliğine ya da tamamen — yaptığı hiçbir şeyi kaybetmeden kaldırın. Kişi eklemek ve yönetmek, Team planında çalışma alanı sahibinin işidir." },
           { kind: "sub", text: "Ekibe birini e-postayla davet etmek (davet bağlantısı)" },
           { kind: "steps", items: [
-            "Ayarlar ▸ Ekip Erişimi ▸ Gelişmiş: Şirket ID ile bağlan › Ekip sayfasını açar (Başlarken ▸ Ekip üyesi davet et de onu açar).",
+            "Ayarlar ▸ Ekip Erişimi ▸ Gelişmiş: Şirket ID ile bağlan › Ekip sayfasını açar.",
             "Üye Davet Et'e basın, E-posta ile'yi seçin, kişinin e-postasını girin, bir rol seçin ve Daveti Gönder'e basın.",
             "Kişiye nivadesk.app/invite/… bağlantılı, 14 gün geçerli bir e-posta gider. Giriş yapar (ya da Henüz hesabım yok'a basıp davet edilen e-postayla hesap açar) ve Daveti Kabul Et'e basar."
           ] },
@@ -3573,7 +3564,6 @@ const TREE_TR: GuideNode[] = [
       { kind: "sub", text: "Yardım asistanı nerede" },
       { kind: "bullets", items: [
         "Nasıl yaparım…? düğmesine basın — ekranın sağ altındaki düğme; web uygulamasında ve Mac, iPhone, iPad ve Android uygulamalarında.",
-        "Başlarken ▸ Yardım asistanına bir soru sorun da onu açar.",
         "nivadesk.app'te köşedeki sohbet de yanıt verir; Starter, Pro ya da Team ile oturum açmışsanız uygulamadaki asistanla aynı adımları verir."
       ] },
       { kind: "sub", text: "Neyi yanıtlar, neyi yanıtlayamaz" },

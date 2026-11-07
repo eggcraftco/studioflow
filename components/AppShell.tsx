@@ -59,7 +59,7 @@ import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import { studioCountLabel, studioDayPhrase } from "@/lib/studioflow/countLabel";
 import { foreignCurrenciesLine, foreignCurrencyTotals, formatCurrencyCodeAmount, isForeignToWorkspace } from "@/lib/studioflow/orderCurrency";
 import { studioLanguageDir, studioLanguageLocale } from "@/lib/studioflow/languageDirection";
-import { OnboardingReady, OnboardingWizard } from "@/components/OnboardingWizard";
+import { OnboardingWizard } from "@/components/OnboardingWizard";
 import { EMPTY_INTEGRATION_SIGNALS, loadIntegrationSignals, type IntegrationSignals } from "@/lib/studioflow/integrations";
 import { setupPassthroughFromUrl } from "@/lib/studioflow/etsyFirstImport";
 import { canEditWorkspaceSettingsForRole, savePersonalInterfaceSettings } from "@/lib/studioflow/settingsActions";
@@ -73,7 +73,6 @@ import { clearOnboardingProgress } from "@/lib/studioflow/onboardingProgress";
 import AppHelpAssistant from "@/components/AppHelpAssistant";
 import WebUpdateNotice from "@/components/WebUpdateNotice";
 import FeedbackCenter from "@/components/FeedbackCenter";
-import RetentionNudge from "@/components/RetentionNudge";
 import {
   formatStudioMoney,
   moneySymbol,
@@ -106,15 +105,6 @@ import {
   isWorkspaceOnboardingPromptSeed,
   WORKSPACE_ONBOARDING_BUSINESS_TYPES,
 } from "@/lib/studioflow/workspaceOnboarding";
-import {
-  FIRST_PROJECT_GUIDE_EVENT,
-  completeFirstProjectGuide,
-  getFirstProjectGuideState,
-  setFirstProjectGuideState,
-  type FirstProjectGuideState,
-  isFirstProjectGuideDeviceEligible,
-  rememberSignupPlatformForGuide,
-} from "@/lib/studioflow/firstProjectGuide";
 
 type NavIconName =
   | "home"
@@ -1431,7 +1421,6 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   // feature is on; the form itself lives in FeedbackCenter.
   const [feedbackManualOpen, setFeedbackManualOpen] = useState(false);
   const [feedbackEnabled, setFeedbackEnabled] = useState(false);
-  const [feedbackInviteVisible, setFeedbackInviteVisible] = useState(false);
   const [avatarImageFailed, setAvatarImageFailed] = useState(false);
   const [workspaceLogoFailed, setWorkspaceLogoFailed] = useState(false);
   // No business type is preselected: a pre-filled choice was silently accepted by
@@ -1444,38 +1433,6 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const [onboardingPromptEdited, setOnboardingPromptEdited] = useState(false);
   const [onboardingSaving, setOnboardingSaving] = useState(false);
   const [onboardingError, setOnboardingError] = useState("");
-  const addProjectButtonRef = useRef<HTMLButtonElement | null>(null);
-  const [firstProjectGuide, setFirstProjectGuide] =
-    useState<FirstProjectGuideState | null>(null);
-  const [guideDeviceEligible, setGuideDeviceEligible] = useState(false);
-  useEffect(() => {
-    if (!user) {
-      setGuideDeviceEligible(false);
-      return;
-    }
-    if (!isFirstProjectGuideDeviceEligible()) {
-      setGuideDeviceEligible(false);
-      return;
-    }
-    let cancelled = false;
-    getDoc(doc(db, "users", user.uid))
-      .then((snap) => {
-        if (cancelled) return;
-        const platform = String(snap.data()?.signupPlatform ?? "").toLowerCase();
-        rememberSignupPlatformForGuide(platform);
-        setGuideDeviceEligible(platform !== "mobile");
-      })
-      .catch(() => {
-        if (!cancelled) setGuideDeviceEligible(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [user]);
-  const [addProjectGuidePosition, setAddProjectGuidePosition] = useState<{
-    top: number;
-    left: number;
-  } | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -1910,26 +1867,6 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       return true;
     }).length + calendarInbox.filter((row) => !row.read).length;
   }, [notifications, notifDismissedLocal, user, workspace?.memberAccess, calendarInbox]);
-
-  useEffect(() => {
-    function refreshFirstProjectGuide() {
-      setFirstProjectGuide(getFirstProjectGuideState());
-    }
-
-    refreshFirstProjectGuide();
-    window.addEventListener(
-      FIRST_PROJECT_GUIDE_EVENT,
-      refreshFirstProjectGuide,
-    );
-    window.addEventListener("storage", refreshFirstProjectGuide);
-    return () => {
-      window.removeEventListener(
-        FIRST_PROJECT_GUIDE_EVENT,
-        refreshFirstProjectGuide,
-      );
-      window.removeEventListener("storage", refreshFirstProjectGuide);
-    };
-  }, []);
 
   useEffect(() => {
     setAvatarImageFailed(false);
@@ -2478,19 +2415,6 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     financeOrdersLoaded &&
     financeOrders.length > 0,
   );
-  // The "add your first project" guide is only for genuinely new users: no orders
-  // yet and the guide not already completed. (Previously `firstProjectGuide === null`
-  // made it show for any existing user without local guide state.)
-  const showAddProjectGuide = Boolean(
-    guideDeviceEligible &&
-    canCreateToolbarOrder &&
-    pathname.startsWith("/orders") &&
-    financeOrdersLoaded &&
-    financeOrdersTrusted &&
-    financeOrders.length === 0 &&
-    !firstProjectGuide?.completed &&
-    (firstProjectGuide === null || firstProjectGuide.step === 1),
-  );
 
   useEffect(() => {
     if (!showWorkspaceOnboarding) return;
@@ -2502,53 +2426,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     );
   }, [showWorkspaceOnboarding, onboardingBusinessType, onboardingPromptEdited, language]);
 
-  useEffect(() => {
-    if (!showAddProjectGuide) {
-      setAddProjectGuidePosition(null);
-      return;
-    }
-
-    function updateAddProjectGuidePosition() {
-      const rect = addProjectButtonRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const bubbleWidth = 360;
-      const left = Math.max(
-        16,
-        Math.min(window.innerWidth - bubbleWidth - 16, rect.left),
-      );
-      setAddProjectGuidePosition({ top: rect.bottom + 12, left });
-    }
-
-    updateAddProjectGuidePosition();
-    const frame = window.requestAnimationFrame(updateAddProjectGuidePosition);
-    window.addEventListener("resize", updateAddProjectGuidePosition);
-    window.addEventListener("scroll", updateAddProjectGuidePosition, true);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", updateAddProjectGuidePosition);
-      window.removeEventListener("scroll", updateAddProjectGuidePosition, true);
-    };
-  }, [showAddProjectGuide]);
-
   function handleOrderCreated(orderId: string, options: { navigate?: boolean } = {}) {
-    const currentGuide =
-      firstProjectGuide ?? getFirstProjectGuideState() ?? {
-        step: 1,
-        completed: false,
-      };
-    // Only kick off the first-project guide on the user's very first project
-    // (no existing orders) and when it isn't already completed.
-    const isFirstEverProject = financeOrders.length === 0;
-    if (isFirstEverProject && guideDeviceEligible && !currentGuide.completed && currentGuide.step <= 1) {
-      const nextGuide: FirstProjectGuideState = {
-        ...currentGuide,
-        step: 2,
-        orderId,
-        completed: false,
-      };
-      setFirstProjectGuideState(nextGuide);
-      setFirstProjectGuide(nextGuide);
-    }
     window.dispatchEvent(
       new CustomEvent("studioflow-order-created", { detail: { orderId } }),
     );
@@ -2566,9 +2444,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   // in. Past them, this only OPENS the mini form; the create itself lives in
   // handleQuickCreateSubmit and nothing is written until it runs.
   function handleAddOrder(payload: QuickActionPayload = {}) {
-    // The button that fires this paints ABOVE the dimmed backdrop — the
-    // first-project guide ring puts it there on purpose, and so does the sticky
-    // phone toolbar — so a second press while the sheet is open is easy to make
+    // The button that fires this paints ABOVE the dimmed backdrop — the sticky
+    // phone toolbar puts it there — so a second press while the sheet is open is easy to make
     // by accident. Reopening would reset customer, name and due date in place,
     // silently emptying everything already typed. The sheet is already on
     // screen, so the honest answer to this press is to do nothing at all.
@@ -2729,8 +2606,6 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     });
   }
 
-  const [finishedAnswers, setFinishedAnswers] = useState<OnboardingAnswers | null>(null);
-
   /**
    * The wizard's language choice, applied the moment it is made rather than on
    * Finish — the rest of the setup should already read in it. Language is
@@ -2778,9 +2653,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         workspaceOnboardingPromptSeed(businessType, language),
       );
       const trialPlan = await saveOnboardingAnswers(workspace.id, user.uid, answers, preset);
-      // The draft has been answered for real. Cleared here rather than on the
-      // way out of the ready screen, because the answers are on the workspace
-      // from this line on and a draft that outlives them is a second, staler
+      // The draft has been answered for real: the answers are on the workspace
+      // from this line on, and a draft that outlives them is a second, staler
       // copy of the same setup waiting to be resumed.
       clearOnboardingProgress(workspace.id, user.uid);
       // The last step may have moved the trial to another plan (setTrialPlan,
@@ -2793,7 +2667,18 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         await waitForWorkspacePlan(workspace.id, trialPlan.plan);
         await refreshWorkspaceAfterPlanChange(user.uid);
       }
-      setFinishedAnswers(answers);
+      // Straight into the workspace. There used to be a "Your workspace is
+      // ready" screen here with three numbered starting tasks; the owner took
+      // every informational step out of the product (7 Nov 2026), so the
+      // answers are saved and the app opens on Orders. `replace`, so Back does
+      // not walk into a ?setup=continue that is already done.
+      setSettings((current) => {
+        const merged = current ? { ...current, businessOnboardingCompleted: true } : current;
+        if (merged && user?.uid) rememberAppShellSnapshot(user.uid, { settings: merged });
+        return merged;
+      });
+      setSetupResumeRequested(false);
+      router.replace("/orders");
       trackOnboarding("setup_finished", { start: answers.start || "other", plan: trialPlan?.plan || answers.plan || "none" });
     } catch (failure) {
       trackOnboarding("error_shown", { where: "setup_save", code: errorCodeOf(failure) });
@@ -2926,48 +2811,28 @@ function AppShellFrame({ children }: { children: ReactNode }) {
             possible first impression. data-studio-theme is what the stylesheet
             keys off, so setting it on this subtree is enough. */}
         <OnboardingLightTheme />
-        {finishedAnswers ? (
-          <OnboardingReady
-            answers={finishedAnswers}
-            t={t}
-            onOpen={(href) => {
-              setSettings((current) => {
-                const merged = current ? { ...current, businessOnboardingCompleted: true } : current;
-                if (merged && user?.uid) rememberAppShellSnapshot(user.uid, { settings: merged });
-                return merged;
-              });
-              window.dispatchEvent(new CustomEvent("studioflow-workspace-onboarded"));
-              // Land on the step they chose, or on the first one. Without this
-              // the wizard let go and whatever route the tab was on rendered —
-              // in practice the empty dashboard, which is the one screen that
-              // cannot show a brand-new workspace anything.
-              if (href) router.push(href);
-            }}
-          />
-        ) : (
-          <OnboardingWizard
-            /* The draft is read once, at mount, under this exact scope. Keying
-               on it means a different workspace or a different account gets a
-               new wizard rather than one still holding the last one's answers. */
-            key={`${workspace?.id ?? ""}:${user?.uid ?? ""}`}
-            t={t}
-            language={language}
-            saving={onboardingSaving}
-            error={t(onboardingError)}
-            companyId={workspace?.id ?? ""}
-            userId={user?.uid ?? ""}
-            onFinish={(answers) => void completeOnboardingWizard(answers)}
-            onLanguageChange={(chosen) => void applyOnboardingLanguage(chosen)}
-            onConnect={(answers, href) => connectFromOnboarding(answers, href)}
-            /* Offered ONLY to somebody who reopened setup themselves. At
-               onboarding start there is nowhere to be let out to — every route
-               renders the wizard — and §110 allows the interrupt there. Nothing
-               is written and the draft is kept, so the Continue setup card
-               opens straight back onto this step. */
-            onExit={canLeaveResumedSetup ? leaveResumedSetup : undefined}
-            connected={onboardingConnected}
-          />
-        )}
+        <OnboardingWizard
+          /* The draft is read once, at mount, under this exact scope. Keying
+             on it means a different workspace or a different account gets a
+             new wizard rather than one still holding the last one's answers. */
+          key={`${workspace?.id ?? ""}:${user?.uid ?? ""}`}
+          t={t}
+          language={language}
+          saving={onboardingSaving}
+          error={t(onboardingError)}
+          companyId={workspace?.id ?? ""}
+          userId={user?.uid ?? ""}
+          onFinish={(answers) => void completeOnboardingWizard(answers)}
+          onLanguageChange={(chosen) => void applyOnboardingLanguage(chosen)}
+          onConnect={(answers, href) => connectFromOnboarding(answers, href)}
+          /* Offered ONLY to somebody who reopened setup themselves. At
+             onboarding start there is nowhere to be let out to — every route
+             renders the wizard — and §110 allows the interrupt there. Nothing
+             is written and the draft is kept, so the Continue setup card
+             opens straight back onto this step. */
+          onExit={canLeaveResumedSetup ? leaveResumedSetup : undefined}
+          connected={onboardingConnected}
+        />
       </AppShellMountedContext.Provider>
     );
   }
@@ -3027,15 +2892,6 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               setSetupResumeRequested(true);
               router.push(`${pathname}?setup=continue`);
             }}
-          />
-        ) : null}
-        {workspace && user?.uid ? (
-          <RetentionNudge
-            companyId={workspace.id}
-            uid={user.uid}
-            t={t}
-            hold={feedbackInviteVisible}
-            onOpen={(href) => router.push(href)}
           />
         ) : null}
         <div className="shell-container shell-container-wide app-shell-frame">
@@ -3189,12 +3045,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               </button>
               {canCreateToolbarOrder ? (
                 <button
-                  ref={addProjectButtonRef}
-                  className={
-                    showAddProjectGuide
-                      ? "button native-add-order studio-guide-target"
-                      : "button native-add-order"
-                  }
+                  className="button native-add-order"
                   type="button"
                   disabled={creatingOrder}
                   title={t("Add Project")}
@@ -3208,90 +3059,6 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               ) : null}
             </div>
           </header>
-          {showAddProjectGuide ? (
-            <div
-              role="dialog"
-              aria-live="polite"
-              style={{
-                position: "fixed",
-                top: addProjectGuidePosition?.top ?? 96,
-                left: addProjectGuidePosition?.left ?? 24,
-                width: "min(360px, calc(100vw - 32px))",
-                zIndex: 9999,
-                padding: "18px",
-                borderRadius: "22px",
-                border: "4px solid #2563eb",
-                background: "color-mix(in srgb, var(--surface) 92%, #dbeafe)",
-                boxShadow: "0 24px 60px rgba(37, 99, 235, 0.36)",
-                color: "var(--text)",
-                pointerEvents: "auto",
-              }}
-            >
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  borderRadius: "999px",
-                  padding: "4px 12px",
-                  marginBottom: "10px",
-                  background: "#2563eb",
-                  color: "white",
-                  fontWeight: 800,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  fontSize: "0.78rem",
-                }}
-              >
-                {t("Step 1 / 6")}
-              </span>
-              <button
-                type="button"
-                aria-label={t("Skip")}
-                onClick={() =>
-                  completeFirstProjectGuide(
-                    firstProjectGuide ?? { step: 1, completed: false },
-                  )
-                }
-                style={{
-                  position: "absolute",
-                  top: "12px",
-                  right: "12px",
-                  width: "30px",
-                  height: "30px",
-                  borderRadius: "999px",
-                  border: 0,
-                  background:
-                    "color-mix(in srgb, var(--muted) 18%, transparent)",
-                  color: "var(--muted)",
-                  fontSize: "20px",
-                  cursor: "pointer",
-                }}
-              >
-                ×
-              </button>
-              <strong
-                style={{
-                  display: "block",
-                  fontSize: "1.35rem",
-                  marginBottom: "8px",
-                }}
-              >
-                {t("Start with Add Project")}
-              </strong>
-              <p
-                style={{
-                  margin: 0,
-                  color: "var(--muted)",
-                  fontSize: "1rem",
-                  lineHeight: 1.45,
-                }}
-              >
-                {t(
-                  "Create your first project. We will then show you the most important cards one by one.",
-                )}
-              </p>
-            </div>
-          ) : null}
           <div className="app-shell-body">
             {mobileNavOpen ? (
               <button
@@ -3643,7 +3410,6 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         manualOpen={feedbackManualOpen}
         onManualClose={() => setFeedbackManualOpen(false)}
         onAvailability={setFeedbackEnabled}
-        onInviteVisible={setFeedbackInviteVisible}
       />
       <NotificationsDrawer
         open={notifDrawerOpen}

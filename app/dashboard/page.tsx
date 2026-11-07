@@ -47,9 +47,6 @@ import { formatStudioMoney, moneySymbol, type StudioMoneySettings } from "@/lib/
 import { foreignCurrenciesLine, foreignCurrencyTotals, formatCurrencyCodeAmount, isForeignToWorkspace } from "@/lib/studioflow/orderCurrency";
 import { saveDashboardWidgetVisibility } from "@/lib/studioflow/settingsActions";
 import { detectRecurringSpends, monthlyFixedTotal, reclaimableVatForTx } from "@/lib/studioflow/bankInsights";
-import { loadSetupChecklist, setupStepHref, type SetupChecklist } from "@/lib/studioflow/setupChecklist";
-import { canSeeGettingStarted } from "@/lib/studioflow/homeCards";
-import { serverStepDone, serverStepLabel } from "@/lib/studioflow/gettingStarted";
 
 type RangeKey = "week" | "month" | "year" | "all" | "custom";
 type BucketUnit = "day" | "month";
@@ -97,144 +94,6 @@ type BankTx = {
   vatCodeAuto: string;
   splits: Array<{ amount: number; vatCode: string }>;
 };
-
-// Activation checklist (first-run report): the dashboard is where a brand-new
-// owner looks first, and an empty KPI wall says nothing. Five small steps with
-// live ticks where the data can prove them (orders, customers) and click-ticks
-// for the rest. Dismissal is a per-workspace device convenience.
-/**
- * The list to show when the server has not answered yet, or cannot.
- *
- * It is the same five steps for everybody, which is why it is only the
- * fallback: a jeweller who came to manage bespoke commissions has no online
- * store to connect, and being told to connect one is the product ignoring the
- * answer it asked for two screens earlier. The real list comes from
- * getSetupChecklist, built from the goal they chose.
- */
-const GETTING_STARTED_STEPS: { id: string; labelKey: string; href: string; auto?: "orders" | "customers" }[] = [
-  { id: "order", labelKey: "Create your first order", href: "/orders", auto: "orders" },
-  { id: "customer", labelKey: "Add your first customer", href: "/customers", auto: "customers" },
-  { id: "chatgpt", labelKey: "Import your old orders with ChatGPT", href: "/chatgpt" },
-  { id: "store", labelKey: "Connect your online store", href: "/settings?section=integrations&category=commerce&intent=connect-shop" },
-  { id: "domain", labelKey: "Put customer links on your name", href: "/settings?section=client-domain" }
-];
-
-// The action→route map, the types and the call itself moved to
-// lib/studioflow/setupChecklist.ts when the Home card came to need the same
-// three. Two copies of a map like that is how a step goes dead on one screen
-// and stays alive on the other.
-
-function GettingStartedCard({ workspaceId, orderCount, customerCount, t }: {
-  workspaceId: string;
-  orderCount: number;
-  customerCount: number;
-  t: (text: string) => string;
-}) {
-  const router = useRouter();
-  const dismissKey = `nivadesk-getting-started-dismissed:${workspaceId}`;
-  const clickedKey = `nivadesk-getting-started-clicked:${workspaceId}`;
-  const [dismissed, setDismissed] = useState(true);
-  const [clicked, setClicked] = useState<string[]>([]);
-  const [server, setServer] = useState<SetupChecklist | null>(null);
-
-  useEffect(() => {
-    try {
-      setDismissed(window.localStorage.getItem(dismissKey) === "1");
-      setClicked(JSON.parse(window.localStorage.getItem(clickedKey) || "[]"));
-    } catch {
-      setDismissed(false);
-    }
-  }, [dismissKey, clickedKey]);
-
-  // The steps this workspace actually came for. Silent on failure: somebody
-  // whose checklist will not load should see the dashboard they opened, and the
-  // five-step fallback below is still better than an error about a card.
-  //
-  // The workspace is named in the call now. It used to be sent as `{}`, and the
-  // server then answered for whichever workspace it considers the caller's
-  // active one — which for anybody who belongs to more than one is not
-  // necessarily the workspace this dashboard is showing.
-  useEffect(() => {
-    let cancelled = false;
-    void loadSetupChecklist(workspaceId).then(next => {
-      if (!cancelled && next) setServer(next);
-    });
-    return () => { cancelled = true; };
-  }, [workspaceId]);
-
-  // A ticked step is one the workspace has DONE, never one somebody clicked
-  // through — the old list counted opening a page as progress, which made the
-  // card congratulate people for looking at it.
-  const steps = server
-    ? server.steps.map(step => ({
-        id: step.key,
-        // The same words, destination and doneness as Home ▸ Getting started
-        // (lib/studioflow/gettingStarted.ts): "Bring in your first order" opens
-        // the sheet that explains how, and any order ticks it.
-        labelKey: serverStepLabel(step.key, step.action, step.title),
-        href: setupStepHref(step.action, step.target, step.key, step.need),
-        done: serverStepDone(step.key, step.done, orderCount > 0)
-      }))
-    : GETTING_STARTED_STEPS.map(step => ({
-        id: step.id,
-        labelKey: step.labelKey,
-        href: step.href,
-        done: step.auto === "orders" ? orderCount > 0 : step.auto === "customers" ? customerCount > 0 : clicked.includes(step.id)
-      }));
-
-  const doneCount = steps.filter(step => step.done).length;
-  // Gone once the workspace has been served, rather than once every box on a
-  // fixed list has been ticked.
-  const finished = server ? server.complete : doneCount >= steps.length;
-  if (dismissed || finished) return null;
-
-  return (
-    <section className="card app-card getting-started-card">
-      <div className="getting-started-head">
-        <CardTitle icon="checklist" eyebrow={t("Getting started")} title={t(server ? server.headline : "Set up your workspace in five small steps.")} />
-        <div className="getting-started-meta">
-          <span className="studio-pill">{doneCount}/{steps.length}</span>
-          <button
-            type="button"
-            className="getting-started-hide"
-            onClick={() => {
-              try { window.localStorage.setItem(dismissKey, "1"); } catch { /* storage unavailable */ }
-              setDismissed(true);
-            }}
-          >
-            {t("Hide this checklist")}
-          </button>
-        </div>
-      </div>
-      <ol className="getting-started-steps">
-        {steps.map(step => {
-          const done = step.done;
-          return (
-            <li key={step.id} data-done={done ? "true" : "false"}>
-              <button
-                type="button"
-                disabled={!step.href}
-                onClick={() => {
-                  if (!step.href) return;
-                  if (!server && !clicked.includes(step.id)) {
-                    const next = [...clicked, step.id];
-                    setClicked(next);
-                    try { window.localStorage.setItem(clickedKey, JSON.stringify(next)); } catch { /* storage unavailable */ }
-                  }
-                  router.push(step.href);
-                }}
-              >
-                <span className="getting-started-tick" aria-hidden="true">{done ? "✓" : ""}</span>
-                {t(step.labelKey)}
-                <span className="getting-started-arrow" aria-hidden="true">›</span>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
-  );
-}
 
 type DashboardChannel = "all" | "shopify" | "woocommerce" | "etsy" | "square" | "amazon" | "ebay" | "inbound" | "manual";
 
@@ -959,15 +818,6 @@ export default function DashboardPage() {
               ) : null}
             </div>
           </section>
-
-          {workspace && canSeeGettingStarted(workspace.role) ? (
-            <GettingStartedCard
-              workspaceId={workspace.id}
-              orderCount={counts.orderCount}
-              customerCount={counts.customerCount}
-              t={t}
-            />
-          ) : null}
 
           <section className="dashboard-filter-card">
             <div className="segmented-control" aria-label={t("Dashboard time range")}>
