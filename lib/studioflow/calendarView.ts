@@ -189,8 +189,10 @@ export function buildCalendarItems(input: BuildInput): CalendarItem[] {
       readOnly: true,
     });
   }
+  // The screen passes the design as the order's title, or the customer when there is none: never "Ana · Ana".
+  const labelOf = (order: CalendarOrderLike) => orderReminderLabel(order.customerName, order.title === order.customerName ? "" : order.title);
   for (const order of input.orders) {
-    const label = orderReminderLabel(order.customerName, order.title);
+    const label = labelOf(order);
     for (const r of orderReminderItems({ id: order.id, label, customFields: order.customFields || null }, input.nowMs ?? Date.now(), viewerTimeZone)) {
       if (r.dayKey < fromKey || r.dayKey > toKey) continue;
       items.push({
@@ -215,7 +217,7 @@ export function buildCalendarItems(input: BuildInput): CalendarItem[] {
       });
     }
   }
-  const orderLabels = new Map(input.orders.map((o) => [o.id, orderReminderLabel(o.customerName, o.title)] as const));
+  const orderLabels = new Map(input.orders.map((o) => [o.id, labelOf(o)] as const));
   for (const note of input.notes) {
     const r = noteReminderItem({ id: note.id, title: note.title, text: note.text, reminderMs: note.reminderMs, reminderAllDay: note.reminderAllDay,
       isDeleted: note.isDeleted, isArchived: note.isArchived, linkedOrderId: note.linkedOrderId, linkedOrderLabel: note.linkedOrderLabel }, input.nowMs ?? Date.now(), viewerTimeZone);

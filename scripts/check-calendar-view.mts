@@ -182,6 +182,16 @@ check("filters: nothing saved = defaults", JSON.stringify(v.parseCalendarFilters
     && JSON.stringify(v.parseCalendarFilters({ types: ["orderReminder"] }).types) === JSON.stringify(["orderReminder"]));
 }
 
+// An order with no design name: the screen passes the customer as its title; the reminder card must not say "Ana · Ana".
+{
+  const swift = (iso: string) => Date.parse(iso) / 1000 - 978307200;
+  const its = build({ nowMs: Date.parse("2026-10-28T09:00:00Z"), orders: [{ id: "o8", title: "Ana", customerName: "Ana", paymentDate: null, deliveryTime: 0, isDelivered: false,
+    customFields: { __scheduleAlertItemsV1: JSON.stringify([{ id: "x", title: "Call Ana", dueAt: swift("2026-10-29T09:00:00Z") }]) } }],
+    notes: [{ id: "nl", title: "Linked", text: "", reminderMs: Date.parse("2026-10-29T12:00:00Z"), reminderAllDay: false, linkedOrderId: "o8", linkedOrderLabel: "" }] });
+  check("order reminder label: no customer twice when the order has no design", its.find((i) => i.kind === "orderReminder")?.subtitle === "Ana", its.find((i) => i.kind === "orderReminder")?.subtitle);
+  check("linked note label: no customer twice either", its.find((i) => i.id === "note:nl")?.subtitle === "Ana", its.find((i) => i.id === "note:nl")?.subtitle);
+}
+
 for (const f of fails) console.log(`FAIL ${f}`);
 console.log(`calendar view (web): ${pass}/${pass + fails.length} pass${fails.length ? "" : "; reds: none"}`);
 process.exit(fails.length ? 1 : 0);
