@@ -3,8 +3,12 @@
  *
  *  W1 an account without a factor signs in through withSecondFactor untouched (no prompt).
  *  W2 an account WITH a factor: the SDK raises auth/multi-factor-auth-required, the wrapper
- *     catches it and builds the resolver. The emulator can only enrol SMS factors (no TOTP),
- *     so the wrapper must refuse that factor kind plainly and never open the code prompt.
+ *     catches it and builds the resolver. The emulator can only enrol SMS factors (no TOTP).
+ *     Before SMS-MFA (7 Nov 2026) the wrapper refused that kind ("unsupported"); now it takes it
+ *     and starts sending the text. Firebase's Node build has no phone sign-in (PhoneAuthProvider
+ *     throws operation-not-supported-in-this-environment), so here we only prove the hint is
+ *     ACCEPTED and nobody is signed in; the whole SMS round trip runs in a real browser against the
+ *     emulator (scripts/e2e-sms-second-factor.mjs).
  *  W3 wrong password is passed through as the normal error (not treated as MFA).
  *  W4 code normalisation, refusal sentences for the server gate reasons.
  *  NOT covered (needs Identity Platform TOTP in a real project): the TOTP prompt loop,
@@ -74,10 +78,11 @@ const ok = (name: string) => { passed += 1; console.log(`ok - ${name}`); };
   ok("W2a factor enrolled: the SDK raises multi-factor-auth-required (detected)");
   let wrapped: any;
   try { await withSecondFactor(auth, () => signInWithEmailAndPassword(auth, u.email, u.password), { email: u.email }); } catch (e) { wrapped = e; }
-  assert.equal(wrapped?.code, "nivadesk/unsupported-second-factor");
-  assert.equal(prompts, 0, "no code prompt for a factor kind the web cannot ask for");
+  assert.notEqual(wrapped?.code, "nivadesk/unsupported-second-factor", "SMS is a supported kind now");
+  assert.equal(wrapped?.code, "auth/operation-not-supported-in-this-environment", "it went on to send the text (browser-only in the SDK)");
+  assert.equal(prompts, 0, "no prompt before a text could be sent");
   assert.equal(auth.currentUser, null, "not signed in");
-  ok("W2b SMS factor (emulator): wrapper resolves hints, refuses the unsupported kind, stays signed out");
+  ok("W2b SMS factor (emulator): wrapper accepts the phone hint and starts the text; stays signed out");
 }
 // W3
 {

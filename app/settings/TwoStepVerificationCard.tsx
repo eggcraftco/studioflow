@@ -9,6 +9,13 @@
 // older iOS/Mac/Android builds cannot finish a sign-in that asks for the code.
 // Never logs or stores the secret, the otpauth URL, codes or recovery codes;
 // the secret lives only in this component's state until enrolment ends.
+//
+// SMS-MFA (7 Nov 2026): a second METHOD, text-message codes to a UK mobile, behind
+// NEXT_PUBLIC_NIVADESK_SMS_MFA=1 (lib/auth/secondFactorPolicy.ts). One authenticator and one
+// phone per account; either can be added or removed while the other stays. The screen says,
+// before the number is typed, what the number is used for and who keeps it (UK GDPR Art 13),
+// that texts are weaker than an app (NIST SP 800-63B "restricted"), and that the Mac app
+// cannot receive texts. The number is never stored by NivaDesk: Firebase keeps it with the factor.
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import QRCode from "qrcode";
@@ -27,23 +34,45 @@ import { studioT } from "@/lib/studioflow/language";
 import { friendlyErrorMessage } from "@/lib/studioflow/friendlyError";
 import {
   SECOND_FACTOR_CANCELLED,
+  SMS_MFA_UI_ENABLED,
   TOTP_MFA_UI_ENABLED,
   createRecoveryCodes,
   enrolledFactors,
+  finishSmsEnrollment,
   finishTotpEnrollment,
+  isSmsFactor,
   recoveryStatus,
   removeFactor,
   signOutEverywhere,
+  startSmsEnrollment,
   startTotpEnrollment,
   totpQrUrl,
-  withSecondFactor
+  withSecondFactor,
+  type SmsEnrollmentStart
 } from "@/lib/auth/secondFactor";
-import { NATIVE_MFA_MIN_VERSION, canOfferTotpEnrollment, shouldShowTwoStepCard } from "@/lib/auth/secondFactorPolicy";
+import {
+  NATIVE_MFA_MIN_VERSION,
+  NATIVE_SMS_MFA_MIN_VERSION,
+  canOfferSmsEnrollment,
+  canOfferTotpEnrollment,
+  shouldShowTwoStepCard
+} from "@/lib/auth/secondFactorPolicy";
+import {
+  SMS_MAX_TEXTS_PER_PROMPT,
+  SMS_RESEND_COOLDOWN_SECONDS,
+  maskPhoneNumber,
+  resendSecondsLeft,
+  smsErrorFrom
+} from "@/lib/auth/smsSecondFactorRules";
+
+type Then = "enroll" | "enroll-sms" | "remove" | "codes";
 
 type Step =
   | { kind: "idle" }
-  | { kind: "reauth"; then: "enroll" | "remove" | "codes"; factor?: MultiFactorInfo }
+  | { kind: "reauth"; then: Then; factor?: MultiFactorInfo }
   | { kind: "enroll"; secret: TotpSecret; qr: string; key: string }
+  | { kind: "sms-number" }
+  | { kind: "sms-code"; start: SmsEnrollmentStart; texts: number; resendAtMs: number }
   | { kind: "codes"; codes: string[] };
 
 const code = (error: unknown) => (error as { code?: string } | null)?.code || "";
@@ -59,8 +88,11 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [deviceName, setDeviceName] = useState("");
+  const [phoneInput, setPhoneInput] = useState("");
+  const [smsCode, setSmsCode] = useState("");
   const [remaining, setRemaining] = useState<number | null>(null);
   const [appsUpdated, setAppsUpdated] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   const refresh = useCallback(async () => {
     setFactors(enrolledFactors(auth.currentUser));
@@ -79,10 +111,22 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
     void refresh();
   }, [refresh, user]);
 
+  // "Send a new code in 25 s" on the enrolment code step.
+  const smsWait = step.kind === "sms-code" ? resendSecondsLeft(step.resendAtMs, now) : 0;
+  useEffect(() => {
+    if (!smsWait) return;
+    const timer = window.setTimeout(() => setNow(Date.now()), 1000);
+    return () => window.clearTimeout(timer);
+  }, [smsWait, now]);
+
   if (!user) return null;
-  const policy = { flagOn: TOTP_MFA_UI_ENABLED, role: workspaceRole, factorCount: factors.length };
+  const factorIds = factors.map(f => f.factorId);
+  const policy = { flagOn: TOTP_MFA_UI_ENABLED, smsFlagOn: SMS_MFA_UI_ENABLED, role: workspaceRole, factorCount: factors.length, factorIds };
   if (!shouldShowTwoStepCard(policy)) return null;
   const mayEnroll = canOfferTotpEnrollment(policy);
+  const mayEnrollSms = canOfferSmsEnrollment(policy);
+  const hasTotp = factorIds.includes("totp");
+  const hasSms = factorIds.includes("phone");
 
   const providerIds = user.providerData.map(p => p.providerId);
   const hasPassword = providerIds.includes("password");
@@ -90,15 +134,21 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
   const hasApple = providerIds.includes("apple.com");
   const accountName = user.email || "NivaDesk";
 
+  const livePolicy = () => {
+    const current = enrolledFactors(auth.currentUser);
+    return { ...policy, factorCount: current.length, factorIds: current.map(f => f.factorId) };
+  };
+
   function fail(err: unknown, fallback: string) {
     if (code(err) === SECOND_FACTOR_CANCELLED) return;
-    setError(friendlyErrorMessage(err, t) || t(fallback));
+    const sms = smsErrorFrom(err);
+    setError((sms && t(sms)) || friendlyErrorMessage(err, t) || t(fallback));
   }
 
   async function beginEnroll() {
     setError("");
     setNotice("");
-    if (!user || !canOfferTotpEnrollment({ flagOn: TOTP_MFA_UI_ENABLED, role: workspaceRole, factorCount: enrolledFactors(auth.currentUser).length })) return;
+    if (!user || !canOfferTotpEnrollment(livePolicy())) return;
     if (!user.emailVerified) {
       setError(t("Verify your email address first. Two-step verification needs a verified email."));
       return;
@@ -120,18 +170,23 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
     }
   }
 
+  /** After the first method is on: straight into recovery codes (the fresh token has the second factor). */
+  async function afterFirstMethod(wasFirst: boolean) {
+    const codes = wasFirst ? await createRecoveryCodes().catch(() => [] as string[]) : [];
+    // Refresh after the codes exist, or the count reads the pre-enrolment "0 left".
+    await refresh();
+    setStep(codes.length ? { kind: "codes", codes } : { kind: "idle" });
+  }
+
   async function confirmEnroll(event: FormEvent) {
     event.preventDefault();
     if (!user || step.kind !== "enroll") return;
     setBusy(true);
     setError("");
     try {
+      const wasFirst = enrolledFactors(auth.currentUser).length === 0;
       await finishTotpEnrollment(user, step.secret, otp, deviceName || t("Authenticator app"));
-      // Straight into recovery codes: the fresh token has the second factor and a new auth_time.
-      const codes = await createRecoveryCodes().catch(() => [] as string[]);
-      // Refresh after the codes exist, or the count reads the pre-enrolment "0 left".
-      await refresh();
-      setStep(codes.length ? { kind: "codes", codes } : { kind: "idle" });
+      await afterFirstMethod(wasFirst);
       setNotice(t("Two-step verification is on. Next time you sign in, NivaDesk asks for a code from your authenticator app."));
     } catch (err) {
       if (code(err) === "auth/invalid-verification-code") setError(t("That code is not right, or it has expired. Codes change every 30 seconds — try the current one."));
@@ -141,15 +196,89 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
     }
   }
 
+  function beginSms() {
+    setError("");
+    setNotice("");
+    if (!user || !canOfferSmsEnrollment(livePolicy())) return;
+    if (!user.emailVerified) {
+      setError(t("Verify your email address first. Two-step verification needs a verified email."));
+      return;
+    }
+    setSmsCode("");
+    setStep({ kind: "sms-number" });
+  }
+
+  async function sendSmsEnrollmentCode(event?: FormEvent) {
+    event?.preventDefault();
+    if (!user || (step.kind !== "sms-number" && step.kind !== "sms-code" && step.kind !== "reauth")) return;
+    const texts = step.kind === "sms-code" ? step.texts : 0;
+    if (texts >= SMS_MAX_TEXTS_PER_PROMPT) {
+      setError(t("No more codes can be sent now. Try again later."));
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const start = await startSmsEnrollment(auth, user, phoneInput);
+      setSmsCode("");
+      setNow(Date.now());
+      setStep({ kind: "sms-code", start, texts: texts + 1, resendAtMs: Date.now() + SMS_RESEND_COOLDOWN_SECONDS * 1000 });
+    } catch (err) {
+      if (code(err) === "auth/requires-recent-login") setStep({ kind: "reauth", then: "enroll-sms" });
+      else if (code(err) === "nivadesk/sms-phone-refused") setError(t((err as Error).message));
+      else if (code(err) === "auth/unverified-email") setError(t("Verify your email address first. Two-step verification needs a verified email."));
+      else fail(err, "Could not send the code.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirmSms(event: FormEvent) {
+    event.preventDefault();
+    if (!user || step.kind !== "sms-code") return;
+    setBusy(true);
+    setError("");
+    try {
+      const wasFirst = enrolledFactors(auth.currentUser).length === 0;
+      await finishSmsEnrollment(user, step.start, smsCode);
+      const masked = maskPhoneNumber(step.start.e164);
+      setPhoneInput("");
+      setSmsCode("");
+      await afterFirstMethod(wasFirst);
+      setNotice(
+        wasFirst
+          ? t("Two-step verification is on. Next time you sign in, NivaDesk texts a code to {number}.").replace("{number}", masked)
+          : t("Text-message codes are on as another way to sign in ({number}).").replace("{number}", masked)
+      );
+    } catch (err) {
+      fail(err, "Could not turn on two-step verification.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function removeQuestion(factor: MultiFactorInfo) {
+    const last = factors.length <= 1;
+    if (isSmsFactor(factor)) {
+      const number = maskPhoneNumber(factor.phoneNumber || "");
+      return last
+        ? t("Turn off text-message codes to {number}? Your account will be protected by your password only.").replace("{number}", number)
+        : t("Remove text-message codes to {number}? Two-step verification stays on with your authenticator app.").replace("{number}", number);
+    }
+    return last
+      ? t("Turn off two-step verification for this authenticator? Your account will be protected by your password only.")
+      : t("Remove this authenticator app? Two-step verification stays on with text-message codes.");
+  }
+
   async function remove(factor: MultiFactorInfo) {
     if (!user) return;
-    if (!window.confirm(t("Turn off two-step verification for this authenticator? Your account will be protected by your password only."))) return;
+    if (!window.confirm(removeQuestion(factor))) return;
     setBusy(true);
     setError("");
     try {
       await removeFactor(user, factor);
       await refresh();
-      setNotice(t("Two-step verification was removed."));
+      setNotice(enrolledFactors(auth.currentUser).length ? t("That two-step method was removed.") : t("Two-step verification was removed."));
     } catch (err) {
       if (code(err) === "auth/requires-recent-login") setStep({ kind: "reauth", then: "remove", factor });
       else if (code(err) === "auth/user-token-expired") {
@@ -178,7 +307,7 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
   }
 
   async function endOtherSessions() {
-    if (!window.confirm(t("Sign out on every device, including this one? You sign in again with your password and authenticator code."))) return;
+    if (!window.confirm(t("Sign out on every device, including this one? You sign in again with your password and two-step code."))) return;
     setBusy(true);
     try {
       await signOutEverywhere();
@@ -203,8 +332,13 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
         await withSecondFactor(auth, () => reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email || "", password)), { email: user.email || "" });
       }
       setPassword("");
-      setStep({ kind: "idle" });
       setBusy(false);
+      if (then === "enroll-sms") {
+        // Keep the number they typed; send the code now that the sign-in is fresh.
+        setStep({ kind: "sms-number" });
+        return;
+      }
+      setStep({ kind: "idle" });
       if (then === "enroll") await beginEnroll();
       else if (then === "remove" && factor) await remove(factor);
       else if (then === "codes") await newCodes();
@@ -224,20 +358,27 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  let status: string;
+  if (hasTotp && hasSms) status = t("On. Signing in asks for a 6-digit code from your authenticator app, or by text message if you choose. AI assistant connections (ChatGPT, Claude) can only be approved after the code.");
+  else if (hasSms) status = t("On. Signing in asks for a 6-digit code we send by text message. AI assistant connections (ChatGPT, Claude) can only be approved after the code.");
+  else if (hasTotp) status = t("On. Signing in asks for a 6-digit code from your authenticator app. AI assistant connections (ChatGPT, Claude) can only be approved after the code.");
+  else status = t("Add a 6-digit code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Apple Passwords…) to your password, Google or Apple sign-in.");
+
   return (
     <section className="card app-card settings-security-card" data-testid="two-step-card">
       <div className="settings-security-item">
         <strong>{t("Two-step verification")}</strong>
-        <p className="muted-copy">
-          {factors.length
-            ? t("On. Signing in asks for a 6-digit code from your authenticator app. AI assistant connections (ChatGPT, Claude) can only be approved after the code.")
-            : t("Add a 6-digit code from an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password, Apple Passwords…) to your password, Google or Apple sign-in.")}
-        </p>
+        <p className="muted-copy" data-testid="two-step-status">{status}</p>
+        {!factors.length && mayEnrollSms ? <p className="muted-copy">{t("Or get the code by text message to a UK mobile number.")}</p> : null}
       </div>
 
       {factors.map(factor => (
-        <div className="settings-security-item" key={factor.uid}>
-          <strong>{factor.displayName || t("Authenticator app")}</strong>
+        <div className="settings-security-item" key={factor.uid} data-testid={isSmsFactor(factor) ? "two-step-factor-sms" : "two-step-factor-totp"}>
+          <strong>
+            {isSmsFactor(factor)
+              ? `${t("Text message (SMS)")} · ${maskPhoneNumber(factor.phoneNumber || "")}`
+              : factor.displayName || t("Authenticator app")}
+          </strong>
           <p className="muted-copy">{t("Added")} {new Date(factor.enrollmentTime).toLocaleDateString()}</p>
           <div className="settings-action-row">
             <button className="button secondary" type="button" disabled={busy} onClick={() => void remove(factor)}>{t("Remove")}</button>
@@ -245,9 +386,14 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
         </div>
       ))}
 
-      {step.kind === "idle" && mayEnroll ? (
+      {step.kind === "idle" && (mayEnroll || mayEnrollSms) ? (
         <div className="settings-field-stack" data-testid="two-step-native-notice">
-          <p className="muted-copy">{t("Before you turn this on, update NivaDesk on your iPhone, iPad, Mac and Android devices to version {version} or later. Older versions cannot finish a sign-in that asks for a code; devices that are already signed in keep working.").replace("{version}", NATIVE_MFA_MIN_VERSION)}</p>
+          {mayEnroll ? (
+            <p className="muted-copy">{t("Before you turn this on, update NivaDesk on your iPhone, iPad, Mac and Android devices to version {version} or later. Older versions cannot finish a sign-in that asks for a code; devices that are already signed in keep working.").replace("{version}", NATIVE_MFA_MIN_VERSION)}</p>
+          ) : null}
+          {mayEnrollSms ? (
+            <p className="muted-copy" data-testid="two-step-sms-native-notice">{t("Text-message codes need NivaDesk {version} or later on iPhone, iPad and Android. The Mac app cannot receive text-message codes yet: on a Mac, use your authenticator app or a recovery code, or sign in at nivadesk.app.").replace("{version}", NATIVE_SMS_MFA_MIN_VERSION)}</p>
+          ) : null}
           <label className="settings-inline-row">
             <input type="checkbox" checked={appsUpdated} onChange={e => setAppsUpdated(e.target.checked)} disabled={busy} />
             <span>{t("My NivaDesk apps are up to date")}</span>
@@ -255,14 +401,19 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
         </div>
       ) : null}
 
-      {step.kind === "idle" && mayEnroll ? (
+      {step.kind === "idle" && (mayEnroll || mayEnrollSms) ? (
         <div className="settings-action-row">
           {!user.emailVerified ? (
             <button className="button secondary" type="button" disabled={busy} onClick={() => void sendEmailVerification(user, { url: "https://nivadesk.app/settings" }).then(() => setNotice(t("Check your inbox for the verification link.")))}>
               {t("Send verification email")}
             </button>
           ) : null}
-          <button className="button" type="button" disabled={busy || !appsUpdated} onClick={() => void beginEnroll()}>{t("Set up authenticator app")}</button>
+          {mayEnroll ? (
+            <button className="button" type="button" disabled={busy || !appsUpdated} onClick={() => void beginEnroll()}>{t("Set up authenticator app")}</button>
+          ) : null}
+          {mayEnrollSms ? (
+            <button className={mayEnroll ? "button secondary" : "button"} type="button" data-testid="two-step-add-sms" disabled={busy || !appsUpdated} onClick={() => beginSms()}>{t("Add text-message codes")}</button>
+          ) : null}
         </div>
       ) : null}
 
@@ -299,6 +450,52 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
         </form>
       ) : null}
 
+      {step.kind === "sms-number" ? (
+        <form className="settings-field-stack" onSubmit={e => void sendSmsEnrollmentCode(e)} data-testid="two-step-sms-number">
+          <p className="muted-copy" data-testid="two-step-sms-privacy">{t("Your number is used only for sign-in codes and account security. Our sign-in provider, Google Firebase, keeps it and sends the texts. Remove it here at any time; it is deleted with your account.")}</p>
+          <p className="muted-copy" data-testid="two-step-sms-risk">{t("Text messages are less safe than an authenticator app: someone who takes over your phone number can receive your codes. If you can, use an authenticator app and keep text messages as a backup.")}</p>
+          <label className="settings-field">
+            <span className="settings-field-label">{t("UK mobile number")}</span>
+            <input
+              className="input"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="07700 900123"
+              value={phoneInput}
+              maxLength={24}
+              onChange={e => setPhoneInput(e.target.value)}
+              disabled={busy}
+              data-testid="two-step-sms-phone"
+            />
+          </label>
+          <p className="muted-copy">{t("We send a 6-digit code to check the number.")}</p>
+          <div className="settings-action-row">
+            <button className="button secondary" type="button" disabled={busy} onClick={() => setStep({ kind: "idle" })}>{t("Cancel")}</button>
+            <button className="button" type="submit" disabled={busy || !phoneInput.trim()} data-testid="two-step-sms-send">{busy ? t("Sending...") : t("Send the code")}</button>
+          </div>
+        </form>
+      ) : null}
+
+      {step.kind === "sms-code" ? (
+        <form className="settings-field-stack" onSubmit={e => void confirmSms(e)} data-testid="two-step-sms-code-step">
+          <p className="muted-copy">{t("We sent a 6-digit code by text message to {number}. Enter it here.").replace("{number}", maskPhoneNumber(step.start.e164))}</p>
+          <label className="settings-field">
+            <span className="settings-field-label">{t("Text message code")}</span>
+            <input className="input" inputMode="numeric" autoComplete="one-time-code" maxLength={7} value={smsCode} onChange={e => setSmsCode(e.target.value)} disabled={busy} data-testid="two-step-sms-code" />
+          </label>
+          <div className="settings-action-row">
+            <button className="button secondary" type="button" disabled={busy} onClick={() => setStep({ kind: "idle" })}>{t("Cancel")}</button>
+            {step.texts < SMS_MAX_TEXTS_PER_PROMPT ? (
+              <button className="button secondary" type="button" disabled={busy || smsWait > 0} onClick={() => void sendSmsEnrollmentCode()} data-testid="two-step-sms-resend">
+                {smsWait > 0 ? t("Send a new code in {seconds} s").replace("{seconds}", String(smsWait)) : t("Send a new code")}
+              </button>
+            ) : null}
+            <button className="button" type="submit" disabled={busy || !smsCode.trim()} data-testid="two-step-sms-confirm">{busy ? t("Checking...") : t("Turn on")}</button>
+          </div>
+        </form>
+      ) : null}
+
       {step.kind === "codes" ? (
         <div className="settings-field-stack" data-testid="recovery-codes">
           <strong>{t("Recovery codes")}</strong>
@@ -327,8 +524,8 @@ export function TwoStepVerificationCard({ language = "English", workspaceRole = 
         </div>
       ) : null}
 
-      {notice ? <p className="success-copy">{notice}</p> : null}
-      {error ? <p className="layout-error" role="alert">{error}</p> : null}
+      {notice ? <p className="success-copy" data-testid="two-step-notice">{notice}</p> : null}
+      {error ? <p className="layout-error" role="alert" data-testid="two-step-error">{error}</p> : null}
     </section>
   );
 }
