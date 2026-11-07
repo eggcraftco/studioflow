@@ -25,7 +25,7 @@ export type PrivacyPolicySection = {
 // registered 21 Oct 2025, expires 20 Oct 2027).
 // RELEASE: this must be the day the change actually goes live — never earlier.
 // scripts/check-legal-h06-h07.mts --publish-date "<d Month yyyy>" checks it.
-export const PRIVACY_POLICY_LAST_UPDATED = "5 November 2026";
+export const PRIVACY_POLICY_LAST_UPDATED = "7 November 2026";
 
 export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {

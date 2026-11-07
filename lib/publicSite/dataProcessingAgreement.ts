@@ -1,7 +1,7 @@
 import type { PrivacyPolicySection } from "@/lib/publicSite/privacyPolicy";
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
-export const DATA_PROCESSING_AGREEMENT_LAST_UPDATED = "13 May 2026";
+export const DATA_PROCESSING_AGREEMENT_LAST_UPDATED = "7 November 2026";
 
 export const DATA_PROCESSING_AGREEMENT_SECTIONS: PrivacyPolicySection[] = [
   {

@@ -5,7 +5,7 @@ import type { StudioLanguage } from "@/lib/studioflow/language";
 // NivaDesk uses today, with locations; the generic rows for tools NivaDesk does not use (crash reporting, help desk)
 // are gone. Sections 1-4 and 6-13, the DPA and the Terms are unchanged. The date is the publication day:
 // scripts/check-subprocessors-h02.mts --publish-date "<d Month yyyy>" must pass on release day.
-export const SUBPROCESSORS_LAST_UPDATED = "6 November 2026";
+export const SUBPROCESSORS_LAST_UPDATED = "7 November 2026";
 
 export const SUBPROCESSORS_SECTIONS: PrivacyPolicySection[] = [
   {

@@ -1,7 +1,7 @@
 import type { PrivacyPolicySection } from "@/lib/publicSite/privacyPolicy";
 import type { StudioLanguage } from "@/lib/studioflow/language";
 
-export const ACCEPTABLE_USE_POLICY_LAST_UPDATED = "13 May 2026";
+export const ACCEPTABLE_USE_POLICY_LAST_UPDATED = "7 November 2026";
 
 export const ACCEPTABLE_USE_POLICY_SECTIONS: PrivacyPolicySection[] = [
   {
