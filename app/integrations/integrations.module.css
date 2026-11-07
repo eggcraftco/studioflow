@@ -52,7 +52,7 @@
 
 /* Cream theme (2 Nov 2026): inside the public site's cream shell the directory
    takes the site's paper-and-ink palette and type. The availability colours
-   (.live/.limited/.soon) keep their meaning and stay as they are. */
+   (.live/.limited/.soon) keep their meaning; since 7 Nov in the cream pairs below. */
 :global(.public-cream) .page{--ink:#251d1a;--muted:#6b5d55;--line:rgba(37,29,26,.12);--green:#251d1a;background:transparent;font-family:var(--font-public-sans,var(--font-inter,Arial)),sans-serif}
 :global(.public-cream) .page h1,:global(.public-cream) .page h2,:global(.public-cream) .page h3{font-family:var(--font-public-sans,var(--font-manrope,Arial)),sans-serif!important;font-weight:800;letter-spacing:-.03em}
 :global(.public-cream) .hero h1 em{font-family:var(--font-public-serif,Georgia),Georgia,serif;font-style:italic;font-weight:400;color:#b0694a;letter-spacing:-.01em}
@@ -68,3 +68,26 @@
 :global(.public-cream) .categoryList button[aria-pressed=true]{background:#f3dcb6;color:#251d1a}
 :global(.public-cream) .categoryList button:hover{background:rgba(37,29,26,.05)}
 :global(.public-cream) .cta{background:#efcfb8;border-color:rgba(37,29,26,.08)}
+/* Cream theme, second pass (7 Nov 2026): the directory's leftover greens (filter
+   list, card details, ghost names, notes) and the availability labels in the cream
+   theme's pairs; the labels keep their meaning: green = connect it yourself
+   (the changelog's "new" pair), sand = on request, sage = not yet. */
+:global(.public-cream) .live{background:#dce8dd;color:#2f5a3a}
+:global(.public-cream) .limited{background:#f3dcb6;color:#8f4f32}
+:global(.public-cream) .soon{background:#e9ebe4;color:#3a2e29}
+:global(.public-cream) .note{background:#fcf6ee;color:#8f4f32}
+:global(.public-cream) .detail{border-color:rgba(37,29,26,.08)}
+:global(.public-cream) .detail summary>span,:global(.public-cream) .faq summary>span{color:#8f4f32}
+:global(.public-cream) .categoryList button,:global(.public-cream) .categoryList button span,:global(.public-cream) .search>span,:global(.public-cream) .legendChecked,:global(.public-cream) .visualNote,:global(.public-cream) .visualLabel,:global(.public-cream) .category{color:#6b5d55}
+:global(.public-cream) .benefits span{color:#8f4f32}
+:global(.public-cream) .ghostNode{border-color:#e3b077;color:#6b5d55}
+:global(.public-cream) .hub{border-color:rgba(255,255,255,.2)}
+:global(.public-cream) .hub span{color:#f8f0e4}
+:global(.public-cream) .empty{background:#fcf6ee}
+:global(.public-cream) .empty button{border-color:#251d1a;background:transparent}
+:global(.public-cream) .search:focus-within,:global(.public-cream) .page button:focus-visible,:global(.public-cream) .page a:focus-visible,:global(.public-cream) .page summary:focus-visible{outline-color:#c17b58}
+:global(.public-cream) .hub{box-shadow:0 22px 46px rgba(36,88,90,.22)}
+:global(.public-cream) .hub small{color:#f8f0e4}
+:global(.public-cream) .card:hover{border-color:#e3b077;box-shadow:0 10px 16px -3px rgba(20,21,26,.08),0 1px 2px rgba(20,21,26,.05)}
+:global(.public-cream) .ghostNode{background:#fffefb}
+:global(.public-cream) .primary:hover{background:#3a2e29}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { parseLandingCampaign, parseLandingSource, setLandingAttribution, trackLandingEvent } from "@/lib/landingTracking";
 import { ChatGPTAppShowcase, PublicHeader } from "@/components/PublicMarketing";
+import { PUBLIC_FONT_CLASSES } from "@/lib/publicSite/fonts";
 
 // Click-to-play demo video: only the poster image loads until the visitor
 // presses play, keeping the ad landing page fast.
@@ -171,7 +172,9 @@ export function CustomOrderLanding() {
   };
 
   return (
-    <div className="lp">
+    // public-site public-cream: the same cream shell as every other public page
+    // (owner, 7 Nov 2026: the whole site in one theme); .lp-* keeps the layout.
+    <div className={`lp public-site public-cream ${PUBLIC_FONT_CLASSES}`}>
       <PublicHeader hideLanguage />
 
       <main>
