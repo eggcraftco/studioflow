@@ -1561,7 +1561,7 @@ const TREE_EN: GuideNode[] = [
         blocks: [
           { kind: "para", text: "Text your customer when their order reaches a stage you chose, with a link to their order page. The owner sets it up under Settings ▸ Customer SMS; it is part of NivaDesk Pro and Team." },
           { kind: "sub", text: "Is it open for my workspace?" },
-          { kind: "para", text: "Text messages are being tried out with a few workspaces before they open to every Pro and Team workspace. The top of Settings ▸ Customer SMS says which state your workspace is in." },
+          { kind: "para", text: "Yes, on NivaDesk Pro and Team. The top of Settings ▸ Customer SMS says whether texts are going out from your workspace, or what is still needed, such as the owner's one-time confirmation." },
           { kind: "sub", text: "Before the first text: the owner confirms once" },
           { kind: "para", text: "In Settings ▸ Customer SMS, the owner confirms once that your customers agreed to receive texts, that you will record each customer's agreement, that texts only carry information about orders (never marketing) and that you will respect a request to stop. NivaDesk records who confirmed and when. Until then no text leaves your workspace." },
           { kind: "sub", text: "Recording that a customer agreed to texts" },
@@ -3347,7 +3347,7 @@ const TREE_TR: GuideNode[] = [
         blocks: [
           { kind: "para", text: "Siparişiniz seçtiğiniz bir aşamaya geldiğinde müşterinize kısa mesaj gönderin; içinde sipariş sayfasının bağlantısı olur. Sahip, Settings ▸ Customer SMS altında ayarlar; NivaDesk Pro ve Team planlarındadır." },
           { kind: "sub", text: "Çalışma alanımda açık mı?" },
-          { kind: "para", text: "SMS, tüm Pro ve Team çalışma alanlarına açılmadan önce birkaç çalışma alanıyla deneniyor. Settings ▸ Customer SMS ekranının üstü, çalışma alanınızın hangi durumda olduğunu yazar." },
+          { kind: "para", text: "Evet, NivaDesk Pro ve Team planlarında. Settings ▸ Customer SMS ekranının üstü, çalışma alanınızdan SMS gidip gitmediğini ya da sahibin bir kerelik onayı gibi neyin eksik olduğunu yazar." },
           { kind: "sub", text: "İlk SMS'ten önce: sahip bir kez onaylar" },
           { kind: "para", text: "Sahip, Settings ▸ Customer SMS'te bir kez şunları onaylar: müşterileriniz SMS almayı kabul etti, her müşterinin iznini kaydedeceksiniz, SMS'ler yalnız sipariş bilgisi taşır (asla pazarlama) ve durdurma isteğine uyacaksınız. NivaDesk kimin ne zaman onayladığını kaydeder. O zamana kadar çalışma alanınızdan SMS gitmez." },
           { kind: "sub", text: "Müşterinin SMS iznini kaydetmek" },
