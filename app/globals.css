@@ -41927,6 +41927,12 @@ body[data-studio-theme="dark"] .public-cream .public-footer-logo { content: url(
 }
 .login-public-shell.public-cream .public-language-select:hover { border-color: rgba(37, 29, 26, 0.12); background: #fdf9f3; }
 .login-public-shell.public-cream .public-language-select select { color: #251d1a; }
+.login-public-shell.public-cream .public-header-menu-btn {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #251d1a;
+}
 .login-public-shell.public-cream .login-card-frame .input { border-color: rgba(37, 29, 26, 0.12); background: #fffefb; color: #251d1a; }
 .login-public-shell.public-cream .login-card-frame .button { color: #f8f0e4; }
 .login-public-shell.public-cream .login-card-frame a { text-decoration: underline; text-underline-offset: 3px; }
@@ -41948,7 +41954,7 @@ body:has(.public-cream) .cookie-cat-title { color: #251d1a; }
 body:has(.public-cream) .cookie-cat { border-color: rgba(37, 29, 26, 0.12); background: rgba(37, 29, 26, 0.02); }
 body:has(.public-cream) .cookie-cat-badge { background: rgba(37, 29, 26, 0.06); color: #6b5d55; }
 body:has(.public-cream) .cookie-banner-copy a,
-body:has(.public-cream) .cookie-link-btn { color: #8f4f32; }
+body:has(.public-cream) .cookie-banner-actions .cookie-link-btn { color: #8f4f32; }
 body:has(.public-cream) .cookie-btn { border-radius: 6px; }
 body:has(.public-cream) .cookie-btn-primary { border-color: #251d1a; background: #251d1a; color: #f8f0e4; }
 body:has(.public-cream) .cookie-btn-primary:hover { background: #3a2e29; }
