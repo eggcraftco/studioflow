@@ -11,6 +11,8 @@ import { useEffect, useMemo, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { CardTitle } from "@/components/CardTitle";
+import { ChartLiveText, ChartTip, useChartCursor, useElementAnchor, type ChartTipContent } from "@/components/AdminChart";
+import { chartCount, chartDayLabel } from "@/lib/studioflow/adminChartFormat";
 import { downloadCsv, toCsv } from "@/lib/studioflow/adminLivePresence";
 
 type AdminView = "business" | "qa";
@@ -79,6 +81,44 @@ function CountList({ rows, labels, unit }: { rows: Named[]; labels?: Record<stri
         ))}
       </tbody>
     </table>
+  );
+}
+
+/** Stacked bars, one per day: hover, tap or focus + arrow keys show the day's numbers (7 Nov 2026). */
+function QuestionsPerDay({ byDay, dayTop, label }: { byDay: QuestionsResult["byDay"]; dayTop: number; label: string }) {
+  const cursor = useChartCursor(byDay.length);
+  const anchor = useElementAnchor(cursor.ref, cursor.active, true);
+  const busiest = byDay.reduce((best, row, index) => (row.app + row.website > (byDay[best]?.app ?? 0) + (byDay[best]?.website ?? 0) ? index : best), 0);
+  const tip: ChartTipContent | null = cursor.active === null || !byDay[cursor.active] ? null : (() => {
+    const row = byDay[cursor.active as number];
+    return {
+      title: chartDayLabel(row.day),
+      rows: [
+        { label: "In all", value: chartCount(row.app + row.website) },
+        { label: BOT_LABELS.app, value: chartCount(row.app), color: "var(--accent, #2563eb)" },
+        { label: BOT_LABELS.website, value: chartCount(row.website), color: "var(--admin-plan-team, #8b5cf6)" }
+      ],
+      note: cursor.active === busiest && row.app + row.website > 0 ? "Busiest day in this range" : undefined
+    };
+  })();
+  const top = byDay[busiest];
+  const summary = top && top.app + top.website > 0 ? `${label}. Busiest ${chartDayLabel(top.day)} with ${chartCount(top.app + top.website)}. Use the arrow keys to read each day.` : `${label}.`;
+  return (
+    <div ref={cursor.ref} style={{ position: "relative", display: "flex", alignItems: "flex-end", gap: 2, height: 120, marginTop: 12 }}
+         role="group" aria-roledescription="chart" aria-label={summary} className="admin-chart-bars" {...cursor.bind}>
+      {byDay.map((row, index) => {
+        const total = row.app + row.website;
+        return (
+          <div key={row.day} data-chart-index={index} aria-hidden="true" className={cursor.active === index ? "admin-chart-bar is-active" : "admin-chart-bar"}
+               style={{ flex: 1, minWidth: 2, display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%" }}>
+            <span style={{ height: `${(100 * row.website) / dayTop}%`, background: "var(--admin-plan-team, #8b5cf6)", borderRadius: "3px 3px 0 0" }} />
+            <span style={{ height: `${(100 * row.app) / dayTop}%`, background: "var(--accent, #2563eb)", borderRadius: total && !row.website ? "3px 3px 0 0" : 0 }} />
+          </div>
+        );
+      })}
+      {tip && anchor ? <ChartTip anchor={anchor} content={tip} /> : null}
+      <ChartLiveText content={tip} enabled={cursor.viaKeyboard} />
+    </div>
   );
 }
 
@@ -192,19 +232,7 @@ export function AdminAssistantQuestionsPanel({ view }: { view: AdminView }) {
       {data && data.byDay.length > 1 ? (
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow={`${BOT_LABELS.app} and ${BOT_LABELS.website}`} title="Questions per day" />
-          <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 120, marginTop: 12 }} role="img"
-               aria-label={`Questions per day over ${data.days} days, ${data.totals.questions} in all`}>
-            {data.byDay.map(row => {
-              const total = row.app + row.website;
-              return (
-                <div key={row.day} title={`${row.day}: ${row.app} in-app, ${row.website} website`}
-                     style={{ flex: 1, minWidth: 2, display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%" }}>
-                  <span style={{ height: `${(100 * row.website) / dayTop}%`, background: "var(--admin-plan-team, #8b5cf6)", borderRadius: "3px 3px 0 0" }} />
-                  <span style={{ height: `${(100 * row.app) / dayTop}%`, background: "var(--accent, #2563eb)", borderRadius: total && !row.website ? "3px 3px 0 0" : 0 }} />
-                </div>
-              );
-            })}
-          </div>
+          <QuestionsPerDay byDay={data.byDay} dayTop={dayTop} label={`Questions per day over ${data.days} days, ${data.totals.questions} in all`} />
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--muted)", marginTop: 4 }}>
             <span>{data.byDay[0].day}</span>
             <span><span style={{ color: "var(--accent, #2563eb)" }}>■</span> in-app · <span style={{ color: "var(--admin-plan-team, #8b5cf6)" }}>■</span> website</span>

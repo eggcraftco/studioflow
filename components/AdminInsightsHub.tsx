@@ -9,6 +9,10 @@ import { studioT } from "@/lib/studioflow/language";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
 import { CardTitle } from "@/components/CardTitle";
+import { ActivityHeatmap, AdminLineChart, ChartLegend, StatsDonut } from "@/components/AdminChart";
+import { AdminSearchIndexPanel } from "@/components/AdminSearchIndexPanel";
+import { AdminUserStatsPanel } from "@/components/AdminUserStatsPanel";
+import { chartCount, chartDayLabel, chartDayTick, chartDuration, chartMoney, chartPercent, chartPosition, chartRatioPercent } from "@/lib/studioflow/adminChartFormat";
 import { isAnalyticsExcluded, setAnalyticsExclusion } from "@/lib/landingTracking";
 import { AdminFeedbackInbox } from "@/components/AdminFeedbackInbox";
 import { AdminLivePanel, useLiveAppNow } from "@/components/AdminLivePanel";
@@ -130,14 +134,25 @@ function statsSourceSlices(days: SiteStatsDay[]): { label: string; value: number
   ].filter(slice => slice.value > 0);
 }
 
-function StatsSparkline({ values, color }: { values: number[]; color: string }) {
+/** The small line under a stats card. Hover, tap or focus it to read each day (7 Nov 2026). */
+function StatsSparkline({ title, values, days, color, format, better }: {
+  title: string;
+  values: (number | null)[];
+  days: string[];
+  color: string;
+  format: (value: number) => string;
+  better?: "higher" | "lower";
+}) {
   if (!values.length) return null;
-  const max = Math.max(...values, 1);
-  const points = values.map((value, index) => `${(index / Math.max(values.length - 1, 1)) * 100},${30 - (value / max) * 26}`).join(" ");
   return (
-    <svg viewBox="0 0 100 32" preserveAspectRatio="none" style={{ width: "100%", height: 30, display: "block" }}>
-      <polyline points={points} fill="none" stroke={color} strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-    </svg>
+    <AdminLineChart
+      compact
+      title={title}
+      labels={days.map(chartDayLabel)}
+      series={[{ key: "v", label: title, color, values, format, better, marks: true }]}
+      width={300}
+      height={30}
+    />
   );
 }
 
@@ -154,74 +169,15 @@ function StatsDeltaBadge({ delta, invertGood }: { delta: number | null; invertGo
 }
 
 function StatsTrendChart({ days }: { days: SiteStatsDay[] }) {
-  const width = 600;
-  const height = 200;
-  const pad = 8;
-  const max = Math.max(...days.map(day => day.sessions), 1);
-  const x = (index: number) => pad + (index / Math.max(days.length - 1, 1)) * (width - pad * 2);
-  const y = (value: number) => height - pad - (value / max) * (height - pad * 2);
-  const linePoints = days.map((day, index) => `${x(index)},${y(day.sessions)}`).join(" ");
-  const areaPoints = `${pad},${height - pad} ${linePoints} ${width - pad},${height - pad}`;
+  if (!days.length) return <p className="muted-copy">No data yet.</p>;
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
-      <polygon points={areaPoints} fill="rgba(138, 92, 246, 0.16)" />
-      <polyline points={linePoints} fill="none" stroke="#8a5cf6" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
-      {days.map((day, index) => (
-        <circle key={day.date} cx={x(index)} cy={y(day.sessions)} r="3" fill="#8a5cf6">
-          <title>{`${day.date}: ${day.sessions}`}</title>
-        </circle>
-      ))}
-    </svg>
-  );
-}
-
-function StatsDonut({ slices, centerLabel }: { slices: { label: string; value: number; color: string }[]; centerLabel: string }) {
-  const total = Math.max(slices.reduce((acc, slice) => acc + slice.value, 0), 1);
-  const radius = 42;
-  const circumference = 2 * Math.PI * radius;
-  let offset = 0;
-  return (
-    <div className="site-stats-donut-row">
-      <div style={{ position: "relative", width: 116, height: 116, flex: "0 0 auto" }}>
-        <svg viewBox="0 0 116 116" style={{ width: 116, height: 116, transform: "rotate(-90deg)" }}>
-          {slices.map(slice => {
-            const fraction = slice.value / total;
-            const dash = fraction * circumference;
-            const el = (
-              <circle
-                key={slice.label}
-                cx="58"
-                cy="58"
-                r={radius}
-                fill="none"
-                stroke={slice.color}
-                strokeWidth="14"
-                strokeDasharray={`${dash} ${circumference - dash}`}
-                strokeDashoffset={-offset}
-              />
-            );
-            offset += dash;
-            return el;
-          })}
-        </svg>
-        <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", textAlign: "center" }}>
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)" }}>{centerLabel}</div>
-            <div style={{ fontSize: 16, fontWeight: 900 }}>{total.toLocaleString()}</div>
-          </div>
-        </div>
-      </div>
-      <div style={{ display: "grid", gap: 7, minWidth: 0, flex: 1 }}>
-        {slices.map(slice => (
-          <div key={slice.label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
-            <span style={{ width: 8, height: 8, borderRadius: 99, background: slice.color, flex: "0 0 auto" }} />
-            <span style={{ fontWeight: 650, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{slice.label}</span>
-            <span style={{ marginLeft: "auto", color: "var(--muted)", fontWeight: 700 }}>{((slice.value / total) * 100).toFixed(1)}%</span>
-            <strong style={{ minWidth: 40, textAlign: "right" }}>{slice.value.toLocaleString()}</strong>
-          </div>
-        ))}
-      </div>
-    </div>
+    <AdminLineChart
+      title="Visitor sessions per day"
+      labels={days.map(day => chartDayLabel(day.date))}
+      ticks={days.map(day => chartDayTick(day.date))}
+      series={[{ key: "sessions", label: "Visitor sessions", color: "#8a5cf6", values: days.map(day => Number(day.sessions) || 0), format: chartCount, area: true }]}
+      extraRows={index => [{ label: "Page views", value: chartCount(Number(days[index]?.total) || 0) }]}
+    />
   );
 }
 
@@ -254,12 +210,15 @@ function StatsRankedList({ entries, flags }: { entries: [string, number][]; flag
   );
 }
 
-function StatsCard({ title, value, delta, invertGood, spark, color }: {
+function StatsCard({ title, value, delta, invertGood, spark, days, format, color }: {
   title: string;
   value: string;
   delta: number | null;
   invertGood?: boolean;
-  spark: number[];
+  spark: (number | null)[];
+  /** One YYYY-MM-DD per spark value. */
+  days: string[];
+  format: (value: number) => string;
   color: string;
 }) {
   return (
@@ -270,7 +229,7 @@ function StatsCard({ title, value, delta, invertGood, spark, color }: {
         <StatsDeltaBadge delta={delta} invertGood={invertGood} />
       </div>
       <span style={{ fontSize: 10.5, color: "var(--muted)" }}>vs previous period</span>
-      <StatsSparkline values={spark} color={color} />
+      <StatsSparkline title={title} values={spark} days={days} color={color} format={format} better={invertGood ? "lower" : "higher"} />
     </section>
   );
 }
@@ -902,10 +861,10 @@ function AdminSiteStatsSection() {
       {!loading && !error ? (
         <>
           <div className="site-stats-grid">
-            <StatsCard title="Visitor sessions" value={curSessions.toLocaleString()} delta={statsDeltaPercent(curSessions, prevSessions)} spark={current.map(day => day.sessions)} color="#8a5cf6" />
-            <StatsCard title="Page Views" value={curViews.toLocaleString()} delta={statsDeltaPercent(curViews, prevViews)} spark={current.map(day => day.total)} color="#0a84ff" />
-            <StatsCard title="Avg. Session Duration" value={statsDurationText(curDuration)} delta={statsDeltaPercent(curDuration, prevDuration)} spark={current.map(day => (day.sessions > 0 ? day.durationSeconds / day.sessions : 0))} color="#30d158" />
-            <StatsCard title="Bounce Rate" value={`${curBounce.toFixed(1)}%`} delta={statsDeltaPercent(curBounce, prevBounce)} invertGood spark={current.map(day => (day.sessions > 0 ? ((day.sessions - Math.min(day.engagedSessions, day.sessions)) / day.sessions) * 100 : 0))} color="#ff9f0a" />
+            <StatsCard title="Visitor sessions" value={curSessions.toLocaleString()} delta={statsDeltaPercent(curSessions, prevSessions)} spark={current.map(day => day.sessions)} days={current.map(day => day.date)} format={chartCount} color="#8a5cf6" />
+            <StatsCard title="Page Views" value={curViews.toLocaleString()} delta={statsDeltaPercent(curViews, prevViews)} spark={current.map(day => day.total)} days={current.map(day => day.date)} format={chartCount} color="#0a84ff" />
+            <StatsCard title="Avg. Session Duration" value={statsDurationText(curDuration)} delta={statsDeltaPercent(curDuration, prevDuration)} spark={current.map(day => (day.sessions > 0 ? day.durationSeconds / day.sessions : null))} days={current.map(day => day.date)} format={chartDuration} color="#30d158" />
+            <StatsCard title="Bounce Rate" value={`${curBounce.toFixed(1)}%`} delta={statsDeltaPercent(curBounce, prevBounce)} invertGood spark={current.map(day => (day.sessions > 0 ? ((day.sessions - Math.min(day.engagedSessions, day.sessions)) / day.sessions) * 100 : null))} days={current.map(day => day.date)} format={value => chartPercent(value)} color="#ff9f0a" />
           </div>
 
           <section className="card app-card">
@@ -1011,36 +970,22 @@ function searchCountryLabel(alpha3: string) {
 const SEARCH_DEVICE_LABELS: Record<string, string> = { DESKTOP: "Desktop", MOBILE: "Mobile", TABLET: "Tablet" };
 const SEARCH_DEVICE_COLORS: Record<string, string> = { DESKTOP: "#0a84ff", MOBILE: "#8a5cf6", TABLET: "#30b0c7" };
 
-// Clicks + impressions over time (impressions as area, clicks as line).
+// Clicks + impressions over time (impressions as area, clicks as line), each on its own scale.
 function SearchTrendChart({ data }: { data: SearchConsoleDay[] }) {
   if (data.length < 2) return <p className="muted-copy">Not enough days to chart yet.</p>;
-  const width = 600;
-  const height = 200;
-  const pad = 10;
-  const maxImpr = Math.max(...data.map(d => d.impressions), 1);
-  const maxClk = Math.max(...data.map(d => d.clicks), 1);
-  const x = (i: number) => pad + (i / Math.max(data.length - 1, 1)) * (width - pad * 2);
-  const yI = (v: number) => height - pad - (v / maxImpr) * (height - pad * 2);
-  const yC = (v: number) => height - pad - (v / maxClk) * (height - pad * 2);
-  const imprLine = data.map((d, i) => `${x(i)},${yI(d.impressions)}`).join(" ");
-  const imprArea = `${pad},${height - pad} ${imprLine} ${width - pad},${height - pad}`;
-  const clkLine = data.map((d, i) => `${x(i)},${yC(d.clicks)}`).join(" ");
   return (
     <>
-      <div style={{ display: "flex", gap: 16, fontSize: 11.5, fontWeight: 700, color: "var(--muted)", marginBottom: 6 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: "#8a5cf6" }} />Impressions</span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: "#0a84ff" }} />Clicks</span>
-      </div>
-      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
-        <polygon points={imprArea} fill="rgba(138, 92, 246, 0.16)" />
-        <polyline points={imprLine} fill="none" stroke="#8a5cf6" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
-        <polyline points={clkLine} fill="none" stroke="#0a84ff" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
-        {data.map((d, i) => (
-          <circle key={d.date} cx={x(i)} cy={yI(d.impressions)} r="2.5" fill="#8a5cf6">
-            <title>{`${d.date}: ${d.impressions} impressions, ${d.clicks} clicks`}</title>
-          </circle>
-        ))}
-      </svg>
+      <ChartLegend items={[{ label: "Impressions", color: "#8a5cf6" }, { label: "Clicks", color: "#0a84ff" }]} />
+      <AdminLineChart
+        title="Google Search impressions and clicks per day"
+        labels={data.map(d => chartDayLabel(d.date))}
+        ticks={data.map(d => chartDayTick(d.date))}
+        series={[
+          { key: "impressions", label: "Impressions", color: "#8a5cf6", values: data.map(d => d.impressions), format: chartCount, area: true },
+          { key: "clicks", label: "Clicks", color: "#0a84ff", values: data.map(d => d.clicks), format: chartCount, marks: true }
+        ]}
+        extraRows={index => [{ label: "CTR", value: chartRatioPercent(data[index]?.ctr ?? 0) }]}
+      />
     </>
   );
 }
@@ -1048,29 +993,20 @@ function SearchTrendChart({ data }: { data: SearchConsoleDay[] }) {
 // Average position over time. Y is inverted (1 = best at the top); a line that
 // climbs means we rose toward #1.
 function SearchPositionChart({ data }: { data: SearchConsoleDay[] }) {
-  const pts = data.filter(d => d.position > 0);
-  if (pts.length < 2) return <p className="muted-copy">Not enough ranked days to chart yet.</p>;
-  const width = 600;
-  const height = 150;
-  const pad = 10;
-  const maxPos = Math.max(...pts.map(d => d.position));
-  const minPos = Math.min(...pts.map(d => d.position));
-  const span = Math.max(maxPos - minPos, 1);
-  const x = (i: number) => pad + (i / Math.max(pts.length - 1, 1)) * (width - pad * 2);
-  // Higher on screen = better (smaller position number).
-  const y = (v: number) => pad + ((v - minPos) / span) * (height - pad * 2);
-  const line = pts.map((d, i) => `${x(i)},${y(d.position)}`).join(" ");
+  const ranked = data.filter(d => d.position > 0);
+  if (ranked.length < 2) return <p className="muted-copy">Not enough ranked days to chart yet.</p>;
+  const maxPos = Math.max(...ranked.map(d => d.position));
+  const minPos = Math.min(...ranked.map(d => d.position));
   return (
     <>
-      <p style={{ fontSize: 11, color: "var(--muted)", margin: "0 0 6px" }}>Higher line = better rank (closer to #1). Best {minPos.toFixed(1)} · worst {maxPos.toFixed(1)}.</p>
-      <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
-        <polyline points={line} fill="none" stroke="#ff9f0a" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
-        {pts.map((d, i) => (
-          <circle key={d.date} cx={x(i)} cy={y(d.position)} r="2.5" fill="#ff9f0a">
-            <title>{`${d.date}: position ${d.position.toFixed(1)}`}</title>
-          </circle>
-        ))}
-      </svg>
+      <p style={{ fontSize: 11, color: "var(--muted)", margin: "0 0 6px" }}>Higher line = better rank (closer to #1). Best {chartPosition(minPos)} · worst {chartPosition(maxPos)}.</p>
+      <AdminLineChart
+        title="Average Google position per day"
+        height={150}
+        labels={data.map(d => chartDayLabel(d.date))}
+        ticks={data.map(d => chartDayTick(d.date))}
+        series={[{ key: "position", label: "Avg. position", color: "#ff9f0a", values: data.map(d => (d.position > 0 ? d.position : null)), format: chartPosition, better: "lower" }]}
+      />
     </>
   );
 }
@@ -1198,10 +1134,10 @@ function AdminSearchConsoleSection() {
       {!loading && result?.ok && cur && prev ? (
         <>
           <div className="site-stats-grid">
-            <StatsCard title="Total Clicks" value={cur.clicks.toLocaleString()} delta={statsDeltaPercent(cur.clicks, prev.clicks)} spark={byDate.map(d => d.clicks)} color="#0a84ff" />
-            <StatsCard title="Impressions" value={cur.impressions.toLocaleString()} delta={statsDeltaPercent(cur.impressions, prev.impressions)} spark={byDate.map(d => d.impressions)} color="#8a5cf6" />
-            <StatsCard title="Avg. CTR" value={`${(cur.ctr * 100).toFixed(1)}%`} delta={statsDeltaPercent(cur.ctr, prev.ctr)} spark={byDate.map(d => d.ctr * 100)} color="#30d158" />
-            <StatsCard title="Avg. Position" value={cur.position.toFixed(1)} delta={statsDeltaPercent(cur.position, prev.position)} invertGood spark={byDate.map(d => d.position)} color="#ff9f0a" />
+            <StatsCard title="Total Clicks" value={cur.clicks.toLocaleString()} delta={statsDeltaPercent(cur.clicks, prev.clicks)} spark={byDate.map(d => d.clicks)} days={byDate.map(d => d.date)} format={chartCount} color="#0a84ff" />
+            <StatsCard title="Impressions" value={cur.impressions.toLocaleString()} delta={statsDeltaPercent(cur.impressions, prev.impressions)} spark={byDate.map(d => d.impressions)} days={byDate.map(d => d.date)} format={chartCount} color="#8a5cf6" />
+            <StatsCard title="Avg. CTR" value={`${(cur.ctr * 100).toFixed(1)}%`} delta={statsDeltaPercent(cur.ctr, prev.ctr)} spark={byDate.map(d => d.ctr * 100)} days={byDate.map(d => d.date)} format={value => chartPercent(value)} color="#30d158" />
+            <StatsCard title="Avg. Position" value={cur.position.toFixed(1)} delta={statsDeltaPercent(cur.position, prev.position)} invertGood spark={byDate.map(d => (d.position > 0 ? d.position : null))} days={byDate.map(d => d.date)} format={chartPosition} color="#ff9f0a" />
           </div>
 
           <section className="card app-card">
@@ -1512,66 +1448,21 @@ type AdminUsersDetail = {
   heatmap: number[][];
 };
 
-function GrowthChart({ growth }: { growth: { date: string; cumulative: number }[] }) {
+function GrowthChart({ growth }: { growth: { date: string; signups?: number; cumulative: number }[] }) {
   if (!growth.length) return <p className="muted-copy">No data yet.</p>;
-  const width = 600;
-  const height = 190;
-  const pad = 8;
-  const max = Math.max(...growth.map(point => point.cumulative), 1);
-  const min = Math.min(...growth.map(point => point.cumulative), 0);
-  const x = (index: number) => pad + (index / Math.max(growth.length - 1, 1)) * (width - pad * 2);
-  const y = (value: number) => height - pad - ((value - min) / Math.max(max - min, 1)) * (height - pad * 2);
-  const line = growth.map((point, index) => `${x(index)},${y(point.cumulative)}`).join(" ");
-  const area = `${pad},${height - pad} ${line} ${width - pad},${height - pad}`;
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto", display: "block" }}>
-      <polygon points={area} fill="rgba(138, 92, 246, 0.14)" />
-      <polyline points={line} fill="none" stroke="#8a5cf6" strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
-      {growth.map((point, index) => (
-        index % Math.ceil(growth.length / 24) === 0 ? (
-          <circle key={point.date} cx={x(index)} cy={y(point.cumulative)} r="2.6" fill="#8a5cf6">
-            <title>{`${point.date}: ${point.cumulative}`}</title>
-          </circle>
-        ) : null
-      ))}
-    </svg>
+    <AdminLineChart
+      title="Total users over time"
+      height={190}
+      labels={growth.map(point => chartDayLabel(point.date))}
+      ticks={growth.map(point => chartDayTick(point.date))}
+      series={[{ key: "users", label: "Total users", color: "#8a5cf6", values: growth.map(point => point.cumulative), format: chartCount, area: true }]}
+      extraRows={index => (typeof growth[index]?.signups === "number" ? [{ label: "New that day", value: chartCount(growth[index].signups as number) }] : [])}
+    />
   );
 }
 
-const HEATMAP_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
-function ActivityHeatmap({ heatmap, caption }: { heatmap: number[][]; caption: string }) {
-  const max = Math.max(...heatmap.flat(), 1);
-  return (
-    <div style={{ overflowX: "auto" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "34px repeat(24, 1fr)", gap: 2, minWidth: 560 }}>
-        <span />
-        {Array.from({ length: 24 }, (_, hour) => (
-          <span key={hour} style={{ fontSize: 8.5, color: "var(--muted)", textAlign: "center" }}>{hour % 3 === 0 ? hour : ""}</span>
-        ))}
-        {heatmap.map((row, day) => (
-          <Fragment key={HEATMAP_DAYS[day]}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)", alignSelf: "center" }}>{HEATMAP_DAYS[day]}</span>
-            {row.map((value, hour) => (
-              <span
-                key={hour}
-                title={`${HEATMAP_DAYS[day]} ${hour}:00 — ${value}`}
-                style={{
-                  aspectRatio: "1",
-                  borderRadius: 3,
-                  background: value === 0 ? "var(--admin-chip-bg)" : `rgba(138, 92, 246, ${0.25 + (value / max) * 0.75})`
-                }}
-              />
-            ))}
-          </Fragment>
-        ))}
-      </div>
-      <p className="muted-copy" style={{ marginTop: 8 }}>{caption}</p>
-    </div>
-  );
-}
-
-function AdminUsersWorkspacesDetail({ onBack, view }: { onBack: () => void; view: AdminView }) {
+function AdminUsersWorkspacesDetail({ onBack, view, onOpenUser }: { onBack: () => void; view: AdminView; onOpenUser?: (uid: string) => void }) {
   const [data, setData] = useState<AdminUsersDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -1723,7 +1614,9 @@ function AdminUsersWorkspacesDetail({ onBack, view }: { onBack: () => void; view
                   {recent.map((u, index) => (
                     <tr key={u.uid} style={{ borderTop: "1px solid var(--border)" }}>
                       <td style={{ padding: "7px 8px", color: "var(--muted)", fontWeight: 700 }}>{index + 1}</td>
-                      <td style={{ padding: "7px 8px", fontWeight: 700 }}>{u.email || "—"}</td>
+                      <td style={{ padding: "7px 8px", fontWeight: 700 }}>
+                        {onOpenUser ? <button type="button" className="admin-person-link" onClick={() => onOpenUser(u.uid)}>{u.email || u.uid}</button> : u.email || "—"}
+                      </td>
                       <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{u.displayName || "—"}</td>
                       <td style={{ padding: "7px 8px" }}>{u.createdAtMs ? new Date(u.createdAtMs).toLocaleDateString() : "—"}</td>
                       <td style={{ padding: "7px 8px", color: "var(--muted)" }}>{u.lastSignInMs ? new Date(u.lastSignInMs).toLocaleDateString() : "never"}</td>
@@ -1740,7 +1633,7 @@ function AdminUsersWorkspacesDetail({ onBack, view }: { onBack: () => void; view
 
       <section className="card app-card">
         <CardTitle icon="dashboard" eyebrow="Activity" title="Order Creation by Time of Day" />
-        <ActivityHeatmap heatmap={data.heatmap} caption="Orders created, by weekday and hour (last 30 days, UK time; orders carrying a server creation stamp)." />
+        <ActivityHeatmap heatmap={data.heatmap} caption="Orders created, by weekday and hour (last 30 days, UK time; orders carrying a server creation stamp)." unit="orders" />
       </section>
     </div>
   );
@@ -2036,7 +1929,7 @@ function AdminRevenueDetail({ onBack, view }: { onBack: () => void; view: AdminV
       <div className="site-stats-panels">
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Revenue" title="Est. Revenue by Plan" />
-          {planSlices.length ? <StatsDonut slices={planSlices} centerLabel="£/month" /> : <p className="muted-copy">No paid subscriptions yet.</p>}
+          {planSlices.length ? <StatsDonut slices={planSlices} centerLabel="£/month" format={value => chartMoney(value, "£", value % 1 ? 2 : 0)} /> : <p className="muted-copy">No paid subscriptions yet.</p>}
         </section>
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Revenue" title="Revenue Breakdown" />
@@ -2621,7 +2514,7 @@ function AdminFeatureUsageDetail({ onBack, view }: { onBack: () => void; view: A
 
       <section className="card app-card">
         <CardTitle icon="dashboard" eyebrow="Activity" title="Feature Usage by Time of Day" />
-        <ActivityHeatmap heatmap={data.heatmap} caption="Orders, customers, notes and messages created, by weekday and hour (last 30 days, UK time)." />
+        <ActivityHeatmap heatmap={data.heatmap} caption="Orders, customers, notes and messages created, by weekday and hour (last 30 days, UK time)." unit="items created" />
       </section>
     </div>
   );
@@ -2833,7 +2726,7 @@ function AdminStorageDetail({ onBack, view }: { onBack: () => void; view: AdminV
         </section>
         <section className="card app-card">
           <CardTitle icon="dashboard" eyebrow="Activity" title="Uploads by Time of Day (30d)" />
-          <ActivityHeatmap heatmap={data.heatmap} caption={data.heatmapCaption || "Client-file uploads by weekday and hour (last 30 days, UK time)."} />
+          <ActivityHeatmap heatmap={data.heatmap} caption={data.heatmapCaption || "Client-file uploads by weekday and hour (last 30 days, UK time)."} unit="uploads" />
         </section>
       </div>
     </div>
@@ -2843,7 +2736,7 @@ function AdminStorageDetail({ onBack, view }: { onBack: () => void; view: AdminV
 type AdminLookupUser = { uid: string; email: string; displayName: string; createdAtMs: number; lastSignInMs: number };
 type AdminLookupWorkspace = { id: string; name: string; ownerEmail: string; plan: string };
 
-function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
+function AdminUserLookupDetail({ onBack, onOpenUser }: { onBack: () => void; onOpenUser?: (uid: string) => void }) {
   const { language } = useAuth();
   const t = (text: string) => studioT(text, language);
   const [query, setQuery] = useState("");
@@ -3049,7 +2942,7 @@ function AdminUserLookupDetail({ onBack }: { onBack: () => void }) {
                   <button
                     key={user.uid}
                     type="button"
-                    onClick={() => openDetail("user", user.uid)}
+                    onClick={() => (onOpenUser ? onOpenUser(user.uid) : openDetail("user", user.uid))}
                     style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: index === 0 ? "none" : "1px solid var(--border)", background: "none", border: 0, cursor: "pointer", textAlign: "left", width: "100%", color: "var(--text)" }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -3542,12 +3435,15 @@ type AdminHubPage =
   | "lookup"
   | "sitestats"
   | "searchconsole"
+  | "searchindex"
   | "customorderlanding"
   | "onboarding"
   | "feedback"
   | "activation"
   | "dropoff"
-  | "botquestions";
+  | "botquestions"
+  // One person's statistics (7 Nov 2026): opened from a name in any list, not a sidebar link.
+  | "user";
 
 /* Fourteen flat links became five groups (29 Oct 2026): what is happening now, money, the
    customers themselves, how the product is used, and the public website. Order inside a group is
@@ -3572,6 +3468,7 @@ const ADMIN_HUB_GROUPS: { label: string; pages: { id: AdminHubPage; label: strin
     pages: [
       { id: "sitestats", label: "Global Statistics" },
       { id: "searchconsole", label: "Google Search" },
+      { id: "searchindex", label: "Google Indexing" },
       { id: "customorderlanding", label: "Custom Order Landing Page" }
     ]
   }
@@ -3590,6 +3487,9 @@ export function AdminInsightsHub() {
   // returns to the previous section instead of leaving the admin area.
   const [page, setPageState] = useState<AdminHubPage>("overview");
   const [view, setView] = useState<AdminView>("business");
+  const [person, setPerson] = useState<{ uid: string; from: AdminHubPage } | null>(null);
+  const personRef = useRef<{ uid: string; from: AdminHubPage } | null>(null);
+  personRef.current = person;
   const hubRef = useRef<HTMLDivElement | null>(null);
   const setPage = (next: AdminHubPage) => {
     setPageState(next);
@@ -3600,10 +3500,16 @@ export function AdminInsightsHub() {
     hubRef.current?.scrollIntoView({ block: "start" });
   };
   const goOverview = () => setPage("overview");
+  // A name in any list opens that person's page; "‹ Back" (or the browser's Back) returns to the list.
+  const openUser = (uid: string) => {
+    if (!uid) return;
+    setPerson({ uid, from: page === "user" ? person?.from || "overview" : page });
+    setPage("user");
+  };
 
   useEffect(() => {
     setPageState(pageFromHash());
-    const onPop = () => setPageState(pageFromHash());
+    const onPop = () => setPageState(window.location.hash === "#user" && personRef.current ? "user" : pageFromHash());
     window.addEventListener("popstate", onPop);
     window.addEventListener("hashchange", onPop);
     // An admin's own browser is not a visitor: the landing-page and public-site beacons skip a
@@ -3618,7 +3524,8 @@ export function AdminInsightsHub() {
 
   // The toggle only means something on the pages that count workspaces or members.
   const viewPages: AdminHubPage[] = ["overview", "live", "users", "subscriptions", "revenue", "plans", "features", "storage", "onboarding", "activation", "dropoff", "botquestions"];
-  const currentLabel = ADMIN_HUB_GROUPS.flatMap(group => group.pages).find(item => item.id === page)?.label || "Overview";
+  const pageLabel = (id: AdminHubPage) => ADMIN_HUB_GROUPS.flatMap(group => group.pages).find(item => item.id === id)?.label || "Overview";
+  const currentLabel = page === "user" ? "Person" : pageLabel(page);
 
   return (
     <div className="admin-hub-grid" ref={hubRef}>
@@ -3648,6 +3555,7 @@ export function AdminInsightsHub() {
       <div className="admin-hub-mobile-nav">
         <label htmlFor="admin-hub-section" className="admin-hub-group-label">Section</label>
         <select id="admin-hub-section" value={page} onChange={event => setPage(event.target.value as AdminHubPage)}>
+          {page === "user" ? <option value="user">Person</option> : null}
           {ADMIN_HUB_GROUPS.map(group => (
             <optgroup key={group.label} label={group.label}>
               {group.pages.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
@@ -3657,21 +3565,26 @@ export function AdminInsightsHub() {
       </div>
       <section className="admin-hub-content" aria-label={currentLabel}>
         {viewPages.includes(page) ? <AdminViewToggle view={view} onChange={setView} /> : null}
-        {page === "overview" ? <AdminOverviewPanel view={view} onOpen={setPage} /> : null}
+        {page === "overview" || (page === "user" && !person) ? <AdminOverviewPanel view={view} onOpen={setPage} /> : null}
         {page === "live" ? <AdminLivePanel view={view} /> : null}
         {/* Online time has its own "Hide internal accounts" switch on the same view state, so no toggle above it. */}
-        {page === "onlinetime" ? <AdminOnlineTimePanel view={view} onViewChange={setView} /> : null}
+        {page === "onlinetime" ? <AdminOnlineTimePanel view={view} onViewChange={setView} onOpenUser={openUser} /> : null}
         {/* Browsers (1 Nov 2026) has the same switch as Online time. */}
-        {page === "browsers" ? <AdminBrowsersPanel view={view} onViewChange={setView} /> : null}
-        {page === "users" ? <AdminUsersWorkspacesDetail onBack={goOverview} view={view} /> : null}
+        {page === "browsers" ? <AdminBrowsersPanel view={view} onViewChange={setView} onOpenUser={openUser} /> : null}
+        {page === "users" ? <AdminUsersWorkspacesDetail onBack={goOverview} view={view} onOpenUser={openUser} /> : null}
         {page === "subscriptions" ? <AdminSubscriptionsDetail onBack={goOverview} view={view} /> : null}
         {page === "revenue" ? <AdminRevenueDetail onBack={goOverview} view={view} /> : null}
         {page === "plans" ? <AdminPlansDetail onBack={goOverview} view={view} /> : null}
         {page === "features" ? <AdminFeatureUsageDetail onBack={goOverview} view={view} /> : null}
         {page === "storage" ? <AdminStorageDetail onBack={goOverview} view={view} /> : null}
-        {page === "lookup" ? <AdminUserLookupDetail onBack={goOverview} /> : null}
+        {page === "lookup" ? <AdminUserLookupDetail onBack={goOverview} onOpenUser={openUser} /> : null}
+        {page === "user" && person ? (
+          <AdminUserStatsPanel uid={person.uid} onBack={() => setPage(person.from)} backLabel={pageLabel(person.from)} planLabel={plan => ADMIN_PLAN_LABELS[plan] || plan} />
+        ) : null}
         {page === "sitestats" ? <AdminSiteStatsSection /> : null}
         {page === "searchconsole" ? <AdminSearchConsoleSection /> : null}
+        {/* Google Indexing (7 Nov 2026): index state, search numbers and sitemaps per site language. */}
+        {page === "searchindex" ? <AdminSearchIndexPanel /> : null}
         {page === "customorderlanding" ? <AdminCustomOrderLandingSection /> : null}
         {page === "onboarding" ? <AdminOnboardingDetail onBack={goOverview} view={view} /> : null}
         {page === "activation" ? <AdminActivationFunnelSection view={view} /> : null}

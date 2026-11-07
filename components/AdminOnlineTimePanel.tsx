@@ -102,7 +102,7 @@ function AppStack({ person, percent }: { person: Pick<OnlinePerson, "byApp">; pe
   );
 }
 
-function PersonRow({ person, rank, percent, now, byHours }: { person: OnlinePerson; rank: number; percent: number; now: number; byHours: boolean }) {
+function PersonRow({ person, rank, percent, now, byHours, onOpenUser }: { person: OnlinePerson; rank: number; percent: number; now: number; byHours: boolean; onOpenUser?: (uid: string) => void }) {
   const internal = internalLabel(person);
   const split = appSplitLabel(person.byApp);
   const devices = person.devices.map(d => (d.sessions > 1 ? `${deviceLabel(d.device)} ×${d.sessions}` : deviceLabel(d.device))).join(", ");
@@ -113,7 +113,11 @@ function PersonRow({ person, rank, percent, now, byHours }: { person: OnlinePers
     <li className="admin-online-row">
       <span className="admin-online-rank" aria-label={`Rank ${rank}`}>{rank}</span>
       <div className="admin-online-who">
-        <strong className="admin-online-name" title={person.uid}>{personLabel(person)}</strong>
+        {onOpenUser ? (
+          <button type="button" className="admin-person-link admin-online-name" onClick={() => onOpenUser(person.uid)}>{personLabel(person)}</button>
+        ) : (
+          <strong className="admin-online-name" title={person.uid}>{personLabel(person)}</strong>
+        )}
         <span className="admin-online-sub">
           {[person.email && person.name ? person.name : "", person.workspace || (person.workspaceId ? "Workspace without a name" : "No workspace")].filter(Boolean).join(" · ")}
         </span>
@@ -137,7 +141,7 @@ function PersonRow({ person, rank, percent, now, byHours }: { person: OnlinePers
   );
 }
 
-export function AdminOnlineTimePanel({ view, onViewChange }: { view: AdminView; onViewChange: (view: AdminView) => void }) {
+export function AdminOnlineTimePanel({ view, onViewChange, onOpenUser }: { view: AdminView; onViewChange: (view: AdminView) => void; onOpenUser?: (uid: string) => void }) {
   const [period, setPeriod] = useState<OnlinePeriod>("today");
   const [aiOnly, setAiOnly] = useState(false);
   const { board, legacy, status, error, updatedAt, loading, refresh } = useOnlineLeaderboard(view, period);
@@ -222,7 +226,7 @@ export function AdminOnlineTimePanel({ view, onViewChange }: { view: AdminView; 
         {board && people.length ? (
           <ol className="admin-online-list" aria-label="People by online time, longest first">
             {people.map((person, index) => (
-              <PersonRow key={person.uid} person={person} rank={aiOnly ? allPeople.indexOf(person) + 1 : index + 1} percent={barPercent(person, allPeople, byHours)} now={now} byHours={byHours} />
+              <PersonRow key={person.uid} person={person} rank={aiOnly ? allPeople.indexOf(person) + 1 : index + 1} percent={barPercent(person, allPeople, byHours)} now={now} byHours={byHours} onOpenUser={onOpenUser} />
             ))}
           </ol>
         ) : (

@@ -99,7 +99,8 @@ const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8")
 check("O7 a section of Insights: Pulse ▸ Online time, in the address, with the view state", () => {
   assert.ok(hub.includes('{ id: "live", label: "Live" }, { id: "onlinetime", label: "Online time" }'));
   assert.ok(hub.includes('| "onlinetime"'));
-  assert.ok(hub.includes('{page === "onlinetime" ? <AdminOnlineTimePanel view={view} onViewChange={setView} /> : null}'));
+  // 7 Nov 2026: names open the person's page (onOpenUser); the view state is still passed.
+  assert.ok(hub.includes('{page === "onlinetime" ? <AdminOnlineTimePanel view={view} onViewChange={setView} onOpenUser={openUser} /> : null}'));
   const viewPages = /const viewPages: AdminHubPage\[\] = \[([^\]]*)\]/.exec(hub);
   assert.ok(viewPages && !viewPages[1].includes('"onlinetime"'), "its own switch replaces the hub toggle on this page");
 });
