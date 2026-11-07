@@ -38,6 +38,11 @@ export type StudioActivityNotification = {
   fileId: string;
   workSessionId: string;
   workDayId: string;
+  /** A reminder (stage B, type "reminder"): which kind and the record it opens — note / order (+ item) / calendar day + entry. */
+  reminderKind: string;
+  noteId: string;
+  entryId: string;
+  dateKey: string;
   channel: string;
   senderUid: string;
   senderName: string;
@@ -125,6 +130,10 @@ function notificationFromDoc(id: string, data: Record<string, unknown>): StudioA
     fileId: str(data.fileId),
     workSessionId: str(data.workSessionId),
     workDayId: str(data.workDayId),
+    reminderKind: str(data.reminderKind),
+    noteId: str(data.noteId),
+    entryId: str(data.entryId),
+    dateKey: str(data.dateKey),
     channel: str(data.channel),
     senderUid: str(data.senderUid),
     senderName: str(data.senderName),

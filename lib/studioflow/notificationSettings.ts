@@ -83,7 +83,7 @@ export function orderNotificationHref(row: { orderId?: string | null; type?: str
   if (!orderId) return "/orders";
   const params = new URLSearchParams({ orderId });
   const focus = String(row.focus || "").trim() || (String(row.type || "").trim() === "delivery" ? "shipping" : "");
-  if (focus === "files" || focus === "workTime" || focus === "shipping") params.set("focus", focus);
+  if (focus === "files" || focus === "workTime" || focus === "shipping" || focus === "schedule") params.set("focus", focus);
   for (const key of ["fileId", "workSessionId", "workDayId"] as const) {
     const value = String(row[key] || "").trim();
     if (value) params.set(key, value);
@@ -95,7 +95,8 @@ export function orderNotificationHref(row: { orderId?: string | null; type?: str
 export const ORDER_CARD_FOCUS_EVENT = "nivadesk-order-card-focus";
 
 /** The order card id a `focus` value scrolls to (OrderDetailContent card ids). */
-export function orderCardForFocus(focus: string | null | undefined): "clientFiles" | "workTime" | "shipping" | null {
+export function orderCardForFocus(focus: string | null | undefined): "clientFiles" | "workTime" | "shipping" | "schedule" | null {
+  if (focus === "schedule") return "schedule";
   if (focus === "files") return "clientFiles";
   if (focus === "workTime") return "workTime";
   if (focus === "shipping") return "shipping";

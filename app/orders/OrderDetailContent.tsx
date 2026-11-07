@@ -55,6 +55,8 @@ import { useConnectedStoreHosts } from "@/lib/studioflow/useConnectedStoreHosts"
 import { maskFileUrl } from "@/lib/studioflow/fileMask";
 import { downloadStoredFile, openOutcomeProblem, openStoredFile, resolvedFileProblem, useResolvedFileUrl } from "@/lib/studioflow/storageFileUrl";
 import { StoredFileImage } from "@/components/StoredFileImage";
+import { OrderLinkedReminders } from "@/components/OrderLinkedReminders";
+import { orderReminderLabel } from "@/lib/studioflow/reminderCore";
 import {
   CLIENT_FILE_ACCEPT,
   canManageClientFilesForRole,
@@ -8922,6 +8924,18 @@ export function OrderDetailContent({
                     ))}
                   </div>
                 </div>
+              ) : null}
+              {/* The rest of what points at this order: the person's own linked notes with a reminder and the
+                  calendar entries linked to it (one reminder list, components/ReminderList.tsx). */}
+              {user ? (
+                <OrderLinkedReminders
+                  companyId={workspace.id}
+                  uid={user.uid}
+                  orderId={order.id}
+                  orderLabel={orderReminderLabel(order.customerName, order.designName)}
+                  language={detailLanguage}
+                  notesAllowed={workspaceAccessAllows(workspace.memberAccess, "notes")}
+                />
               ) : null}
             </div>
           </section>

@@ -1,0 +1,477 @@
+{
+  "about": "One reminder list (lib/studioflow/reminderCore.ts). The SAME file pins the Swift (EGGcraft/ReminderCore.swift) and Kotlin (features/reminders/ReminderCore.kt) copies. Expected values were written by hand from the rules, not copied from an implementation. now = 2026-11-07T01:30:00Z (Saturday; London is on GMT).",
+  "nowMs": 1794015000000,
+  "parseOrderDue": [
+    {
+      "name": "Swift seconds since 2001 (Apple + server writes)",
+      "raw": 816048600,
+      "ms": 1794355800000
+    },
+    {
+      "name": "Swift seconds with a fraction",
+      "raw": 816048600.5,
+      "ms": 1794355800500
+    },
+    {
+      "name": "Unix milliseconds",
+      "raw": 1794355800000,
+      "ms": 1794355800000
+    },
+    {
+      "name": "ISO string",
+      "raw": "2026-11-11T00:10:00.000Z",
+      "ms": 1794355800000
+    },
+    {
+      "name": "numeric string = Swift seconds",
+      "raw": "816048600",
+      "ms": 1794355800000
+    },
+    {
+      "name": "empty string",
+      "raw": "",
+      "ms": null
+    },
+    {
+      "name": "garbage",
+      "raw": "soon",
+      "ms": null
+    },
+    {
+      "name": "missing",
+      "raw": null,
+      "ms": null
+    }
+  ],
+  "allDayStorage": [
+    {
+      "name": "winter London: local noon = 12:00Z",
+      "dayKey": "2026-11-08",
+      "timeZone": "Europe/London",
+      "ms": 1794139200000
+    },
+    {
+      "name": "summer London: local noon = 11:00Z",
+      "dayKey": "2026-07-01",
+      "timeZone": "Europe/London",
+      "ms": 1782903600000
+    },
+    {
+      "name": "Istanbul: local noon = 09:00Z",
+      "dayKey": "2026-11-08",
+      "timeZone": "Europe/Istanbul",
+      "ms": 1794128400000
+    }
+  ],
+  "resolveAllDay": [
+    {
+      "name": "mode for this reminder, all-day",
+      "reminderMs": 1794139200000,
+      "mode": {
+        "atMs": 1794139200000,
+        "allDay": true
+      },
+      "allDay": true
+    },
+    {
+      "name": "mode for this reminder, timed",
+      "reminderMs": 1794096000000,
+      "mode": {
+        "atMs": 1794096000000,
+        "allDay": false
+      },
+      "allDay": false
+    },
+    {
+      "name": "an older app moved the reminder: mode is stale, legacy reading",
+      "reminderMs": 1794234600000,
+      "mode": {
+        "atMs": 1794139200000,
+        "allDay": true
+      },
+      "allDay": null
+    },
+    {
+      "name": "Apple sub-millisecond reminder still matches",
+      "reminderMs": 1794139200000.4,
+      "mode": {
+        "atMs": 1794139200000,
+        "allDay": true
+      },
+      "allDay": true
+    },
+    {
+      "name": "no mode",
+      "reminderMs": 1794139200000,
+      "mode": null,
+      "allDay": null
+    },
+    {
+      "name": "no reminder",
+      "reminderMs": null,
+      "mode": {
+        "atMs": 1794139200000,
+        "allDay": true
+      },
+      "allDay": null
+    },
+    {
+      "name": "broken mode",
+      "reminderMs": 1794139200000,
+      "mode": {
+        "atMs": "1794139200000",
+        "allDay": "yes"
+      },
+      "allDay": null
+    }
+  ],
+  "build": [
+    {
+      "name": "notes: timed (iPhone), legacy date-only (Android UTC midnight), flagged all-day (local noon), flagged timed at midnight, deleted and archived left out",
+      "viewerTimeZone": "Europe/London",
+      "notes": [
+        {
+          "id": "n-timed",
+          "title": "Call supplier",
+          "text": "",
+          "reminderMs": 1794234600000
+        },
+        {
+          "id": "n-legacy",
+          "title": "",
+          "text": "Order sapphire glass\nfor R-1",
+          "reminderMs": 1794096000000,
+          "linkedOrderId": "R-1",
+          "linkedOrderLabel": ""
+        },
+        {
+          "id": "n-flag",
+          "title": "Renew insurance",
+          "text": "",
+          "reminderMs": 1794139200000,
+          "reminderAllDay": true
+        },
+        {
+          "id": "n-midnight",
+          "title": "Midnight check",
+          "text": "",
+          "reminderMs": 1794096000000,
+          "reminderAllDay": false
+        },
+        {
+          "id": "n-deleted",
+          "title": "Gone",
+          "text": "",
+          "reminderMs": 1794096000000,
+          "isDeleted": true
+        },
+        {
+          "id": "n-archived",
+          "title": "Put away",
+          "text": "",
+          "reminderMs": 1794096000000,
+          "isArchived": true
+        },
+        {
+          "id": "n-none",
+          "title": "No reminder",
+          "text": "",
+          "reminderMs": null
+        }
+      ],
+      "orders": [
+        {
+          "id": "R-1",
+          "label": "Maisie Client · Dial painting",
+          "customFields": {}
+        }
+      ],
+      "calendar": [],
+      "expect": [
+        {
+          "key": "note:n-flag",
+          "kind": "note",
+          "title": "Renew insurance",
+          "allDay": true,
+          "dayKey": "2026-11-08",
+          "time": null,
+          "overdue": false,
+          "dueMs": 1794096000000,
+          "orderId": null,
+          "orderLabel": ""
+        },
+        {
+          "key": "note:n-legacy",
+          "kind": "note",
+          "title": "Order sapphire glass",
+          "allDay": true,
+          "dayKey": "2026-11-08",
+          "time": null,
+          "overdue": false,
+          "dueMs": 1794096000000,
+          "orderId": "R-1",
+          "orderLabel": "Maisie Client · Dial painting"
+        },
+        {
+          "key": "note:n-midnight",
+          "kind": "note",
+          "title": "Midnight check",
+          "allDay": false,
+          "dayKey": "2026-11-08",
+          "time": "00:00",
+          "overdue": false,
+          "dueMs": 1794096000000,
+          "orderId": null,
+          "orderLabel": ""
+        },
+        {
+          "key": "note:n-timed",
+          "kind": "note",
+          "title": "Call supplier",
+          "allDay": false,
+          "dayKey": "2026-11-09",
+          "time": "14:30",
+          "overdue": false,
+          "dueMs": 1794234600000,
+          "orderId": null,
+          "orderLabel": ""
+        }
+      ]
+    },
+    {
+      "name": "legacy UTC-midnight date stays on the day its writer picked, also west of Greenwich; a flagged all-day one is the day where the viewer is; a legacy one saved again with its all-day mode keeps its UTC day",
+      "viewerTimeZone": "America/New_York",
+      "notes": [
+        {
+          "id": "n-legacy",
+          "title": "Legacy",
+          "text": "",
+          "reminderMs": 1794096000000
+        },
+        {
+          "id": "n-flag",
+          "title": "Flagged",
+          "text": "",
+          "reminderMs": 1794139200000,
+          "reminderAllDay": true
+        },
+        {
+          "id": "n-flag-midnight",
+          "title": "Saved again",
+          "text": "",
+          "reminderMs": 1794096000000,
+          "reminderAllDay": true
+        }
+      ],
+      "orders": [],
+      "calendar": [],
+      "expect": [
+        {
+          "key": "note:n-flag",
+          "kind": "note",
+          "title": "Flagged",
+          "allDay": true,
+          "dayKey": "2026-11-08",
+          "time": null,
+          "overdue": false,
+          "dueMs": 1794114000000,
+          "orderId": null,
+          "orderLabel": ""
+        },
+        {
+          "key": "note:n-flag-midnight",
+          "kind": "note",
+          "title": "Saved again",
+          "allDay": true,
+          "dayKey": "2026-11-08",
+          "time": null,
+          "overdue": false,
+          "dueMs": 1794114000000,
+          "orderId": null,
+          "orderLabel": ""
+        },
+        {
+          "key": "note:n-legacy",
+          "kind": "note",
+          "title": "Legacy",
+          "allDay": true,
+          "dayKey": "2026-11-08",
+          "time": null,
+          "overdue": false,
+          "dueMs": 1794114000000,
+          "orderId": null,
+          "orderLabel": ""
+        }
+      ]
+    },
+    {
+      "name": "order items: every stored dueAt shape, done/completed left out, one bad item never hides the others, overdue",
+      "viewerTimeZone": "Europe/London",
+      "notes": [],
+      "orders": [
+        {
+          "id": "R-1",
+          "label": "Maisie Client · Dial painting",
+          "customFields": {
+            "__scheduleAlertItemsV1": "[{\"id\":\"a1\",\"title\":\"Check payment\",\"dueAt\":815705400,\"status\":\"Pending\",\"priority\":\"High\"},{\"id\":\"a2\",\"title\":\"Follow up customer\",\"dueAt\":815826600,\"status\":\"Pending\"},{\"id\":\"a3\",\"title\":\"Done one\",\"dueAt\":815826600,\"status\":\"Done\"},{\"id\":\"a4\",\"title\":\"Completed one\",\"dueAt\":815826600,\"status\":\"Pending\",\"completedAt\":815705400},{\"id\":\"a5\",\"title\":\"No date\",\"status\":\"Pending\"},{\"id\":\"a6\",\"title\":\"\",\"dueAt\":\"2026-11-09T09:00:00.000Z\",\"status\":\"Pending\"}]"
+          }
+        },
+        {
+          "id": "R-2",
+          "label": "Tom Client · Bezel repair",
+          "customFields": {
+            "__scheduleAlertItemsV1": "{not json"
+          }
+        },
+        {
+          "id": "R-3",
+          "label": "Ann",
+          "customFields": {
+            "__scheduleAlertItemsV1": "[{\"title\":\"Legacy ms\",\"dueAt\":1794240000000}]"
+          }
+        }
+      ],
+      "calendar": [],
+      "expect": [
+        {
+          "key": "order:R-1:a1",
+          "kind": "order",
+          "title": "Check payment",
+          "allDay": false,
+          "dayKey": "2026-11-07",
+          "time": "00:50",
+          "overdue": true,
+          "dueMs": 1794012600000,
+          "orderId": "R-1",
+          "orderLabel": "Maisie Client · Dial painting"
+        },
+        {
+          "key": "order:R-1:a2",
+          "kind": "order",
+          "title": "Follow up customer",
+          "allDay": false,
+          "dayKey": "2026-11-08",
+          "time": "10:30",
+          "overdue": false,
+          "dueMs": 1794133800000,
+          "orderId": "R-1",
+          "orderLabel": "Maisie Client · Dial painting"
+        },
+        {
+          "key": "order:R-1:a6",
+          "kind": "order",
+          "title": "Reminder",
+          "allDay": false,
+          "dayKey": "2026-11-09",
+          "time": "09:00",
+          "overdue": false,
+          "dueMs": 1794214800000,
+          "orderId": "R-1",
+          "orderLabel": "Maisie Client · Dial painting"
+        },
+        {
+          "key": "order:R-3:index-0",
+          "kind": "order",
+          "title": "Legacy ms",
+          "allDay": false,
+          "dayKey": "2026-11-09",
+          "time": "16:00",
+          "overdue": false,
+          "dueMs": 1794240000000,
+          "orderId": "R-3",
+          "orderLabel": "Ann"
+        }
+      ]
+    },
+    {
+      "name": "calendar rows: timed in its own zone shown in the viewer's zone, all-day on its day, linked order label; everything sorted together, all-day before timed on the same instant",
+      "viewerTimeZone": "Europe/Istanbul",
+      "notes": [
+        {
+          "id": "n1",
+          "title": "Same day all-day",
+          "text": "",
+          "reminderMs": 1794139200000,
+          "reminderAllDay": true
+        }
+      ],
+      "orders": [
+        {
+          "id": "R-1",
+          "label": "Maisie Client · Dial painting",
+          "customFields": {}
+        }
+      ],
+      "calendar": [
+        {
+          "entryId": "E2",
+          "title": "Client call — Maisie",
+          "type": "event",
+          "allDay": false,
+          "occurrenceKey": "2026-11-08",
+          "startTime": "11:00",
+          "timeZone": "Europe/London",
+          "orderId": "R-1"
+        },
+        {
+          "entryId": "E5",
+          "title": "Kiln day",
+          "type": "event",
+          "allDay": true,
+          "occurrenceKey": "2026-11-08",
+          "startTime": null,
+          "timeZone": "Europe/London",
+          "orderId": null
+        },
+        {
+          "entryId": "E6",
+          "title": "Bad day",
+          "type": "event",
+          "allDay": true,
+          "occurrenceKey": "8 Nov",
+          "startTime": null,
+          "timeZone": "Europe/London",
+          "orderId": null
+        }
+      ],
+      "expect": [
+        {
+          "key": "note:n1",
+          "kind": "note",
+          "title": "Same day all-day",
+          "allDay": true,
+          "dayKey": "2026-11-08",
+          "time": null,
+          "overdue": false,
+          "dueMs": 1794085200000,
+          "orderId": null,
+          "orderLabel": ""
+        },
+        {
+          "key": "calendar:E5:2026-11-08",
+          "kind": "calendar",
+          "title": "Kiln day",
+          "allDay": true,
+          "dayKey": "2026-11-08",
+          "time": null,
+          "overdue": false,
+          "dueMs": 1794085200000,
+          "orderId": null,
+          "orderLabel": ""
+        },
+        {
+          "key": "calendar:E2:2026-11-08",
+          "kind": "calendar",
+          "title": "Client call — Maisie",
+          "allDay": false,
+          "dayKey": "2026-11-08",
+          "time": "14:00",
+          "overdue": false,
+          "dueMs": 1794135600000,
+          "orderId": "R-1",
+          "orderLabel": "Maisie Client · Dial painting"
+        }
+      ]
+    }
+  ]
+}

@@ -31,7 +31,7 @@ function note(overrides: Partial<StudioKeepNote> = {}): StudioKeepNote {
   return {
     id: "n1", title: "Title", text: "Body", colorName: "yellow", ownerUserId: "u1", ownerEmail: "a@b.c", ownerName: "A",
     sharedWith: [], collaboratorEmails: [], collaboratorUserIds: [], pendingCollaboratorUserIds: [], activeEditorUserId: "", activeEditorEmail: "", activeEditorUpdatedAtMillis: null,
-    isPinned: false, isArchived: false, isDeleted: false, labels: ["x"], links: [], reminderDateMillis: null, manualOrder: 5,
+    isPinned: false, isArchived: false, isDeleted: false, labels: ["x"], links: [], reminderDateMillis: null, reminderAllDay: null, manualOrder: 5,
     createdAtMillis: 1000, updatedAtMillis: 2000, noteType: "personal", linkedOrderId: "", linkedOrderLabel: "", linkedCustomerName: "",
     visibility: "only_me", ...overrides,
   };

@@ -26,6 +26,7 @@ import { ORDER_STACK_VIEW_TRANSLATIONS } from "./orderStackViewTranslations";
 import { ORDER_DELIVERY_ADDRESS_TRANSLATIONS } from "./orderDeliveryAddressTranslations";
 import { SECURITY_FIX_TRANSLATIONS } from "./securityFixTranslations";
 import { CALENDAR_TRANSLATIONS } from "./calendarTranslations";
+import { REMINDER_TRANSLATIONS } from "./reminderTranslations";
 import { ONLINE_BOOKING_TRANSLATIONS } from "./onlineBookingTranslations";
 import { PAYMENT_LINKS_BOARD_TRANSLATIONS } from "./paymentLinksBoardTranslations";
 import { APP_HELP_HISTORY_TRANSLATIONS } from "./appHelpHistoryTranslations";
@@ -9501,6 +9502,8 @@ mergeIntoTranslations(SECOND_FACTOR_TRANSLATIONS);
 // Calendar V1 (28 Oct 2026): the /calendar screen and the bell's calendar reminders. Last, and filling only
 // gaps, so no wording elsewhere changes.
 mergeMissingIntoTranslations(CALENDAR_TRANSLATIONS);
+// One reminder list (7 Nov 2026): Notes ▸ Reminders, the Calendar's order reminders, the order card's linked reminders.
+mergeMissingIntoTranslations(REMINDER_TRANSLATIONS);
 // Online booking (1 Nov 2026): Settings ▸ Online booking and the booking block in the Calendar.
 mergeMissingIntoTranslations(ONLINE_BOOKING_TRANSLATIONS);
 mergeMissingIntoTranslations(STORAGE_TRANSLATIONS);

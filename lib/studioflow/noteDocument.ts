@@ -1,4 +1,14 @@
 import { Timestamp } from "firebase/firestore";
+import { reminderModeFor, resolveReminderAllDay } from "./reminderCore";
+
+/** The writer's IANA zone (stage B: the server rings an all-day reminder at 09:00 there); "" where Intl has none. */
+function deviceZone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch {
+    return "";
+  }
+}
 
 // Pure half of the notes model: the type, and the two converters between a
 // StudioKeepNote and its Firestore document. No Firebase client import, so a
@@ -34,6 +44,9 @@ export type StudioKeepNote = {
   labels: string[];
   links: string[];
   reminderDateMillis: number | null;
+  /** True = an all-day reminder (no time), false = at its time, null = written before 7 Nov 2026 (reminderCore's legacy
+   *  reading). Stored as `reminderMode: {atMs, allDay}` so a reminder moved by an older app drops it by itself. */
+  reminderAllDay: boolean | null;
   manualOrder: number;
   createdAtMillis: number | null;
   updatedAtMillis: number | null;
@@ -93,6 +106,7 @@ export function keepNoteFromDoc(id: string, data: Record<string, unknown>): Stud
     labels: Array.isArray(data.labels) ? (data.labels as string[]) : [],
     links: Array.isArray(data.links) ? (data.links as string[]) : [],
     reminderDateMillis: tsToMillis(data.reminderDate),
+    reminderAllDay: resolveReminderAllDay(tsToMillis(data.reminderDate), data.reminderMode),
     manualOrder: typeof data.manualOrder === "number" ? (data.manualOrder as number) : 0,
     createdAtMillis: tsToMillis(data.createdAt),
     updatedAtMillis: tsToMillis(data.updatedAt),
@@ -136,6 +150,8 @@ export function keepNoteDocumentFields(note: StudioKeepNote): Record<string, unk
     reminderDate: note.reminderDateMillis != null && Number.isFinite(note.reminderDateMillis)
       ? Timestamp.fromMillis(note.reminderDateMillis)
       : null,
+    // Only a reminder this screen set knowingly gets a mode; an unknown one (null) keeps the legacy reading.
+    reminderMode: note.reminderAllDay == null ? null : reminderModeFor(note.reminderDateMillis, note.reminderAllDay, deviceZone()),
     manualOrder: note.manualOrder,
     noteType: note.noteType || "personal",
     linkedOrderId: note.linkedOrderId || "",

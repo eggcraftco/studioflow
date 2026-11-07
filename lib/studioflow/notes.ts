@@ -197,6 +197,7 @@ export function newKeepNote(
     labels: [],
     links: [],
     reminderDateMillis: null,
+    reminderAllDay: null,
     manualOrder: now,
     createdAtMillis: now,
     updatedAtMillis: now,

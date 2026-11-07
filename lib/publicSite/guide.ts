@@ -605,12 +605,17 @@ const TREE_EN: GuideNode[] = [
           { kind: "sub", text: "What you can do" },
           { kind: "bullets", items: [
             "Pick a Quick Reminder shortcut (for example Ask for approval, Send design update or Check payment) or type your own title.",
-            "Set the date & time, a priority (Normal, High or Urgent) and an optional note. Turn on Notify to get a notification when it is due.",
-            "See Upcoming reminders and Recently completed ones; Mark Done, or Snooze by 1 hour or 1 day."
+            "Set the date & time, a priority (Normal, High or Urgent) and an optional note. Turn on Notify to get a notification when it is due: it goes to the person who set the reminder and the people assigned to the order, on every device where they use NivaDesk.",
+            "See Upcoming reminders and Recently completed ones; Mark Done, or Snooze by 1 hour or 1 day.",
+            "The same reminders appear in Notes ▸ Reminders and on the Calendar. Linked reminders lists your notes and calendar entries linked to this order."
           ] },
           { kind: "sub", text: "What you can change" },
           { kind: "bullets", items: [
             "Use Edit headings to customize the Quick Reminder shortcuts and their default timing so they match how you follow up."
+          ] },
+          { kind: "sub", text: "Who gets the reminder notification" },
+          { kind: "bullets", items: [
+            "The person who set the reminder and the people assigned to the order get it on every device where they use NivaDesk, as long as they can still open that order. If none of them can, the workspace owner gets it."
           ] }
         ]
       },
@@ -717,7 +722,7 @@ const TREE_EN: GuideNode[] = [
       { kind: "sub", text: "Tasks, reminders, overdue tasks and repeating entries" },
       { kind: "bullets", items: [
         "Click an entry to open its detail. A task has Mark done, Reopen and Cancel task; the person it is assigned to can change its status too.",
-        "Reminder: Off, At the time, 15 minutes before, 1 hour before or 1 day before (an all-day entry also has Reminder time). Reminders appear inside NivaDesk, under Calendar reminders in the notification bell; they are not sent by email, text message or phone notification.",
+        "Reminder: Off, At the time, 15 minutes before, 1 hour before or 1 day before (an all-day entry also has Reminder time). Reminders appear under Calendar reminders in the notification bell and as a phone, Mac or browser notification on every device where you use NivaDesk; they are not sent by email or text message.",
         "Overdue tasks: open Day view on today. Open tasks planned in the last 14 days that are not done yet are listed there, each with Late since.",
         "Editing or deleting a repeating entry asks Only this one or This and following.",
         "Edit and Delete are at the bottom of the detail. Delete cannot be undone."
@@ -725,7 +730,8 @@ const TREE_EN: GuideNode[] = [
       { kind: "sub", text: "Order due dates and note reminders on the calendar, and filters" },
       { kind: "bullets", items: [
         "An order with a due date appears as Order due (📦) for people who can see Orders; Open order takes you to it. The date comes from the order, so change it on the order.",
-        "A note reminder appears as Note reminder (🔔) for people who can see Notes, with Open in Notes.",
+        "A note reminder appears as Note reminder (🔔) for people who can see Notes, at its time or as All day and with its linked order; Open in Notes opens that note.",
+        "An order's Schedule & Alerts reminder appears as Order reminder (⏰) at its time for people who can open the order; Open order takes you to it, and it is changed on the order.",
         "Filters narrows the calendar: My entries, Shared with me, Team entries, Who it is about, Type, Status and Linked order. Filters are remembered on this device, never change who can see an entry, and Reset filters clears them."
       ] },
       { kind: "sub", text: "Connecting Google Calendar or Outlook (your other calendars)" },
@@ -773,8 +779,9 @@ const TREE_EN: GuideNode[] = [
       ] },
       { kind: "sub", text: "Reminders" },
       { kind: "bullets", items: [
-        "Set a reminder on a note (Tomorrow, Next week or a custom time) and get notified.",
-        "See all your note reminders in one place, and remove a reminder when it is done."
+        "Set a reminder on a note: pick a date and a time, or tick All day (Tomorrow and Next week set 09:00). When it is due you get a notification on every device where you use NivaDesk; an all-day reminder rings at 09:00.",
+        "Notes ▸ Reminders is one list: your note reminders, the Schedule & Alerts reminders of the orders you can open and your calendar reminders, soonest first, each with its date and time. Tap one to open the note, the order or the calendar entry.",
+        "Daily notes you write in the Calendar also appear in Notes, under From Calendar."
       ] },
       { kind: "sub", text: "Project notes" },
       { kind: "bullets", items: [
@@ -1181,6 +1188,8 @@ const TREE_EN: GuideNode[] = [
             "Etsy and eBay are not among those: each has a connection of its own, described in the sections that follow.",
             "Coming soon cards carry no setup because that integration does not exist yet; Request an integration opens a support ticket if you need one."
           ] },
+          { kind: "sub", text: "Shopify personalisation and variants" },
+          { kind: "para", text: "Personalisation a buyer fills in on a Shopify product — engraving text, a name, a font — arrives in the order's Notes, starting with “Personalisation —”; the buyer's own note follows as “Buyer note —”, and when the order has several products each line starts with the product's name. The chosen variant (for example Gold / 7) is part of the item's name in Invoice Items. Hidden fields that apps keep for themselves are left out, and the personalisation is not copied into the order's title. Orders already in NivaDesk before 7 November 2026 are not changed." },
           { kind: "sub", text: "Wix, Squarespace, Zapier and Make: the order webhook" },
           { kind: "steps", items: [
             "Settings → Integrations → Wix, Squarespace, Zapier or Make → Manage: all four open the same screen, Connect any store with one webhook.",
@@ -1815,6 +1824,7 @@ const TREE_EN: GuideNode[] = [
         "A parcel moving: the first tracking scan, and delivery.",
         "A note shared with you, and an invitation to work on a note together.",
         "A message from a teammate, and a reply on a support ticket.",
+        "A reminder coming due: your own note and calendar reminders, and the Schedule & Alerts reminders of orders you set them on or are assigned to.",
         "Anything that lands in the activity list is a notification as well, so the list and the alerts never tell different stories."
       ] },
       { kind: "sub", text: "Turning them on, and off" },
@@ -2406,12 +2416,17 @@ const TREE_TR: GuideNode[] = [
           { kind: "sub", text: "Neler yapabilirsiniz" },
           { kind: "bullets", items: [
             "Bir Quick Reminder kısayolu seçin (örneğin Ask for approval, Send design update veya Check payment) ya da kendi başlığınızı yazın.",
-            "Tarih & saat, bir öncelik (Normal, High veya Urgent) ve isteğe bağlı bir not belirleyin. Zamanı gelince bildirim almak için Notify'ı açın.",
-            "Upcoming (yaklaşan) ve Recently completed (son tamamlanan) hatırlatıcıları görün; Mark Done yapın veya 1 saat ya da 1 gün Snooze edin."
+            "Tarih & saat, bir öncelik (Normal, High veya Urgent) ve isteğe bağlı bir not belirleyin. Zamanı gelince bildirim almak için Notify'ı açın: bildirim hatırlatıcıyı kuran kişiye ve siparişe atananlara, NivaDesk'i kullandıkları her cihazda gider.",
+            "Upcoming (yaklaşan) ve Recently completed (son tamamlanan) hatırlatıcıları görün; Mark Done yapın veya 1 saat ya da 1 gün Snooze edin.",
+            "Aynı hatırlatıcılar Notlar ▸ Hatırlatıcılar'da ve Takvim'de de görünür. Bağlı hatırlatıcılar, bu siparişe bağlı notlarınızı ve takvim kayıtlarınızı listeler."
           ] },
           { kind: "sub", text: "Neleri değiştirebilirsiniz" },
           { kind: "bullets", items: [
             "Başlıkları Düzenle ile Quick Reminder kısayollarını ve varsayılan zamanlamalarını, takip etme şeklinize uyacak biçimde özelleştirin."
+          ] },
+          { kind: "sub", text: "Hatırlatıcı bildirimi kime gider" },
+          { kind: "bullets", items: [
+            "Bildirimi hatırlatıcıyı kuran kişi ve siparişe atananlar, NivaDesk'i kullandıkları her cihazda alır; yeter ki o siparişi hâlâ açabilsinler. Hiçbiri açamıyorsa işletme sahibi alır."
           ] }
         ]
       },
@@ -2505,7 +2520,7 @@ const TREE_TR: GuideNode[] = [
       { kind: "sub", text: "Görevler, hatırlatıcılar, gecikmiş görevler ve tekrarlayan kayıtlar" },
       { kind: "bullets", items: [
         "Ayrıntısını açmak için bir kayda tıklayın. Görevde Tamamlandı işaretle, Yeniden Aç ve Görevi iptal et vardır; görevin atandığı kişi de durumunu değiştirebilir.",
-        "Hatırlatıcı: Kapalı, Tam zamanında, 15 dakika önce, 1 saat önce ya da 1 gün önce (tüm gün süren kayıtlarda ayrıca Hatırlatma saati). Hatırlatmalar NivaDesk'in içinde, bildirim zilinde Takvim hatırlatmaları altında görünür; e-posta, SMS ya da telefon bildirimi olarak gönderilmez.",
+        "Hatırlatıcı: Kapalı, Tam zamanında, 15 dakika önce, 1 saat önce ya da 1 gün önce (tüm gün süren kayıtlarda ayrıca Hatırlatma saati). Hatırlatmalar bildirim zilinde Takvim hatırlatmaları altında ve NivaDesk'i kullandığınız her cihazda telefon, Mac ya da tarayıcı bildirimi olarak görünür; e-posta ya da SMS olarak gönderilmez.",
         "Gecikmiş görevler: bugünde Gün görünümünü açın. Son 14 günde planlanıp henüz bitmemiş açık görevler Gecikmiş başlığı altında listelenir; her birinde ne zamandan beri geciktiği yazar (… tarihinden beri gecikmiş).",
         "Tekrarlayan bir kaydı düzenlemek ya da silmek Yalnız bu mu, Bu ve sonrakiler mi diye sorar.",
         "Düzenle ve Sil ayrıntının en altındadır. Silme geri alınamaz."
@@ -2513,7 +2528,8 @@ const TREE_TR: GuideNode[] = [
       { kind: "sub", text: "Takvimde sipariş teslim tarihleri, not hatırlatmaları ve filtreler" },
       { kind: "bullets", items: [
         "Teslim tarihi olan bir sipariş, Siparişler'i görebilen kişilere Sipariş teslim zamanı (📦) olarak görünür; Siparişi aç sizi siparişe götürür. Tarih siparişten gelir; değiştirmek için siparişte değiştirin.",
-        "Bir not hatırlatması, Notlar'ı görebilen kişilere Not hatırlatması (🔔) olarak, Notes'ta aç ile birlikte görünür.",
+        "Bir not hatırlatması, Notlar'ı görebilen kişilere Not hatırlatması (🔔) olarak saatinde ya da Tüm gün olarak, bağlı siparişiyle görünür; Notes'ta aç o notu açar.",
+        "Bir siparişin Schedule & Alerts hatırlatıcısı, siparişi açabilen kişilere saatinde Sipariş hatırlatıcısı (⏰) olarak görünür; Siparişi aç sizi siparişe götürür, değişiklik siparişte yapılır.",
         "Filtreler takvimi daraltır: Benim kayıtlarım, Benimle paylaşılanlar, Ekibin kayıtları, Kimin için, Tür, Durum ve Bağlı sipariş. Filtreler bu cihazda hatırlanır, bir kaydı kimin görebileceğini asla değiştirmez; Filtreleri sıfırla hepsini temizler."
       ] },
       { kind: "sub", text: "Google Takvim ya da Outlook takvimini bağlamak (diğer takvimleriniz)" },
@@ -2561,8 +2577,9 @@ const TREE_TR: GuideNode[] = [
       ] },
       { kind: "sub", text: "Hatırlatıcılar" },
       { kind: "bullets", items: [
-        "Bir nota hatırlatıcı kurun (Tomorrow, Next week veya özel bir zaman) ve bildirim alın.",
-        "Tüm not hatırlatıcılarınızı tek yerde görün ve işi bitince hatırlatıcıyı kaldırın."
+        "Bir nota hatırlatıcı kurun: bir tarih ve saat seçin ya da Tüm gün'ü işaretleyin (Tomorrow ve Next week saati 09:00 yapar). Zamanı gelince NivaDesk'i kullandığınız her cihaza bildirim gelir; tüm gün hatırlatıcısı 09:00'da çalar.",
+        "Notlar ▸ Hatırlatıcılar tek listedir: not hatırlatıcılarınız, açabildiğiniz siparişlerin Schedule & Alerts hatırlatıcıları ve takvim hatırlatıcılarınız, en yakını üstte, her biri tarihi ve saatiyle. Birine dokunun; not, sipariş ya da takvim kaydı açılır.",
+        "Takvim'de yazdığınız günlük notlar Notlar'da da, Takvimden başlığı altında görünür."
       ] },
       { kind: "sub", text: "Proje notları" },
       { kind: "bullets", items: [
@@ -2969,6 +2986,8 @@ const TREE_TR: GuideNode[] = [
             "Etsy ve eBay bunlardan değil: her birinin kendi bağlantısı var, sonraki bölümlerde anlatılıyor.",
             "Coming soon kartlarında kurulum yoktur, çünkü o entegrasyon henüz yok; ihtiyacın varsa Request an integration bir destek talebi açar."
           ] },
+          { kind: "sub", text: "Shopify kişiselleştirmesi ve varyantlar" },
+          { kind: "para", text: "Alıcının bir Shopify ürününde doldurduğu kişiselleştirme — gravür metni, bir isim, yazı tipi — siparişin Notlar bölümüne “Personalisation —” ile başlayarak gelir; alıcının kendi notu arkasından “Buyer note —” olarak gelir, siparişte birden çok ürün varsa her satır ürünün adıyla başlar. Seçilen varyant (örneğin Gold / 7) Fatura Kalemleri'ndeki ürün adının parçasıdır. Uygulamaların kendileri için tuttuğu gizli alanlar alınmaz ve kişiselleştirme siparişin başlığına kopyalanmaz. 7 Kasım 2026'dan önce NivaDesk'te olan siparişler değişmez." },
           { kind: "sub", text: "Wix, Squarespace, Zapier ve Make: sipariş webhook'u" },
           { kind: "steps", items: [
             "Settings → Integrations → Wix, Squarespace, Zapier ya da Make → Manage: dördü de aynı ekranı açar, Connect any store with one webhook.",
@@ -3595,6 +3614,7 @@ const TREE_TR: GuideNode[] = [
         "Bir kargonun hareket etmesi: ilk okutma ve teslimat.",
         "Sizinle paylaşılan bir not ve bir nota birlikte çalışma daveti.",
         "Ekip arkadaşınızdan mesaj ve destek talebine gelen yanıt.",
+        "Zamanı gelen bir hatırlatıcı: kendi not ve takvim hatırlatıcılarınız, kurduğunuz ya da atandığınız siparişlerin Schedule & Alerts hatırlatıcıları.",
         "Hareket listesine düşen her şey aynı zamanda bir bildirimdir; liste ile uyarılar asla farklı şeyler anlatmaz."
       ] },
       { kind: "sub", text: "Açmak ve kapatmak" },

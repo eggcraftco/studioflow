@@ -1,6 +1,7 @@
 "use client";
 
 import { orderNotificationHref } from "@/lib/studioflow/notificationSettings";
+import { reminderNotificationHref } from "@/lib/studioflow/reminderCore";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -243,7 +244,12 @@ export function NotificationsDrawer({
     if (!notificationVisibleForAccess(n, workspace?.memberAccess)) return;
     void handleMarkRead(n.id);
     const route = n.route.trim().toLowerCase();
-    if (route === "customerinbox") {
+    if (n.type === "reminder") {
+      // Stage B: a reminder opens the record it lives on — the note, the order's Schedule & Alerts card, or the
+      // calendar day with the entry (the same link the push opens).
+      router.push(reminderNotificationHref(n));
+      onClose();
+    } else if (route === "customerinbox") {
       // A customer wrote on WhatsApp: the customer inbox, on that conversation.
       // The row carries nothing about the customer; the server decides again,
       // when the thread is read, whether this person may see it.
