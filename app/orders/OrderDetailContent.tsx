@@ -1,6 +1,6 @@
 "use client";
 
-import { effectivePreviewLink } from "@/lib/studioflow/orderPreview";
+import { effectivePreviewLink, previewCopyCaption } from "@/lib/studioflow/orderPreview";
 import Link from "next/link";
 import { createContext, Fragment, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useCondensedHeader } from "@/lib/studioflow/useCondensedHeader";
@@ -800,6 +800,8 @@ function orderPdfHtml(
     canSeeAdvancedFinance: boolean;
     hideNumbers: boolean;
     previewUrl: string;
+    /** siparis-onizleme: e.g. eBay's "Photo from the eBay listing · 7 Nov 2026" under a copied photo. */
+    previewCaption?: string;
     statusSteps: OrderPdfItem[];
     statusToggles: OrderPdfItem[];
     materialItems: OrderPdfItem[];
@@ -869,7 +871,7 @@ function orderPdfHtml(
     <section class="pdf-section">
       <h2>PREVIEW</h2>
       ${options.previewUrl && isProbablyImageUrl(options.previewUrl)
-        ? `<img class="preview-image" src="${escapeHtml(options.previewUrl)}" alt="${escapeHtml(designName)}" />`
+        ? `<img class="preview-image" src="${escapeHtml(options.previewUrl)}" alt="${escapeHtml(designName)}" />${options.previewCaption ? `<div class="preview-caption">${escapeHtml(options.previewCaption)}</div>` : ""}`
         : `<div class="pdf-box empty-preview">No preview image provided.</div>`}
     </section>
   ` : "";
@@ -955,6 +957,7 @@ function orderPdfHtml(
           .tone-gray { color: #8f8f8f !important; font-weight: 800; }
           .pdf-divider { height: 1px; background: rgba(22, 22, 22, .16); margin: 10px 0; }
           p { margin: 0; color: #7c7c7c; font-size: 12px; line-height: 1.45; }
+          .preview-caption { margin-top: 4px; font-size: 10px; color: #666; }
           .preview-image { display: block; max-width: 100%; max-height: 210px; object-fit: contain; border-radius: 10px; background: rgba(25, 25, 25, .04); }
           .empty-preview { color: #7c7c7c; font-size: 12px; font-weight: 700; }
           footer { border-top: 1px solid #ddd; margin-top: 22px; padding-top: 10px; text-align: center; color: #8f8f8f; font-size: 10px; }
@@ -6007,7 +6010,8 @@ export function OrderDetailContent({
         canSeeFinance,
         canSeeAdvancedFinance,
         hideNumbers,
-        previewUrl: effectivePreviewLink(order.designLink, order.channelPreviewUrl),
+        previewUrl: effectivePreviewLink(order.designLink, order.channelPreview),
+        previewCaption: shopPreviewCaption,
         statusSteps,
         statusToggles,
         materialItems: [...materialChecks, ...materialToggles],
@@ -6476,9 +6480,14 @@ export function OrderDetailContent({
   // siparis-onizleme (7 Nov 2026): the shop photo the server copied, shown only when designLink is a link that is
   // not a picture (lib/studioflow/orderPreview.ts). A picture in designLink — the studio's or the server's — wins.
   const shopPreviewLink = (() => {
-    const shown = effectivePreviewLink(order.designLink, order.channelPreviewUrl);
+    const shown = effectivePreviewLink(order.designLink, order.channelPreview);
     return shown && shown !== order.designLink.trim() ? shown : "";
   })();
+  // eBay's copy carries its date wherever it is shown large (eBay API License §8.1.3).
+  const shopPreviewCaptionInfo = previewCopyCaption(order.designLink, order.channelPreview);
+  const shopPreviewCaption = shopPreviewCaptionInfo
+    ? `${t("Photo from the eBay listing")} · ${formatDate(shopPreviewCaptionInfo.copiedAtMs ? new Date(shopPreviewCaptionInfo.copiedAtMs) : null)}`
+    : "";
   const etsyFirstPhoto = etsyPhotos.photos.find((row) => etsyPhotoIsShowable(row, Date.now(), true))
     ?? etsyPhotos.photos.find((row) => Boolean(etsyListingLink(row)));
   const etsyFirstPhotoLink = etsyListingLink(etsyFirstPhoto);
@@ -7565,7 +7574,14 @@ export function OrderDetailContent({
               ) : shopPreviewLink ? (
                 // siparis-onizleme: the shop's product photo the server copied, shown when designLink is a link
                 // that is not a picture (Shopify's status page). The menu below still edits designLink only.
-                <img src={shopPreviewLink} alt={order.designName || t("Order preview")} className="app-preview-image" data-preview-source="channel" />
+                shopPreviewCaption ? (
+                  <figure className="app-preview-etsy" data-preview-source="channel">
+                    <img src={shopPreviewLink} alt={order.designName || t("Order preview")} className="app-preview-image" />
+                    <figcaption>{shopPreviewCaption}</figcaption>
+                  </figure>
+                ) : (
+                  <img src={shopPreviewLink} alt={order.designName || t("Order preview")} className="app-preview-image" data-preview-source="channel" />
+                )
               ) : !order.designLink && etsyFirstPhoto ? (
                 // ETSY-E2E night: Etsy's product photo, fetched when the order opens (API Terms: <= 6 h old, not stored).
                 <EtsySafe>
@@ -13852,7 +13868,7 @@ export function pdfPreviewSampleOrder(): OrderDetail {
     customerName: "Alex Carter",
     designName: "Engraved Signet Ring",
     designLink: "",
-    channelPreviewUrl: "",
+    channelPreview: null,
     watchRef: "SAMPLE-1042",
     status: "In Progress",
     designStatus: "In Progress",
