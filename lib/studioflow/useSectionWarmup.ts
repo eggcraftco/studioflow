@@ -9,7 +9,7 @@
 import { useEffect, useRef } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase/client";
-import { createSectionWarmup } from "@/lib/studioflow/sectionWarmup";
+import { createSectionWarmup, type SectionWarmGate } from "@/lib/studioflow/sectionWarmup";
 
 const SETTLE_MS = 1500;
 const IDLE_TIMEOUT_MS = 3000;
@@ -39,16 +39,19 @@ function sectionWarmup() {
  * @param companyId the workspace on screen ("" while it loads: nothing is sent)
  * @param menuHrefs the hrefs the sidebar draws for this person, space-separated (only those sections are warmed)
  * @param pathname  the path on screen (its own section is not called again)
+ * @param gates     the SectionWarmGate names this person's screens would pass, space-separated
  */
-export function useSectionWarmup(companyId: string, menuHrefs: string, pathname: string | null) {
+export function useSectionWarmup(companyId: string, menuHrefs: string, pathname: string | null, gates = "") {
   const current = useRef(pathname ?? "");
   current.current = pathname ?? "";
 
   useEffect(() => {
     if (!companyId || !menuHrefs || typeof window === "undefined") return;
     const hrefs = menuHrefs.split(" ").filter(Boolean);
+    const open = new Set(gates.split(" ").filter(Boolean));
+    const allows = (gate: SectionWarmGate) => open.has(gate);
     const run = () => {
-      sectionWarmup().warm(companyId, hrefs, current.current);
+      sectionWarmup().warm(companyId, hrefs, current.current, allows);
     };
 
     type IdleWindow = Window & {
@@ -79,5 +82,5 @@ export function useSectionWarmup(companyId: string, menuHrefs: string, pathname:
       document.removeEventListener("pointerover", onSidebar);
       document.removeEventListener("focusin", onSidebar);
     };
-  }, [companyId, menuHrefs]);
+  }, [companyId, menuHrefs, gates]);
 }

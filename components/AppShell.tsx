@@ -54,6 +54,7 @@ import { orderGrossMargin } from "@/lib/studioflow/finance";
 import { WorkspaceAccessLostError } from "@/lib/studioflow/workspaceResolution";
 import { fetchSalesCapability, SALES_VISIBILITY_CHANGED_EVENT } from "@/lib/studioflow/sales";
 import { useSectionWarmup } from "@/lib/studioflow/useSectionWarmup";
+import { orderActionCardVisible } from "@/lib/studioflow/orderActionCards";
 import { notificationVisibleForAccess } from "@/lib/studioflow/notificationAccess";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import { studioCountLabel, studioDayPhrase } from "@/lib/studioflow/countLabel";
@@ -2193,14 +2194,26 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     if (itemBox.top < navBox.top) nav.scrollTop -= navBox.top - itemBox.top;
     else if (itemBox.bottom > navBox.bottom) nav.scrollTop += itemBox.bottom - navBox.bottom;
   }, [pathname, visibleNavHrefs]);
-  // First click on Sales, Inventory, Messages or AI Replies (8 Nov 2026): those screens open on Cloud Functions that
-  // take 2–4 s to start when nobody has asked them anything for a while. The sections in this person's menu (the
+  // First click on Orders (its order panel), Sales, Inventory, Messages or AI Replies (8 Nov 2026): those screens open
+  // on Cloud Functions that take 2–4 s to start when nobody has asked them anything for a while. The sections in this person's menu (the
   // hrefs as drawn, so Messages is /inbox only for someone who has the customer inbox) send their read-only opening
   // calls ahead of the click — lib/studioflow/sectionWarmup.ts.
   const warmMenuHrefs = NAV_ITEMS.filter((item) => !navItemHidden(item))
     .map((item) => (item.href === "/inbox" ? (messagesNavHref(workspace?.memberAccess) ?? item.href) : item.href))
     .join(" ");
-  useSectionWarmup(workspace?.id ?? "", user?.uid ? warmMenuHrefs : "", pathname);
+  // The Orders panel's calls that its screen sends only to some people carry the same condition (sectionWarmup.ts
+  // SectionWarmGate): stock block, linked files, upload route, SMS row, payment links, held-orders queue.
+  const warmGates = workspace
+    ? [
+        canCreateOrders(workspace) ? "createOrders" : "",
+        workspaceAccessAllows(workspace.memberAccess, "inventory") && orderActionCardVisible(workspace.memberAccess, "materials") ? "inventory" : "",
+        workspaceAccessAllows(workspace.memberAccess, "clientFiles") ? "clientFiles" : "",
+        workspace.entitlements.features.client_files ? "clientFilesPlan" : "",
+        orderActionCardVisible(workspace.memberAccess, "customerPortal") ? "customerCard" : "",
+        orderActionCardVisible(workspace.memberAccess, "financial") ? "finance" : ""
+      ].filter(Boolean).join(" ")
+    : "";
+  useSectionWarmup(workspace?.id ?? "", user?.uid ? warmMenuHrefs : "", pathname, warmGates);
   // Lets the stylesheet give the Orders workspace the whole height of the
   // content area (three columns that scroll inside), while every other page
   // keeps scrolling as a document.

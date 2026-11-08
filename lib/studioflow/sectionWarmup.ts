@@ -5,8 +5,12 @@
 // first paint waits on a callable nobody has asked for a while waits for that service to start. Cloud Monitoring,
 // 7 days to 8 Nov 2026: container start p50 2.0–3.2 s, p95 2.7–4.0 s for the calls below, against 45–340 ms for a
 // warm answer. The second click lands on the instance the first one started, so it is quick. An instance serves
-// every workspace, so "warm" is a property of the section's services, not of a workspace. Orders, Production,
-// Customers, Notes, Calendar… draw from Firestore and are on screen at once; these four sections wait:
+// every workspace, so "warm" is a property of the section's services, not of a workspace. Production, Customers,
+// Notes, Calendar… draw from Firestore and are on screen at once; these sections wait:
+//   Orders       the list is Firestore and immediate, but the order panel's cards wait (second step, the owner
+//                8 Nov 2026 "fix Orders too"): getWorkspaceCardLayout (the cards' arrangement), getWorkspaceBlockHeadings,
+//                getWorkspaceSmsSettings, storageStatus, listLibraryFiles, getOrderInventory, the DHL and Royal Mail
+//                connections, getStripePaymentConnection, and the list's own listHeldIntegrationOrders
 //   Sales        listSalesRows + listSalesChannels (getSalesCapability is warm: the shell asks it on every load)
 //   Inventory    listInventoryItems, getInventorySummary, listSuppliers, listInventoryLocations,
 //                getEbayListingLinks, getWooProductLinks
@@ -16,7 +20,9 @@
 // What this does: once the shell has settled, again when the tab comes back, and when the pointer or keyboard focus
 // enters the sidebar, each of those sections that is in THIS person's menu sends its opening calls — the same
 // callables its screen sends, all read-only, with the smallest answer the server allows (limit 1 where there is a
-// limit) — so the services are already running when the click comes. The answers are thrown away and nothing is
+// limit) — so the services are already running when the click comes. A call the screen only sends to some people
+// carries the same condition here (a gate the shell answers: the Orders panel's stock block only with the inventory
+// key, and so on), so nobody is sent a call their screen would not send. The answers are thrown away and nothing is
 // cached: the screen still asks for its own data when it opens, so what it shows is unchanged. A section is warmed at
 // most once every WARM_INTERVAL_MS, across tabs, and never while the tab is hidden, the browser is offline or Save-Data
 // is on. The section on screen is not called again: its own screen just did. The only thing kept on the device is the
@@ -28,15 +34,52 @@
 /** Cloud Run keeps an idle instance for up to 15 minutes; warming more often than this buys nothing. */
 export const WARM_INTERVAL_MS = 10 * 60 * 1000;
 
+/**
+ * The conditions under which a screen sends a call, as the shell knows them (components/AppShell.tsx warmGates):
+ *   createOrders     canCreateOrders(workspace) — the held-orders queue (app/orders/page.tsx)
+ *   inventory        the inventory key and the Materials card — its stock block (OrderDetailContent's OrderStockBlock)
+ *   clientFiles      the clientFiles key — the order's linked library files (the server's area)
+ *   clientFilesPlan  the plan's client_files feature — the upload route (OrderDetailContent's storageStatus)
+ *   customerCard     the customerPortal card is visible — its SMS row (OrderDetailContent canShowOrderCard)
+ *   finance          the Financial card (cardFinancial + financialInfo) — the order's payment links (OrderPaymentLinks)
+ * A card the person has hidden in their own layout still counts as visible here: the read is theirs to make.
+ */
+export type SectionWarmGate = "createOrders" | "inventory" | "clientFiles" | "clientFilesPlan" | "customerCard" | "finance";
+export const SECTION_WARM_GATES: readonly SectionWarmGate[] = ["createOrders", "inventory", "clientFiles", "clientFilesPlan", "customerCard", "finance"];
+
+/**
+ * The order panel's per-order reads need an order id; this one belongs to no order (Firestore's automatic ids are
+ * letters and digits only, no hyphen), so the answer is the empty one — one indexed query, nothing read. Only the
+ * two calls that look the id up in a query use it; the calls that open the order itself (shipments, payment links)
+ * would refuse it and are not warmed.
+ */
+export const WARM_ORDER_ID = "nv-warmup";
+
 export type SectionWarmCall = {
   /** The callable the section's screen sends when it opens. */
   name: string;
   /** The smallest request the server answers normally: the screen's own fields, the smallest page. */
   payload: (companyId: string) => Record<string, unknown>;
+  /** Sent only to someone the screen sends it to. */
+  gate?: SectionWarmGate;
 };
 
 /** Keyed by the href the sidebar draws for the section. */
 export const SECTION_WARMUP: Readonly<Record<string, readonly SectionWarmCall[]>> = Object.freeze({
+  "/orders": [
+    // app/orders/OrderDetailContent.tsx and its cards, for whichever order opens first; app/orders/page.tsx.
+    { name: "getWorkspaceCardLayout", payload: (companyId: string) => ({ companyId }) },
+    { name: "getWorkspaceBlockHeadings", payload: (companyId: string) => ({ companyId }) },
+    { name: "getWorkspaceSmsSettings", payload: (companyId: string) => ({ companyId }), gate: "customerCard" },
+    // The plain read the order screens send; never { check: true }, which asks the storage provider.
+    { name: "storageStatus", payload: (companyId: string) => ({ companyId }), gate: "clientFilesPlan" },
+    { name: "listLibraryFiles", payload: (companyId: string) => ({ companyId, linkKey: `order:${WARM_ORDER_ID}` }), gate: "clientFiles" },
+    { name: "getOrderInventory", payload: (companyId: string) => ({ companyId, orderId: WARM_ORDER_ID }), gate: "inventory" },
+    { name: "getShippingConnection", payload: (companyId: string) => ({ companyId }) },
+    { name: "getRoyalMailConnection", payload: (companyId: string) => ({ companyId }) },
+    { name: "getStripePaymentConnection", payload: (companyId: string) => ({ companyId }), gate: "finance" },
+    { name: "listHeldIntegrationOrders", payload: (companyId: string) => ({ companyId }), gate: "createOrders" }
+  ],
   "/sales": [
     // app/sales/page.tsx: the first page of the list, and the store directory for the filters.
     { name: "listSalesRows", payload: (companyId: string) => ({ companyId, includeBespoke: true, needsAttentionOnly: false, limit: 1 }) },
@@ -71,12 +114,16 @@ export type SectionWarmupDeps = {
   canRun: () => boolean;
 };
 
+/** Gates the shell has not said yes to are closed. */
+export type SectionWarmAllows = (gate: SectionWarmGate) => boolean;
+
 export type SectionWarmup = {
   /**
    * Warms the sections among `hrefs` that are due. `current` is the path on screen: its section is only marked
-   * warm, because its screen has just sent the same calls. Returns the hrefs whose calls went out.
+   * warm, because its screen has just sent the same calls. A gated call goes out only when `allows` says yes to its
+   * gate (no `allows`: no gated call). Returns the hrefs whose calls went out.
    */
-  warm: (companyId: string, hrefs: readonly string[], current?: string) => string[];
+  warm: (companyId: string, hrefs: readonly string[], current?: string, allows?: SectionWarmAllows) => string[];
 };
 
 export function sectionWarmupKey(href: string) {
@@ -110,7 +157,7 @@ export function createSectionWarmup(deps: SectionWarmupDeps): SectionWarmup {
     }
   };
   return {
-    warm(companyId, hrefs, current) {
+    warm(companyId, hrefs, current, allows) {
       const started: string[] = [];
       if (!companyId) return started;
       let allowed = false;
@@ -129,6 +176,15 @@ export function createSectionWarmup(deps: SectionWarmupDeps): SectionWarmup {
         mark(key, at);
         if (onSection(current, href)) continue;
         for (const entry of calls) {
+          if (entry.gate) {
+            let open = false;
+            try {
+              open = typeof allows === "function" && allows(entry.gate) === true;
+            } catch {
+              open = false;
+            }
+            if (!open) continue;
+          }
           try {
             // Fire and forget: a refusal or a network error is the screen's to report when it opens, not this.
             Promise.resolve(deps.call(entry.name, entry.payload(companyId))).catch(() => undefined);
