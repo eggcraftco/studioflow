@@ -61,6 +61,7 @@ const TREE_EN: GuideNode[] = [
             "Tell us about your work: what you make or repair, which sets your order cards, your production stages and your labels.",
             "Your plan: the 14 trial days are free on any of them, nothing is charged until they end, and you can change plan at any time."
           ] },
+          { kind: "para", text: "The first step also asks whether you are VAT registered: Yes takes VAT out of every price and prints it on invoices; No leaves VAT off your invoices and your profit. A workspace that connects no shop starts with the platform-fee estimate at 0%. Both can be changed in Settings ▸ Financial Settings." },
           { kind: "para", text: "The setup runs once per workspace. If you have already been through it, everything it set is in Settings." },
           { kind: "sub", text: "After the setup questions: no tour and no checklist" },
           { kind: "para", text: "When you finish, you go straight into your workspace. There is no guided tour, no step-by-step checklist and no list of starting tasks to work through. When you want the steps for something, this guide has them, and on Starter, Pro and Team the How do I…? button answers from it." }
@@ -209,6 +210,7 @@ const TREE_EN: GuideNode[] = [
       { kind: "sub", text: "The orders list" },
       { kind: "bullets", items: [
         "Add Project: create a new order. You give it a customer, a title and the basics; you can fill in the rest inside the order.",
+        "Price (optional) in Add Project: type it when you know it and the order opens with that value; leave it blank and set it later in Invoice Items — while the Order Value is 0, the summary card links straight there.",
         "Search: type a customer name, order number or keyword to jump straight to an order.",
         "Quick filters: narrow the list (for example only your assigned orders, or by stage) without losing the others.",
         "Source bar: the buttons under the search show where orders came from — All, one per platform with its letters and count, and By hand. Tap one to see only those orders; tap it again, or All, to see every order. When two or more WooCommerce stores are connected (for example EGGcraft and TickToon), each store has its own button with its name, and Woo orders that do not record their store sit under Store unknown. Order Filters ▸ Source offers the same choices.",
@@ -239,6 +241,7 @@ const TREE_EN: GuideNode[] = [
       { kind: "bullets", items: [
         "Export the order as a PDF: a clean summary built from your PDF Export Settings.",
         "Generate an Invoice: NivaDesk assigns an invoice number automatically (if the order has none) and uses your business details and footer note from Settings.",
+        "Print / Save as PDF — the button on the Invoice Items card and in the Actions menu — opens your browser's print window; choose \"Save as PDF\" there. The invoice is written in your app language, shows Paid and Balance due once a payment is recorded, and carries the business name from Settings ▸ Brand (your workspace name when the brand subtitle is empty).",
         "You can also print the To Do list and the History log as PDFs.",
         "Customize how all of these look in Settings ▸ PDF Export Settings."
       ] },
@@ -1931,6 +1934,7 @@ const TREE_TR: GuideNode[] = [
             "İşinizi anlatın: ne ürettiğiniz ya da onardığınız. Bu, sipariş kartlarınızı, üretim aşamalarınızı ve etiketlerinizi belirler.",
             "Planınız: 14 günlük deneme hepsinde ücretsizdir, deneme bitmeden hiçbir ücret alınmaz ve planı istediğiniz zaman değiştirebilirsiniz."
           ] },
+          { kind: "para", text: "İlk adım KDV mükellefi olup olmadığınızı da sorar: Evet, KDV'yi her fiyatın içinden çıkarır ve faturalara yazar; Hayır, faturalarınızda ve kârınızda KDV bırakmaz. Hiçbir mağaza bağlamayan çalışma alanı, platform ücreti tahmini %0 ile başlar. İkisi de Settings ▸ Financial Settings'ten değiştirilebilir." },
           { kind: "para", text: "Kurulum her çalışma alanı için bir kez çalışır. Daha önce geçtiyseniz, kurduğu her şey Settings içindedir." },
           { kind: "sub", text: "Kurulum sorularından sonra: tur yok, Başlarken kontrol listesi yok" },
           { kind: "para", text: "Kurulumu bitirince doğrudan çalışma alanınıza geçersiniz. Rehberli tur, adım adım kontrol listesi ya da sırayla yapılacak başlangıç görevleri yoktur; bu yüzden tekrar başlatılacak bir kurulum turu da yoktur. Bir şeyin adımlarını öğrenmek istediğinizde bu rehbere bakın; Starter, Pro ve Team planlarında How do I…? düğmesi de buradan cevap verir." }
@@ -2079,6 +2083,7 @@ const TREE_TR: GuideNode[] = [
       { kind: "sub", text: "Sipariş listesi" },
       { kind: "bullets", items: [
         "Add Project: yeni sipariş oluşturur. Müşteri, başlık ve temel bilgileri verirsiniz; gerisini siparişin içinde doldurabilirsiniz.",
+        "Add Project'te Fiyat (isteğe bağlı): biliyorsanız yazın, sipariş o değerle açılır; boş bırakıp sonra Invoice Items'ta girebilirsiniz — Sipariş Değeri 0 iken özet kartı doğrudan oraya bağlantı verir.",
         "Arama: müşteri adı, sipariş numarası veya anahtar kelime yazarak doğrudan siparişe gidin.",
         "Hızlı filtreler: listeyi daraltın (örneğin yalnızca size atanan siparişler ya da aşamaya göre), diğerlerini kaybetmeden.",
         "Kaynak çubuğu: aramanın altındaki düğmeler siparişlerin nereden geldiğini gösterir — Tümü, her platform için kısaltması ve sayısıyla bir düğme, ve Elle eklenen. Yalnız o siparişleri görmek için birine dokunun; hepsini görmek için yeniden ya da Tümü'ne dokunun. İki veya daha fazla WooCommerce mağazası bağlıysa (örneğin EGGcraft ve TickToon) her mağazanın kendi adıyla ayrı bir düğmesi olur; mağazasını kaydetmemiş Woo siparişleri Mağaza bilinmiyor altında durur. Aynı seçimler Order Filters ▸ Kaynak içinde de var.",
@@ -2109,6 +2114,7 @@ const TREE_TR: GuideNode[] = [
       { kind: "bullets", items: [
         "Siparişi PDF olarak dışa aktarın: PDF Export Settings'inizden oluşturulan derli toplu bir özet.",
         "Invoice (Fatura) oluşturun: NivaDesk, sipariş için fatura numarasını otomatik atar (yoksa) ve işletme bilgilerinizi ve alt notu Settings'ten kullanır.",
+        "Print / Save as PDF — Invoice Items kartındaki ve Actions menüsündeki düğme — tarayıcınızın yazdırma penceresini açar; orada \"PDF olarak kaydet\"i seçin. Fatura uygulama dilinizde yazılır, bir ödeme kaydedildiğinde Paid ve Balance due satırlarını gösterir ve işletme adını Settings ▸ Brand'den alır (marka alt başlığı boşsa çalışma alanı adınızı).",
         "Ayrıca To Do listesini ve History kaydını da PDF olarak yazdırabilirsiniz.",
         "Bunların tümünün görünümünü Settings ▸ PDF Export Settings'ten özelleştirin."
       ] },

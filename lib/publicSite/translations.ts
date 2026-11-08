@@ -1026,14 +1026,14 @@ export const PUBLIC_SITE_EN = {
   "plan.limit.activeOrders": "{count} active",
   "plan.limit.notIncluded": "Not included",
 
-  "signup.eyebrow": "Start free",
+  "signup.eyebrow": "Start free — no card",
   "signup.title": "Create your NivaDesk workspace.",
-  "signup.body": "Start with Free and explore your order workflow before choosing a paid plan. No payment details are required. When you want the full toolset, any paid plan can start with a 14-day trial — still no card.",
-  "signup.includes.title": "Free includes",
-  "signup.includes.bullet1": "Up to 10 active orders and unlimited customers",
-  "signup.includes.bullet2": "Basic financial summary and personal notes",
-  "signup.includes.bullet3": "Export access for your existing data",
-  "signup.form.eyebrow": "Free account",
+  "signup.body": "Every new workspace starts with a 14-day Pro trial. No card, nothing charged. When the trial ends you keep your data and can continue on Free or choose a plan.",
+  "signup.includes.title": "Your 14-day trial includes",
+  "signup.includes.bullet1": "Unlimited orders and customers",
+  "signup.includes.bullet2": "Client files, finance cards and the production board",
+  "signup.includes.bullet3": "After the trial: Free keeps 10 active orders and export access",
+  "signup.form.eyebrow": "Free to start",
   "signup.form.title": "Create your account",
   "signup.form.body": "Set up your private workspace in under a minute.",
   "signup.form.fullName": "Full name",
@@ -1043,7 +1043,7 @@ export const PUBLIC_SITE_EN = {
   "signup.form.confirmPassword": "Confirm password",
   "signup.form.agreePrefix": "I agree to the",
   "signup.form.agreeAnd": "and",
-  "signup.form.submit": "Create free workspace",
+  "signup.form.submit": "Create my workspace",
   "signup.form.creating": "Creating workspace...",
   "signup.form.haveAccount": "Already have an account?",
   "signup.error.required": "Enter your full name and workspace name to continue.",
@@ -15740,6 +15740,24 @@ const FILL_TRANSLATIONS_TOUR: Partial<Record<StudioLanguage, Partial<Record<Publ
   },
 };
 
+
+// UX test, 8 Nov 2026: the sign-up page described "Free" while the server opened
+// every new workspace on a 14-day Pro trial (open item N06). The copy now says
+// what happens. Last batch, so it wins over the older rows above.
+const FILL_TRANSLATIONS_UX_SIGNUP: Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>> = {
+  "Türkçe": { "signup.eyebrow": "Ücretsiz başlayın — kart gerekmez", "signup.body": "Her yeni çalışma alanı 14 günlük Pro denemesiyle başlar. Kart yok, ücret yok. Deneme bitince verileriniz sizde kalır; Free ile devam eder ya da bir plan seçersiniz.", "signup.includes.title": "14 günlük denemenize dahil", "signup.includes.bullet1": "Sınırsız sipariş ve müşteri", "signup.includes.bullet2": "Müşteri dosyaları, finans kartları ve üretim panosu", "signup.includes.bullet3": "Deneme sonrası: Free'de 10 aktif sipariş ve dışa aktarma erişimi kalır", "signup.form.eyebrow": "Başlamak ücretsiz", "signup.form.submit": "Çalışma alanımı oluştur" },
+  "Deutsch": { "signup.eyebrow": "Kostenlos starten — keine Karte", "signup.body": "Jeder neue Workspace beginnt mit einer 14-tägigen Pro-Testphase. Keine Karte, keine Abbuchung. Danach behältst du deine Daten und machst mit Free weiter oder wählst einen Plan.", "signup.includes.title": "In deinen 14 Testtagen enthalten", "signup.includes.bullet1": "Unbegrenzt Aufträge und Kunden", "signup.includes.bullet2": "Kundendateien, Finanzkarten und das Produktionsboard", "signup.includes.bullet3": "Nach der Testphase: Free behält 10 aktive Aufträge und den Export", "signup.form.eyebrow": "Start kostenlos", "signup.form.submit": "Meinen Workspace erstellen" },
+  "Français": { "signup.eyebrow": "Démarrer gratuitement — sans carte", "signup.body": "Chaque nouvel espace démarre avec un essai Pro de 14 jours. Aucune carte, aucun prélèvement. À la fin, vous gardez vos données et continuez en Free ou choisissez un plan.", "signup.includes.title": "Inclus dans vos 14 jours d'essai", "signup.includes.bullet1": "Commandes et clients illimités", "signup.includes.bullet2": "Fichiers clients, cartes finance et tableau de production", "signup.includes.bullet3": "Après l'essai : Free garde 10 commandes actives et l'export", "signup.form.eyebrow": "Gratuit pour commencer", "signup.form.submit": "Créer mon espace" },
+  "Italiano": { "signup.eyebrow": "Inizia gratis — senza carta", "signup.body": "Ogni nuovo workspace parte con una prova Pro di 14 giorni. Nessuna carta, nessun addebito. Alla fine tieni i tuoi dati e continui con Free o scegli un piano.", "signup.includes.title": "Inclusi nei 14 giorni di prova", "signup.includes.bullet1": "Ordini e clienti illimitati", "signup.includes.bullet2": "File cliente, schede finanza e bacheca di produzione", "signup.includes.bullet3": "Dopo la prova: Free mantiene 10 ordini attivi e l'esportazione", "signup.form.eyebrow": "Iniziare è gratis", "signup.form.submit": "Crea il mio workspace" },
+  "Español (Spanish)": { "signup.eyebrow": "Empieza gratis — sin tarjeta", "signup.body": "Cada nuevo espacio empieza con una prueba Pro de 14 días. Sin tarjeta, sin cargos. Al terminar conservas tus datos y sigues en Free o eliges un plan.", "signup.includes.title": "Tu prueba de 14 días incluye", "signup.includes.bullet1": "Pedidos y clientes ilimitados", "signup.includes.bullet2": "Archivos de clientes, tarjetas de finanzas y tablero de producción", "signup.includes.bullet3": "Tras la prueba: Free conserva 10 pedidos activos y la exportación", "signup.form.eyebrow": "Empezar es gratis", "signup.form.submit": "Crear mi espacio" },
+  "Português": { "signup.eyebrow": "Comece grátis — sem cartão", "signup.body": "Cada novo espaço começa com um teste Pro de 14 dias. Sem cartão, sem cobrança. No fim mantém os seus dados e continua no Free ou escolhe um plano.", "signup.includes.title": "Incluído nos seus 14 dias de teste", "signup.includes.bullet1": "Encomendas e clientes ilimitados", "signup.includes.bullet2": "Ficheiros de clientes, cartões de finanças e quadro de produção", "signup.includes.bullet3": "Depois do teste: o Free mantém 10 encomendas ativas e a exportação", "signup.form.eyebrow": "Começar é grátis", "signup.form.submit": "Criar o meu espaço" },
+  "Русский (Russian)": { "signup.eyebrow": "Начните бесплатно — без карты", "signup.body": "Каждое новое пространство начинается с 14-дневного пробного периода Pro. Без карты и списаний. После него данные остаются у вас: продолжайте на Free или выберите план.", "signup.includes.title": "В 14 пробных дней входит", "signup.includes.bullet1": "Неограниченные заказы и клиенты", "signup.includes.bullet2": "Файлы клиентов, финансовые карточки и доска производства", "signup.includes.bullet3": "После пробного периода: Free сохраняет 10 активных заказов и экспорт", "signup.form.eyebrow": "Старт бесплатно", "signup.form.submit": "Создать пространство" },
+  "日本語 (Japanese)": { "signup.eyebrow": "無料で開始 — カード不要", "signup.body": "新しいワークスペースはすべて14日間のProトライアルから始まります。カード登録も請求もありません。終了後もデータはそのまま、Freeで続けるかプランを選べます。", "signup.includes.title": "14日間のトライアルに含まれるもの", "signup.includes.bullet1": "注文と顧客は無制限", "signup.includes.bullet2": "顧客ファイル、財務カード、制作ボード", "signup.includes.bullet3": "トライアル後：Freeでは有効な注文10件とエクスポートが残ります", "signup.form.eyebrow": "開始は無料", "signup.form.submit": "ワークスペースを作成" },
+  "中文 (Chinese)": { "signup.eyebrow": "免费开始 — 无需银行卡", "signup.body": "每个新工作区都从 14 天 Pro 试用开始。无需银行卡，不会扣费。试用结束后数据仍归您所有，可继续使用 Free 或选择套餐。", "signup.includes.title": "14 天试用包含", "signup.includes.bullet1": "不限数量的订单和客户", "signup.includes.bullet2": "客户文件、财务卡片和生产看板", "signup.includes.bullet3": "试用结束后：Free 保留 10 个进行中订单和导出功能", "signup.form.eyebrow": "开始即免费", "signup.form.submit": "创建我的工作区" },
+  "العربية (Arabic)": { "signup.eyebrow": "ابدأ مجانًا — بلا بطاقة", "signup.body": "تبدأ كل مساحة عمل جديدة بفترة تجربة Pro لمدة 14 يومًا. بلا بطاقة ولا رسوم. عند انتهائها تحتفظ ببياناتك وتتابع على Free أو تختار خطة.", "signup.includes.title": "تشمل تجربتك لمدة 14 يومًا", "signup.includes.bullet1": "طلبات وعملاء بلا حدود", "signup.includes.bullet2": "ملفات العملاء وبطاقات المالية ولوحة الإنتاج", "signup.includes.bullet3": "بعد التجربة: تحتفظ خطة Free بعشرة طلبات نشطة وبالتصدير", "signup.form.eyebrow": "البداية مجانية", "signup.form.submit": "إنشاء مساحة العمل" },
+  "हिन्दी (Hindi)": { "signup.eyebrow": "मुफ़्त शुरू करें — कार्ड नहीं चाहिए", "signup.body": "हर नया workspace 14 दिन के Pro trial से शुरू होता है। न कार्ड, न कोई शुल्क। Trial खत्म होने पर आपका data आपके पास रहता है; Free पर जारी रखें या कोई plan चुनें।", "signup.includes.title": "आपके 14 दिन के trial में शामिल", "signup.includes.bullet1": "असीमित orders और customers", "signup.includes.bullet2": "Client files, finance cards और production board", "signup.includes.bullet3": "Trial के बाद: Free में 10 active orders और export रहता है", "signup.form.eyebrow": "शुरुआत मुफ़्त", "signup.form.submit": "मेरा workspace बनाएँ" },
+};
+
 const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSiteTranslationKey, string>>>>> = [
   FILL_TRANSLATIONS,
   FILL_TRANSLATIONS_2,
@@ -15770,7 +15788,8 @@ const FILL_BATCHES: Array<Partial<Record<StudioLanguage, Partial<Record<PublicSi
   FILL_TRANSLATIONS_ORDER_TOWN,
   FILL_TRANSLATIONS_LANGUAGE_AUDIT,
   FILL_TRANSLATIONS_SITE_REDESIGN,
-  FILL_TRANSLATIONS_TOUR
+  FILL_TRANSLATIONS_TOUR,
+  FILL_TRANSLATIONS_UX_SIGNUP
 ];
 
 function mergeFill(
