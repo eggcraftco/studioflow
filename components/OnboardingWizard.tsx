@@ -133,6 +133,7 @@ function blankAnswers(suggested: ReturnType<typeof suggestedSettings>): Onboardi
     currency: suggested.currency,
     language: suggested.language,
     timeZone: suggested.timeZone,
+    vatRegistered: "",
     workKinds: [],
     workflow: "made_to_order",
     teamSize: "solo",
@@ -143,9 +144,10 @@ function blankAnswers(suggested: ReturnType<typeof suggestedSettings>): Onboardi
     mainGoal: "",
     otherGoal: "",
     extraGoals: [],
-    // Pre-picked: it is the only row, and making someone tick the one choice
-    // there is before Continue will let them through is a ritual, not a question.
-    start: "later",
+    // Not pre-picked (UX test, 8 Nov 2026): a ticked "I'll set this up later"
+    // nudged everyone past the Connect tiles. Continue works with nothing
+    // chosen and saves "later" then — see stepIsAnswered.
+    start: "",
     plan: "",
   };
 }
@@ -160,8 +162,9 @@ function blankAnswers(suggested: ReturnType<typeof suggestedSettings>): Onboardi
 function stepIsAnswered(key: OnboardingStepKey, answers: OnboardingAnswers): boolean {
   switch (key) {
     case "basics":
-      return Boolean(answers.country && answers.currency && answers.language && answers.timeZone);
-    case "bringWork": return Boolean(answers.start);
+      return Boolean(answers.country && answers.currency && answers.language && answers.timeZone && answers.vatRegistered);
+    // Nothing chosen is a choice here: "later" is written at Finish.
+    case "bringWork": return true;
     case "goal": return Boolean(answers.mainGoal);
     case "work": return answers.workKinds.length > 0;
     // The plan step arrives with a recommendation already chosen, so it is
@@ -213,6 +216,7 @@ function restoreAnswers(
     // Only the zones the picker can offer: its option list is TIME_ZONES plus
     // whatever the browser suggested, and nothing else is reachable by hand.
     timeZone: oneOf(stored.timeZone, [defaults.timeZone, ...TIME_ZONES], defaults.timeZone),
+    vatRegistered: oneOf(stored.vatRegistered, ["yes", "no"], defaults.vatRegistered),
     workKinds: rawKinds
       .filter((kind): kind is OnboardingWorkKind => typeof kind === "string" && kindIds.includes(kind))
       .slice(0, kindIds.length),
@@ -404,6 +408,25 @@ export function OnboardingWizard({
                 ))}
               </select>
             </label>
+            {/* Asked here, not assumed: this decides whether VAT comes out of
+                every price and whether invoices carry a VAT line. */}
+            <div className="onboard-field onboard-vat">
+              <span>{t("Are you VAT registered?")}</span>
+              <div className="onboard-options onboard-options-inline">
+                {([["yes", "Yes — my prices include VAT"], ["no", "No — I'm not VAT registered"]] as const).map(([id, label]) => (
+                  <label key={id} className={answers.vatRegistered === id ? "is-on" : ""}>
+                    <input
+                      type="radio"
+                      name="onboard-vat"
+                      checked={answers.vatRegistered === id}
+                      onChange={() => set("vatRegistered", id)}
+                    />
+                    <span><strong>{t(label)}</strong></span>
+                  </label>
+                ))}
+              </div>
+              <p className="onboard-why">{t("This sets your VAT and profit calculations. You can change it later in Settings ▸ Financial Settings.")}</p>
+            </div>
           </div>
         ) : null}
 
@@ -415,7 +438,7 @@ export function OnboardingWizard({
              reads as untidy however carefully it is spaced. */
           <div className="onboard-grid is-pairs">
             <label className="onboard-field">
-              <span>{t("What you make")}</span>
+              <span>{t("What you make")} <span className="onboard-required" aria-hidden="true">*</span></span>
               <select
                 value={answers.workKinds[0] ?? ""}
                 onChange={event => set("workKinds", event.target.value
@@ -443,6 +466,12 @@ export function OnboardingWizard({
                 {ONBOARDING_TEAM_SIZES.map(size => <option key={size.id} value={size.id}>{t(size.label)}</option>)}
               </select>
             </label>
+            {/* Four questions that set nothing up (UX test, 8 Nov 2026: the
+                step read as seven questions). Folded away; Continue never
+                waits on them. */}
+            <details className="onboard-optional">
+              <summary>{t("More about your business (optional)")}</summary>
+              <div className="onboard-grid is-pairs">
             <label className="onboard-field">
               <span>{t("Monthly orders")}</span>
               <select value={answers.volume} onChange={event => set("volume", event.target.value as OnboardingVolume)}>
@@ -486,6 +515,8 @@ export function OnboardingWizard({
                 onChange={event => set("heardFrom", event.target.value)}
               />
             </label>
+              </div>
+            </details>
             <p className="onboard-why onboard-field">
               {t("This helps us suggest the right setup. It won't affect your trial.")}
             </p>
@@ -686,7 +717,7 @@ export function OnboardingWizard({
               disabled={!canContinue || saving}
               onClick={() => {
                 if (step < TOTAL_STEPS) { goToStep(step + 1); return; }
-                onFinish(answers);
+                onFinish({ ...answers, marketplaceLinked: Object.values(connected ?? {}).some(Boolean) });
               }}
             >
               {saving ? t("Setting up…") : step < TOTAL_STEPS ? t("Continue") : t("Open my workspace")}

@@ -38,6 +38,13 @@ export type OnboardingAnswers = {
    *  than hunted for in Settings after the fact. */
   language: string;
   timeZone: string;
+  /** Asked on the first step (UX test, 8 Nov 2026): every new workspace used to
+   *  open as VAT-registered with 20% taken out of each price, and nothing on
+   *  the way in ever said so. "yes" / "no"; empty until answered. */
+  vatRegistered: "" | "yes" | "no";
+  /** Set at Finish from the Connect tiles: an account linked during setup means
+   *  marketplace orders are coming, so the fee estimate stays on. */
+  marketplaceLinked?: boolean;
   /** Kept as a list because businessTypeForWorkKinds reads kinds[0] and the
    *  saved answers are read elsewhere; the question itself is now one choice. */
   workKinds: OnboardingWorkKind[];
@@ -470,9 +477,17 @@ export async function saveOnboardingAnswers(
   presetPayload: Record<string, unknown>
 ): Promise<TrialPlanOutcome | null> {
   const goals = [answers.mainGoal, ...answers.extraGoals].filter(Boolean);
+  // A workshop that brought no shop in has no platform taking a cut, so the
+  // "average platform fee" estimate (3% by default) is switched off for it.
+  // One that linked Shopify, WooCommerce or Etsy keeps the estimate.
+  const marketplaceStart = answers.start === "shopify" || answers.start === "woocommerce";
+  const feeOff = !marketplaceStart && answers.marketplaceLinked !== true;
   return withWebSyncStatus(async () => {
     await setDoc(doc(db, "companySettings", companyId), {
       ...presetPayload,
+      ...(feeOff ? { feePercentage: 0 } : {}),
+      // Written explicitly either way: the reader's default is "registered".
+      vatRegistered: answers.vatRegistered === "yes",
       selectedCountry: answers.country,
       selectedCurrency: answers.currency,
       // The one the app reads.
@@ -489,7 +504,8 @@ export async function saveOnboardingAnswers(
       onboardingGoals: goals,
       onboardingMainGoal: answers.mainGoal,
       onboardingOtherGoal: answers.otherGoal.trim().slice(0, 200),
-      onboardingStartChoice: answers.start,
+      // No choice on the step means "go straight to the workspace".
+      onboardingStartChoice: answers.start || "later",
       productionStages: productionStagesForWorkflow(answers.workflow),
       // The workshop's own word for each card. Read by all four platforms when
       // they draw an order-detail heading.
