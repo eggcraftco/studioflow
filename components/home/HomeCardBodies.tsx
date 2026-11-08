@@ -2190,7 +2190,8 @@ export function QuickActionsCardBody({ size, t, onQuickAction, canCreateOrders }
     );
   }
 
-  // 2x1: six compact rows, icon beside label.
+  // 2x1: six compact rows, three across and two down, icon beside label; below 900px the icon stacks over the
+  // label so both rows still fit a phone card (F1, globals.css).
   if (size === "2x1") {
     return (
       <div className="home-action-grid is-rows">

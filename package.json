@@ -100,6 +100,7 @@
     "test:worktime-edit": "node scripts/check-worktime-edit.mjs",
     "test:review-n01-n05": "npx tsx scripts/check-review-n01-n05.mts",
     "test:review-n09-n25": "npx tsx scripts/check-review-n09-n25.mts",
+    "test:quick-actions-2x1": "npx tsx scripts/check-quick-actions-2x1.mts",
     "test:n23-receipt-currency": "npx tsx scripts/check-n23-receipt-currency.mts",
     "test:admin-insights": "node scripts/check-admin-insights-metrics.mts",
     "test:admin-charts": "node scripts/check-admin-charts.mts",
