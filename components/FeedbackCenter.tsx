@@ -73,8 +73,13 @@ export default function FeedbackCenter({
   // The server's "enabled" answer is kept too: a reload inside the window must
   // still surface the account-menu entry, otherwise it disappears until the
   // next ask (the pilot's finding 7f).
+  // A workspace in its first day is not asked how it is going (UX test, 8 Nov
+  // 2026: the card appeared minutes after sign-up, under two other banners).
+  // The trial starts at sign-up, so its end minus fourteen days is the start.
+  const trialEndsAtMs = workspace?.billingTrialEndsAtMs ?? 0;
+  const firstDay = trialEndsAtMs > 0 && Date.now() < trialEndsAtMs - 13 * 24 * 60 * 60 * 1000;
   useEffect(() => {
-    if (!companyId || !uid) return;
+    if (!companyId || !uid || firstDay) return;
     const cached = readSession(promptKey(companyId, uid));
     if (cached) { setInvitation(cached); onAvailability?.(true); return; }
     const last = Number(readSession(checkKey(companyId, uid))) || 0;
@@ -97,7 +102,7 @@ export default function FeedbackCenter({
       }
     })();
     return () => { cancelled = true; };
-  }, [companyId, uid, pathname, onAvailability]);
+  }, [companyId, uid, pathname, onAvailability, firstDay]);
 
   // The card is on screen: tell the server once per session. Before this call
   // nothing has been counted, so a card that never rendered costs nothing.

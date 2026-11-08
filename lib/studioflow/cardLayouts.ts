@@ -61,6 +61,21 @@ export const DEFAULT_ORDER_DETAIL_CARD_LAYOUT: OrderDetailCardLayout = {
   visibility: { ...DEFAULT_VISIBILITY }
 };
 
+/** The layout an order opens with when nothing was ever saved for it.
+ *
+ *  "Repair Intake & Item" belongs to repair orders; on a made-to-order or batch
+ *  order it sat open as the second card (UX test, 8 Nov 2026) and asked a leather
+ *  workshop about diagnostics. Hidden there by default — a saved layout, a type
+ *  layout or Customize cards still shows it whenever somebody wants it. */
+export function defaultOrderDetailCardLayoutFor(orderType?: string): OrderDetailCardLayout {
+  if (orderType === "repair") return DEFAULT_ORDER_DETAIL_CARD_LAYOUT;
+  return {
+    ...DEFAULT_ORDER_DETAIL_CARD_LAYOUT,
+    columns: DEFAULT_ORDER_DETAIL_CARD_LAYOUT.columns.map(column => [...column]),
+    visibility: { ...DEFAULT_ORDER_DETAIL_CARD_LAYOUT.visibility, repairIntake: false }
+  };
+}
+
 const LEGACY_CARD_ID_MAP: Record<string, OrderDetailCardId> = {
   communication: "customer",
   customerCommunication: "customer",
@@ -364,7 +379,7 @@ function layoutFromWorkspaceSettings(data: Record<string, unknown>, uid: string,
 
   if (profileSnapshot) return layoutFromWorkspaceSnapshot(profileSnapshot, orderId);
   if (sharedSnapshot) return layoutFromWorkspaceSnapshot(sharedSnapshot, orderId);
-  return DEFAULT_ORDER_DETAIL_CARD_LAYOUT;
+  return defaultOrderDetailCardLayoutFor(orderType);
 }
 
 function friendlyCardLayoutError(error: unknown, fallback: string) {
@@ -393,12 +408,14 @@ async function callCardLayoutFunction(name: string, payload: Record<string, unkn
 }
 
 export async function loadOrderDetailCardLayout(uid: string, workspaceId: string, orderId?: string, orderType?: string) {
-  if (!uid || !workspaceId) return DEFAULT_ORDER_DETAIL_CARD_LAYOUT;
+  if (!uid || !workspaceId) return defaultOrderDetailCardLayoutFor(orderType);
   const response = await callCardLayoutFunction(
     "getWorkspaceCardLayout",
     { companyId: workspaceId, orderId: normalizeOrderId(orderId) || undefined, orderType: orderType || undefined },
     "Could not load card layout. Using the default layout for now."
   );
+  // Nothing saved anywhere: the type-aware default, not the all-cards one.
+  if (!response.layout || typeof response.layout !== "object") return defaultOrderDetailCardLayoutFor(orderType);
   return normalizeOrderDetailCardLayout(response.layout);
 }
 

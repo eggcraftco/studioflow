@@ -98,6 +98,7 @@ import {
   defaultQuickCreateDueDate,
   quickCreateDefaultDays,
   quickCreateCustomerName,
+  quickCreatePrice,
   type QuickCreateProjectForm,
 } from "@/components/QuickCreateProjectDialog";
 import {
@@ -859,16 +860,21 @@ function TrialBanner({
         <strong style={{ display: "block", fontSize: 12.5 }}>{headline}</strong>
         <span style={{ fontSize: 11, opacity: 0.7 }}>{detail}</span>
       </span>
-      <button
-        type="button"
-        onClick={onViewPlans}
-        style={{
-          border: 0, background: "#2563eb", color: "#fff", borderRadius: 8,
-          padding: "7px 12px", fontWeight: 700, fontSize: 12, cursor: "pointer",
-        }}
-      >
-        {t("Keep these features")}
-      </button>
+      {/* The sales button waits three days (UX test, 8 Nov 2026): on day one
+          "Keep these features" sat next to the e-mail banner and the feedback
+          card, three asks before the first order. The headline stays. */}
+      {daysRemaining <= 11 ? (
+        <button
+          type="button"
+          onClick={onViewPlans}
+          style={{
+            border: 0, background: "#2563eb", color: "#fff", borderRadius: 8,
+            padding: "7px 12px", fontWeight: 700, fontSize: 12, cursor: "pointer",
+          }}
+        >
+          {t("Keep these features")}
+        </button>
+      ) : null}
       <button
         type="button"
         aria-label={t("Collapse")}
@@ -2623,6 +2629,17 @@ function AppShellFrame({ children }: { children: ReactNode }) {
       // Always a date. A cleared box means the default the hint names, worked
       // out here, rather than a server fallback the form never showed.
       input.deliveryDueDate = quickCreateForm.dueDate || defaultQuickCreateDueDate(settings?.defaultDeliveryTime);
+      // Only when typed and well-formed; a malformed price stops here rather
+      // than creating an order worth nothing.
+      if (quickCreateForm.price.trim()) {
+        const price = quickCreatePrice(quickCreateForm);
+        if (price == null) {
+          setQuickCreateError("Enter the price as a number, for example 85 or 85.50.");
+          setCreatingOrder(false);
+          return;
+        }
+        input.orderValue = price;
+      }
 
       const result = await createOrderFromWeb(currentWorkspace, input);
       const orderId = result.orderId || "";

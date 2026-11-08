@@ -97,6 +97,9 @@ export type UpdateOrderInput = Partial<CreateOrderInput> & {
     paymentDate?: string;
     deliveryTime?: number;
     deliveryDueDate?: string;
+    /** Top level on purpose: createWebOrder reads requestData.orderValue (the
+     *  quick-create price); the finance block below is for the full form. */
+    orderValue?: number;
     courier?: string;
     trackingNumber?: string;
     isDispatched?: boolean;

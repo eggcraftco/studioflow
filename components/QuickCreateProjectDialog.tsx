@@ -30,6 +30,8 @@ export type QuickCreateProjectForm = {
   newCustomerOpen: boolean;
   newCustomerName: string;
   projectName: string;
+  /** Optional. Typed as text so a half-typed "85." survives a re-render; parsed once on submit. */
+  price: string;
   /** yyyy-MM-dd, or empty. */
   dueDate: string;
 };
@@ -40,11 +42,22 @@ export const EMPTY_QUICK_CREATE_PROJECT_FORM: QuickCreateProjectForm = {
   newCustomerOpen: false,
   newCustomerName: "",
   projectName: "",
+  price: "",
   dueDate: ""
 };
 
 /** The customer name this form would create under — empty means genuinely no
  *  customer, which is a supported outcome (stock pieces, window work). */
+/** The typed price as a number, or null when blank or not a number. Accepts
+ *  "85", "85.50" and "85,50"; a sign or a second separator makes it null. */
+export function quickCreatePrice(form: QuickCreateProjectForm): number | null {
+  const raw = (form.price || "").trim().replace(/\s+/g, "").replace(",", ".");
+  if (!raw) return null;
+  if (!/^\d+(\.\d{1,2})?$/.test(raw)) return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? Math.round(value * 100) / 100 : null;
+}
+
 export function quickCreateCustomerName(form: QuickCreateProjectForm): string {
   return (form.newCustomerOpen ? form.newCustomerName : form.customerSearch).trim();
 }
@@ -370,6 +383,22 @@ export function QuickCreateProjectDialog({
               placeholder={t("Leave blank and we will name it for you")}
               disabled={saving}
               onChange={event => update({ projectName: event.target.value })}
+            />
+          </label>
+
+          <label>
+            {t("Price (optional)")}
+            {/* UX test, 8 Nov 2026: the first thing looked for after a new order
+                was where its price goes. Here, when it is known; otherwise the
+                Invoice Items card sets it line by line. */}
+            <input
+              className="input"
+              type="text"
+              inputMode="decimal"
+              value={form.price}
+              placeholder={t("Leave blank to add invoice items later")}
+              disabled={saving}
+              onChange={event => update({ price: event.target.value })}
             />
           </label>
 
