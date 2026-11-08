@@ -1027,12 +1027,16 @@ function openOrderPdfPrint(
 function invoiceHtml(
   order: OrderDetail,
   settings: WorkspaceSettingsOverview | null | undefined,
-  estimate?: EstimateRecord | null
+  estimate?: EstimateRecord | null,
+  // The document follows the app language (UX test, 8 Nov 2026: a Turkish
+  // workspace printed an English invoice). Identity when a caller has no t.
+  t: (text: string) => string = text => text,
+  workspaceName = ""
 ) {
   const money = (value: number) => orderPdfMoney(value, settings, false);
   const isEstimate = Boolean(estimate);
-  const documentTitle = isEstimate ? "ESTIMATE" : "INVOICE";
-  const documentNumberLabel = isEstimate ? "Estimate No" : "Invoice No";
+  const documentTitle = escapeHtml(isEstimate ? t("ESTIMATE") : t("INVOICE"));
+  const documentNumberLabel = escapeHtml(isEstimate ? t("Estimate No") : t("Invoice No"));
   const documentNumber = isEstimate ? estimate!.number : (order.invoiceNumber || "-");
   // Invoice total: when the user added named line items, the invoice bills
   // exactly those items — the order's paid/remaining figures stay off the
@@ -1060,7 +1064,9 @@ function invoiceHtml(
     : isMarginScheme
       ? orderValue
       : orderValue - vatAmount;
-  const businessName = settings?.appSubtitle || "NivaDesk";
+  // The brand subtitle when the workshop wrote one; otherwise the workspace's
+  // own name. The sample studio name is no longer a default anywhere.
+  const businessName = (settings?.appSubtitle || "").trim() || workspaceName.trim() || "NivaDesk";
   const logoUrl = settings?.appLogoUrl || "";
   const footerNote = settings?.invoiceFooterNote || "";
   const numbers = (settings?.companyNumbers || [])
@@ -1076,26 +1082,26 @@ function invoiceHtml(
     : "";
   const approval = isEstimate ? estimate!.approval : null;
   const approvalMethodLabel = approval
-    ? (approval.method === "portal" ? "Customer Portal" : (approval.method || "Customer Portal"))
+    ? (approval.method === "portal" ? t("Customer Portal") : (approval.method || t("Customer Portal")))
     : "";
   const approvalBlock = approval
     ? `<div class="approval ${approval.decision === "approved" ? "ok" : "no"}">
-        <div class="approval-title">${approval.decision === "approved" ? "APPROVED BY CUSTOMER" : "DECLINED BY CUSTOMER"}</div>
+        <div class="approval-title">${escapeHtml(approval.decision === "approved" ? t("APPROVED BY CUSTOMER") : t("DECLINED BY CUSTOMER"))}</div>
         <div class="approval-row">${escapeHtml(approval.approvedByName || order.customerName || "-")}</div>
         ${approval.approvedByEmail ? `<div class="approval-row muted">${escapeHtml(approval.approvedByEmail)}</div>` : ""}
         <div class="approval-row muted">${escapeHtml(approval.decidedAtMs > 0 ? new Date(approval.decidedAtMs).toLocaleString() : "")} &middot; ${escapeHtml(approvalMethodLabel)}</div>
-        ${approval.declineReason ? `<div class="approval-row">Reason: ${escapeHtml(approval.declineReason)}</div>` : ""}
+        ${approval.declineReason ? `<div class="approval-row">${escapeHtml(t("Reason"))}: ${escapeHtml(approval.declineReason)}</div>` : ""}
         ${approval.signatureDownloadUrl ? `<img class="sig" src="${escapeHtml(approval.signatureDownloadUrl)}" alt="Signature" />` : ""}
       </div>`
     : "";
-  const description = order.designName?.trim() || order.customerName?.trim() || "Order";
+  const description = order.designName?.trim() || order.customerName?.trim() || t("Order");
   // The two address switches are the only PDF settings an invoice reads; the
   // document itself is gated on Financial Info by its callers (every price is on it).
   const { showAddress, showShippingAddress } = resolvePdfDocumentOptions(settings, PDF_FULL_ACCESS);
   const billingAddr = (order.customFields.communicationAddress || order.customFields.Address || "").trim();
   const shipLine = [order.shippingStreetAddress, order.shippingCity, order.shippingPostalCode, order.shippingCountry].filter(Boolean).join(", ");
   const shipRecipient = order.shippingName || order.customerName || "";
-  const itemsHeading = "Description";
+  const itemsHeading = t("Description");
   const fmtQty = (q: number) => (Number.isInteger(q) ? String(q) : q.toFixed(2));
   const itemRows = printedLines.length > 0
     ? printedLines.map((it) => `<tr><td>${escapeHtml(it.name || "-")}${it.quantity !== 1 ? `<div style="font-size:10px;color:#727272;">${fmtQty(it.quantity)} × ${money(it.unitPrice)}</div>` : ""}</td><td class="r">${money(it.lineTotal)}</td></tr>`).join("")
@@ -1103,14 +1109,14 @@ function invoiceHtml(
 
   let vatRow = "";
   if (isMarginScheme) {
-    vatRow = `<div class="muted-note">VAT under margin scheme (not shown separately)</div>`;
+    vatRow = `<div class="muted-note">${escapeHtml(t("VAT under margin scheme (not shown separately)"))}</div>`;
   } else if (isZeroRated) {
-    vatRow = `<div class="trow"><span>VAT (Zero-rated / Export)</span><strong>${money(0)}</strong></div>`;
+    vatRow = `<div class="trow"><span>${escapeHtml(t("VAT (Zero-rated / Export)"))}</span><strong>${money(0)}</strong></div>`;
   } else {
-    vatRow = `<div class="trow"><span>VAT (${Math.round(taxRate)}%)</span><strong>${money(vatAmount)}</strong></div>`;
+    vatRow = `<div class="trow"><span>${escapeHtml(t("VAT"))} (${Math.round(taxRate)}%)</span><strong>${money(vatAmount)}</strong></div>`;
   }
 
-  return `<!doctype html><html><head><meta charset="utf-8"/><title>${escapeHtml(isEstimate ? "Estimate" : "Invoice")} ${escapeHtml(documentNumber)}</title>
+  return `<!doctype html><html><head><meta charset="utf-8"/><title>${escapeHtml(isEstimate ? t("Estimate") : t("Invoice"))} ${escapeHtml(documentNumber)}</title>
   <style>
     @page { size: A4; margin: 18mm; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1c1c1c; margin: 0; }
@@ -1157,47 +1163,51 @@ function invoiceHtml(
       <div class="inv">
         <div class="title">${documentTitle}</div>
         <div class="meta">${documentNumberLabel}: ${escapeHtml(documentNumber)}</div>
-        <div class="meta">Date: ${escapeHtml(orderDate)}</div>
-        ${validUntil ? `<div class="meta">Valid Until: ${escapeHtml(validUntil)}</div>` : ""}
+        <div class="meta">${escapeHtml(t("Date"))}: ${escapeHtml(orderDate)}</div>
+        ${validUntil ? `<div class="meta">${escapeHtml(t("Valid Until"))}: ${escapeHtml(validUntil)}</div>` : ""}
       </div>
     </header>
     <hr/>
     <div class="bill" style="display:flex; gap:40px; align-items:flex-start;">
       <div>
-        <div class="label">BILL TO</div>
+        <div class="label">${escapeHtml(t("BILL TO"))}</div>
         <div class="who">${escapeHtml(order.customerName || "-")}</div>
         ${showAddress && billingAddr ? `<div class="email">${escapeHtml(billingAddr)}</div>` : ""}
         ${order.emailAddress ? `<div class="email">${escapeHtml(order.emailAddress)}</div>` : ""}
         ${showAddress && order.whatsappNumber ? `<div class="email">${escapeHtml(order.whatsappNumber)}</div>` : ""}
       </div>
       ${showShippingAddress && shipLine ? `<div>
-        <div class="label">SHIP TO</div>
+        <div class="label">${escapeHtml(t("SHIP TO"))}</div>
         <div class="who">${escapeHtml(shipRecipient || "-")}</div>
         <div class="email">${escapeHtml(shipLine)}</div>
         ${order.shippingPhone ? `<div class="email">${escapeHtml(order.shippingPhone)}</div>` : ""}
       </div>` : ""}
     </div>
     <table>
-      <thead><tr><th>${escapeHtml(itemsHeading)}</th><th class="r">Amount</th></tr></thead>
+      <thead><tr><th>${escapeHtml(itemsHeading)}</th><th class="r">${escapeHtml(t("Amount"))}</th></tr></thead>
       <tbody>${itemRows}</tbody>
     </table>
     <div class="totals">
-      <div class="trow"><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
+      <div class="trow"><span>${escapeHtml(t("Subtotal"))}</span><strong>${money(subtotal)}</strong></div>
       ${vatRow}
-      <div class="trow total"><span>TOTAL</span><strong>${money(orderValue)}</strong></div>
+      <div class="trow total"><span>${escapeHtml(t("TOTAL"))}</span><strong>${money(orderValue)}</strong></div>
+      ${!isEstimate && order.paidAmount > 0 ? `<div class="trow paid"><span>${escapeHtml(t("Paid"))}</span><strong>${money(order.paidAmount)}</strong></div>
+      <div class="trow due"><span>${escapeHtml(t("Balance due"))}</span><strong>${money(Math.max(orderValue - order.paidAmount, 0))}</strong></div>` : ""}
     </div>
     ${approvalBlock}
     ${isEstimate && estimate!.terms.trim() ? `<div class="terms">${escapeHtml(estimate!.terms)}</div>` : ""}
     ${!isEstimate && order.invoiceNote && order.invoiceNote.trim() ? `<div style="margin-top:22px; border:1px solid rgba(0,0,0,0.12); border-radius:10px; padding:14px 16px;"><div style="font-size:11px; font-weight:700; color:#727272; letter-spacing:0.5px;">NOTES</div><div style="font-size:12px; margin-top:6px; white-space:pre-wrap;">${escapeHtml(order.invoiceNote)}</div></div>` : ""}
     ${footerNote ? `<footer>${escapeHtml(footerNote)}</footer>` : ""}
-    <div class="credit">Generated with NivaDesk</div>
+    <div class="credit">${escapeHtml(t("Generated with NivaDesk"))}</div>
   </div></body></html>`;
 }
 
 function openInvoicePrint(
   order: OrderDetail,
   settings: WorkspaceSettingsOverview | null | undefined,
-  estimate?: EstimateRecord | null
+  estimate?: EstimateRecord | null,
+  t: (text: string) => string = text => text,
+  workspaceName = ""
 ) {
   const popup = window.open("", "_blank", "width=900,height=1100");
   if (!popup) {
@@ -1207,7 +1217,7 @@ function openInvoicePrint(
   }
   popup.opener = null;
   popup.document.open();
-  popup.document.write(invoiceHtml(order, settings, estimate));
+  popup.document.write(invoiceHtml(order, settings, estimate, t, workspaceName));
   popup.document.close();
   popup.focus();
   // The logo and the customer's signature are remote images. Printing on a fixed
@@ -2247,6 +2257,7 @@ export function OrderDetailContent({
   const [browserUploadPolicyAcceptance, setBrowserUploadPolicyAcceptance] = useState<UploadPolicyAcceptance | null>(null);
   const browserAcceptedUploadPolicy = browserUploadPolicyAcceptance !== null;
   const clientFileInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadPolicyCheckboxRef = useRef<HTMLInputElement | null>(null);
   // Own cloud storage: the workspace's storage answer (null until read, and
   // when the read fails — both mean NivaDesk Cloud, the live path), and the
   // order's files the common file service recorded in a connected provider.
@@ -5906,7 +5917,7 @@ export function OrderDetailContent({
         invoiceNumber = await assignInvoiceNumberFromWeb(workspace, order.id);
         void onReloadOrder();
       }
-      openInvoicePrint({ ...order, invoiceNumber }, moneySettings);
+      openInvoicePrint({ ...order, invoiceNumber }, moneySettings, undefined, t, workspace.name);
     } catch (invoiceError) {
       setInlineError(invoiceError instanceof Error ? invoiceError.message : "Invoice could not be generated.");
     }
@@ -6756,7 +6767,7 @@ export function OrderDetailContent({
       return;
     }
     try {
-      openInvoicePrint(order, moneySettings, estimateRecord);
+      openInvoicePrint(order, moneySettings, estimateRecord, t, workspace.name);
     } catch (printFailure) {
       setEstimateNotice(printFailure instanceof Error ? printFailure.message : "The estimate could not be opened.");
     }
@@ -7522,6 +7533,14 @@ export function OrderDetailContent({
               <div className="app-summary-top">
                 <div className="app-summary-value">
                   <span>{t("Order Value")}</span>
+                  {/* A zero here is where a new order's price is looked for
+                      first (UX test, 8 Nov 2026); the way to set it is a card
+                      away, so the link says which. */}
+                  {canSeeFinance && canInlineEditFullDetails && order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order) <= 0 ? (
+                    <button type="button" className="link-button app-summary-set-price" onClick={goToInvoiceItems}>
+                      {t("Set the price in Invoice Items")}
+                    </button>
+                  ) : null}
                   <strong>{canSeeFinance ? orderValueMoney(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers) : t("Hidden")}</strong>
                 </div>
                 <div className="app-summary-status-list">
@@ -7796,8 +7815,13 @@ export function OrderDetailContent({
                   onClick={() => void handleExportInvoice()}
                   style={isStackView ? undefined : { marginTop: 14, width: "100%", border: "none", background: "#2563eb", color: "#fff", borderRadius: 10, padding: "10px 12px", fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
                 >
-                  {t("Invoice PDF")}
+                  {t("Print / Save as PDF")}
                 </button>
+              ) : null}
+              {canSeeFinance ? (
+                <p className="muted-copy" style={{ margin: "8px 0 0", fontSize: 11.5 }}>
+                  {t("Opens your browser's print window — choose \"Save as PDF\" there.")}
+                </p>
               ) : null}
             </div>
           </section>
@@ -9591,8 +9615,17 @@ export function OrderDetailContent({
                     <button
                       className="button app-upload-button"
                       type="button"
-                      disabled={clientFileRequiresPolicyAcceptance && !browserAcceptedUploadPolicy}
-                      onClick={() => clientFileInputRef.current?.click()}
+                      onClick={() => {
+                        // Never greyed out (UX test, 8 Nov 2026): a dead button
+                        // and a red line read as "upload is broken". Before the
+                        // policy is accepted the click points at the policy box.
+                        if (clientFileRequiresPolicyAcceptance && !browserAcceptedUploadPolicy) {
+                          setFileActionError("Accept the upload policy below before choosing or dropping a client file.");
+                          uploadPolicyCheckboxRef.current?.focus();
+                          return;
+                        }
+                        clientFileInputRef.current?.click();
+                      }}
                     >
                       {clientFileUploads.isActive ? t("Uploading...") : <>{isStackView ? <ClientFilesTrayIcon direction="up" /> : "⇧ "}{t("Upload File")}</>}
                     </button>
@@ -9623,6 +9656,7 @@ export function OrderDetailContent({
                       </p>
                       <label className="upload-safety-check">
                         <input
+                          ref={uploadPolicyCheckboxRef}
                           type="checkbox"
                           checked={browserAcceptedUploadPolicy}
                           onChange={event => updateClientFileUploadPolicyAccepted(event.target.checked)}
@@ -9630,6 +9664,20 @@ export function OrderDetailContent({
                         />
                         <span>{t("I understand and accept the upload policy for this browser.")}</span>
                       </label>
+                      {!browserAcceptedUploadPolicy ? (
+                        <button
+                          className="button app-upload-button"
+                          type="button"
+                          disabled={clientFileUploads.isActive}
+                          onClick={() => {
+                            // One click: accept for this browser, then open the picker.
+                            updateClientFileUploadPolicyAccepted(true);
+                            window.setTimeout(() => clientFileInputRef.current?.click(), 0);
+                          }}
+                        >
+                          {t("Accept and choose files")}
+                        </button>
+                      ) : null}
                     </>
                   ) : null}
                 </div>
@@ -10858,7 +10906,7 @@ export function OrderDetailContent({
                       void handleExportInvoice();
                     }}
                   >
-                    {t("Invoice PDF")}
+                    {t("Print / Save as PDF")}
                   </button>
                 ) : null}
                 <div className="order-actions-menu-divider" />

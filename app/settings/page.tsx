@@ -379,7 +379,9 @@ function formatTeamDate(date: Date | null) {
 function planOrderLimitText(plan: { orderLimit: number | null }) {
   // ACTIVE orders: finished work is not using anything, and saying so is the
   // difference between a limit you can get back under and one you cannot.
-  return plan.orderLimit == null ? "Unlimited orders" : `${plan.orderLimit} active orders`;
+  // Dictionary keys (UX test, 8 Nov 2026: these rows stayed English in every
+  // language); the caller runs them through t() and fills {count}.
+  return plan.orderLimit == null ? "Unlimited orders" : "{count} active orders";
 }
 
 function planBillingStateLabel(status: string) {
@@ -395,13 +397,13 @@ function planBillingStateLabel(status: string) {
 }
 
 function planCustomerLimitText(plan: { customerLimit: number | null }) {
-  return plan.customerLimit == null ? "Unlimited customers" : `${plan.customerLimit} customers`;
+  return plan.customerLimit == null ? "Unlimited customers" : "{count} customers";
 }
 
 function planTeamLimitText(plan: { plan?: string; teamMemberLimit: number }) {
   // "add up to 10" read as "10 more". TEAM_INCLUDED_SEATS 5, TEAM_SELF_SERVICE_MAX_SEATS 10.
   if (plan.plan === "team_monthly") return "5 seats included · up to 10 with extra seats";
-  return plan.teamMemberLimit <= 1 ? "1 user" : `Up to ${plan.teamMemberLimit} users`;
+  return plan.teamMemberLimit <= 1 ? "1 user" : "Up to {count} users";
 }
 
 function planSummaryText(plan: string) {
@@ -1848,7 +1850,7 @@ function WorkspaceBrandingSection({
   const { user } = useAuth();
   const logoInputRef = useRef<HTMLInputElement | null>(null);
   const [companyName, setCompanyName] = useState(workspace.name);
-  const [appSubtitle, setAppSubtitle] = useState(settings?.appSubtitle ?? "Bespoke Hand-Painted Dials");
+  const [appSubtitle, setAppSubtitle] = useState(settings?.appSubtitle ?? "");
   const [savingIdentity, setSavingIdentity] = useState(false);
   const [identityStatus, setIdentityStatus] = useState("");
   const [identityError, setIdentityError] = useState("");
@@ -1872,7 +1874,7 @@ function WorkspaceBrandingSection({
   }, [workspace.name]);
 
   useEffect(() => {
-    setAppSubtitle(settings?.appSubtitle ?? "Bespoke Hand-Painted Dials");
+    setAppSubtitle(settings?.appSubtitle ?? "");
     setIdentityStatus("");
     setIdentityError("");
   }, [settings?.appSubtitle]);
@@ -2069,7 +2071,7 @@ function WorkspaceBrandingSection({
                   setIdentityError("");
                 }}
               />
-              <span className="settings-field-hint">{t("Shared with everyone in this workspace.")}</span>
+              <span className="settings-field-hint">{t("Shown on invoices and documents as the business name. Leave it empty to use the workspace name.")}</span>
             </label>
             <div className="settings-action-row">
               <button
@@ -7258,10 +7260,10 @@ function PlanAccessSection({
   );
   const isActiveWorkspaceOwner = normalizeWorkspaceRole(workspace.role) === "owner";
   const featurePills = [
-    { title: planOrderLimitText(currentPlan), enabled: true },
-    { title: planCustomerLimitText(currentPlan), enabled: true },
+    { title: t(planOrderLimitText(currentPlan)).replace("{count}", String(currentPlan.orderLimit ?? "")), enabled: true },
+    { title: t(planCustomerLimitText(currentPlan)).replace("{count}", String(currentPlan.customerLimit ?? "")), enabled: true },
     { title: `${t("Storage")}: ${effectiveStorageLabel}`, enabled: currentPlan.features.client_files },
-    { title: t(planTeamLimitText(currentPlan)), enabled: currentPlan.features.team_access },
+    { title: t(planTeamLimitText(currentPlan)).replace("{count}", String(currentPlan.teamMemberLimit)), enabled: currentPlan.features.team_access },
     { title: t("Client Files"), enabled: currentPlan.features.client_files },
     { title: t("Export Data"), enabled: currentPlan.features.export_data },
     { title: t("Card Customise"), enabled: currentPlan.features.card_customization },
@@ -7324,8 +7326,8 @@ function PlanAccessSection({
               <Link className="button" href="/plan">{t("Open Plan & Billing")} ↗</Link>
             ) : null}
           </div>
-          <p className="settings-plan-hero-model">{currentPlan.purchaseModel}</p>
-          <p className="settings-field-hint">{planSummaryText(currentPlan.plan)}</p>
+          <p className="settings-plan-hero-model">{t(currentPlan.purchaseModel)}</p>
+          <p className="settings-field-hint">{t(planSummaryText(currentPlan.plan))}</p>
           {!isActiveWorkspaceOwner ? <p className="settings-field-hint">{t("This workspace plan is managed by its owner.")}</p> : null}
           <div className="settings-metric-grid">
             <div className="settings-metric settings-metric-orders">

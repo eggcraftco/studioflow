@@ -104,7 +104,7 @@ has("the Actions menu's Invoice PDF must be inside canSeeFinance",
 has("handleExportInvoice must refuse a member without Financial Info before it assigns a number",
   /async function handleExportInvoice\(\) \{[\s\S]{0,400}?if \(!canSeeFinance\) return;[\s\S]{0,200}?assignInvoiceNumberFromWeb/);
 expect("handleExportInvoice is called from exactly two places (the card and the Actions menu)", count(/handleExportInvoice\(\)/g) - count(/async function handleExportInvoice\(\)/g), 2);
-expect("the invoice document is opened only by handleExportInvoice", count(/openInvoicePrint\(\{ \.\.\.order, invoiceNumber \}, moneySettings\)/g), 1);
+expect("the invoice document is opened only by handleExportInvoice", count(/openInvoicePrint\(\{ \.\.\.order, invoiceNumber \}, moneySettings, undefined, t, workspace\.name\)/g), 1);
 has("the Financial card's body must be inside canSeeFinance", /case "financial":\s*return \(\s*<section key=\{cardId\} className="card order-detail-card">\s*\{renderCardTitle\(cardId\)\}\s*\{canSeeFinance \? \(/);
 has("the Estimate card must say it is hidden without Financial Info", /\{!canSeeFinance \? \(\s*<p className="estimate-card-note">\{t\("Hidden on this workspace role\."\)\}<\/p>/);
 has("the Summary card's Order Value must be hidden without Financial Info", /<strong>\{canSeeFinance \? (?:money|orderValueMoney)\(order\.paidAmount \+ order\.remainingAmount \+ orderCustomRemainingTotal\(order\), hideNumbers\) : t\("Hidden"\)\}<\/strong>/);

@@ -1722,7 +1722,10 @@ export async function loadWorkspaceSettingsOverview(companyId: string): Promise<
     // Theme and language are per-user. Never surface the workspace legacy
     // values to the signed-in user's UI.
     appTheme: stringValue(personalData.appTheme, "System"),
-    appSubtitle: stringValue(data.appSubtitle, "Bespoke Hand-Painted Dials"),
+    // Empty until the workshop writes its own line. The sample studio name used to
+    // sit here and ended up as the business name on every new workspace's first
+    // invoice (UX test, 8 Nov 2026); documents now fall back to the workspace name.
+    appSubtitle: stringValue(data.appSubtitle, ""),
     appLogoUrl: stringValue(data.appLogoUrl, ""),
     selectedLanguage: stringValue(personalData.selectedLanguage, "English"),
     lastBackupExportedAtMs: numberValue(data.lastBackupExportedAtMs, 0),
