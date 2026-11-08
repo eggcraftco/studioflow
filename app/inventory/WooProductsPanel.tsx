@@ -89,7 +89,10 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
     storeRef.current = next;
     setConnectionId(next);
     setAnswer(null); setRefusal(""); setError(""); setSummary(""); setResults({}); setChosen([]); setDecisions({}); setSearch({}); setFilter("active");
-  }, []);
+    // envanter-test (8 Nov 2026): the panel came back to the first store every time it opened (the owner picked
+    // TickToon twice in one session). The last store chosen is remembered in this browser for this workspace.
+    try { if (companyId && next) window.localStorage.setItem(`nivadesk.wooProducts.store.${companyId}`, next); } catch { /* storage refused: no memory */ }
+  }, [companyId]);
 
   const load = useCallback(async () => {
     if (!companyId) return;
@@ -100,7 +103,10 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
       const connected = now.connections.filter((c) => c.status === "connected");
       // ?panel=woo&store=<connection> (Settings ▸ WooCommerce's link) opens that store; otherwise the first connected one.
       const asked = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("store") || "" : "";
-      const first = connected.find((c) => c.connectionId === asked) || connected[0];
+      let remembered = "";
+      try { remembered = window.localStorage.getItem(`nivadesk.wooProducts.store.${companyId}`) || ""; } catch { remembered = ""; }
+      // The link's store first, then the one chosen last in this browser, then the first connected one.
+      const first = connected.find((c) => c.connectionId === asked) || connected.find((c) => c.connectionId === remembered) || connected[0];
       if (!storeRef.current && first) { storeRef.current = first.connectionId; setConnectionId(first.connectionId); }
     } catch {
       setError(t("This could not be done."));

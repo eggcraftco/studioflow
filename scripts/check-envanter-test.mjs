@@ -15,6 +15,7 @@
 // 5. A section change in the left list brings the section's top into view.
 // 6. "Add what you paid" after an import (WooCommerce and eBay) opens the new card's edit form, only for people who
 //    may see and change the cost.
+// 7. WooCommerce products opens on the store chosen last (it went back to the first store every time).
 //
 //   node scripts/check-envanter-test.mjs
 import fs from "fs";
@@ -159,6 +160,12 @@ ok("WooCommerce products: a created card offers 'Add what you paid'", /done\.res
 ok("eBay listings: a created card offers 'Add what you paid'", /done\.result === "created" && done\.inventoryItemId && onEditCard \?[\s\S]{0,220}wooInventoryT\("Add what you paid", language\)/.test(ebayPanel));
 expect("both panels get onEditCard only for people who may edit and see the cost", (contentSrc.match(/onEditCard=\{canEdit && canSeeCost \? editCardById : undefined\}/g) || []).length, 2);
 ok("editCardById opens the edit form (or the card when not loaded yet)", /function editCardById\(itemId: string\) \{\s*const card = items\.find\(row => row\.id === itemId\);\s*if \(card\) setEditing\(card\);\s*else openCard\(itemId\);/.test(contentSrc));
+
+// ---- 7. the store choice is remembered -----------------------------------------------------------------------
+ok("WooCommerce products remembers the last store chosen (per workspace, in this browser)",
+  /window\.localStorage\.setItem\(`nivadesk\.wooProducts\.store\.\$\{companyId\}`, next\)/.test(wooPanel)
+  && /connected\.find\(\(c\) => c\.connectionId === asked\) \|\| connected\.find\(\(c\) => c\.connectionId === remembered\) \|\| connected\[0\]/.test(wooPanel));
+ok("a refused storage never breaks the panel", (wooPanel.match(/try \{.*localStorage.*\} catch/g) || []).length >= 2);
 
 fs.rmSync(tmp, { recursive: true, force: true });
 if (failures.length) {
