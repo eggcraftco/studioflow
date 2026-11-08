@@ -167,7 +167,17 @@ function onPaymentPage(): boolean {
   return typeof window !== "undefined" && PAYMENT_PATHS.some(pattern => pattern.test(window.location.pathname));
 }
 
+// The page's own language first: a visitor reading /tr/signup saw this banner in
+// whatever their browser was set to (UX test, 8 Nov 2026 — Turkish page, English
+// banner). The localised routes carry the language as the first path segment
+// and the <html lang>; the browser's preference is only the fallback.
 function detectLang(): string {
+  if (typeof window !== "undefined") {
+    const segment = window.location.pathname.split("/")[1]?.toLowerCase() || "";
+    if (STRINGS[segment]) return segment;
+    const htmlLang = (document.documentElement.lang || "").toLowerCase().split("-")[0];
+    if (htmlLang && htmlLang !== "en" && STRINGS[htmlLang]) return htmlLang;
+  }
   if (typeof navigator === "undefined") return "en";
   const code = (navigator.languages?.[0] || navigator.language || "en").toLowerCase().split("-")[0];
   return STRINGS[code] ? code : "en";

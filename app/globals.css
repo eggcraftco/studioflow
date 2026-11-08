@@ -42483,3 +42483,31 @@ body:has(.public-cream) .cookie-btn-ghost:hover { background: rgba(37, 29, 26, 0
 .public-site.public-cream .public-appstore-btn:hover,
 .public-site.public-cream .public-appstore-btn:focus-visible { color: #fff; }
 .public-site.public-cream .public-skip-link { color: #fff; }
+
+/* Cookie banner on a phone (UX test, 8 Nov 2026): the full card covered the
+   sign-up and login forms and their submit buttons. Below 640px it is a compact
+   strip — smaller type, tighter padding, the two buttons side by side. */
+@media (max-width: 640px) {
+  .cookie-banner { left: 8px; right: 8px; bottom: 8px; }
+  .cookie-banner-inner { padding: 12px 14px; gap: 8px; border-radius: 12px; }
+  .cookie-banner-copy strong { font-size: 13.5px; margin-bottom: 2px; }
+  .cookie-banner-copy p { font-size: 12px; line-height: 1.4; }
+  .cookie-banner-actions { gap: 8px; }
+  .cookie-banner-actions .cookie-link-btn { flex-basis: 100%; margin-right: 0; padding: 2px 0; font-size: 12px; }
+  .cookie-btn { flex: 1 1 0; padding: 8px 10px; font-size: 12.5px; border-radius: 8px; }
+}
+
+/* UX test, 8 Nov 2026 — wizard: the VAT question on step 1, the folded optional
+   questions on step 4, and the required mark. */
+.onboard-vat { grid-column: 1 / -1; }
+.onboard-options-inline { flex-direction: row; flex-wrap: wrap; gap: 8px; }
+.onboard-options-inline label { flex: 1 1 220px; }
+.onboard-required { color: #dc2626; font-weight: 700; margin-left: 2px; }
+.onboard-optional { grid-column: 1 / -1; border: 1px solid rgba(23, 25, 35, 0.1); border-radius: 10px; padding: 8px 12px; }
+.onboard-optional > summary { cursor: pointer; font-size: 12.5px; font-weight: 650; color: var(--muted); list-style: none; }
+.onboard-optional > summary::-webkit-details-marker { display: none; }
+.onboard-optional > summary::before { content: "▸ "; }
+.onboard-optional[open] > summary::before { content: "▾ "; }
+.onboard-optional[open] > summary { margin-bottom: 10px; }
+/* Order summary: the "set the price" link under a zero order value. */
+.app-summary-set-price { border: 0; background: none; padding: 0; margin: 0 0 2px; font-size: 11.5px; font-weight: 650; color: #2563eb; cursor: pointer; text-decoration: underline; text-align: left; }
