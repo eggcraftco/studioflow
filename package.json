@@ -50,6 +50,7 @@
     "test:file-link-address": "node scripts/check-file-link-address.mts",
     "test:branded-file-open": "node scripts/check-branded-file-open.mts",
     "test:file-share": "node scripts/check-file-share.mts",
+    "test:file-viewer-pdf": "node scripts/check-file-viewer-pdf.mts",
     "test:section-warmup": "node scripts/check-section-warmup.mts",
     "test:refund-ui": "node scripts/check-refund-ui.mts",
     "test:row-menu-layer": "node scripts/check-row-menu-layer.mts",

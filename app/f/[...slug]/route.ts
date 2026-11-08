@@ -11,6 +11,13 @@ export const dynamic = "force-dynamic";
 // The address bar stays on nivadesk.app, but the actual file bytes are loaded by
 // the viewer's browser DIRECTLY from Firebase Storage — they never pass through
 // our server. This route only returns a tiny HTML shell (a few KB).
+//
+// PDFs are the exception (8 Nov 2026, real-device finding L1): a PDF inside an
+// <iframe> is drawn badly by phone browsers — iPhone Safari showed page 1 only,
+// cropped, and Android Chrome showed a placeholder with the raw storage path. So a
+// PDF (either link kind) is streamed from this host at the top level, as
+// application/pdf with Content-Disposition: inline: the browser's own PDF viewer
+// shows every page and the address bar keeps the file host. ?dl=1 still downloads.
 
 const BUCKET_PATTERN = /^[a-z0-9._-]+\.(appspot\.com|firebasestorage\.app)$/i;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -56,6 +63,14 @@ function errorPage(message: string, showBrand = true): Response {
 
 const FUNCTIONS_BASE = "https://europe-west2-eggcraft-studio.cloudfunctions.net";
 
+/** Content-Disposition for the browser's own viewer: an ASCII name plus the exact UTF-8 one (RFC 6266 / 8187). */
+function inlineDisposition(name: string): string {
+  const clean = name.replace(/["\r\n\\]/g, "").slice(0, 180) || "file";
+  const ascii = clean.replace(/[^\x20-\x7e]/g, "_");
+  const encoded = encodeURIComponent(clean).replace(/['()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return `inline; filename="${ascii}"; filename*=UTF-8''${encoded}`;
+}
+
 export async function GET(request: NextRequest, context: { params: Promise<{ slug: string[] }> }) {
   const { slug } = await context.params;
   const searchParams = request.nextUrl.searchParams;
@@ -82,6 +97,28 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
     });
   }
 
+  // A PDF opens in the browser's own viewer: the bytes are streamed from this host (never an <iframe> on the
+  // storage address). A Range request is passed on, so a viewer can fetch the pages it needs.
+  async function streamInlinePdf(fileUrl: string, displayName: string): Promise<Response> {
+    const range = request.headers.get("range");
+    const upstream = await fetch(fileUrl, range ? { cache: "no-store", headers: { range } } : { cache: "no-store" });
+    if ((upstream.status !== 200 && upstream.status !== 206) || !upstream.body) {
+      return errorPage("Could not load this file right now.", nivadeskHost);
+    }
+    const headers: Record<string, string> = {
+      "content-type": "application/pdf",
+      "content-disposition": inlineDisposition(displayName),
+      "cache-control": "no-store, no-cache, max-age=0, must-revalidate",
+      "x-robots-tag": "noindex, nofollow",
+      "x-content-type-options": "nosniff"
+    };
+    for (const name of ["content-length", "content-range", "accept-ranges"]) {
+      const value = upstream.headers.get(name);
+      if (value) headers[name] = value;
+    }
+    return new Response(upstream.body, { status: upstream.status, headers });
+  }
+
   // Short-link mode: a single clean segment like /f/aB9xK2.png (no b/t params).
   // Resolve it through the function (it reads the /fileShares mapping and returns
   // the viewer HTML). Company id and token are never exposed in the URL.
@@ -100,6 +137,24 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
         return await streamDownload(target, String(meta.fileName || slug[0]));
       } catch {
         return errorPage("This file could not be downloaded right now.", nivadeskHost);
+      }
+    }
+    // A PDF short link (/f/<id>.pdf — or one with no extension that turns out to be a PDF): the same mapping the
+    // download uses, then the bytes inline. Anything else, or a mapping that does not answer, goes on to the viewer
+    // HTML below, which says "expired" itself when it is.
+    const linkExt = extensionOf(slug[0]);
+    if (linkExt === "pdf" || linkExt === "") {
+      try {
+        const metaResponse = await fetch(`${FUNCTIONS_BASE}/nvViewSharedFile?id=${encodeURIComponent(id)}&meta=1`, { cache: "no-store" });
+        const meta = metaResponse.ok
+          ? ((await metaResponse.json()) as { ok?: boolean; bucket?: string; path?: string; token?: string; fileName?: string })
+          : null;
+        if (meta?.ok && meta.bucket && meta.path && meta.token && PDF_EXTENSIONS.has(extensionOf(String(meta.fileName || meta.path)))) {
+          const target = `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(meta.bucket)}/o/${encodeURIComponent(meta.path)}?alt=media&token=${encodeURIComponent(meta.token)}`;
+          return await streamInlinePdf(target, String(meta.fileName || slug[0]));
+        }
+      } catch {
+        // fall through to the viewer HTML
       }
     }
     try {
@@ -138,6 +193,13 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   }
 
   const ext = extensionOf(fileName);
+  if (PDF_EXTENSIONS.has(ext)) {
+    try {
+      return await streamInlinePdf(firebaseUrl, fileName);
+    } catch {
+      return errorPage("Could not load this file right now.", nivadeskHost);
+    }
+  }
   const safeUrl = escapeHtml(firebaseUrl);
   const safeName = escapeHtml(fileName);
   // Download links stay on THIS host: the route streams the bytes itself.
@@ -146,8 +208,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
   let body: string;
   if (IMAGE_EXTENSIONS.has(ext)) {
     body = `<img src="${safeUrl}" alt="${safeName}" />`;
-  } else if (PDF_EXTENSIONS.has(ext)) {
-    body = `<iframe src="${safeUrl}" title="${safeName}"></iframe>`;
   } else if (VIDEO_EXTENSIONS.has(ext)) {
     body = `<video src="${safeUrl}" controls autoplay playsinline></video>`;
   } else if (AUDIO_EXTENSIONS.has(ext)) {
@@ -173,7 +233,6 @@ export async function GET(request: NextRequest, context: { params: Promise<{ slu
       display: flex; align-items: center; justify-content: center; overflow: hidden;
     }
     img, video { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
-    iframe { border: 0; width: 100%; height: 100%; background: #1b1b1f; }
     .generic { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     .filecard { text-align: center; color: #e6e6e6; padding: 28px 32px; background: #161618; border: 1px solid #2a2a2e; border-radius: 16px; }
     .filecard .name { margin: 0 0 14px; font-weight: 700; font-size: 15px; word-break: break-all; }
