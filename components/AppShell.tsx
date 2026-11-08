@@ -53,6 +53,7 @@ import {
 import { orderGrossMargin } from "@/lib/studioflow/finance";
 import { WorkspaceAccessLostError } from "@/lib/studioflow/workspaceResolution";
 import { fetchSalesCapability, SALES_VISIBILITY_CHANGED_EVENT } from "@/lib/studioflow/sales";
+import { useSectionWarmup } from "@/lib/studioflow/useSectionWarmup";
 import { notificationVisibleForAccess } from "@/lib/studioflow/notificationAccess";
 import { studioLanguageForLocaleTag, studioT } from "@/lib/studioflow/language";
 import { studioCountLabel, studioDayPhrase } from "@/lib/studioflow/countLabel";
@@ -2192,6 +2193,14 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     if (itemBox.top < navBox.top) nav.scrollTop -= navBox.top - itemBox.top;
     else if (itemBox.bottom > navBox.bottom) nav.scrollTop += itemBox.bottom - navBox.bottom;
   }, [pathname, visibleNavHrefs]);
+  // First click on Sales, Inventory, Messages or AI Replies (8 Nov 2026): those screens open on Cloud Functions that
+  // take 2–4 s to start when nobody has asked them anything for a while. The sections in this person's menu (the
+  // hrefs as drawn, so Messages is /inbox only for someone who has the customer inbox) send their read-only opening
+  // calls ahead of the click — lib/studioflow/sectionWarmup.ts.
+  const warmMenuHrefs = NAV_ITEMS.filter((item) => !navItemHidden(item))
+    .map((item) => (item.href === "/inbox" ? (messagesNavHref(workspace?.memberAccess) ?? item.href) : item.href))
+    .join(" ");
+  useSectionWarmup(workspace?.id ?? "", user?.uid ? warmMenuHrefs : "", pathname);
   // Lets the stylesheet give the Orders workspace the whole height of the
   // content area (three columns that scroll inside), while every other page
   // keeps scrolling as a document.
