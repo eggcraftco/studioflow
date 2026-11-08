@@ -582,8 +582,11 @@ const TREE_EN: GuideNode[] = [
           { kind: "bullets", items: [
             "Set the Courier (Auto Detect, Royal Mail, DHL, FedEx or UPS) and enter the Tracking number.",
             "Mark the order Dispatched and Delivered as it moves.",
-            "Delivery address: Add address (or Edit) sets the recipient that Royal Mail and DHL labels use — name, company, address lines (one per row), city, postcode, country and phone. Use customer address copies the Customer & Communication address in for you to finish. Owners, Admins and Members can change it.",
             "Refresh live status to pull the latest delivery progress from 17TRACK, so you always know where a parcel is."
+          ] },
+          { kind: "sub", text: "Delivery address (the recipient on labels)" },
+          { kind: "bullets", items: [
+            "[Web] Delivery address: Add address (or Edit) sets the recipient that Royal Mail and DHL labels use — name, company, address lines (one per row), city, postcode, country and phone. Use customer address copies the Customer & Communication address in for you to finish. Owners, Admins and Members can change it."
           ] },
           { kind: "sub", text: "Good to know" },
           { kind: "bullets", items: [
@@ -695,10 +698,13 @@ const TREE_EN: GuideNode[] = [
     title: "Calendar",
     blocks: [
       { kind: "para", text: "One calendar for the whole workshop: meetings, tasks with reminders and a list of overdue ones, daily notes, work days and days off, each kept private, shared with the people you choose or shared with the whole workspace. Orders with a due date and note reminders show up on it, and your own Google Calendar or Outlook meetings can sit beside your work." },
-      { kind: "para", text: "The Calendar is on the web app; the Mac, iPhone, iPad and Android apps do not have it yet. Schedule stays what it was: your orders laid out by delivery date." },
+      { kind: "para", text: "The Calendar is on the web app, and in the Mac, iPhone, iPad and Android apps from app version 2.4. Schedule stays what it was: your orders laid out by delivery date." },
       { kind: "sub", text: "Opening the calendar and moving around (Day, Week, Month, Agenda)" },
       { kind: "bullets", items: [
-        "Calendar is in the sidebar of the web app, between Banking and Schedule. Every member has it, on every plan.",
+        "[Web] Calendar is in the sidebar, between Banking and Schedule.",
+        "[Mac] [iPhone/iPad] Calendar is in the sidebar on the Mac and the iPad, and behind the menu button (☰) on the iPhone, between Banking and Schedule (app version 2.4 and later).",
+        "[Android] Calendar is behind the menu button (☰) on a phone and in the sidebar on a tablet, between Banking and Schedule (app version 2.4 and later).",
+        "Every member has it, on every plan.",
         "Today jumps back to today, the ‹ and › arrows move one period, and Go to date picks any day.",
         "Day, Week, Month and Agenda switch the view. Month is the default (Agenda on a narrow screen) and your last choice is remembered on that browser.",
         "Search entries finds an entry by its words, 180 days either side of today unless you change Search from and Search until."
@@ -743,7 +749,7 @@ const TREE_EN: GuideNode[] = [
       { kind: "bullets", items: [
         "It is read-only and one way: NivaDesk never writes to Google or Outlook, and those meetings never become NivaDesk entries, tasks or orders.",
         "Only you see your Google or Outlook meetings — not your team and not the owner. They cover 30 days back to 180 days ahead, and a meeting with a link has Join meeting and Open in Google Calendar or Open in Outlook.",
-        "Connecting Google Calendar and Outlook is open to every member of every workspace, on the web app.",
+        "Connecting Google Calendar and Outlook is open to every member of every workspace — on the web app, and in the Mac, iPhone, iPad and Android apps from app version 2.4 (the same Your other calendars button).",
         "Settings ▸ Integrations ▸ Calendar explains these steps and shows whether Google Calendar and Outlook are connected for you. Microsoft has verified NivaDesk as a publisher.",
         "A work or school Outlook account may need your IT admin to approve NivaDesk first."
       ] },
@@ -1202,6 +1208,7 @@ const TREE_EN: GuideNode[] = [
           { kind: "sub", text: "Connected apps: the Integrations screen" },
           { kind: "para", text: "Everything NivaDesk connects to lives on one screen: Settings → Integrations. Providers are cards, each labelled with its group — Commerce & orders, Banking & accounting, Payments, files & automation or Customer messaging — and the courier tiles have sections of their own, Shipping and Tracking. Each card says what it is doing right now — Connected, Available, Via webhook or Coming soon. A card's status is read from your workspace, so Connected means something has actually arrived. Manage opens that provider's setup, sync, webhook and security detail, including your per-workspace signed delivery URL to paste into the platform; new orders then appear in Orders and Schedule, mapped to your order workflow. The public page nivadesk.app/integrations lists the same integrations under the same names, each marked Live, Limited access or Coming soon." },
           { kind: "para", text: "Shopify connects through the official NivaDesk app on the Shopify App Store, and WooCommerce with one approval at your own store: orders, customers, payment status, fulfilment and refunds then sync on their own, and every fifteen minutes NivaDesk checks the store for anything a webhook missed." },
+          { kind: "para", text: "A workspace can connect more than one WooCommerce store. On the web app, the Orders list then has a source button for each store, with the store's name, so each store's orders can be seen on their own." },
           { kind: "para", text: "Square connects with one sign-in: NivaDesk gets read-only access to your Square account, and sales from Square Point of Sale, Square Online and Square Invoices arrive with their payments and refunds. You choose which locations to import and which sales become orders — by default only sales with a shipment, pickup or delivery, so a quick counter sale stays in finance without filling the production board. Payments and refunds are recorded beside the order they belong to and never turned into orders of their own; one you cannot match appears under Unmatched Square payments." },
           { kind: "para", text: "Payouts and your bank: when Square pays out to your bank, the money reaches the Banking page as one incoming row that already covers sales NivaDesk counted when they happened. NivaDesk matches that row to the payout by amount, currency and arrival date, marks it as a processor payout so it is not counted as revenue again, and shows the payout's gross, fees and net on the row. If two rows could be the payout, the Square payouts card offers Find bank row so the owner picks one; Unlink undoes a match." },
           { kind: "para", text: "Each connection has a Sync health card: for orders, products, inventory and finance it says whether the last sync is fresh, stale or has never happened — or that the provider cannot sync that data at all — with the last successful sync, the last webhook, the retries still pending and the events that gave up." },
@@ -1370,6 +1377,16 @@ const TREE_EN: GuideNode[] = [
             "Banking ▸ Payment Links ▸ New payment link.",
             "Fill in What is this payment for? and the Amount (in your workspace's currency); add Customer name (optional) and Customer email (optional) if you know them, and tick Ask for phone number or Ask for delivery address if you need them. Press Create link.",
             "Copy link and send it. Until it is paid the row says The order opens when the customer pays.; when the customer pays, NivaDesk opens the order with the details they enter, and the row links to it."
+          ] },
+          { kind: "sub", text: "Attach a payment link to an order" },
+          { kind: "steps", items: [
+            "[Web] Banking ▸ Payment Links ▸ New payment link: type What is this payment for? (the only name your customer sees) and pick the order under Add to an order (optional).",
+            "[Web] Choose Deposit, Instalment or Remaining balance. The order's Still to pay and Not yet asked for are shown, an empty Amount is filled in with what you can still ask for, and the customer fields go away — the order already has them.",
+            "[Web] Press Create link, then Copy link and send it yourself. When the customer pays, the payment is added to that order and what it still owes goes down."
+          ] },
+          { kind: "bullets", items: [
+            "Your customer sees only the name you typed, on the payment page and on Stripe's page — never the order or its number. A link attached to an order cannot ask for more than the order still owes.",
+            "[Web] Banking ▸ Payment Links shows the name you typed under the order's row. Leave Add to an order on No order (a new one opens when it is paid) for a link without an order, as above."
           ] },
           { kind: "sub", text: "Refunding a payment" },
           { kind: "bullets", items: [
@@ -1849,6 +1866,10 @@ const TREE_EN: GuideNode[] = [
         "It cannot see your workspace. For questions about your own data — which orders are late, how much you made — it points you to the NivaDesk ChatGPT app.",
         "When the guide does not cover a question, Send this to NivaDesk Support turns it into a ticket with the answer it gave attached; See your tickets shows the reply.",
         "Starter, Pro and Team can ask 40 questions a day."
+      ] },
+      { kind: "sub", text: "Your conversation (kept for 7 days)" },
+      { kind: "bullets", items: [
+        "[Web] Your conversation stays in this browser for 7 days, so it is still there after a reload or on another page. New conversation clears it; signing out deletes it."
       ] }
     ]
   },
@@ -2431,8 +2452,11 @@ const TREE_TR: GuideNode[] = [
           { kind: "bullets", items: [
             "Courier'i ayarlayın (Auto Detect, Royal Mail, DHL, FedEx veya UPS) ve Tracking numarasını girin.",
             "Sipariş ilerledikçe Dispatched ve Delivered olarak işaretleyin.",
-            "Teslimat adresi: Adres ekle (ya da Düzenle), Royal Mail ve DHL etiketlerinin kullandığı alıcıyı ayarlar — ad, şirket, adres satırları (her satıra bir), şehir, posta kodu, ülke ve telefon. Müşteri adresini kullan, Müşteri ve İletişim kartındaki adresi tamamlamanız için içeri kopyalar. Sahip, Admin ve Member değiştirebilir.",
             "Refresh live status ile 17TRACK'ten en güncel teslimat ilerlemesini çekin; böylece kargonun nerede olduğunu her zaman bilin."
+          ] },
+          { kind: "sub", text: "Teslimat adresi (etiketteki alıcı)" },
+          { kind: "bullets", items: [
+            "[Web] Teslimat adresi: Adres ekle (ya da Düzenle), Royal Mail ve DHL etiketlerinin kullandığı alıcıyı ayarlar — ad, şirket, adres satırları (her satıra bir), şehir, posta kodu, ülke ve telefon. Müşteri adresini kullan, Müşteri ve İletişim kartındaki adresi tamamlamanız için içeri kopyalar. Sahip, Admin ve Member değiştirebilir."
           ] },
           { kind: "sub", text: "Bilmekte fayda var" },
           { kind: "bullets", items: [
@@ -2531,10 +2555,13 @@ const TREE_TR: GuideNode[] = [
     title: "Takvim",
     blocks: [
       { kind: "para", text: "Tüm atölye için tek takvim: toplantılar, hatırlatıcılı görevler ve gecikmiş görevlerin listesi, günlük notlar, çalışma günleri ve izin günleri; her biri yalnız size özel kalabilir, seçtiğiniz kişilerle ya da tüm çalışma alanıyla paylaşılabilir. Teslim tarihi olan siparişler ve not hatırlatmaları da takvimde görünür; kendi Google Takvim ya da Outlook toplantılarınız da işinizin yanında durabilir." },
-      { kind: "para", text: "Takvim web uygulamasındadır; Mac, iPhone, iPad ve Android uygulamalarında henüz yoktur. Planlama ekranı (Schedule) olduğu gibi kalır: siparişlerinizin teslim tarihine göre dizilişi." },
+      { kind: "para", text: "Takvim web uygulamasında ve uygulama sürümü 2.4'ten itibaren Mac, iPhone, iPad ve Android uygulamalarındadır. Planlama ekranı (Schedule) olduğu gibi kalır: siparişlerinizin teslim tarihine göre dizilişi." },
       { kind: "sub", text: "Takvimi açmak ve içinde gezinmek (Gün, Hafta, Ay, Ajanda)" },
       { kind: "bullets", items: [
-        "Takvim, web uygulamasının kenar çubuğunda Banka ile Planlama arasındadır. Her plandaki her üyede vardır.",
+        "[Web] Takvim kenar çubuğunda, Banka ile Planlama arasındadır.",
+        "[Mac] [iPhone/iPad] Takvim Mac'te ve iPad'de kenar çubuğunda, iPhone'da menü düğmesinin (☰) arkasında, Banka ile Planlama arasındadır (uygulama sürümü 2.4 ve sonrası).",
+        "[Android] Takvim telefonda menü düğmesinin (☰) arkasında, tablette kenar çubuğunda, Banka ile Planlama arasındadır (uygulama sürümü 2.4 ve sonrası).",
+        "Her plandaki her üyede vardır.",
         "Bugün sizi bugüne döndürür, ‹ ve › okları bir dönem ileri ya da geri gider, Tarihe git ise istediğiniz günü açar.",
         "Gün, Hafta, Ay ve Ajanda görünümü değiştirir. Varsayılan Ay'dır (dar ekranda Ajanda) ve son seçiminiz o tarayıcıda hatırlanır.",
         "Kayıtlarda ara bir kaydı içindeki kelimelerle bulur; Şu tarihten ara ve Şu tarihe kadar alanlarını değiştirmezseniz bugünün 180 gün öncesine ve sonrasına bakar."
@@ -2579,7 +2606,7 @@ const TREE_TR: GuideNode[] = [
       { kind: "bullets", items: [
         "Salt okunurdur ve tek yönlüdür: NivaDesk Google'a ya da Outlook'a asla yazmaz; oradaki toplantılar asla NivaDesk kaydına, görevine ya da siparişine dönüşmez.",
         "Google ya da Outlook toplantılarınızı yalnız siz görürsünüz — ekibiniz de, sahip de görmez. 30 gün öncesinden 180 gün sonrasına kadar gelirler; bağlantısı olan bir toplantıda Toplantıya katıl ile Google Takvim'de aç ya da Outlook'ta aç bulunur.",
-        "Google Takvim ve Outlook bağlama, web uygulamasında her çalışma alanının her üyesine açıktır.",
+        "Google Takvim ve Outlook bağlama her çalışma alanının her üyesine açıktır — web uygulamasında ve uygulama sürümü 2.4'ten itibaren Mac, iPhone, iPad ve Android uygulamalarında (aynı Diğer takvimleriniz düğmesi).",
         "Ayarlar ▸ Entegrasyonlar ▸ Takvim bu adımları anlatır ve Google Takvim ile Outlook'un sizin için bağlı olup olmadığını gösterir. Microsoft, NivaDesk'i doğrulanmış yayıncı olarak onayladı.",
         "İş ya da okul Outlook hesabında BT yöneticinizin önce NivaDesk'i onaylaması gerekebilir."
       ] },
@@ -3038,6 +3065,7 @@ const TREE_TR: GuideNode[] = [
           { kind: "sub", text: "Bağlı uygulamalar: Integrations ekranı" },
           { kind: "para", text: "NivaDesk'in bağlandığı her şey tek ekranda: Settings → Integrations. Sağlayıcılar kart halindedir ve her kartın üstünde grubu yazar — Commerce & orders, Banking & accounting, Payments, files & automation ya da Customer messaging; kargo kartlarının kendi bölümleri vardır: Shipping ve Tracking. Her kart şu an ne durumda olduğunu söyler: Connected, Available, Via webhook veya Coming soon. Durum çalışma alanından okunur, yani Connected gerçekten bir şeyin geldiği anlamına gelir. Manage o sağlayıcının kurulum, senkronizasyon, webhook ve güvenlik ayrıntısını açar; platforma yapıştıracağın çalışma alanına özel imzalı delivery URL'i de oradadır. Yeni siparişler sipariş akışına eşlenerek Orders ve Schedule'da görünür. Herkese açık nivadesk.app/integrations sayfası aynı entegrasyonları aynı adlarla listeler; her biri Live, Limited access ya da Coming soon olarak işaretlidir." },
           { kind: "para", text: "Shopify, Shopify App Store'daki resmi NivaDesk uygulamasıyla; WooCommerce ise kendi mağazanda tek onayla bağlanır: siparişler, müşteriler, ödeme durumu, kargo ve iadeler kendiliğinden senkron olur; NivaDesk on beş dakikada bir, bir webhook'un kaçırdığı bir şey var mı diye mağazaya bakar." },
+          { kind: "para", text: "Bir çalışma alanı birden fazla WooCommerce mağazası bağlayabilir. Web uygulamasında Siparişler listesinde o zaman her mağazanın kendi adıyla bir kaynak düğmesi olur; her mağazanın siparişleri ayrı görülebilir." },
           { kind: "para", text: "Square tek girişle bağlanır: NivaDesk, Square hesabına salt okunur erişim alır; Square Point of Sale, Square Online ve Square Invoices satışları ödemeleri ve iadeleriyle birlikte gelir. Hangi konumların içe aktarılacağını ve hangi satışların sipariş olacağını sen seçersin — varsayılan olarak yalnızca kargo, teslim alma veya teslimat içeren satışlar sipariş olur; hızlı bir tezgâh satışı üretim panosunu doldurmadan finansta kalır. Ödemeler ve iadeler ait oldukları siparişin yanına kaydedilir, kendi başlarına asla siparişe dönüşmez; eşleştirilemeyen bir ödeme Eşleşmemiş Square ödemeleri altında görünür." },
           { kind: "para", text: "Ödeme aktarımları ve bankan: Square bankana ödeme yaptığında para, Banking sayfasına NivaDesk'in zaten saydığı satışları kapsayan tek bir gelen satır olarak düşer. NivaDesk o satırı tutar, para birimi ve varış tarihine göre aktarımla eşleştirir, ciro olarak yeniden sayılmasın diye işlemci ödemesi olarak işaretler ve aktarımın brüt, ücret ve net tutarını satırda gösterir. İki satır da aktarım olabiliyorsa Square payouts kartındaki Find bank row ile sahibi birini seçer; Unlink eşleşmeyi geri alır." },
           { kind: "para", text: "Her bağlantının bir Sync health kartı var: siparişler, ürünler, envanter ve finans için son senkronun güncel mi, bayat mı yoksa hiç olmamış mı olduğunu — ya da sağlayıcının o veriyi hiç senkronlayamadığını — son başarılı senkron, son webhook, hâlâ bekleyen yeniden denemeler ve vazgeçilen olaylarla birlikte söyler." },
@@ -3206,6 +3234,16 @@ const TREE_TR: GuideNode[] = [
             "Banka ▸ Ödeme Bağlantıları ▸ Yeni ödeme bağlantısı.",
             "Bu ödeme ne için? ve Tutar'ı doldurun (çalışma alanınızın para biriminde); biliyorsanız Müşteri adı (isteğe bağlı) ve Müşteri e-postası (isteğe bağlı) ekleyin, gerekiyorsa Telefon numarası iste ya da Teslimat adresi iste'yi işaretleyin. Bağlantı oluştur'a basın.",
             "Bağlantıyı kopyalayıp gönderin. Ödenene kadar satırda Sipariş, müşteri ödediğinde açılır. yazar; müşteri ödeyince NivaDesk siparişi müşterinin girdiği bilgilerle açar ve satır siparişe bağlanır."
+          ] },
+          { kind: "sub", text: "Ödeme bağlantısını bir siparişe eklemek" },
+          { kind: "steps", items: [
+            "[Web] Banka ▸ Ödeme Bağlantıları ▸ Yeni ödeme bağlantısı: Bu ödeme ne için? alanına adı yazın (müşterinizin gördüğü tek ad) ve siparişi Bir siparişe ekle (isteğe bağlı) listesinden seçin.",
+            "[Web] Kapora, Taksit ya da Kalan tutar'ı seçin. Siparişin Kalan tutar ve Henüz istenmedi rakamları görünür, boş Tutar en fazla isteyebileceğiniz miktarla dolar ve müşteri alanları kalkar — sipariş onları zaten biliyor.",
+            "[Web] Bağlantı oluştur'a basın, sonra Bağlantıyı kopyala ile kendiniz gönderin. Müşteri ödeyince ödeme o siparişe eklenir ve siparişin kalan borcu azalır."
+          ] },
+          { kind: "bullets", items: [
+            "Müşteriniz ödeme sayfasında ve Stripe'ın sayfasında yalnız yazdığınız adı görür — siparişi ya da numarasını asla görmez. Siparişe bağlı bir bağlantı, siparişin hâlâ borçlu olduğundan fazlasını isteyemez.",
+            "[Web] Banka ▸ Ödeme Bağlantıları, yazdığınız adı siparişin satırının altında gösterir. Siparişsiz bir bağlantı için Bir siparişe ekle'yi Sipariş yok (ödenince yeni sipariş açılır) seçeneğinde bırakın (yukarıdaki gibi)."
           ] },
           { kind: "sub", text: "Ödemeyi iade etmek (para iadesi)" },
           { kind: "bullets", items: [
@@ -3677,6 +3715,10 @@ const TREE_TR: GuideNode[] = [
         "Çalışma alanınızı göremez. Kendi verilerinizle ilgili sorular için — hangi siparişler gecikti, ne kadar kazandınız — sizi NivaDesk ChatGPT uygulamasına yönlendirir.",
         "Kılavuz bir soruyu kapsamıyorsa Bunu NivaDesk Destek'e gönder, soruyu verdiği yanıtla birlikte bir destek talebine çevirir; Taleplerini gör yanıtı gösterir.",
         "Starter, Pro ve Team günde 40 soru sorabilir."
+      ] },
+      { kind: "sub", text: "Konuşmanız (7 gün saklanır)" },
+      { kind: "bullets", items: [
+        "[Web] Konuşmanız bu tarayıcıda 7 gün kalır; sayfa yenilenince ya da başka sayfaya geçince kaybolmaz. Yeni sohbet temizler, çıkış yapınca silinir."
       ] }
     ]
   },
