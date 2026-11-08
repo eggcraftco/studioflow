@@ -17,6 +17,12 @@ export async function getWooProductLinks(companyId: string, input: { inventoryIt
   return (await call<Record<string, unknown>, WooLinksAnswer>("getWooProductLinks")({ companyId, ...input })).data;
 }
 
+/** Point a linked product at another card, or unlink it (`inventoryItemId` ""). Writes NivaDesk only, never the store
+ *  (envanter-test, 8 Nov 2026: the item panel's "On your website" box; the server side has been live since 22 Oct). */
+export async function changeWooProductLink(companyId: string, linkId: string, inventoryItemId: string) {
+  return (await call<{ companyId: string; linkId: string; inventoryItemId: string }, { ok: boolean; reason?: string; changed?: boolean }>("changeWooProductLink")({ companyId, linkId, inventoryItemId })).data;
+}
+
 /** Read the store's products and match them. Writes nothing in the store; the rows are kept a day for the import. */
 export async function previewWooProducts(companyId: string, connectionId: string) {
   return (await call<{ companyId: string; connectionId: string }, Record<string, unknown>>("previewWooProducts")({ companyId, connectionId })).data;

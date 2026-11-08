@@ -123,7 +123,9 @@ ok("the nav entry is gated on the server's answer", /getWooProductLinks\(workspa
 ok("?panel=woo opens it", /get\("panel"\) === "woo"\) setTab\("woo"\)/.test(content));
 const client = read("lib/studioflow/wooInventory.ts");
 const callables = [...client.matchAll(/\("([A-Za-z]+)"\)\(/g)].map((m) => m[1]).sort();
-expect("only the read/import callables are called", callables, ["getWooProductLinks", "importWooProducts", "previewWooProducts"]);
+// envanter-test (8 Nov 2026): the item panel's "On your website" box also calls changeWooProductLink (Change card /
+// Unlink) — a NivaDesk-only write, live on the server since 22 Oct; still no call that writes to the store.
+expect("only the read/import/link callables are called", callables, ["changeWooProductLink", "getWooProductLinks", "importWooProducts", "previewWooProducts"]);
 // 25 Oct fix: one store's list at a time, and a way in from Settings ▸ WooCommerce.
 ok("changing the store empties the list, ticks and decisions", /onChange=\{\(event\) => chooseStore\(event\.target\.value\)\}/.test(panel) && /storeRef\.current = next;\s*setConnectionId\(next\);\s*setAnswer\(null\);[^\n]*setChosen\(\[\]\); setDecisions\(\{\}\)/.test(panel));
 ok("a read that answers after the store changed is dropped", (panel.match(/if \(storeRef\.current !== forStore\) return;/g) || []).length === 2);

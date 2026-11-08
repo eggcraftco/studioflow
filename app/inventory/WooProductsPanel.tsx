@@ -30,6 +30,9 @@ type Props = {
   onStockChanged?: () => void | Promise<void>;
   /** Opens a card in the item list (27 Oct: the row that was just brought in says which card, and opens it). */
   onOpenCard?: (inventoryItemId: string) => void;
+  /** envanter-test (8 Nov 2026): opens a new card's edit form at its cost ("Add what you paid"); given only to people
+   *  who may see and change the cost. An imported card has no cost, so it adds nothing to Total Inventory Value. */
+  onEditCard?: (inventoryItemId: string) => void;
 };
 
 function priceText(price: { value: string; currency: string } | null, locale: string): string {
@@ -60,7 +63,7 @@ async function picturesAfterImport(workspace: WorkspaceContext, ids: string[], l
   }
 }
 
-export function WooProductsPanel({ workspace, language, canEdit, items, categoryOptions, defaultCategory = "", onStockChanged, onOpenCard }: Props) {
+export function WooProductsPanel({ workspace, language, canEdit, items, categoryOptions, defaultCategory = "", onStockChanged, onOpenCard, onEditCard }: Props) {
   const t = useCallback((sentence: string) => wooInventoryT(sentence, language), [language]);
   const locale = studioLocaleTag(language);
   const companyId = workspace.id.trim();
@@ -86,7 +89,10 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
     storeRef.current = next;
     setConnectionId(next);
     setAnswer(null); setRefusal(""); setError(""); setSummary(""); setResults({}); setChosen([]); setDecisions({}); setSearch({}); setFilter("active");
-  }, []);
+    // envanter-test (8 Nov 2026): the panel came back to the first store every time it opened (the owner picked
+    // TickToon twice in one session). The last store chosen is remembered in this browser for this workspace.
+    try { if (companyId && next) window.localStorage.setItem(`nivadesk.wooProducts.store.${companyId}`, next); } catch { /* storage refused: no memory */ }
+  }, [companyId]);
 
   const load = useCallback(async () => {
     if (!companyId) return;
@@ -97,7 +103,10 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
       const connected = now.connections.filter((c) => c.status === "connected");
       // ?panel=woo&store=<connection> (Settings ▸ WooCommerce's link) opens that store; otherwise the first connected one.
       const asked = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("store") || "" : "";
-      const first = connected.find((c) => c.connectionId === asked) || connected[0];
+      let remembered = "";
+      try { remembered = window.localStorage.getItem(`nivadesk.wooProducts.store.${companyId}`) || ""; } catch { remembered = ""; }
+      // The link's store first, then the one chosen last in this browser, then the first connected one.
+      const first = connected.find((c) => c.connectionId === asked) || connected.find((c) => c.connectionId === remembered) || connected[0];
       if (!storeRef.current && first) { storeRef.current = first.connectionId; setConnectionId(first.connectionId); }
     } catch {
       setError(t("This could not be done."));
@@ -327,6 +336,7 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
                           {done.result === "created" && done.category ? <> · {t(done.category)}</> : null}
                           {done.photo === "copied" ? <> · <span data-testid="woo-photo-copied">{t("Picture copied from the store")}</span></> : null}
                           {done.photo === "not_copied" ? <> · <span data-testid="woo-photo-not-copied" data-reason={done.photoReason}>{t("The store's picture was not copied")}</span></> : null}
+                          {done.result === "created" && done.inventoryItemId && onEditCard ? <> · <button type="button" className="inventory-link" data-testid="woo-add-cost" onClick={() => onEditCard(done.inventoryItemId)}>{t("Add what you paid")}</button></> : null}
                         </p>
                       ) : null}
                     </li>

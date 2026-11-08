@@ -16,6 +16,7 @@ import { copyListingPictures, type InventoryItem } from "@/lib/studioflow/invent
 import { inventoryListingsText } from "@/lib/studioflow/inventoryListings";
 import { studioLocaleTag } from "@/lib/studioflow/language";
 import { getEbayListingLinks, previewEbayListings, importEbayListings, ebayInventoryT, type EbayLinksAnswer } from "@/lib/studioflow/ebayInventory";
+import { wooInventoryT } from "@/lib/studioflow/wooInventory";
 import {
   canChoose, countsOf, decisionProblem, decisionsToSend, fill, filterRows, listingRowsOf, reasonSentence, rowStateSentence, startingDecision,
   type EbayDecision, type EbayImportRow, type EbayListingRow
@@ -28,6 +29,8 @@ type Props = {
   items: InventoryItem[];
   categoryOptions: string[];
   onStockChanged?: () => void | Promise<void>;
+  /** envanter-test (8 Nov 2026): opens a new card's edit form at its cost ("Add what you paid"); cost viewers only. */
+  onEditCard?: (inventoryItemId: string) => void;
 };
 
 function priceText(price: { value: string; currency: string } | null, locale: string): string {
@@ -57,7 +60,7 @@ async function picturesAfterImport(workspace: WorkspaceContext, ids: string[], l
   }
 }
 
-export function EbayListingsPanel({ workspace, language, canEdit, items, categoryOptions, onStockChanged }: Props) {
+export function EbayListingsPanel({ workspace, language, canEdit, items, categoryOptions, onStockChanged, onEditCard }: Props) {
   const t = useCallback((sentence: string) => ebayInventoryT(sentence, language), [language]);
   const locale = studioLocaleTag(language);
   const companyId = workspace.id.trim();
@@ -272,6 +275,7 @@ export function EbayListingsPanel({ workspace, language, canEdit, items, categor
                             : done.result === "linked" ? fill(t("Linked to {number}"), { number: done.number })
                               : done.result === "already_linked" ? t("Already linked")
                                 : t(reasonSentence(done.reason))}
+                          {done.result === "created" && done.inventoryItemId && onEditCard ? <> · <button type="button" className="inventory-link" data-testid="ebay-add-cost" onClick={() => onEditCard(done.inventoryItemId)}>{wooInventoryT("Add what you paid", language)}</button></> : null}
                         </p>
                       ) : null}
                     </li>

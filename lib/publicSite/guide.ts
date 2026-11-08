@@ -862,6 +862,7 @@ const TREE_EN: GuideNode[] = [
     title: "Inventory",
     blocks: [
       { kind: "para", text: "Your stock room inside NivaDesk: the watches, dials, parts and consumables your business owns, what they cost, where they stand and what they are promised to. A customer's own property can be held and tracked too — it is marked as theirs and never counted as your asset." },
+      { kind: "para", text: "Products from your WooCommerce website or eBay can be brought in as stock cards with their picture, SKU and description \u2014 NivaDesk only reads your listings and never changes them. Total Inventory Value counts what you paid; the listing prices are shown beside it as Listed value, and Needs details lists the items still missing a cost, a photo or a category." },
       { kind: "sub", text: "Items" },
       { kind: "bullets", items: [
         "Two kinds of item: a Unique item is one physical object with its own serial and condition (a watch, a dial); a Quantity item is counted stock with a unit (screws, leather, lacquer).",
@@ -874,6 +875,26 @@ const TREE_EN: GuideNode[] = [
         "Add Item creates one item by hand — pick Unique or Quantity first, the form adapts.",
         "Import opening stock pastes a whole spreadsheet: columns are matched automatically, every row is previewed before anything is created, and rows that match stock you already have (by SKU or serial) are flagged so you choose Skip / Update existing / Create anyway.",
         "Recording a Purchase creates its items for you, held as Incoming until the goods arrive."
+      ] },
+      { kind: "sub", text: "Bringing in products from your website or eBay" },
+      { kind: "steps", items: [
+        "Open Inventory ▸ WooCommerce products (or eBay listings), choose the store and press Read my products. NivaDesk only reads: nothing is written to your website or to eBay — no stock figure, no price.",
+        "Tick a product, then choose Link to a card (a card you already have, found by its SKU) or Create a new card. For one physical piece choose One-off item and tick 'This one item is here, on my shelf'; the category is suggested from the store's own category.",
+        "Press Bring in selected. The new card gets the store's picture, SKU, brand and description. Its cost stays empty, because the store's price is a sale price, not what you paid.",
+        "Press Add what you paid next to 'Created INV-…' to type the purchase price straight away. Until you do, the card adds nothing to Total Inventory Value."
+      ] },
+      { kind: "sub", text: "Total Inventory Value, Listed value and Needs details" },
+      { kind: "bullets", items: [
+        "Total Inventory Value is what the stock on your shelf cost you: purchase price plus extra costs, times the count. Customer property and sold, used, archived or incoming items are left out. A card without a cost adds nothing — the line under the tiles says how many, and Show them lists them.",
+        "Listed value, beside it, is the same shelf at your listing prices: per item the lowest active eBay or website price. It is a sale price, so it is never added to Total Inventory Value.",
+        "Needs details lists the items on the shelf missing a cost, a photo or a category. Bring in pictures from listings copies each listing's picture onto cards that have none.",
+        "The apps on iPhone, iPad, Mac and Android show the same: the Listed value tile, the Needs details filter, and each item's channel and listing price on its row."
+      ] },
+      { kind: "sub", text: "A card's website or eBay listing" },
+      { kind: "bullets", items: [
+        "Open the item: On your website (or On eBay) shows the store, the SKU, the store's own stock figure, its sale price and when it was last read, with Open in the store.",
+        "Change card points the listing at another card; Unlink stops new orders for it from reserving stock on this card. Orders that already took stock keep it.",
+        "One-off items have a SKU box too, so a watch you added by hand can be matched to its store listing by SKU. The Description box holds what the store wrote (size, strap, movement) and can be corrected."
       ] },
       { kind: "sub", text: "Purchases" },
       { kind: "bullets", items: [
@@ -2669,6 +2690,7 @@ const TREE_TR: GuideNode[] = [
     title: "Envanter",
     blocks: [
       { kind: "para", text: "NivaDesk içindeki stok odanız: işletmenizin sahip olduğu saatler, kadranlar, parçalar ve sarf malzemeleri — maliyetleri, nerede durdukları ve neye söz verildikleri. Müşterinin kendi malı da tutulup izlenebilir; onun olarak işaretlenir ve asla sizin varlığınız sayılmaz." },
+      { kind: "para", text: "WooCommerce sitenizdeki ya da eBay'deki \u00fcr\u00fcnler resmi, SKU'su ve a\u00e7\u0131klamas\u0131yla stok kart\u0131 olarak i\u00e7e al\u0131nabilir \u2014 NivaDesk ilanlar\u0131n\u0131z\u0131 yaln\u0131z okur, hi\u00e7bir zaman de\u011fi\u015ftirmez. Toplam Envanter De\u011feri \u00f6dedi\u011finiz tutar\u0131 sayar; ilan fiyatlar\u0131 yan\u0131nda \u0130lan de\u011feri olarak g\u00f6sterilir, Eksik bilgi de maliyeti, foto\u011fraf\u0131 ya da kategorisi h\u00e2l\u00e2 eksik olan \u00fcr\u00fcnleri listeler." },
       { kind: "sub", text: "Ürünler" },
       { kind: "bullets", items: [
         "İki tür ürün var: Benzersiz ürün, kendi serisi ve durumu olan tek bir fiziksel nesnedir (bir saat, bir kadran); Adetli ürün, birimiyle sayılan stoktur (vida, deri, lake).",
@@ -2681,6 +2703,26 @@ const TREE_TR: GuideNode[] = [
         "Ürün Ekle tek ürünü elle oluşturur — önce Benzersiz mi Adetli mi seçin, form uyum sağlar.",
         "Açılış stoğunu içe aktar bütün bir tabloyu yapıştırır: sütunlar otomatik eşlenir, hiçbir şey oluşturulmadan her satır önizlenir ve elinizdeki stokla (SKU veya seriyle) eşleşen satırlar işaretlenir — Atla / Mevcutları güncelle / Yine de oluştur sizin seçiminizdir.",
         "Satın alma kaydı ürünlerini sizin için oluşturur; mal gelene kadar Geliyor statüsünde tutulur."
+      ] },
+      { kind: "sub", text: "Sitenizden ya da eBay'den ürün getirme" },
+      { kind: "steps", items: [
+        "Envanter ▸ WooCommerce ürünleri (ya da eBay ilanları) bölümünü açın, mağazayı seçin ve Ürünlerimi oku'ya basın. NivaDesk yalnız okur: sitenize ya da eBay'e hiçbir şey yazılmaz — ne stok sayısı ne fiyat.",
+        "Bir ürünü işaretleyin, sonra Bir karta bağla (SKU'suyla bulunan, zaten var olan bir kart) ya da Yeni kart oluştur'u seçin. Tek fiziksel parça için Tekil ürün'ü seçip 'Bu tek ürün burada, rafımda' kutusunu işaretleyin; kategori mağazanın kendi kategorisinden önerilir.",
+        "Seçilenleri içe al'a basın. Yeni karta mağazanın resmi, SKU'su, markası ve açıklaması gelir. Maliyeti boş kalır, çünkü mağazanın fiyatı satış fiyatıdır, ödediğiniz tutar değil.",
+        "'INV-… oluşturuldu' yanındaki Ödediğinizi girin ile alış fiyatını hemen yazın. Yazana kadar kart Toplam Envanter Değeri'ne hiçbir şey eklemez."
+      ] },
+      { kind: "sub", text: "Toplam Envanter Değeri, İlan değeri ve Eksik bilgi" },
+      { kind: "bullets", items: [
+        "Toplam Envanter Değeri raftaki stoğun size maliyetidir: alış fiyatı artı ek maliyetler, adetle çarpılmış. Müşteri malı ile satılmış, kullanılmış, arşivlenmiş ya da yolda olan ürünler sayılmaz. Maliyeti olmayan kart hiçbir şey eklemez — kutuların altındaki satır kaç tane olduğunu söyler, Göster onları listeler.",
+        "Yanındaki İlan değeri aynı rafın ilan fiyatlarıyla değeridir: her ürün için en düşük aktif eBay ya da site fiyatı. Bu bir satış fiyatıdır, bu yüzden Toplam Envanter Değeri'ne hiçbir zaman eklenmez.",
+        "Eksik bilgi, raftaki maliyeti, fotoğrafı ya da kategorisi eksik ürünleri listeler. Resimleri ilanlardan getir her ilanın resmini resmi olmayan karta kopyalar.",
+        "iPhone, iPad, Mac ve Android uygulamaları da aynısını gösterir: İlan değeri kutusu, Eksik bilgi süzgeci ve her ürünün satırında kanalı ile ilan fiyatı."
+      ] },
+      { kind: "sub", text: "Kartın site ya da eBay ilanı" },
+      { kind: "bullets", items: [
+        "Ürünü açın: Sitenizde (ya da eBay'de) bölümü mağazayı, SKU'yu, mağazanın kendi stok sayısını, satış fiyatını ve son okunduğu zamanı gösterir; Mağazada aç ile ürün sayfasına gidersiniz.",
+        "Kartı değiştir ilanı başka bir karta yönlendirir; Bağlantıyı kaldır, o ürünün yeni siparişlerinin bu karttan stok ayırmasını durdurur. Stok almış siparişler onu korur.",
+        "Tekil ürünlerde de SKU kutusu var; böylece elle eklediğiniz bir saat mağaza ilanıyla SKU'su üzerinden eşleşebilir. Açıklama kutusu mağazanın yazdıklarını (ölçü, kayış, mekanizma) tutar ve düzeltilebilir."
       ] },
       { kind: "sub", text: "Satın almalar" },
       { kind: "bullets", items: [
