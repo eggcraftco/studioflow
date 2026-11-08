@@ -116,8 +116,11 @@ if (historyFile) {
   ok("no storage at all: nothing kept, nothing thrown", h.loadAppHelpTurns(key, NOW, null).length === 0 && h.saveAppHelpTurns(key, [turn(1, NOW)], NOW, null).length === 1 && h.canKeepAppHelpTurns(null) === false);
 
   const many = new MemoryStorage();
-  h.saveAppHelpTurns("a".repeat(32), [turn(1, NOW)], Date.now(), many);
-  h.saveAppHelpTurns("b".repeat(32), [turn(1, NOW)], Date.now(), many);
+  // Saved "now" at the fixture's NOW, not the wall clock: a turn dated 1 Nov 2026
+  // falls out of the 7-day window once the calendar passes 8 Nov, and this line
+  // then fails for a reason that has nothing to do with the code under test.
+  h.saveAppHelpTurns("a".repeat(32), [turn(1, NOW)], NOW, many);
+  h.saveAppHelpTurns("b".repeat(32), [turn(1, NOW)], NOW, many);
   many.setItem("theme", "dark");
   ok("every kept conversation is found for sign-out", h.appHelpHistoryStorageKeys(many).length === 2 && !h.appHelpHistoryStorageKeys(many).includes("theme"));
 

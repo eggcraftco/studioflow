@@ -7542,15 +7542,15 @@ export function OrderDetailContent({
               <div className="app-summary-top">
                 <div className="app-summary-value">
                   <span>{t("Order Value")}</span>
+                  <strong>{canSeeFinance ? orderValueMoney(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers) : t("Hidden")}</strong>
                   {/* A zero here is where a new order's price is looked for
                       first (UX test, 8 Nov 2026); the way to set it is a card
                       away, so the link says which. */}
                   {canSeeFinance && canInlineEditFullDetails && order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order) <= 0 ? (
-                    <button type="button" className="link-button app-summary-set-price" onClick={goToInvoiceItems}>
+                    <button type="button" className="app-summary-set-price" onClick={goToInvoiceItems}>
                       {t("Set the price in Invoice Items")}
                     </button>
                   ) : null}
-                  <strong>{canSeeFinance ? orderValueMoney(order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order), hideNumbers) : t("Hidden")}</strong>
                 </div>
                 <div className="app-summary-status-list">
                   <div className="app-summary-status-row">
