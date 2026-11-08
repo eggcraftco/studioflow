@@ -38,6 +38,8 @@ import { studioT } from "@/lib/studioflow/language";
 import { studioCountLabel } from "@/lib/studioflow/countLabel";
 import { listenToKeepNotes, type StudioKeepNote } from "@/lib/studioflow/notes";
 import { resyncIntegrationCustomerFromWeb } from "@/lib/studioflow/customers";
+import { maskFileUrl } from "@/lib/studioflow/fileMask";
+import { openOutcomeProblem, openStoredFile } from "@/lib/studioflow/storageFileUrl";
 
 type SortMode = "recent" | "orders" | "lastOrder" | "highestValue" | "outstanding" | "alphabetical";
 type FormMode = "create" | "edit" | null;
@@ -842,6 +844,7 @@ export default function CustomersPage() {
           {selectedCustomer ? (
             <CustomerDetail
               shopifyShop={workspace?.shopifyLinkedShop ?? ""}
+              fileLinkHost={workspace?.fileLinkHost ?? ""}
               customer={selectedCustomer}
               canSeeFinance={canSeeFinance}
               canManageCustomers={canManageCustomers}
@@ -1033,6 +1036,7 @@ function CustomerDetail({
   duplicate,
   linkedNotes,
   shopifyShop,
+  fileLinkHost,
   onResync,
   onReviewMerge,
   onSaveDetails,
@@ -1048,6 +1052,8 @@ function CustomerDetail({
   linkedNotes: StudioKeepNote[];
   /** The connected shop domain, so a Shopify record can be opened where it lives. */
   shopifyShop: string;
+  /** Where file links are written (workspace.fileLinkHost): files open there, never on firebasestorage. */
+  fileLinkHost: string;
   onResync: () => void;
   onReviewMerge: () => void;
   onSaveDetails: (patch: CustomerUpdatePatch, fieldLabel: string) => Promise<void>;
@@ -1059,6 +1065,7 @@ function CustomerDetail({
   const uploadingPhoto = savingInlineField === "Customer photo";
 
   const [activeTab, setActiveTab] = useState<"Orders" | "Files" | "Notes" | "Activity">("Orders");
+  const [fileProblem, setFileProblem] = useState("");
   const [activityLimit, setActivityLimit] = useState(30);
   const [segmentInput, setSegmentInput] = useState("");
 
@@ -1394,8 +1401,21 @@ function CustomerDetail({
           ) : activeTab === "Files" ? (
             allFiles.length === 0 ? <CustomerTabEmpty text={t("No files yet.")} /> : (
               <div className="customer-files-list">
+                {fileProblem ? <p className="layout-error" role="alert">{t(fileProblem)}</p> : null}
+                {/* 8 Nov 2026: opened like the Files page — through Storage when the file has a path (audit #19 A1), on
+                    the workspace's file address (openStoredFile), never the raw firebasestorage URL. */}
                 {allFiles.map(file => (
-                  <a key={file.id + file.downloadUrl} href={file.downloadUrl || undefined} target="_blank" rel="noreferrer" className="customer-file-row">
+                  <a
+                    key={file.id + file.downloadUrl}
+                    href={file.storagePath ? "#" : maskFileUrl(file.downloadUrl, fileLinkHost) || undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="customer-file-row"
+                    onClick={event => {
+                      event.preventDefault();
+                      void openStoredFile({ storagePath: file.storagePath, downloadURL: file.downloadUrl }, fileLinkHost).then(status => setFileProblem(openOutcomeProblem(status)));
+                    }}
+                  >
                     <span className="customer-file-icon">📄</span>
                     <span className="customer-file-main">
                       <strong>{file.fileName}</strong>

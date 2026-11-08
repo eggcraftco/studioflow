@@ -38,6 +38,7 @@ import {
 } from "@/lib/studioflow/inventory";
 import { loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { libraryFileUrl, listLibraryFiles, type LibraryFile } from "@/lib/studioflow/filesLibrary";
+import { maskFileUrl, openSharedFile } from "@/lib/studioflow/fileMask";
 import { EbayItemLinks } from "./EbayItemLinks";
 import { wooInventoryT } from "@/lib/studioflow/wooInventory";
 import { inventoryCostKind } from "@/lib/studioflow/inventoryCost";
@@ -291,7 +292,9 @@ export function ItemDetailPanel({
     if (!bankTx?.receiptPath) return;
     try {
       const url = await inventoryPhotoUrl(bankTx.receiptPath);
-      window.open(url, "_blank", "noopener,noreferrer");
+      // 8 Nov 2026: on the workspace's file address, masked only — a receipt gets no share link (nvCreateFileLink
+      // would write a 90-day /fileShares record for a financial document); this exposes no more than the token URL.
+      window.open(maskFileUrl(url, workspace.fileLinkHost), "_blank", "noopener,noreferrer");
     } catch {
       // Receipt files are owner-only in storage; a member's click lands here.
       setError(t("The receipt file is only accessible to the workspace owner."));
@@ -756,8 +759,9 @@ export function ItemDetailPanel({
                     type="button"
                     className="inventory-link"
                     onClick={() => {
+                      // 8 Nov 2026: on the workspace's file address, as the Files library opens it.
                       void libraryFileUrl(file.storagePath)
-                        .then(url => window.open(url, "_blank", "noopener,noreferrer"))
+                        .then(url => openSharedFile(url, workspace.fileLinkHost))
                         .catch(() => undefined);
                     }}
                   >

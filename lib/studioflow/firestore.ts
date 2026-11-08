@@ -480,6 +480,8 @@ export type CustomerOrderFile = {
   id: string;
   fileName: string;
   downloadUrl: string;
+  /** Opened through Storage when present (audit #19 A1, openStoredFile); "" on older records. */
+  storagePath: string;
   contentType: string;
   fileSize: number;
   uploadedAt: Date | null;
@@ -2265,6 +2267,7 @@ function parseCustomerOrderFiles(raw: unknown): CustomerOrderFile[] {
         id: stringValue(item.id, `${index}`),
         fileName: fileName || "File",
         downloadUrl,
+        storagePath: stringValue(item.storagePath, ""),
         contentType: stringValue(item.contentType, ""),
         fileSize: numberValue(item.fileSize, 0),
         uploadedAt: dateValue(item.uploadedAt)

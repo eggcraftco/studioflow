@@ -53,7 +53,7 @@ import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { orderSourceLink, orderSourceLinkReasonText } from "@/lib/studioflow/orderSourceLink";
 import { orderSourceChipLabel } from "@/lib/studioflow/orderFilters";
 import { useConnectedStoreHosts } from "@/lib/studioflow/useConnectedStoreHosts";
-import { maskFileUrl } from "@/lib/studioflow/fileMask";
+import { maskFileUrl, openSharedFile } from "@/lib/studioflow/fileMask";
 import { downloadStoredFile, openOutcomeProblem, openStoredFile, resolvedFileProblem, useResolvedFileUrl } from "@/lib/studioflow/storageFileUrl";
 import { StoredFileImage } from "@/components/StoredFileImage";
 import { OrderLinkedReminders } from "@/components/OrderLinkedReminders";
@@ -9688,8 +9688,9 @@ export function OrderDetailContent({
                           <button
                             type="button"
                             onClick={() => {
+                              // 8 Nov 2026: on the workspace's file address, as the Files library opens it.
                               void libraryFileUrl(file.storagePath)
-                                .then(url => window.open(url, "_blank", "noopener,noreferrer"))
+                                .then(url => openSharedFile(url, workspace.fileLinkHost))
                                 .catch(() => undefined);
                             }}
                           >
