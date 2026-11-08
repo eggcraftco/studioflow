@@ -1049,16 +1049,23 @@ function invoiceHtml(
     : hasLineItems
       ? lineItemsTotal
       : order.paidAmount + order.remainingAmount + orderCustomRemainingTotal(order);
-  const taxRate = isEstimate ? estimate!.taxRate : (order.taxRate ?? 0);
-  const isMarginScheme = (isEstimate ? estimate!.taxType : order.taxType) === "Profit";
+  // A workshop that said "not VAT registered" (the wizard's first step, or
+  // Settings ▸ Financial Settings) must not hand its customer a document with
+  // a VAT line on it: the order still carries the workspace's default rate, but
+  // the finance engine already treats it as no VAT, and so does the invoice.
+  const vatOff = settings?.vatRegistered === false;
+  const taxRate = vatOff ? 0 : isEstimate ? estimate!.taxRate : (order.taxRate ?? 0);
+  const isMarginScheme = !vatOff && (isEstimate ? estimate!.taxType : order.taxType) === "Profit";
   const isZeroRated = taxRate <= 0.0001;
   // Line-item invoices recompute VAT on the item total with the order's rate,
   // extracted from the gross the same way the Finance card and the server do.
-  const vatAmount = isEstimate
-    ? estimate!.taxAmount
-    : hasLineItems
-      ? (orderValue * taxRate) / (100 + taxRate)
-      : order.taxAmount;
+  const vatAmount = vatOff
+    ? 0
+    : isEstimate
+      ? estimate!.taxAmount
+      : hasLineItems
+        ? (orderValue * taxRate) / (100 + taxRate)
+        : order.taxAmount;
   const subtotal = isEstimate
     ? estimate!.subtotal
     : isMarginScheme
@@ -1108,7 +1115,9 @@ function invoiceHtml(
     : `<tr><td>${escapeHtml(description)}</td><td class="r">${money(subtotal)}</td></tr>`;
 
   let vatRow = "";
-  if (isMarginScheme) {
+  if (vatOff) {
+    vatRow = "";
+  } else if (isMarginScheme) {
     vatRow = `<div class="muted-note">${escapeHtml(t("VAT under margin scheme (not shown separately)"))}</div>`;
   } else if (isZeroRated) {
     vatRow = `<div class="trow"><span>${escapeHtml(t("VAT (Zero-rated / Export)"))}</span><strong>${money(0)}</strong></div>`;
