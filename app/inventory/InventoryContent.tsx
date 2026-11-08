@@ -1,7 +1,7 @@
 "use client";
 import { useQuickActionParam } from "@/lib/studioflow/quickActions";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCanSeeCost, usePrivateMoney } from "@/components/PricePrivacy";
 import { CardIconGlyph } from "@/components/CardTitle";
 import {
@@ -180,6 +180,18 @@ export function InventoryContent({
   // The report's call (§28): ONE primary navigation. The sidebar is it; the
   // old tab strip is gone. Quick views are saved filters over the same list.
   const [quickView, setQuickView] = useState<"all" | "low" | "incoming" | "reserved" | "details">("all");
+  // envanter-test (8 Nov 2026): choosing another section in the left list (e.g. WooCommerce products from far down a
+  // long item list) kept the scroll position, so the new section's top was above the window and the page looked
+  // empty. A section change now brings the section's top into view when it is above the window.
+  const inventoryMainRef = useRef<HTMLDivElement | null>(null);
+  const sectionKey = `${tab}|${quickView}`;
+  const lastSectionKey = useRef(sectionKey);
+  useEffect(() => {
+    if (lastSectionKey.current === sectionKey) return;
+    lastSectionKey.current = sectionKey;
+    const main = inventoryMainRef.current;
+    if (main && main.getBoundingClientRect().top < 0) main.scrollIntoView({ block: "start" });
+  }, [sectionKey]);
   const [locationFilter, setLocationFilter] = useState("");
   const [supplierFilter, setSupplierFilter] = useState("");
   const [page, setPage] = useState(1);
@@ -361,6 +373,14 @@ export function InventoryContent({
     setTypeFilter(""); setLocationFilter(""); setSupplierFilter(""); setSearch("");
   }
   // The card a WooCommerce import just made or linked: the list, unfiltered, with that card's panel open.
+  // envanter-test (8 Nov 2026): "Add what you paid" after an import opens the new card's edit form. The list reloads
+  // after the import, so the card is looked up when the person clicks; a card not loaded yet is opened in the list.
+  function editCardById(itemId: string) {
+    const card = items.find(row => row.id === itemId);
+    if (card) setEditing(card);
+    else openCard(itemId);
+  }
+
   function openCard(itemId: string) {
     openAllItems();
     setSelectedId(itemId);
@@ -590,7 +610,7 @@ export function InventoryContent({
         {/* Categories moved up to "Manage categories" under the category list (27 Oct 2026): one entry, where the list is. */}
       </nav>
 
-      <div className="inventory-main">
+      <div className="inventory-main" ref={inventoryMainRef}>
       {tab === "woo" ? (
         <WooProductsPanel
           workspace={workspace}
@@ -601,6 +621,7 @@ export function InventoryContent({
           defaultCategory={defaultCategory}
           onStockChanged={() => void reload()}
           onOpenCard={openCard}
+          onEditCard={canEdit && canSeeCost ? editCardById : undefined}
         />
       ) : tab === "ebay" ? (
         <EbayListingsPanel
@@ -610,6 +631,7 @@ export function InventoryContent({
           items={items}
           categoryOptions={categoryOptions}
           onStockChanged={() => void reload()}
+          onEditCard={canEdit && canSeeCost ? editCardById : undefined}
         />
       ) : tab === "purchases" ? (
         <PurchasesPanel
@@ -1154,9 +1176,13 @@ function NewItemModal({
           for (const file of stagedPhotos) {
             uploaded.push(await uploadInventoryPhoto(workspace, itemId, file));
           }
+          // envanter-test (8 Nov 2026): the cost box keeps its own text (costText), so `draft.purchasePrice` is still the
+          // value the form opened with (0 on a new card). This second save used to send that, and the server took it:
+          // a new item saved with a cost AND a photo ended at £0 (an edit that changed the cost and added a photo went
+          // back to the old cost). It sends the same cost fields as the first save now.
           await saveInventoryItem(
             workspace,
-            { ...draft, photos: [...(draft.photos ?? []), ...uploaded] },
+            { ...draft, ...costFields, photos: [...(draft.photos ?? []), ...uploaded] },
             itemId
           );
         } catch {
@@ -1248,6 +1274,12 @@ function NewItemModal({
               <label className="inventory-field"><span>{t("Condition")}</span>
                 <input className="input" value={draft.condition ?? ""} onChange={e => set("condition", e.target.value)}
                   placeholder={t("Good, Fair, Needs service…")} /></label>
+              {/* envanter-test (8 Nov 2026): a one-off card had no SKU box, so a watch brought in from a store showed its
+                  SKU in the panel but the form could not change it, and a hand-made card could never be matched to a
+                  store listing by SKU ("Same SKU" in WooCommerce products / eBay listings). */}
+              <label className="inventory-field"><span>{t("SKU")}</span>
+                <input className="input" value={draft.sku ?? ""} maxLength={60} onChange={e => set("sku", e.target.value)}
+                  data-testid="inventory-sku-input" /></label>
             </>
           ) : (
             <>
@@ -1313,6 +1345,20 @@ function NewItemModal({
               style={{ font: "inherit", resize: "vertical" }}
               value={draft.notes ?? ""}
               onChange={e => set("notes", e.target.value)}
+            />
+          </label>
+          {/* envanter-test (8 Nov 2026): the description a store or eBay import writes (size, strap, movement…) is shown
+              in the item panel, but the form had no box for it — it could be neither corrected nor written by hand. */}
+          <label className="inventory-field is-wide">
+            <span>{t("Description")}</span>
+            <textarea
+              className="input"
+              rows={3}
+              maxLength={2000}
+              style={{ font: "inherit", resize: "vertical" }}
+              value={draft.description ?? ""}
+              onChange={e => set("description", e.target.value)}
+              data-testid="inventory-description-input"
             />
           </label>
         </div>

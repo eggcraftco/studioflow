@@ -16,6 +16,7 @@ import {
   type AppHelpTurn
 } from "@/lib/studioflow/appHelpHistory";
 import { createNivaDeskSupportTicket } from "@/lib/studioflow/supportTickets";
+import { useAppHelpClearance } from "@/lib/studioflow/appHelpClearance";
 import { type WorkspaceContext } from "@/lib/studioflow/firestore";
 
 // In-app "how do I…?" helper. It answers from the user guide only: it has no
@@ -52,6 +53,7 @@ export default function AppHelpAssistant({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const threadRef = useRef<HTMLDivElement | null>(null);
+  const bubbleRef = useRef<HTMLButtonElement | null>(null);
   // The conversation's name in this browser: null until it is known, or when
   // the account or workspace is not (then nothing is kept).
   const [historyKey, setHistoryKey] = useState<string | null>(null);
@@ -163,13 +165,17 @@ export default function AppHelpAssistant({
     if (threadRef.current) threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [turns, busy, open]);
 
+  // envanter-test (owner, 8 Nov 2026): the bubble covered "Bring in selected" in Inventory ▸ WooCommerce products.
+  // It now rises above a pinned (sticky/fixed) control under its corner and goes under an open dialog
+  // (lib/studioflow/appHelpClearance.ts).
+  useAppHelpClearance(bubbleRef, available || paused);
 
   if (!available && !paused) return null;
 
   if (paused) {
     return (
       <>
-        <button type="button" className="app-help-bubble is-paused" onClick={() => setOpen(value => !value)} aria-expanded={open}
+        <button ref={bubbleRef} type="button" className="app-help-bubble is-paused" onClick={() => setOpen(value => !value)} aria-expanded={open}
                 aria-label={t("Help assistant off")}>
           <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <circle cx="10" cy="10" r="7.5" />
@@ -222,6 +228,7 @@ export default function AppHelpAssistant({
   return (
     <>
       <button
+        ref={bubbleRef}
         type="button"
         className="app-help-bubble"
         onClick={() => setOpen(value => !value)}

@@ -21833,6 +21833,19 @@ html[dir="rtl"] .login-public-shell {
   .app-help-panel { right: 12px; left: 12px; bottom: 130px; width: auto; }
 }
 
+/* envanter-test (owner, 8 Nov 2026): the bubble sat on "Bring in selected". lib/studioflow/appHelpClearance.ts writes
+   --app-help-lift (how far above a pinned page button the bubble must sit; the panel opens that much higher too) and
+   data-help-under-modal (an open dialog: the bubble goes under its backdrop, z-index 40, instead of over the form). */
+.app-help-bubble { transform: translateY(calc(-1 * var(--app-help-lift, 0px))); transition: transform 0.16s ease; }
+.app-help-panel { bottom: calc(74px + var(--app-help-lift, 0px)); }
+@media (max-width: 560px) {
+  .app-help-panel { bottom: calc(130px + var(--app-help-lift, 0px)); }
+}
+:root[data-help-under-modal] .app-help-bubble { z-index: 39; }
+@media (prefers-reduced-motion: reduce) {
+  .app-help-bubble { transition: none; }
+}
+
 /* Support chat widget ---------------------------------------------------- */
 .support-chat-bubble {
   position: fixed;

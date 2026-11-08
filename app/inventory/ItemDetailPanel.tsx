@@ -39,6 +39,7 @@ import {
 import { loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { libraryFileUrl, listLibraryFiles, type LibraryFile } from "@/lib/studioflow/filesLibrary";
 import { EbayItemLinks } from "./EbayItemLinks";
+import { WooItemLinks } from "./WooItemLinks";
 import { wooInventoryT } from "@/lib/studioflow/wooInventory";
 import { inventoryCostKind } from "@/lib/studioflow/inventoryCost";
 import { wooOrderStockT } from "@/lib/studioflow/wooOrderStock";
@@ -429,6 +430,9 @@ export function ItemDetailPanel({
 
           {/* Package E4: the eBay listings linked to this card (drawn only for a card that has any). */}
           <EbayItemLinks workspace={workspace} item={item} items={allItems} canEdit={canEdit} language={language} onChanged={onChanged} />
+
+          {/* envanter-test (8 Nov 2026): the website products (WooCommerce) linked to this card — same box as eBay's. */}
+          <WooItemLinks workspace={workspace} item={item} items={allItems} canEdit={canEdit} language={language} onChanged={onChanged} />
 
           {/* MC-4: a WooCommerce order that needs a look about THIS card (oversold, refunded after dispatch). The order's
               own page says what happened and offers the act; this only points there. */}

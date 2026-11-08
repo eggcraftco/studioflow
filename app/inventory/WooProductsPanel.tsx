@@ -30,6 +30,9 @@ type Props = {
   onStockChanged?: () => void | Promise<void>;
   /** Opens a card in the item list (27 Oct: the row that was just brought in says which card, and opens it). */
   onOpenCard?: (inventoryItemId: string) => void;
+  /** envanter-test (8 Nov 2026): opens a new card's edit form at its cost ("Add what you paid"); given only to people
+   *  who may see and change the cost. An imported card has no cost, so it adds nothing to Total Inventory Value. */
+  onEditCard?: (inventoryItemId: string) => void;
 };
 
 function priceText(price: { value: string; currency: string } | null, locale: string): string {
@@ -60,7 +63,7 @@ async function picturesAfterImport(workspace: WorkspaceContext, ids: string[], l
   }
 }
 
-export function WooProductsPanel({ workspace, language, canEdit, items, categoryOptions, defaultCategory = "", onStockChanged, onOpenCard }: Props) {
+export function WooProductsPanel({ workspace, language, canEdit, items, categoryOptions, defaultCategory = "", onStockChanged, onOpenCard, onEditCard }: Props) {
   const t = useCallback((sentence: string) => wooInventoryT(sentence, language), [language]);
   const locale = studioLocaleTag(language);
   const companyId = workspace.id.trim();
@@ -327,6 +330,7 @@ export function WooProductsPanel({ workspace, language, canEdit, items, category
                           {done.result === "created" && done.category ? <> · {t(done.category)}</> : null}
                           {done.photo === "copied" ? <> · <span data-testid="woo-photo-copied">{t("Picture copied from the store")}</span></> : null}
                           {done.photo === "not_copied" ? <> · <span data-testid="woo-photo-not-copied" data-reason={done.photoReason}>{t("The store's picture was not copied")}</span></> : null}
+                          {done.result === "created" && done.inventoryItemId && onEditCard ? <> · <button type="button" className="inventory-link" data-testid="woo-add-cost" onClick={() => onEditCard(done.inventoryItemId)}>{t("Add what you paid")}</button></> : null}
                         </p>
                       ) : null}
                     </li>

@@ -398,10 +398,59 @@ export const WOO_INVENTORY_TEXT_27OCT: Record<string, Record<Lang, string>> = {
   "Choose…": L("Seçin…", "Auswählen…", "Choisir…", "Scegli…", "Elegir…", "Escolher…", "Выбрать…", "選択…", "选择…", "اختر…", "चुनें…")
 };
 
+// envanter-test (8 Nov 2026): one product linked to a card, as getWooProductLinks answers it (the price is null for
+// anyone without Financial Info), for the item panel's "On your website" box.
+export type WooLinkView = {
+  linkId: string; connectionId: string; productId: string; variationId: string; sku: string; title: string; variationName: string;
+  listedQuantity: number | null; stockTracked: boolean | "parent"; price: { value: string; currency: string } | null;
+  imageUrl: string; permalink: string; seenAtMs: number;
+};
+
+/** The answer's link rows, typed and trimmed; rows without a link id are dropped. */
+export function wooLinkViews(links: unknown): WooLinkView[] {
+  return (Array.isArray(links) ? links : []).map((raw) => {
+    const row = obj(raw);
+    const price = obj(row.price);
+    return {
+      linkId: text(row.linkId, 120), connectionId: text(row.connectionId, 300), productId: text(row.productId, 20), variationId: text(row.variationId, 20),
+      sku: text(row.sku, 80), title: text(row.title, 200), variationName: text(row.variationName, 200),
+      listedQuantity: intOrNull(row.listedQuantity),
+      stockTracked: (row.stockTracked === "parent" ? "parent" : row.stockTracked === true) as boolean | "parent",
+      price: text(price.value, 24) ? { value: text(price.value, 24), currency: text(price.currency, 3) } : null,
+      imageUrl: text(row.imageUrl, 1024), permalink: text(row.permalink, 1024), seenAtMs: typeof row.seenAtMs === "number" && Number.isFinite(row.seenAtMs) ? row.seenAtMs : 0
+    };
+  }).filter((row) => Boolean(row.linkId));
+}
+
+/** A store's product page, only as a plain https address on that store's own host (or a subdomain of it); else "". */
+export function storeProductUrl(permalink: string, storeHost: string): string {
+  try {
+    const url = new URL(permalink);
+    const host = String(storeHost || "").toLowerCase().replace(/^www\./, "");
+    const own = url.hostname.toLowerCase().replace(/^www\./, "");
+    return url.protocol === "https:" && host !== "" && (own === host || own.endsWith(`.${host}`)) ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+// envanter-test (8 Nov 2026): the item panel's "On your website" box and the import's "Add what you paid".
+export const WOO_INVENTORY_TEXT_8NOV: Record<string, Record<Lang, string>> = {
+  "On your website": L("Sitenizde", "Auf Ihrer Website", "Sur votre site", "Sul tuo sito", "En tu sitio web", "No seu site", "На вашем сайте", "あなたのサイト", "您的网站上", "على موقعك", "आपकी वेबसाइट पर"),
+  "The store's stock figure and price are the store's; the shelf count and the cost on this card are yours.": L("Mağazadaki stok sayısı ve fiyat mağazanındır; raf sayısı ve bu karttaki maliyet sizindir.", "Bestand und Preis im Shop gehören dem Shop; die Regalmenge und die Kosten auf dieser Karte sind Ihre.", "Le stock et le prix de la boutique sont ceux de la boutique ; la quantité en rayon et le coût de cette fiche sont les vôtres.", "Giacenza e prezzo del negozio sono del negozio; la quantità a scaffale e il costo di questa scheda sono tuoi.", "El stock y el precio de la tienda son de la tienda; la cantidad en estante y el coste de esta ficha son tuyos.", "O stock e o preço da loja são da loja; a quantidade na prateleira e o custo deste cartão são seus.", "Остаток и цена в магазине — данные магазина; количество на полке и себестоимость в этой карточке — ваши.", "ストアの在庫数と価格はストアのものです。棚の数とこのカードの原価はあなたのものです。", "商店的库存数和价格属于商店；货架数量和此卡片上的成本由您填写。", "رقم المخزون والسعر في المتجر يخصّان المتجر؛ العدد على الرف والتكلفة في هذه البطاقة يخصّانك.", "स्टोर का स्टॉक आंकड़ा और कीमत स्टोर के हैं; शेल्फ़ की गिनती और इस कार्ड की लागत आपकी हैं।"),
+  "Last read from the store": L("Mağazadan son okuma", "Zuletzt aus dem Shop gelesen", "Dernière lecture de la boutique", "Ultima lettura dal negozio", "Última lectura de la tienda", "Última leitura da loja", "Последнее чтение из магазина", "ストアからの最終読み込み", "上次从商店读取", "آخر قراءة من المتجر", "स्टोर से आख़िरी बार पढ़ा गया"),
+  "Open in the store": L("Mağazada aç", "Im Shop öffnen", "Ouvrir dans la boutique", "Apri nel negozio", "Abrir en la tienda", "Abrir na loja", "Открыть в магазине", "ストアで開く", "在商店中打开", "افتح في المتجر", "स्टोर में खोलें"),
+  "Store product #{id}": L("Mağaza ürünü #{id}", "Shop-Produkt #{id}", "Produit de la boutique #{id}", "Prodotto del negozio #{id}", "Producto de la tienda #{id}", "Produto da loja #{id}", "Товар магазина #{id}", "ストアの商品 #{id}", "商店商品 #{id}", "منتج المتجر #{id}", "स्टोर उत्पाद #{id}"),
+  "Unlink this product? Orders that already took stock keep it; new orders for this product will not reserve stock on this card.": L("Bu ürünün bağlantısı kaldırılsın mı? Stok almış siparişler onu korur; bu ürünün yeni siparişleri bu karttan stok ayırmaz.", "Verknüpfung dieses Produkts lösen? Bestellungen, die bereits Bestand genommen haben, behalten ihn; neue Bestellungen für dieses Produkt reservieren keinen Bestand auf dieser Karte.", "Délier ce produit ? Les commandes qui ont déjà pris du stock le gardent ; les nouvelles commandes de ce produit ne réserveront pas de stock sur cette fiche.", "Scollegare questo prodotto? Gli ordini che hanno già preso giacenza la mantengono; i nuovi ordini di questo prodotto non riserveranno giacenza su questa scheda.", "¿Desvincular este producto? Los pedidos que ya tomaron stock lo conservan; los pedidos nuevos de este producto no reservarán stock en esta ficha.", "Desligar este produto? As encomendas que já tiraram stock mantêm-no; as novas encomendas deste produto não reservam stock neste cartão.", "Отвязать этот товар? Заказы, уже взявшие остаток, его сохранят; новые заказы этого товара не будут резервировать остаток на этой карточке.", "この商品のリンクを解除しますか？すでに在庫を確保した注文はそのままです。この商品の新しい注文はこのカードの在庫を確保しません。", "取消关联此商品？已占用库存的订单保持不变；此商品的新订单不会在此卡片上预留库存。", "إلغاء ربط هذا المنتج؟ الطلبات التي أخذت مخزونًا تحتفظ به؛ والطلبات الجديدة لهذا المنتج لن تحجز مخزونًا من هذه البطاقة.", "इस उत्पाद का लिंक हटाएँ? जिन ऑर्डरों ने पहले ही स्टॉक लिया है वे उसे रखेंगे; इस उत्पाद के नए ऑर्डर इस कार्ड पर स्टॉक आरक्षित नहीं करेंगे।"),
+  "Done — the link was changed.": L("Tamam — bağlantı değiştirildi.", "Erledigt — die Verknüpfung wurde geändert.", "C'est fait — le lien a été modifié.", "Fatto — il collegamento è stato modificato.", "Hecho: el vínculo se ha cambiado.", "Feito — a ligação foi alterada.", "Готово — связь изменена.", "完了 — リンクを変更しました。", "完成 — 关联已更改。", "تم — تم تغيير الربط.", "हो गया — लिंक बदल दिया गया।"),
+  "Add what you paid": L("Ödediğinizi girin", "Einkaufspreis eintragen", "Indiquer ce que vous avez payé", "Inserisci quanto hai pagato", "Añade lo que pagaste", "Indique o que pagou", "Укажите, сколько вы заплатили", "支払った金額を入力", "填写您支付的金额", "أضف ما دفعته", "आपने जो चुकाया वह जोड़ें")
+};
+
 /** The sentence in `language`, or "" when this table has none (the screen then asks E4's table, then the app's studioT). */
 export function wooInventoryText(sentence: string, language: string): string {
   const table = Object.prototype.hasOwnProperty.call(WOO_INVENTORY_TEXT, sentence) ? WOO_INVENTORY_TEXT
-    : Object.prototype.hasOwnProperty.call(WOO_INVENTORY_TEXT_27OCT, sentence) ? WOO_INVENTORY_TEXT_27OCT : null;
+    : Object.prototype.hasOwnProperty.call(WOO_INVENTORY_TEXT_27OCT, sentence) ? WOO_INVENTORY_TEXT_27OCT
+      : Object.prototype.hasOwnProperty.call(WOO_INVENTORY_TEXT_8NOV, sentence) ? WOO_INVENTORY_TEXT_8NOV : null;
   if (!table) return "";
   const row = table[sentence];
   return Object.prototype.hasOwnProperty.call(row, language) ? row[language as Lang] : "";
