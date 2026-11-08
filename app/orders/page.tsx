@@ -1644,10 +1644,11 @@ export default function OrdersPage() {
             <section className="orders-empty-detail">
               {workspaceHasNoOrders ? (
                 <>
+                  {/* A plain empty state (owner, 7–8 Nov 2026): "Getting started · Your workspace is ready" read
+                      like the post-setup screen the owner removed. */}
                   <CardTitle
                     icon="orders"
-                    eyebrow={t("Getting started")}
-                    title={t("Your workspace is ready")}
+                    title={t("No orders yet")}
                   />
                   <p className="muted-copy">
                     {t("Create your first order and its details will open here.")}

@@ -5745,88 +5745,66 @@ const ORDERS_FIRST_RUN_TRANSLATIONS = translationsFromLanguagePacks({
     "Select your business type": "İş türünüzü seçin",
     "Create your first order": "İlk siparişini oluştur",
     "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Bir sipariş tek bir işi tutar: müşteri, fiyat, teslim tarihi, fotoğraflar ve dosyalar. Bir tane ekle, NivaDesk'in geri kalanı onun etrafında şekillensin.",
-    "Getting started": "Başlarken",
-    "Your workspace is ready": "Workspace'in hazır",
     "Create your first order and its details will open here.": "İlk siparişini oluştur, detayları burada açılsın."
   },
   "Deutsch": {
     "Select your business type": "Branche auswählen",
     "Create your first order": "Ersten Auftrag anlegen",
     "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Ein Auftrag umfasst einen Job: Kunde, Preis, Termin, Fotos und Dateien. Legen Sie einen an, und der Rest von NivaDesk baut sich darum auf.",
-    "Getting started": "Erste Schritte",
-    "Your workspace is ready": "Ihr Workspace ist bereit",
     "Create your first order and its details will open here.": "Legen Sie Ihren ersten Auftrag an – die Details erscheinen hier."
   },
   "Français": {
     "Select your business type": "Choisissez votre secteur",
     "Create your first order": "Créer votre première commande",
     "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Une commande regroupe un travail : le client, le prix, l'échéance, les photos et les fichiers. Créez-en une et le reste de NivaDesk s'organise autour.",
-    "Getting started": "Pour commencer",
-    "Your workspace is ready": "Votre espace de travail est prêt",
     "Create your first order and its details will open here.": "Créez votre première commande, ses détails s'afficheront ici."
   },
   "Italiano": {
     "Select your business type": "Seleziona il tuo settore",
     "Create your first order": "Crea il tuo primo ordine",
     "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Un ordine contiene un lavoro: cliente, prezzo, scadenza, foto e file. Creane uno e il resto di NivaDesk si costruisce intorno.",
-    "Getting started": "Per iniziare",
-    "Your workspace is ready": "Il tuo workspace è pronto",
     "Create your first order and its details will open here.": "Crea il tuo primo ordine e i dettagli si apriranno qui."
   },
   "Español (Spanish)": {
     "Select your business type": "Selecciona tu tipo de negocio",
     "Create your first order": "Crea tu primer pedido",
     "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Un pedido reúne un trabajo: el cliente, el precio, la fecha de entrega, fotos y archivos. Crea uno y el resto de NivaDesk se organiza a su alrededor.",
-    "Getting started": "Primeros pasos",
-    "Your workspace is ready": "Tu espacio de trabajo está listo",
     "Create your first order and its details will open here.": "Crea tu primer pedido y sus detalles se abrirán aquí."
   },
   "Português": {
     "Select your business type": "Selecione o seu tipo de negócio",
     "Create your first order": "Crie o seu primeiro pedido",
     "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Um pedido reúne um trabalho: o cliente, o preço, o prazo, fotos e ficheiros. Crie um e o resto do NivaDesk organiza-se à volta dele.",
-    "Getting started": "Começar",
-    "Your workspace is ready": "O seu workspace está pronto",
     "Create your first order and its details will open here.": "Crie o seu primeiro pedido e os detalhes abrirão aqui."
   },
   "Русский (Russian)": {
     "Select your business type": "Выберите тип бизнеса",
     "Create your first order": "Создайте первый заказ",
     "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "Заказ содержит одну работу: клиента, цену, срок, фотографии и файлы. Создайте его — и остальное в NivaDesk выстроится вокруг.",
-    "Getting started": "Начало работы",
-    "Your workspace is ready": "Ваше рабочее пространство готово",
     "Create your first order and its details will open here.": "Создайте первый заказ, и его детали откроются здесь."
   },
   "日本語 (Japanese)": {
     "Select your business type": "業種を選択",
     "Create your first order": "最初の注文を作成",
     "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "注文には1つの案件がまとまります。顧客、金額、納期、写真、ファイル。まず1件作成すると、NivaDesk の他の機能がその周りに揃います。",
-    "Getting started": "はじめに",
-    "Your workspace is ready": "ワークスペースの準備ができました",
     "Create your first order and its details will open here.": "最初の注文を作成すると、詳細がここに表示されます。"
   },
   "中文 (Chinese)": {
     "Select your business type": "选择您的业务类型",
     "Create your first order": "创建第一个订单",
     "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "一个订单包含一项工作：客户、价格、交期、照片和文件。先创建一个，NivaDesk 的其他功能会围绕它展开。",
-    "Getting started": "开始使用",
-    "Your workspace is ready": "您的工作区已就绪",
     "Create your first order and its details will open here.": "创建第一个订单，详情将在此处打开。"
   },
   "العربية (Arabic)": {
     "Select your business type": "اختر نوع نشاطك",
     "Create your first order": "أنشئ طلبك الأول",
     "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "يجمع الطلب عملاً واحداً: العميل والسعر والموعد النهائي والصور والملفات. أنشئ طلباً وسيتشكل باقي NivaDesk حوله.",
-    "Getting started": "البداية",
-    "Your workspace is ready": "مساحة عملك جاهزة",
     "Create your first order and its details will open here.": "أنشئ طلبك الأول وستظهر تفاصيله هنا."
   },
   "हिन्दी (Hindi)": {
     "Select your business type": "अपना व्यवसाय प्रकार चुनें",
     "Create your first order": "अपना पहला ऑर्डर बनाएं",
     "An order holds one job: the client, the price, the deadline, photos and files. Add one and the rest of NivaDesk fills in around it.": "एक ऑर्डर में एक काम रहता है: ग्राहक, कीमत, समय-सीमा, तस्वीरें और फ़ाइलें। एक बनाइए और NivaDesk का बाकी हिस्सा उसके चारों ओर बन जाएगा।",
-    "Getting started": "शुरुआत करें",
-    "Your workspace is ready": "आपका वर्कस्पेस तैयार है",
     "Create your first order and its details will open here.": "अपना पहला ऑर्डर बनाएं, उसका विवरण यहां खुलेगा।"
   }
 });
@@ -7043,7 +7021,6 @@ const ONBOARDING_WIZARD_TRANSLATIONS: TranslationTable = {
   "Bring your work in": { "Türkçe": "İşini içeri getir", "Deutsch": "Bringen Sie Ihre Arbeit herein", "Français": "Importez votre travail", "Italiano": "Porta dentro il tuo lavoro", "Español (Spanish)": "Trae tu trabajo", "Português": "Traga o seu trabalho", "Русский (Russian)": "Перенесите свою работу", "日本語 (Japanese)": "作業を取り込む", "中文 (Chinese)": "把你的工作带进来", "العربية (Arabic)": "أدخِل عملك", "हिन्दी (Hindi)": "अपना काम लाएँ" },
   "Pick how you'd like to start. You can do any of the others later.": { "Türkçe": "Nasıl başlamak istediğini seç. Diğerlerini sonra da yapabilirsin.", "Deutsch": "Wählen Sie, wie Sie starten möchten. Die anderen gehen auch später.", "Français": "Choisissez comment commencer. Vous pourrez faire les autres plus tard.", "Italiano": "Scegli come iniziare. Gli altri puoi farli dopo.", "Español (Spanish)": "Elige cómo empezar. Los demás puedes hacerlos luego.", "Português": "Escolha como começar. Pode fazer os outros mais tarde.", "Русский (Russian)": "Выберите, с чего начать. Остальное можно сделать позже.", "日本語 (Japanese)": "始め方を選んでください。他は後からでもできます。", "中文 (Chinese)": "选择你想怎么开始，其余的稍后也可以做。", "العربية (Arabic)": "اختر كيف تبدأ. يمكنك فعل البقية لاحقًا.", "हिन्दी (Hindi)": "चुनें कि कैसे शुरू करना है। बाकी बाद में भी कर सकते हैं।" },
   "Open my workspace": { "Türkçe": "Çalışma alanımı aç", "Deutsch": "Arbeitsbereich öffnen", "Français": "Ouvrir mon espace", "Italiano": "Apri il mio spazio", "Español (Spanish)": "Abrir mi espacio", "Português": "Abrir o meu espaço", "Русский (Russian)": "Открыть рабочее пространство", "日本語 (Japanese)": "ワークスペースを開く", "中文 (Chinese)": "打开我的工作区", "العربية (Arabic)": "افتح مساحة عملي", "हिन्दी (Hindi)": "मेरा वर्कस्पेस खोलें" },
-  "Your workspace is ready": { "Türkçe": "Çalışma alanın hazır", "Deutsch": "Ihr Arbeitsbereich ist bereit", "Français": "Votre espace est prêt", "Italiano": "Il tuo spazio è pronto", "Español (Spanish)": "Tu espacio está listo", "Português": "O seu espaço está pronto", "Русский (Russian)": "Рабочее пространство готово", "日本語 (Japanese)": "ワークスペースの準備ができました", "中文 (Chinese)": "你的工作区已就绪", "العربية (Arabic)": "مساحة عملك جاهزة", "हिन्दी (Hindi)": "आपका वर्कस्पेस तैयार है" },
   "Watches & jewellery": { "Türkçe": "Saat ve mücevher", "Deutsch": "Uhren & Schmuck", "Français": "Montres et bijoux", "Italiano": "Orologi e gioielli", "Español (Spanish)": "Relojes y joyería", "Português": "Relógios e joalharia", "Русский (Russian)": "Часы и украшения", "日本語 (Japanese)": "時計・ジュエリー", "中文 (Chinese)": "手表与珠宝", "العربية (Arabic)": "الساعات والمجوهرات", "हिन्दी (Hindi)": "घड़ियाँ और आभूषण" },
   "Repairs & servicing": { "Türkçe": "Onarım ve servis", "Deutsch": "Reparatur & Service", "Français": "Réparations et entretien", "Italiano": "Riparazioni e assistenza", "Español (Spanish)": "Reparaciones y mantenimiento", "Português": "Reparações e assistência", "Русский (Russian)": "Ремонт и обслуживание", "日本語 (Japanese)": "修理・メンテナンス", "中文 (Chinese)": "维修与保养", "العربية (Arabic)": "الإصلاح والصيانة", "हिन्दी (Hindi)": "मरम्मत और सर्विसिंग" },
   "Leather goods": { "Türkçe": "Deri ürünler", "Deutsch": "Lederwaren", "Français": "Maroquinerie", "Italiano": "Pelletteria", "Español (Spanish)": "Marroquinería", "Português": "Artigos em pele", "Русский (Russian)": "Изделия из кожи", "日本語 (Japanese)": "革製品", "中文 (Chinese)": "皮具", "العربية (Arabic)": "المنتجات الجلدية", "हिन्दी (Hindi)": "चमड़े का सामान" },
@@ -7787,6 +7764,7 @@ mergeIntoTranslations({
   "No files yet.": { "Türkçe": "Henüz dosya yok.", "Deutsch": "Noch keine Dateien.", "Français": "Aucun fichier pour le moment.", "Italiano": "Ancora nessun file.", "Español (Spanish)": "Aún no hay archivos.", "Português": "Ainda sem ficheiros.", "Русский (Russian)": "Файлов пока нет.", "日本語 (Japanese)": "まだファイルはありません。", "中文 (Chinese)": "暂无文件。", "العربية (Arabic)": "لا ملفات بعد.", "हिन्दी (Hindi)": "अभी कोई फ़ाइल नहीं।" },
   "No order notes yet.": { "Türkçe": "Henüz sipariş notu yok.", "Deutsch": "Noch keine Auftragsnotizen.", "Français": "Aucune note de commande.", "Italiano": "Ancora nessuna nota d'ordine.", "Español (Spanish)": "Aún no hay notas de pedido.", "Português": "Ainda sem notas de encomenda.", "Русский (Russian)": "Заметок по заказам пока нет.", "日本語 (Japanese)": "まだ注文メモはありません。", "中文 (Chinese)": "暂无订单备注。", "العربية (Arabic)": "لا ملاحظات طلبات بعد.", "हिन्दी (Hindi)": "अभी कोई ऑर्डर नोट नहीं।" },
   "No orders yet.": { "Türkçe": "Henüz sipariş yok.", "Deutsch": "Noch keine Aufträge.", "Français": "Aucune commande pour le moment.", "Italiano": "Ancora nessun ordine.", "Español (Spanish)": "Aún no hay pedidos.", "Português": "Ainda sem encomendas.", "Русский (Russian)": "Заказов пока нет.", "日本語 (Japanese)": "まだ注文はありません。", "中文 (Chinese)": "暂无订单。", "العربية (Arabic)": "لا طلبات بعد.", "हिन्दी (Hindi)": "अभी कोई ऑर्डर नहीं।" },
+  "No orders yet": { "Türkçe": "Henüz sipariş yok", "Deutsch": "Noch keine Aufträge", "Français": "Aucune commande pour le moment", "Italiano": "Ancora nessun ordine", "Español (Spanish)": "Aún no hay pedidos", "Português": "Ainda sem encomendas", "Русский (Russian)": "Заказов пока нет", "日本語 (Japanese)": "まだ注文はありません", "中文 (Chinese)": "暂无订单", "العربية (Arabic)": "لا طلبات بعد", "हिन्दी (Hindi)": "अभी कोई ऑर्डर नहीं" },
   "Open a detailed page for monthly, yearly and order-based extra spending with descriptions.": { "Türkçe": "Aylık, yıllık ve siparişe dayalı ek harcamaları açıklamalarıyla gösteren ayrıntılı sayfayı aç.", "Deutsch": "Öffnet eine ausführliche Seite für monatliche, jährliche und auftragsbezogene Zusatzausgaben mit Beschreibungen.", "Français": "Ouvrir une page détaillée des dépenses supplémentaires mensuelles, annuelles et par commande, avec descriptions.", "Italiano": "Apri una pagina dettagliata delle spese extra mensili, annuali e per ordine, con descrizioni.", "Español (Spanish)": "Abre una página detallada de gastos adicionales mensuales, anuales y por pedido, con descripciones.", "Português": "Abre uma página detalhada das despesas extra mensais, anuais e por encomenda, com descrições.", "Русский (Russian)": "Открыть подробную страницу дополнительных расходов за месяц, год и по заказам с описаниями.", "日本語 (Japanese)": "月次・年次・注文別の追加支出を説明付きで表示する詳細ページを開きます。", "中文 (Chinese)": "打开按月、按年和按订单的额外支出详情页，并附说明。", "العربية (Arabic)": "افتح صفحة مفصلة للمصروفات الإضافية الشهرية والسنوية وحسب الطلب مع الأوصاف.", "हिन्दी (Hindi)": "मासिक, वार्षिक और ऑर्डर-आधारित अतिरिक्त ख़र्च का विवरण सहित पेज खोलें।" },
   "Open in Shopify": { "Türkçe": "Shopify'da aç", "Deutsch": "In Shopify öffnen", "Français": "Ouvrir dans Shopify", "Italiano": "Apri in Shopify", "Español (Spanish)": "Abrir en Shopify", "Português": "Abrir no Shopify", "Русский (Russian)": "Открыть в Shopify", "日本語 (Japanese)": "Shopify で開く", "中文 (Chinese)": "在 Shopify 中打开", "العربية (Arabic)": "فتح في Shopify", "हिन्दी (Hindi)": "Shopify में खोलें" },
   "Open the production board": { "Türkçe": "Üretim panosunu aç", "Deutsch": "Produktionsboard öffnen", "Français": "Ouvrir le tableau de production", "Italiano": "Apri la bacheca di produzione", "Español (Spanish)": "Abrir el tablero de producción", "Português": "Abrir o quadro de produção", "Русский (Russian)": "Открыть доску производства", "日本語 (Japanese)": "生産ボードを開く", "中文 (Chinese)": "打开生产看板", "العربية (Arabic)": "فتح لوحة الإنتاج", "हिन्दी (Hindi)": "प्रोडक्शन बोर्ड खोलें" },

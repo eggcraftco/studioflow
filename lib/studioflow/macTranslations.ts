@@ -9368,19 +9368,6 @@ export const MAC_TRANSLATIONS: Record<string, Record<string, string>> = {
     "العربية (Arabic)": "تخطي الآن",
     "हिन्दी (Hindi)": "अभी छोड़ें"
   },
-  "Your workspace is ready": {
-    "Türkçe": "Çalışma alanın hazır",
-    "Deutsch": "Arbeitsbereich ist bereit",
-    "Français": "Votre espace est prêt",
-    "Italiano": "Workspace pronto",
-    "Español (Spanish)": "Tu espacio está listo",
-    "Português": "Workspace pronto",
-    "Русский (Russian)": "Рабочая область готова",
-    "日本語 (Japanese)": "準備完了",
-    "中文 (Chinese)": "工作区已就绪",
-    "العربية (Arabic)": "مساحة العمل جاهزة",
-    "हिन्दी (Hindi)": "वर्कस्पेस तैयार है"
-  },
   "No matching orders found.": {
     "Türkçe": "Eşleşen sipariş bulunamadı.",
     "Deutsch": "Keine passenden Bestellungen.",

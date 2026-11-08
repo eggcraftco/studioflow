@@ -55,6 +55,9 @@ export type CardBodyProps = {
   /** False hides the "New order" quick action: the member may not open
    *  projects (role, or assigned-projects-only). Undefined keeps it. */
   canCreateOrders?: boolean;
+  /** F2 (8 Nov 2026): each quick action's page for this person, null where it is not in their menu (then the
+   *  action is not shown). Undefined shows every action (lib/studioflow/quickActionTargets.ts). */
+  quickActionTargets?: Partial<Record<QuickActionId, string | null>>;
   /** Which slice of the activity feed to show. Only the 2x2 activity card
    *  offers the pills; every other size and card ignores it. */
   activityFilter?: ActivityFilterId;
@@ -2167,10 +2170,13 @@ const QUICK_ACTION_GROUPS: { id: "create" | "capture" | "finance"; label: string
   { id: "finance", label: "Finance & communication" },
 ];
 
-export function QuickActionsCardBody({ size, t, onQuickAction, canCreateOrders }: CardBodyProps) {
+export function QuickActionsCardBody({ size, t, onQuickAction, canCreateOrders, quickActionTargets }: CardBodyProps) {
   // The "order" action is the toolbar's "+ Add Project"; it leaves the card for
-  // the same member the toolbar hides it from.
-  const quickActions = canCreateOrders === false ? QUICK_ACTIONS.filter((action) => action.id !== "order") : QUICK_ACTIONS;
+  // the same member the toolbar hides it from. Every other action shows only
+  // when its page is in this person's menu (F2: no button that leads nowhere).
+  const quickActions = QUICK_ACTIONS.filter((action) => action.id === "order"
+    ? canCreateOrders !== false
+    : !quickActionTargets || quickActionTargets[action.id] != null);
   // 1x1: four large tinted tiles, icon over label.
   if (size === "1x1") {
     return (

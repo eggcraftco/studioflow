@@ -61,6 +61,8 @@ import {
 import { saveHomeLayout, subscribeHomeLayout } from "@/lib/studioflow/homeLayout";
 import { useHomeData, type HomeDomain } from "@/lib/studioflow/useHomeData";
 import { dispatchQuickAction } from "@/lib/studioflow/quickActions";
+import { quickActionTargets as quickActionTargetsFor, QUICK_ACTION_PATHS } from "@/lib/studioflow/quickActionTargets";
+import { canManageClientFilesForRole } from "@/lib/studioflow/clientFiles";
 
 /** Which shared domain each card reads, so a card shows its own domain's state. */
 const CARD_DOMAIN: Record<HomeCardId, HomeDomain> = {
@@ -252,6 +254,20 @@ export default function HomePage() {
     [settings],
   );
 
+  // F2 (8 Nov 2026): which page each quick action may open for this person — the sidebar's own conditions.
+  const quickTargets = useMemo(
+    () => workspace
+      ? quickActionTargetsFor({
+          memberAccess: workspace.memberAccess,
+          features: workspace.entitlements.features,
+          quickReplyMenuEnabled: workspace.quickReplyMenuEnabled,
+          // The Files page's own upload gate (canUploadClientFiles): plan client_files + a managing role.
+          canUploadFiles: workspace.entitlements.features.client_files === true && canManageClientFilesForRole(workspace.role),
+        })
+      : null,
+    [workspace],
+  );
+
   const handleQuickAction = useCallback(
     (action: QuickActionId) => {
       // "New order" is the toolbar's own action and AppShell owns it, so this
@@ -260,18 +276,12 @@ export default function HomePage() {
         dispatchQuickAction("order");
         return;
       }
-      const destinations: Record<Exclude<QuickActionId, "order">, string> = {
-        customer: "/customers?new=1",
-        note: "/notes?new=1",
-        file: "/files?upload=1",
-        inventory: "/inventory?new=1",
-        reviewSpending: "/bank",
-        receipt: "/bank?receipt=1",
-        aiReply: "/messages",
-      };
-      router.push(destinations[action]);
+      // F2: the page this person's menu has for it (Generate AI reply: team messages, or AI Replies on a plan
+      // without them). A hidden action is never drawn, so the fallback is only for a click racing a reload.
+      const target = quickTargets?.[action] ?? (action === "aiReply" ? "/quick-reply" : QUICK_ACTION_PATHS[action]);
+      router.push(target);
     },
-    [router],
+    [router, quickTargets],
   );
 
   if (!authLoading && user && !workspace && workspaceError) {
@@ -316,6 +326,7 @@ export default function HomePage() {
       // "New order" is hidden from a member who only works inside assigned
       // projects (canCreateOrders); the toolbar hides its button the same way.
       canCreateOrders: canCreateOrders(workspace),
+      quickActionTargets: quickTargets ?? undefined,
     };
     switch (id) {
       case "money": return <MoneyCardBody {...props} />;
@@ -450,7 +461,8 @@ export default function HomePage() {
               headerSlot={
                 // The sheet puts a + on the notes card, because the thing you
                 // most often want from a wall of notes is one more note.
-                placement.id === "files" ? (
+                // F2: the Files card's upload button follows the quick action — none where Files offers no upload.
+                placement.id === "files" && quickTargets?.file !== null ? (
                   // 87px of "↑ Upload file" left the card's own title at 25px
                   // on the square, rendering as "Fil…". There the action is a
                   // mark; the wider cards have the room to name it.
