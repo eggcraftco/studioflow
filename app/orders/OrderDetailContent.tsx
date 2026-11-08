@@ -56,6 +56,7 @@ import { useConnectedStoreHosts } from "@/lib/studioflow/useConnectedStoreHosts"
 import { maskFileUrl, openSharedFile } from "@/lib/studioflow/fileMask";
 import { downloadStoredFile, openOutcomeProblem, openStoredFile, resolvedFileProblem, useResolvedFileUrl } from "@/lib/studioflow/storageFileUrl";
 import { StoredFileImage } from "@/components/StoredFileImage";
+import { FileShareButton } from "@/components/FileShareButton";
 import { OrderLinkedReminders } from "@/components/OrderLinkedReminders";
 import { orderReminderLabel } from "@/lib/studioflow/reminderCore";
 import {
@@ -13024,7 +13025,7 @@ function UnavailableInline({ note }: { note: string }) {
   );
 }
 
-type ClientFileActionIconName = "download" | "preview" | "rename" | "delete";
+type ClientFileActionIconName = "download" | "preview" | "rename" | "delete" | "share";
 
 function ClientFileActionIcon({ name }: { name: ClientFileActionIconName }) {
   if (name === "download") {
@@ -13043,6 +13044,16 @@ function ClientFileActionIcon({ name }: { name: ClientFileActionIconName }) {
         <path d="M5 5h14v14H5z" />
         <path d="M8 16l3-3 2 2 3-4 3 5" />
         <path d="M9 9h.01" />
+      </svg>
+    );
+  }
+
+  if (name === "share") {
+    return (
+      <svg className="client-file-action-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M12 15V4" />
+        <path d="M8 8l4-4 4 4" />
+        <path d="M6 12v7h12v-7" />
       </svg>
     );
   }
@@ -13150,6 +13161,8 @@ function ClientFileCard({
   // "Use in Preview" writes the stored link into the order's preview photo; it needs one.
   const canUseAsPreview = canManageClientFiles && canPreviewImage && Boolean(file.downloadURL);
   const [openProblem, setOpenProblem] = useState("");
+  // Share (8 Nov 2026): what the last Share said ("link copied", a refusal).
+  const [shareNote, setShareNote] = useState<{ text: string; problem: boolean } | null>(null);
   const byline = clientFileByline(file);
   const detailLocale = useDetailLocale();
   // A row in the workspace's own cloud: opened by minting, binned not deleted,
@@ -13191,6 +13204,7 @@ function ClientFileCard({
             <p className="muted-copy"><span className="studio-pill" data-file-provider={file.provider}>{providerBadgeLabel(file.provider ?? "")}</span></p>
           ) : null}
           {openProblem ? <p className="layout-error" role="alert">{t(openProblem)}</p> : null}
+          {shareNote ? <p className={shareNote.problem ? "layout-error" : "muted-copy"} role={shareNote.problem ? "alert" : "status"}>{t(shareNote.text)}</p> : null}
         </div>
       </button>
 
@@ -13219,6 +13233,19 @@ function ClientFileCard({
         ) : (
           <span className="client-file-locked-pill">{t("Locked")}</span>
         )}
+        {canUseClientFiles && (file.downloadURL || file.storagePath) ? (
+          // Share (8 Nov 2026, the owner): the file itself to this device's share sheet, beside Open / Download and
+          // under its gate (lib/studioflow/fileShare.ts: Storage first; else the workspace's file link, never firebasestorage).
+          <FileShareButton
+            file={file}
+            brandedHost={brandedHost}
+            t={t}
+            className="client-file-icon-button"
+            onMessage={(text, problem) => setShareNote(text ? { text, problem } : null)}
+          >
+            <ClientFileActionIcon name="share" />
+          </FileShareButton>
+        ) : null}
 
         {canUseAsPreview ? (
           <button className="client-file-icon-button" type="button" onClick={onUseAsPreview} disabled={actionDisabled} title={t("Use in Preview")} aria-label={t("Use file in Preview card")}>
@@ -13283,7 +13310,9 @@ function ClientFilePreviewModal({
   const activeUrl = resolved.status === "ready" ? resolved.url : "";
   const problem = resolvedFileProblem(resolved);
   const [openProblem, setOpenProblem] = useState("");
-  useEffect(() => { setOpenProblem(""); }, [activeFile.id]);
+  // Share (8 Nov 2026): what the last Share said; cleared with the file.
+  const [shareNote, setShareNote] = useState<{ text: string; problem: boolean } | null>(null);
+  useEffect(() => { setOpenProblem(""); setShareNote(null); }, [activeFile.id]);
   const previewFrameUrl = safePreviewFrameUrl(activeUrl, typeof window !== "undefined" ? window.location.origin : "https://nivadesk.app");
   const canUseAsPreview = canManageClientFiles && isImage && Boolean(activeFile.downloadURL) && Boolean(activeUrl);
 
@@ -13340,6 +13369,7 @@ function ClientFilePreviewModal({
             </div>
           )}
           {openProblem && !problem ? <p className="layout-error" role="alert">{t(openProblem)}</p> : null}
+          {shareNote && !problem ? <p className={shareNote.problem ? "layout-error" : "muted-copy"} role={shareNote.problem ? "alert" : "status"}>{t(shareNote.text)}</p> : null}
         </div>
 
         <footer className="client-file-preview-actions">
@@ -13368,6 +13398,12 @@ function ClientFilePreviewModal({
           {activeUrl ? (
             <>
               <a className="button secondary" href={maskFileUrl(activeUrl, brandedHost)} target="_blank" rel="noreferrer" onClick={event => { event.preventDefault(); void openStoredFile(activeFile, brandedHost).then(status => setOpenProblem(openOutcomeProblem(status))); }}>{t("Open file")}</a>
+              <FileShareButton
+                file={activeFile}
+                brandedHost={brandedHost}
+                t={t}
+                onMessage={(text, problem) => setShareNote(text ? { text, problem } : null)}
+              />
               <a className="button" href={maskFileUrl(activeUrl, brandedHost)} onClick={event => { event.preventDefault(); void downloadStoredFile(activeFile, activeFile.fileName, brandedHost).then(status => setOpenProblem(openOutcomeProblem(status))); }}>{t("Download")}</a>
             </>
           ) : null}

@@ -55,6 +55,7 @@ import { FilesLibraryView, type LibraryView } from "./FilesLibraryView";
 import { maskFileUrl } from "@/lib/studioflow/fileMask";
 import { openOutcomeProblem, openStoredFile, resolvedFileProblem, useResolvedFileUrl } from "@/lib/studioflow/storageFileUrl";
 import { StoredFileImage } from "@/components/StoredFileImage";
+import { FileShareButton } from "@/components/FileShareButton";
 import { UploadQueuePanel } from "@/components/UploadQueuePanel";
 import { useUploadQueue } from "@/lib/studioflow/useUploadQueue";
 import { safePreviewFrameUrl } from "@/lib/security/framePreview";
@@ -146,7 +147,9 @@ function FilesPreviewModal({
   const activeUrl = resolved.status === "ready" ? resolved.url : "";
   const problem = resolvedFileProblem(resolved);
   const [openProblem, setOpenProblem] = useState("");
-  useEffect(() => { setOpenProblem(""); }, [activeFile.id]);
+  // Share (8 Nov 2026): what the last Share said ("link copied", a refusal); cleared with the file.
+  const [shareNote, setShareNote] = useState<{ text: string; problem: boolean } | null>(null);
+  useEffect(() => { setOpenProblem(""); setShareNote(null); }, [activeFile.id]);
   const previewFrameUrl = safePreviewFrameUrl(activeUrl, typeof window !== "undefined" ? window.location.origin : "https://nivadesk.app");
 
   useEffect(() => {
@@ -204,6 +207,9 @@ function FilesPreviewModal({
             </div>
           )}
           {openProblem && !problem ? <p className="layout-error" role="alert">{t(openProblem)}</p> : null}
+          {shareNote && !problem ? (
+            <p className={shareNote.problem ? "layout-error" : "muted-copy"} role={shareNote.problem ? "alert" : "status"}>{t(shareNote.text)}</p>
+          ) : null}
         </div>
 
         <footer className="client-file-preview-actions">
@@ -228,6 +234,15 @@ function FilesPreviewModal({
             >
               {t("Open / Download")}
             </a>
+          ) : null}
+          {activeUrl ? (
+            // Share (8 Nov 2026): the preview opens only for whoever may open the file (canUseClientFiles).
+            <FileShareButton
+              file={activeFile}
+              brandedHost={brandedHost}
+              t={t}
+              onMessage={(text, problem) => setShareNote(text ? { text, problem } : null)}
+            />
           ) : null}
           <button
             className="button secondary"
@@ -1224,6 +1239,18 @@ export default function FilesPage() {
                           ) : (
                             <span className="pill">{t("Locked")}</span>
                           )}
+                          {canUseClientFiles && (file.downloadURL || file.storagePath) ? (
+                            // Share (8 Nov 2026, the owner): the file itself to this device's share sheet, under Open's gate.
+                            <FileShareButton
+                              file={file}
+                              brandedHost={workspace?.fileLinkHost}
+                              t={t}
+                              onMessage={(text, problem) => {
+                                if (problem) { setActionStatus(null); setError(text ? t(text) : null); }
+                                else { setError(null); setActionStatus(text); }
+                              }}
+                            />
+                          ) : null}
                           {canManageClientFiles ? (
                             <>
                               <button className="button secondary" type="button" onClick={() => handleRename(file)} disabled={Boolean(actioningFileId)}>

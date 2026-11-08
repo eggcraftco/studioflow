@@ -14,6 +14,7 @@ import { NOTIFICATION_SETTINGS_TRANSLATIONS } from "./notificationSettingsTransl
 import { ORDER_LIST_VIEW_TRANSLATIONS } from "./orderListViewTranslations";
 import { FILES_NOTES_ACCOUNT_TRANSLATIONS } from "./filesNotesAccountTranslations";
 import { FILES_BULK_DOWNLOAD_TRANSLATIONS } from "./filesBulkDownloadTranslations";
+import { FILE_SHARE_TRANSLATIONS } from "./fileShareTranslations";
 import { SALES_STORES_TRANSLATIONS } from "./salesStoresTranslations";
 import { WOO_STORES_TRANSLATIONS } from "./wooStoresTranslations";
 import { ETSY_ROUND_TWO_TRANSLATIONS } from "./etsyRoundTwoTranslations";
@@ -9374,6 +9375,8 @@ mergeMissingIntoTranslations(LANGUAGE_AUDIT_TRANSLATIONS);
 // "Download selected (ZIP)" on the Files page (4 Nov 2026). Gaps only, so "Could not download files." keeps any
 // wording another table already gives it.
 mergeMissingIntoTranslations(FILES_BULK_DOWNLOAD_TRANSLATIONS);
+// Share a stored file (8 Nov 2026): new keys only (fileShareTranslations.ts, the apps' rows + the web's link fallback).
+mergeMissingIntoTranslations(FILE_SHARE_TRANSLATIONS);
 // Payment links in the owner's reference design + "Payment received" (4 Nov 2026). Gaps only.
 mergeMissingIntoTranslations(PAYMENT_LINKS_BOARD_TRANSLATIONS);
 

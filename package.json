@@ -49,6 +49,7 @@
     "test:payment-link": "node scripts/check-payment-link.mts",
     "test:file-link-address": "node scripts/check-file-link-address.mts",
     "test:branded-file-open": "node scripts/check-branded-file-open.mts",
+    "test:file-share": "node scripts/check-file-share.mts",
     "test:refund-ui": "node scripts/check-refund-ui.mts",
     "test:row-menu-layer": "node scripts/check-row-menu-layer.mts",
     "test:standalone-ui": "node scripts/check-standalone-ui.mts",

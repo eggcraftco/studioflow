@@ -1023,6 +1023,14 @@ const TREE_EN: GuideNode[] = [
         "Make Offline (Mac, iPhone, iPad) keeps a copy on the device, so the file still opens with no signal. The same button then reads Remove offline copy and deletes it again; a file kept offline is opened from the device rather than downloaded each time.",
         "A file you share with a customer opens on your own domain when you have one set up in Settings ▸ Customer Portal Domain — the address bar shows your domain, the NivaDesk name is dropped, and the file itself is still loaded straight from storage, never through our servers."
       ] },
+      { kind: "sub", text: "Sharing a file (Share)" },
+      { kind: "para", text: "Share sends the file itself through your device's own share options — Messages, Mail, WhatsApp, AirDrop, Save to Files and the like — on the web, and in the Mac, iPhone, iPad and Android apps from version 2.5. It is a copy sent from your device: it does not change who can see the file in NivaDesk, which is what Share with Order does." },
+      { kind: "bullets", items: [
+        "Where: Files ▸ Client & Orders — the Share button on a file's row, or Share in the file preview; a library file's Actions ▸ Share; and the rows and preview of an order's Client Files.",
+        "iPhone and iPad open the share sheet (on iPad it points at the button you pressed), the Mac opens its Share menu, and Android opens its share chooser. The file arrives under its own name; while it downloads, the button shows it is working.",
+        "On the web, a browser that can share files opens the same share sheet. One that cannot copies the file's link on your file address instead and says so — the raw storage address is never shared.",
+        "Share is shown only to people who may open that file, the same as Open and Download."
+      ] },
       { kind: "sub", text: "Downloading several files at once (Download selected as a ZIP)" },
       { kind: "para", text: "Tick several files and download them as one ZIP — on the web, on Mac, iPhone and iPad, and on Android. Files kept in your own Google Drive, OneDrive, Dropbox or Box come in the same ZIP. Download all (ZIP) and each order's ZIP button work the same way." },
       { kind: "bullets", items: [
@@ -2850,6 +2858,14 @@ const TREE_TR: GuideNode[] = [
         "Bir dosyayı açtığınızda tam ekran görünür. iPhone ve iPad'de altındaki düğmeler simgeye döner — Önceki, Sonraki, çevrimdışı, Aç ve İndir — çünkü beş etiket telefona sığmaz.",
         "Make Offline (Mac, iPhone, iPad) dosyanın bir kopyasını cihazda tutar; sinyal yokken de açılır. Aynı düğme sonra Remove offline copy olur ve kopyayı siler. Çevrimdışı tutulan dosya her seferinde indirilmek yerine cihazdan açılır.",
         "Müşteriyle paylaştığınız bir dosya, Settings ▸ Customer Portal Domain'de kendi alan adınız kuruluysa o alan adında açılır — adres çubuğunda sizin alan adınız görünür, NivaDesk adı kalkar, ve dosyanın kendisi sunucularımızdan geçmeden doğrudan depodan yüklenir."
+      ] },
+      { kind: "sub", text: "Dosya paylaşma (Paylaş)" },
+      { kind: "para", text: "Paylaş, dosyanın kendisini cihazınızın kendi paylaşım seçenekleriyle gönderir — Mesajlar, Mail, WhatsApp, AirDrop, Dosyalar'a Kaydet ve benzerleri — web'de ve 2.5 sürümünden itibaren Mac, iPhone, iPad ve Android uygulamalarında. Bu, cihazınızdan gönderilen bir kopyadır: dosyayı NivaDesk'te kimin görebileceğini değiştirmez; onu Share with Order yapar." },
+      { kind: "bullets", items: [
+        "Nerede: Dosyalar ▸ Client & Orders — bir dosyanın satırındaki Paylaş düğmesi ya da dosya önizlemesindeki Paylaş; bir kütüphane dosyasında Actions ▸ Share; ve bir siparişin Client Files satırları ile önizlemesi.",
+        "iPhone ve iPad paylaşım sayfasını açar (iPad'de bastığınız düğmeyi gösterir), Mac Paylaş menüsünü, Android ise paylaşım seçicisini açar. Dosya kendi adıyla gider; indirilirken düğme çalıştığını gösterir.",
+        "Web'de dosya paylaşabilen bir tarayıcı aynı paylaşım sayfasını açar. Paylaşamayan bir tarayıcı bunun yerine dosyanın bağlantısını dosya adresinizden kopyalar ve bunu söyler — ham depolama adresi asla paylaşılmaz.",
+        "Paylaş yalnızca o dosyayı açabilen kişilere görünür; Aç ve İndir ile aynı."
       ] },
       { kind: "sub", text: "Birden fazla dosyayı birlikte indirme (Seçilenleri ZIP olarak indir)" },
       { kind: "para", text: "Birkaç dosyayı işaretleyip tek bir ZIP olarak indirin — web'de, Mac, iPhone ve iPad'de ve Android'de. Kendi Google Drive, OneDrive, Dropbox veya Box'ınızda tutulan dosyalar da aynı ZIP'e girer. Tümünü indir (ZIP) ve her siparişin ZIP düğmesi de aynı şekilde çalışır." },

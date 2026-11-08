@@ -27,6 +27,7 @@ import {
 } from "@/lib/studioflow/filesLibrary";
 import { loadWorkspaceOrderOptions, type OrderOptionItem, type WorkspaceContext } from "@/lib/studioflow/firestore";
 import { openSharedFile } from "@/lib/studioflow/fileMask";
+import { FileShareButton } from "@/components/FileShareButton";
 import { downloadSelectedFilesZip, filesDownloadProblem } from "@/lib/studioflow/clientFiles";
 import { UploadQueuePanel } from "@/components/UploadQueuePanel";
 import { useUploadQueue } from "@/lib/studioflow/useUploadQueue";
@@ -604,6 +605,22 @@ export function FilesLibraryView({
                 <button type="button" className="inventory-secondary" disabled={busy} onClick={() => void openFile(selected)}>
                   {t("Open / Download")}
                 </button>
+                {selected.storagePath ? (
+                  // Share (8 Nov 2026, the owner): the file itself to this device's share sheet, under Open's gate. A bank
+                  // receipt's link fallback is the masked one only (no new share record), as its Open is on the apps.
+                  <FileShareButton
+                    file={{
+                      storagePath: selected.storagePath,
+                      fileName: selected.displayName || selected.fileName,
+                      contentType: selected.fileType,
+                      maskedLinkOnly: selected.source === "bankReceipt"
+                    }}
+                    brandedHost={workspace.fileLinkHost}
+                    t={t}
+                    className="inventory-secondary"
+                    onMessage={text => setNotice(text ? t(text) : "")}
+                  />
+                ) : null}
                 <button type="button" className="inventory-secondary" disabled={busy} onClick={() => { setRenameDraft(selected.displayName); setRenaming(true); }}>
                   {t("Rename")}
                 </button>
