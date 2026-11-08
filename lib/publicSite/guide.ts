@@ -1021,7 +1021,7 @@ const TREE_EN: GuideNode[] = [
       { kind: "bullets", items: [
         "Opening a file shows it full screen. On iPhone and iPad the buttons under it become icons — Previous, Next, offline, Open and Download — because five labels do not fit a phone.",
         "Make Offline (Mac, iPhone, iPad) keeps a copy on the device, so the file still opens with no signal. The same button then reads Remove offline copy and deletes it again; a file kept offline is opened from the device rather than downloaded each time.",
-        "A file you share with a customer opens on your own domain when you have one set up in Settings ▸ Customer Portal Domain — the address bar shows your domain, the NivaDesk name is dropped, and the file itself is still loaded straight from storage, never through our servers."
+        "A file you share with a customer opens on your own domain when you have one set up in Settings ▸ Customer Portal Domain — the address bar shows your domain and the NivaDesk name is dropped. Pictures and videos load straight from storage; a PDF comes through that same address so that phones open it in their own PDF viewer with every page, and it is not kept on our servers."
       ] },
       { kind: "sub", text: "Sharing a file (Share)" },
       { kind: "para", text: "Share sends the file itself through your device's own share options — Messages, Mail, WhatsApp, AirDrop, Save to Files and the like — on the web, and in the Mac, iPhone, iPad and Android apps from version 2.5. It is a copy sent from your device: it does not change who can see the file in NivaDesk, which is what Share with Order does." },
@@ -2857,7 +2857,7 @@ const TREE_TR: GuideNode[] = [
       { kind: "bullets", items: [
         "Bir dosyayı açtığınızda tam ekran görünür. iPhone ve iPad'de altındaki düğmeler simgeye döner — Önceki, Sonraki, çevrimdışı, Aç ve İndir — çünkü beş etiket telefona sığmaz.",
         "Make Offline (Mac, iPhone, iPad) dosyanın bir kopyasını cihazda tutar; sinyal yokken de açılır. Aynı düğme sonra Remove offline copy olur ve kopyayı siler. Çevrimdışı tutulan dosya her seferinde indirilmek yerine cihazdan açılır.",
-        "Müşteriyle paylaştığınız bir dosya, Settings ▸ Customer Portal Domain'de kendi alan adınız kuruluysa o alan adında açılır — adres çubuğunda sizin alan adınız görünür, NivaDesk adı kalkar, ve dosyanın kendisi sunucularımızdan geçmeden doğrudan depodan yüklenir."
+        "Müşteriyle paylaştığınız bir dosya, Settings ▸ Customer Portal Domain'de kendi alan adınız kuruluysa o alan adında açılır — adres çubuğunda sizin alan adınız görünür, NivaDesk adı kalkar. Resimler ve videolar doğrudan depodan yüklenir; PDF ise telefonların kendi PDF görüntüleyicisinde tüm sayfalarıyla açılsın diye aynı adres üzerinden gelir ve sunucularımızda saklanmaz."
       ] },
       { kind: "sub", text: "Dosya paylaşma (Paylaş)" },
       { kind: "para", text: "Paylaş, dosyanın kendisini cihazınızın kendi paylaşım seçenekleriyle gönderir — Mesajlar, Mail, WhatsApp, AirDrop, Dosyalar'a Kaydet ve benzerleri — web'de ve 2.5 sürümünden itibaren Mac, iPhone, iPad ve Android uygulamalarında. Bu, cihazınızdan gönderilen bir kopyadır: dosyayı NivaDesk'te kimin görebileceğini değiştirmez; onu Share with Order yapar." },
