@@ -170,7 +170,7 @@ function guideProblems(source: string): string[] {
   return out;
 }
 const guideMutants: Array<[string, string]> = [
-  ["the old sentence back", guide.replace("Connecting Google Calendar and Outlook is open to every member of every workspace, on the web app.", "it is being opened gradually.")],
+  ["the old sentence back", guide.replace("Connecting Google Calendar and Outlook is open to every member of every workspace — on the web app, and in the Mac, iPhone, iPad and Android apps from app version 2.4 (the same Your other calendars button).", "it is being opened gradually.")],
   ["no pointer (English)", guide.replace("Settings ▸ Integrations ▸ Calendar explains these steps", "Settings explains these steps")],
   ["no pointer (Turkish)", guide.replace("Ayarlar ▸ Entegrasyonlar ▸ Takvim bu adımları anlatır", "Ayarlar bu adımları anlatır")],
 ];
