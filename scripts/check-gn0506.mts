@@ -55,12 +55,12 @@ const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Sp
   });
   await check("6.2 each platform's newest entry is its 'Latest', dated, with real changes", () => {
     const latest = changelog.CHANGELOG.filter((entry) => changelog.isLatestForPlatform(entry)).map((entry) => changelog.changelogAnchor(entry));
-    assert.deepEqual(latest, ["apple-2.4.1", "android-2.4.1", "all-0.1.3"]);
+    assert.deepEqual(latest, ["apple-2.5", "android-2.5", "all-0.1.3"]);
     for (const entry of changelog.CHANGELOG) {
       assert.match(entry.date, /\d{4}/, entry.version);
       assert.ok(entry.changes.length > 0, entry.version);
     }
-    assert.equal(changelog.CHANGELOG_LAST_UPDATED, "5 November 2026");
+    assert.equal(changelog.CHANGELOG_LAST_UPDATED, "11 November 2026"); // 2.5: the day the last store (iPhone & iPad) released it
   });
   await check("6.2a Apple 2.4.1 is on iPhone, iPad and Mac (both App Store pages, 5 Nov 2026); 2.4 stays iPhone & iPad", () => {
     const find = (anchor: string) => changelog.CHANGELOG.find((entry) => changelog.changelogAnchor(entry) === anchor);

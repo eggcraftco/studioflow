@@ -62,9 +62,60 @@ export function isLatestForPlatform(entry: ChangelogEntry, list: ChangelogEntry[
   return list.find((item) => item.platformKey === entry.platformKey) === entry;
 }
 
-export const CHANGELOG_LAST_UPDATED = "5 November 2026";
+export const CHANGELOG_LAST_UPDATED = "11 November 2026";
 
 export const CHANGELOG: ChangelogEntry[] = [
+  // 2.5 (Apple) — RELEASED: Mac App Store 9 Nov 2026, App Store (iPhone & iPad) 11 Nov 2026 (store pages read 13 Nov); one entry, dated by the later day, both days in the highlight. Owner 7 Nov: 2.4.2 is skipped (never uploaded), everything goes in 2.5, so 2.5 lists 2.4.2's
+  // own lines too. Word for word from the App Store "What's New" in store-metadata/app-store/en-US/release_notes.txt on
+  // native-2.5-candidate-r14-2026-11-08 (r14 notes: + Files design; + Banking window; + Files share; + files open on your address, Inventory, Quick actions; no SMS, no ChatGPT/Claude; generator ~/Developer/nivadesk-deploy-2026-11-07/store-2.5/notes/build-notes-2.5.py), version 2.5 (37),
+  // identical for iOS and macOS. Dates set by hand on 13 Nov 2026 because the stores released on different days; copy any wording change made in App Store Connect. The NivaDesk Trial is NOT listed: it is behind the membership switch (rule 4 above).
+  {
+    version: "2.5",
+    platformKey: "apple",
+    platform: "iPhone, iPad & Mac",
+    date: "11 November 2026",
+    highlight: "Up to 10 people on an order, payment links and refunds in the app, every reminder in one list with notifications on the Mac too, a shorter setup, fuller inventory listings, a smoother Mac window, ZIP downloads, a fuller DHL Express label form with Check with DHL, and product analytics now optional and off. Released to the Mac App Store on 9 November 2026 and to the App Store for iPhone and iPad on 11 November 2026.",
+    changes: [
+      { tag: "new", text: "Orders: assign an order to up to 10 people. Each of them sees the order with their own role." },
+      { tag: "new", text: "Payment links: Banking ▸ Payment links lists every link with its status, on iPhone, iPad and Mac. Create a link for an order or a link on its own; the workspace owner can refund a payment." },
+      { tag: "new", text: "Reminders: Notes ▸ Reminders shows note, order and calendar reminders together, soonest first. A note reminder can have a time or be All day, and the Calendar shows order reminders at their time." },
+      { tag: "improved", text: "File links: the files you open and share use your workspace's own address, and your file address (for example files.example.com) once it is live." },
+      { tag: "improved", text: "Reminder notifications open the note, order or Calendar day they are about, and the Mac now receives them too." },
+      { tag: "improved", text: "Setup is shorter: after the setup questions you go straight into the app, with no starter checklist or guided tour." },
+      { tag: "improved", text: "Inventory: each listing shows its channel and price, items that still need details are marked, and listing pictures, SKU and description come in with the item. You can add what you paid." },
+      { tag: "improved", text: "Home: the Quick actions card only offers actions you can use." },
+      { tag: "improved", text: "Orders on iPhone: the status strip opens folded and the order header folds as you scroll, so more of the order fits on the screen." },
+      { tag: "improved", text: "Mac: resizing the window is smoother in every direction, the Work Time card fits a narrow column, and the account card at the bottom of the sidebar works like the web." },
+      { tag: "improved", text: "Banking uses the whole window on Mac and iPad, with tidier buttons." },
+      { tag: "fixed", text: "Order card names follow your workspace on every device." },
+      { tag: "new", text: "Files: tick files and download them together as one ZIP, on iPhone, iPad and Mac." },
+      { tag: "new", text: "Files: share a file straight from Files with your device's share options." },
+      { tag: "new", text: "Files: every file in Client Files and the Library shows a picture, and a PDF shows its first page. A Library file opens large with its order and history; tap it to see the whole file in the app." },
+      { tag: "improved", text: "DHL Express: the label form adds a phone country code, a currency list and, where DHL offers it, a courier pickup booked with the label. Before you book, the form tells you that NivaDesk cannot cancel the pickup." },
+      { tag: "improved", text: "DHL Express customs: type the weight of one item and NivaDesk multiplies it by the quantity, and saving looks the HS code up in the official UK Trade Tariff. A line that was filled from the order or the inventory asks you to tick that you checked it." },
+      { tag: "new", text: "Check with DHL: DHL checks the label details before you create the label. Nothing is created at DHL: no label, no waybill and no courier." },
+      { tag: "improved", text: "Privacy: product analytics is now optional and off unless you switch it on (Settings ▸ Legal ▸ Privacy choices). The app no longer uses an advertising ID or ad measurement." },
+      { tag: "fixed", text: "Storage use and limits read in the same units everywhere in the app." },
+      { tag: "fixed", text: "Smaller fixes and translations." },
+    ],
+  },
+  // 2.5 (Android) — RELEASED on Google Play 8 Nov 2026 (public Play page read 13 Nov: version 2.5, updated 8 Nov 2026). Word for word from the Play notes ~/Developer/nivadesk-deploy-2026-11-07/store-2.5/notes/play-notes-2.5.txt
+  // (en-GB) for versionCode 25.
+  {
+    version: "2.5",
+    platformKey: "android",
+    platform: "Android",
+    date: "8 November 2026",
+    highlight: "Up to 10 people on an order, payment links and refunds in the app, every reminder in one list, Files with a picture for every file, a fuller DHL Express label form with Check with DHL, product analytics now optional and off, and the Mac app's colours. Released on Google Play on 8 November 2026.",
+    changes: [
+      { tag: "new", text: "Orders: assign an order to up to 10 people, each with their own role." },
+      { tag: "new", text: "Payment links: Banking ▸ Payment links lists every link; create links, and the owner can refund." },
+      { tag: "new", text: "Reminders: note, order and calendar reminders in one list." },
+      { tag: "improved", text: "Files: a picture for every file (a PDF's first page), a Library page with order and history, ZIP." },
+      { tag: "improved", text: "DHL Express: courier pickup, weight per item, HS codes and Check with DHL." },
+      { tag: "improved", text: "Privacy: analytics optional and off; no advertising ID. Colours match the Mac app." },
+    ],
+  },
   // 2.4.1 (Apple, iPhone, iPad & Mac) — from the App Store "What's New" that was entered (en-GB; ~/Developer/nivadesk-deploy-2026-11-05/store-2.4.1/README.md,
   // identical for iOS and macOS) for native-2.4.1-candidate-2026-11-01 @5336c2245, build 35. Read back 6 Nov 2026 ~01:15Z from the public
   // App Store (no sign-in): iOS — itunes lookup gb version 2.4.1, currentVersionReleaseDate 2026-11-05T22:14:37Z, and the iPhone page's
