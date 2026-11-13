@@ -1066,11 +1066,16 @@ function invoiceHtml(
       : hasLineItems
         ? (orderValue * taxRate) / (100 + taxRate)
         : order.taxAmount;
-  const subtotal = isEstimate
-    ? estimate!.subtotal
-    : isMarginScheme
-      ? orderValue
-      : orderValue - vatAmount;
+  // With VAT off nothing on the document is VAT, so the subtotal is the whole
+  // total — an estimate saved at 20% must not print "Subtotal 100 / TOTAL 120"
+  // with no VAT line between them (13 Nov 2026; same rule as the apps).
+  const subtotal = vatOff
+    ? orderValue
+    : isEstimate
+      ? estimate!.subtotal
+      : isMarginScheme
+        ? orderValue
+        : orderValue - vatAmount;
   // The brand subtitle when the workshop wrote one; otherwise the workspace's
   // own name. The sample studio name is no longer a default anywhere.
   const businessName = (settings?.appSubtitle || "").trim() || workspaceName.trim() || "NivaDesk";
