@@ -181,7 +181,10 @@ export function RoyalMailShipmentPanel({
     try {
       const before = shipmentsRef.current;
       const result = await refreshOrderRoyalMail(companyId, orderId);
-      await adopt(result.shipments, { tellOrder: royalMailShipmentsChanged(before, result.shipments) });
+      const changed = royalMailShipmentsChanged(before, result.shipments);
+      // What was said after sending ("pay for and print the label there…") is no longer the news.
+      if (changed) setNotice("");
+      await adopt(result.shipments, { tellOrder: changed });
     } catch {
       // Royal Mail unreachable, or the key refused: said when a person presses Check now.
     } finally {
@@ -397,6 +400,16 @@ export function RoyalMailShipmentPanel({
     </fieldset>
   ) : null;
 
+  // What happened, said where the person is looking: beside the form's own buttons while the form is
+  // open (the customs form is long, and a sentence at the top of the card would be off the screen).
+  const messages = (
+    <>
+      {notice ? <p className="shipment-note" role="status">{notice}</p> : null}
+      {error ? <p className="shipment-error" role="alert">{error}</p> : null}
+      {problems.length ? <ul className="shipment-list" data-testid="royal-mail-problems">{problems.map((p, i) => <li key={i} className="shipment-error">{p}</li>)}</ul> : null}
+    </>
+  );
+
   const form = (
     <div className="shipment-settings-form" data-testid="royal-mail-form">
       <div className="inventory-form">
@@ -439,6 +452,7 @@ export function RoyalMailShipmentPanel({
           </div>
         </>
       ) : null}
+      {messages}
     </div>
   );
 
@@ -447,9 +461,7 @@ export function RoyalMailShipmentPanel({
       <div className="app-card-divider" />
       <div className="shipment-panel-head"><strong>Royal Mail</strong></div>
       {notConnectedNote}
-      {notice ? <p className="shipment-note" role="status">{notice}</p> : null}
-      {error ? <p className="shipment-error">{error}</p> : null}
-      {problems.length ? <ul className="shipment-list">{problems.map((p, i) => <li key={i} className="shipment-error">{p}</li>)}</ul> : null}
+      {formOpen ? null : messages}
 
       {list.length > 0 ? (
         <ul className="shipment-list">
