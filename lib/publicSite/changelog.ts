@@ -82,21 +82,24 @@ export function isLatestForPlatform(entry: ChangelogEntry, list: ChangelogEntry[
   return list.find((item) => item.platformKey === entry.platformKey) === entry;
 }
 
-export const CHANGELOG_LAST_UPDATED = "11 November 2026";
+export const CHANGELOG_LAST_UPDATED = "14 November 2026";
 
-// 2.5.1 is in review (submitted 14 Nov 2026). Replace with the day the stores released it, e.g. "17 November 2026",
-// and set CHANGELOG_LAST_UPDATED to the same day. check-gn0506 fails while this is not a real date.
-export const CHANGELOG_251_RELEASE_DAY = "RELEASE-DAY";
+// 2.5.1 was submitted to the three stores on 14 Nov 2026 and the owner asked (chat, 14 Nov) to show its notes on the site
+// straight away, before approval. So the entries carry the SUBMISSION day and a highlight that says the version is in store
+// review. When the stores release it: set each entry's date to that store's release day, drop or reword the highlight
+// (all 12 languages), and set CHANGELOG_LAST_UPDATED.
+export const CHANGELOG_251_DAY = "14 November 2026";
+export const CHANGELOG_251_IN_REVIEW = "In store review since 14 November 2026. It reaches your device as an update once the store approves it.";
 
 export const CHANGELOG: ChangelogEntry[] = [
-  // 2.5.1 (Apple) — SUBMITTED 14 Nov 2026 (iOS + macOS, build 38), automatic release. NOT released when this was written: the date is set on the release day
-  // (CHANGELOG_251_RELEASE_DAY below; check-gn0506 refuses a placeholder). Word for word from the App Store "What's New" entered in App Store Connect
+  // 2.5.1 (Apple) — SUBMITTED 14 Nov 2026 (iOS + macOS, build 38), automatic release. In review when this was written (see CHANGELOG_251_DAY above). Word for word from the App Store "What's New" entered in App Store Connect
   // (~/Developer/nivadesk-deploy-2026-11-13/native-2.5.1/store/notes/kopyala/app-store/<locale>.txt), all 12 languages.
   {
     version: "2.5.1",
     platformKey: "apple",
     platform: "iPhone, iPad & Mac",
-    date: CHANGELOG_251_RELEASE_DAY,
+    date: CHANGELOG_251_DAY,
+    highlight: CHANGELOG_251_IN_REVIEW,
     changes: [
       { tag: "fixed", text: "Invoices and estimates: no VAT line when your business is not VAT registered. The invoice also shows Paid and Balance due." },
       { tag: "fixed", text: "Documents carry your own workspace name; the sample business name is gone." },
@@ -106,7 +109,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       { tag: "improved", text: "Repair Intake appears only where repairs happen." },
     ],
     i18n: {
-      "Türkçe": { changes: [
+      "Türkçe": { highlight: "14 Kasım 2026'dan beri mağaza incelemesinde. Mağaza onayladığında cihazınıza güncelleme olarak gelir.", changes: [
         "Fatura ve teklifler: işletmeniz KDV mükellefi değilse KDV satırı çıkmaz. Faturada ayrıca Ödenen ve Kalan bakiye görünür.",
         "Belgelerde kendi çalışma alanınızın adı yazar; örnek işletme adı kaldırıldı.",
         "Kurulum, KDV mükellefi olup olmadığınızı sorar; hiçbir seçenek önceden işaretli gelmez ve isteğe bağlı sorular katlanmış durur.",
@@ -114,7 +117,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         "iPhone'da Banka: sayfa başlığı ve düğmeleri artık sıkışmıyor.",
         "Onarım Kabul yalnızca onarım yapılan iş yerlerinde görünür.",
       ] },
-      "Deutsch": { changes: [
+      "Deutsch": { highlight: "Seit dem 14. November 2026 in der Store-Prüfung. Das Update erreicht Ihr Gerät, sobald der Store es freigibt.", changes: [
         "Rechnungen und Kostenvoranschläge: keine Umsatzsteuerzeile, wenn Ihr Betrieb nicht umsatzsteuerpflichtig ist. Die Rechnung zeigt außerdem „Bezahlt“ und „Restbetrag“.",
         "Dokumente tragen den Namen Ihres eigenen Workspace; der Beispielname ist entfernt.",
         "Die Einrichtung fragt, ob Sie umsatzsteuerpflichtig sind, nichts ist vorausgewählt, und die optionalen Fragen sind eingeklappt.",
@@ -122,7 +125,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         "Banking auf dem iPhone: Seitentitel und Schaltflächen drängen sich nicht mehr zusammen.",
         "Die Reparaturannahme erscheint nur dort, wo repariert wird.",
       ] },
-      "Français": { changes: [
+      "Français": { highlight: "En cours de validation par le store depuis le 14 novembre 2026. La mise à jour arrive sur votre appareil dès que le store l'approuve.", changes: [
         "Factures et devis : pas de ligne de TVA si votre entreprise n'est pas assujettie à la TVA. La facture affiche aussi « Payé » et « Solde dû ».",
         "Les documents portent le nom de votre propre espace de travail ; le nom d'entreprise d'exemple a disparu.",
         "La configuration demande si vous êtes assujetti à la TVA, rien n'est présélectionné et les questions facultatives sont repliées.",
@@ -130,7 +133,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         "Banque sur iPhone : le titre de la page et ses boutons ne se serrent plus.",
         "La réception de réparation n'apparaît que là où l'on répare.",
       ] },
-      "Italiano": { changes: [
+      "Italiano": { highlight: "In revisione presso lo store dal 14 novembre 2026. L'aggiornamento arriva sul tuo dispositivo appena lo store lo approva.", changes: [
         "Fatture e preventivi: nessuna riga IVA se la tua attività non è registrata ai fini IVA. La fattura mostra anche «Pagato» e «Saldo dovuto».",
         "I documenti riportano il nome del tuo spazio di lavoro; il nome di esempio non c'è più.",
         "La configurazione chiede se sei registrato ai fini IVA, nulla è preselezionato e le domande facoltative sono ripiegate.",
@@ -138,7 +141,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         "Banca su iPhone: il titolo della pagina e i suoi pulsanti non si schiacciano più.",
         "L'accettazione riparazione compare solo dove si fanno riparazioni.",
       ] },
-      "Español (Spanish)": { changes: [
+      "Español (Spanish)": { highlight: "En revisión de la tienda desde el 14 de noviembre de 2026. La actualización llega a tu dispositivo en cuanto la tienda la aprueba.", changes: [
         "Facturas y presupuestos: sin línea de IVA si tu negocio no está registrado a efectos de IVA. La factura muestra además «Pagado» y «Saldo pendiente».",
         "Los documentos llevan el nombre de tu propio espacio de trabajo; el nombre de ejemplo ha desaparecido.",
         "La configuración pregunta si estás registrado a efectos de IVA, nada viene marcado de antemano y las preguntas opcionales quedan plegadas.",
@@ -146,7 +149,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         "Banca en iPhone: el título de la página y sus botones ya no se aprietan.",
         "La recepción de reparación aparece solo donde se hacen reparaciones.",
       ] },
-      "Português": { changes: [
+      "Português": { highlight: "Em revisão na loja desde 14 de novembro de 2026. A atualização chega ao seu dispositivo assim que a loja a aprovar.", changes: [
         "Faturas e orçamentos: sem linha de IVA quando o seu negócio não está registado para efeitos de IVA. A fatura mostra também «Pago» e «Saldo em dívida».",
         "Os documentos levam o nome do seu próprio espaço de trabalho; o nome de exemplo desapareceu.",
         "A configuração pergunta se está registado para efeitos de IVA, nada vem pré-selecionado e as perguntas opcionais ficam recolhidas.",
@@ -154,7 +157,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         "Banco no iPhone: o título da página e os seus botões já não ficam apertados.",
         "A receção de reparação aparece apenas onde se fazem reparações.",
       ] },
-      "Русский (Russian)": { changes: [
+      "Русский (Russian)": { highlight: "На проверке в магазине с 14 ноября 2026 г. Обновление появится на вашем устройстве, как только магазин его одобрит.", changes: [
         "Счета и сметы: строки НДС нет, если ваша мастерская не является плательщиком НДС. В счёте также показаны «Оплачено» и «К оплате».",
         "В документах стоит название вашего рабочего пространства; образец названия убран.",
         "Настройка спрашивает, являетесь ли вы плательщиком НДС; ничего не выбрано заранее, а необязательные вопросы свёрнуты.",
@@ -162,7 +165,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         "Банк на iPhone: заголовок страницы и кнопки больше не сжимаются.",
         "Приём в ремонт появляется только там, где выполняют ремонт.",
       ] },
-      "日本語 (Japanese)": { changes: [
+      "日本語 (Japanese)": { highlight: "2026年11月14日からストアの審査中です。ストアが承認すると、アップデートとしてお使いのデバイスに届きます。", changes: [
         "請求書と見積書：VAT（消費税）の課税事業者でない場合、税の行は表示されません。請求書には「支払済」と「残額」も表示されます。",
         "書類にはご自身のワークスペース名が入ります。サンプルの事業者名はなくなりました。",
         "セットアップで課税事業者かどうかを確認します。あらかじめ選択されている項目はなく、任意の質問は折りたたまれています。",
@@ -170,7 +173,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         "iPhone のバンキング：ページのタイトルとボタンが窮屈にならなくなりました。",
         "修理受付は修理を行う工房にだけ表示されます。",
       ] },
-      "中文 (Chinese)": { changes: [
+      "中文 (Chinese)": { highlight: "自 2026 年 11 月 14 日起处于商店审核中。商店批准后，将以更新的形式推送到您的设备。", changes: [
         "发票和报价单：如果您不是增值税登记纳税人，则不显示增值税行。发票还会显示“已付”和“应付余额”。",
         "单据上显示您自己的工作区名称；示例商家名称已移除。",
         "设置向导会询问您是否为增值税登记纳税人，不再预先选中任何选项，可选问题默认折叠。",
@@ -178,7 +181,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         "iPhone 上的银行：页面标题和按钮不再挤在一起。",
         "维修接收只在做维修的工坊显示。",
       ] },
-      "العربية (Arabic)": { changes: [
+      "العربية (Arabic)": { highlight: "قيد مراجعة المتجر منذ 14 نوفمبر 2026. يصل التحديث إلى جهازك فور موافقة المتجر عليه.", changes: [
         "الفواتير وعروض الأسعار: لا يظهر سطر ضريبة القيمة المضافة إذا لم تكن منشأتك مسجّلة في ضريبة القيمة المضافة. وتعرض الفاتورة أيضًا «مدفوع» و«الرصيد المستحق».",
         "تحمل المستندات اسم مساحة عملك أنت؛ وأُزيل اسم المنشأة التجريبي.",
         "يسألك الإعداد هل أنت مسجّل في ضريبة القيمة المضافة، ولا يُحدَّد أي خيار مسبقًا، والأسئلة الاختيارية مطويّة.",
@@ -186,7 +189,7 @@ export const CHANGELOG: ChangelogEntry[] = [
         "الخدمات المصرفية على iPhone: لم يعد عنوان الصفحة وأزرارها تتزاحم.",
         "يظهر استلام الإصلاح فقط حيث تُجرى الإصلاحات.",
       ] },
-      "हिन्दी (Hindi)": { changes: [
+      "हिन्दी (Hindi)": { highlight: "14 नवंबर 2026 से स्टोर की समीक्षा में है। स्टोर के स्वीकृत करते ही यह अपडेट के रूप में आपके डिवाइस पर आ जाएगा।", changes: [
         "इनवॉइस और अनुमान: अगर आपका व्यवसाय VAT में पंजीकृत नहीं है तो VAT की पंक्ति नहीं दिखती। इनवॉइस में “भुगतान किया” और “बकाया राशि” भी दिखते हैं।",
         "दस्तावेज़ों पर आपके अपने वर्कस्पेस का नाम रहता है; नमूना व्यवसाय नाम हटा दिया गया है।",
         "सेटअप पूछता है कि क्या आप VAT में पंजीकृत हैं, कुछ भी पहले से चुना हुआ नहीं होता, और वैकल्पिक प्रश्न मुड़े हुए रहते हैं।",
@@ -202,7 +205,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: "2.5.1",
     platformKey: "android",
     platform: "Android",
-    date: CHANGELOG_251_RELEASE_DAY,
+    date: CHANGELOG_251_DAY,
+    highlight: CHANGELOG_251_IN_REVIEW,
     changes: [
       { tag: "fixed", text: "Home, Inventory and Orders on a phone: text and buttons no longer overlap." },
       { tag: "fixed", text: "Invoices and estimates: no VAT line when you are not VAT registered; Paid and Balance due on the invoice." },
@@ -211,77 +215,77 @@ export const CHANGELOG: ChangelogEntry[] = [
       { tag: "new", text: "New order, quick form: optional price." },
     ],
     i18n: {
-      "Türkçe": { changes: [
+      "Türkçe": { highlight: "14 Kasım 2026'dan beri mağaza incelemesinde. Mağaza onayladığında cihazınıza güncelleme olarak gelir.", changes: [
         "Telefonda Ana Sayfa, Envanter ve Siparişler: yazılar ve düğmeler artık iç içe geçmiyor.",
         "Fatura ve teklifler: KDV mükellefi değilseniz KDV satırı yok; faturada Ödenen ve Kalan bakiye.",
         "Belgelerde kendi çalışma alanınızın adı yazar.",
         "Kurulum, KDV mükellefi olup olmadığınızı sorar.",
         "Yeni sipariş, hızlı form: isteğe bağlı fiyat.",
       ] },
-      "Deutsch": { changes: [
+      "Deutsch": { highlight: "Seit dem 14. November 2026 in der Store-Prüfung. Das Update erreicht Ihr Gerät, sobald der Store es freigibt.", changes: [
         "Start, Bestand und Bestellungen auf dem Telefon: Texte und Schaltflächen überlappen nicht mehr.",
         "Rechnungen und Kostenvoranschläge: keine Umsatzsteuerzeile, wenn Sie nicht umsatzsteuerpflichtig sind; „Bezahlt“ und „Restbetrag“ auf der Rechnung.",
         "Dokumente tragen den Namen Ihres Workspace.",
         "Die Einrichtung fragt, ob Sie umsatzsteuerpflichtig sind.",
         "Neue Bestellung, Schnellformular: optionaler Preis.",
       ] },
-      "Français": { changes: [
+      "Français": { highlight: "En cours de validation par le store depuis le 14 novembre 2026. La mise à jour arrive sur votre appareil dès que le store l'approuve.", changes: [
         "Accueil, Inventaire et Commandes sur téléphone : les textes et les boutons ne se chevauchent plus.",
         "Factures et devis : pas de ligne de TVA si vous n'êtes pas assujetti à la TVA ; « Payé » et « Solde dû » sur la facture.",
         "Les documents portent le nom de votre espace de travail.",
         "La configuration demande si vous êtes assujetti à la TVA.",
         "Nouvelle commande, formulaire rapide : prix facultatif.",
       ] },
-      "Italiano": { changes: [
+      "Italiano": { highlight: "In revisione presso lo store dal 14 novembre 2026. L'aggiornamento arriva sul tuo dispositivo appena lo store lo approva.", changes: [
         "Home, Inventario e Ordini sul telefono: testi e pulsanti non si sovrappongono più.",
         "Fatture e preventivi: nessuna riga IVA se non sei registrato ai fini IVA; «Pagato» e «Saldo dovuto» in fattura.",
         "I documenti riportano il nome del tuo spazio di lavoro.",
         "La configurazione chiede se sei registrato ai fini IVA.",
         "Nuovo ordine, modulo rapido: prezzo facoltativo.",
       ] },
-      "Español (Spanish)": { changes: [
+      "Español (Spanish)": { highlight: "En revisión de la tienda desde el 14 de noviembre de 2026. La actualización llega a tu dispositivo en cuanto la tienda la aprueba.", changes: [
         "Inicio, Inventario y Pedidos en el teléfono: los textos y los botones ya no se solapan.",
         "Facturas y presupuestos: sin línea de IVA si no estás registrado a efectos de IVA; «Pagado» y «Saldo pendiente» en la factura.",
         "Los documentos llevan el nombre de tu espacio de trabajo.",
         "La configuración pregunta si estás registrado a efectos de IVA.",
         "Nuevo pedido, formulario rápido: precio opcional.",
       ] },
-      "Português": { changes: [
+      "Português": { highlight: "Em revisão na loja desde 14 de novembro de 2026. A atualização chega ao seu dispositivo assim que a loja a aprovar.", changes: [
         "Início, Inventário e Pedidos no telemóvel: os textos e os botões já não se sobrepõem.",
         "Faturas e orçamentos: sem linha de IVA se não estiver registado para efeitos de IVA; «Pago» e «Saldo em dívida» na fatura.",
         "Os documentos levam o nome do seu espaço de trabalho.",
         "A configuração pergunta se está registado para efeitos de IVA.",
         "Novo pedido, formulário rápido: preço opcional.",
       ] },
-      "Русский (Russian)": { changes: [
+      "Русский (Russian)": { highlight: "На проверке в магазине с 14 ноября 2026 г. Обновление появится на вашем устройстве, как только магазин его одобрит.", changes: [
         "Главная, Инвентарь и Заказы на телефоне: текст и кнопки больше не накладываются друг на друга.",
         "Счета и сметы: без строки НДС, если вы не плательщик НДС; в счёте — «Оплачено» и «К оплате».",
         "В документах стоит название вашего рабочего пространства.",
         "Настройка спрашивает, являетесь ли вы плательщиком НДС.",
         "Новый заказ, быстрая форма: цена по желанию.",
       ] },
-      "日本語 (Japanese)": { changes: [
+      "日本語 (Japanese)": { highlight: "2026年11月14日からストアの審査中です。ストアが承認すると、アップデートとしてお使いのデバイスに届きます。", changes: [
         "スマートフォンのホーム・在庫・注文：文字とボタンが重ならなくなりました。",
         "請求書と見積書：課税事業者でない場合は税の行なし。請求書に「支払済」と「残額」を表示。",
         "書類にはご自身のワークスペース名が入ります。",
         "セットアップで課税事業者かどうかを確認します。",
         "新規注文のクイックフォーム：価格を入力可能（任意）。",
       ] },
-      "العربية (Arabic)": { changes: [
+      "العربية (Arabic)": { highlight: "قيد مراجعة المتجر منذ 14 نوفمبر 2026. يصل التحديث إلى جهازك فور موافقة المتجر عليه.", changes: [
         "الرئيسية والمخزون والطلبات على الهاتف: لم تعد النصوص والأزرار تتداخل.",
         "الفواتير وعروض الأسعار: لا سطر لضريبة القيمة المضافة إذا لم تكن مسجّلًا فيها؛ «مدفوع» و«الرصيد المستحق» في الفاتورة.",
         "تحمل المستندات اسم مساحة عملك.",
         "يسألك الإعداد هل أنت مسجّل في ضريبة القيمة المضافة.",
         "طلب جديد، النموذج السريع: سعر اختياري.",
       ] },
-      "हिन्दी (Hindi)": { changes: [
+      "हिन्दी (Hindi)": { highlight: "14 नवंबर 2026 से स्टोर की समीक्षा में है। स्टोर के स्वीकृत करते ही यह अपडेट के रूप में आपके डिवाइस पर आ जाएगा।", changes: [
         "फ़ोन पर होम, इन्वेंटरी और ऑर्डर: टेक्स्ट और बटन अब एक-दूसरे पर नहीं चढ़ते।",
         "इनवॉइस और अनुमान: VAT में पंजीकृत न होने पर VAT की पंक्ति नहीं; इनवॉइस में “भुगतान किया” और “बकाया राशि”।",
         "दस्तावेज़ों पर आपके वर्कस्पेस का नाम रहता है।",
         "सेटअप पूछता है कि क्या आप VAT में पंजीकृत हैं।",
         "नया ऑर्डर, त्वरित फ़ॉर्म: वैकल्पिक कीमत।",
       ] },
-      "中文 (Chinese)": { changes: [
+      "中文 (Chinese)": { highlight: "自 2026 年 11 月 14 日起处于商店审核中。商店批准后，将以更新的形式推送到您的设备。", changes: [
         "手机上的主页、库存和订单：文字与按钮不再重叠。",
         "发票与报价单：若您不是增值税登记纳税人，则不显示增值税行；发票显示“已付”与“应付余额”。",
         "单据上显示您自己的工作区名称。",

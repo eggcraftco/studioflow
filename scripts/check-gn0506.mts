@@ -61,7 +61,7 @@ const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Sp
       if (entry.version === "2.5.1") assert.match(entry.date, /^\d{1,2} [A-Z][a-z]+ \d{4}$/, "2.5.1: the date must be the release day, not a placeholder");
       assert.ok(entry.changes.length > 0, entry.version);
     }
-    assert.equal(changelog.CHANGELOG_LAST_UPDATED, "11 November 2026"); // 2.5: the day the last store (iPhone & iPad) released it
+    assert.equal(changelog.CHANGELOG_LAST_UPDATED, "14 November 2026"); // 2.5.1: shown from the day it was submitted, marked as in store review (owner, 14 Nov)
   });
   await check("6.2b 2.5.1 reads in all 12 site languages; an entry without its own text reads in English", () => {
     const languages = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
@@ -84,6 +84,14 @@ const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Sp
           assert.equal(change.tag, entry.changes[index].tag);
           assert.notEqual(change.text, entry.changes[index].text, `${anchor} ${language} line ${index + 1} is still English`);
         });
+      }
+    }
+    for (const anchor of ["apple-2.5.1", "android-2.5.1"]) {
+      const entry = changelog.CHANGELOG.find((item) => changelog.changelogAnchor(item) === anchor)!;
+      assert.ok((entry.highlight ?? "").includes("store review"), anchor);
+      for (const language of languages) {
+        const local = changelog.localizedChangelogEntry(entry, language).highlight ?? "";
+        assert.ok(local.length > 20 && local !== entry.highlight && local.includes("2026"), `${anchor} ${language} highlight`);
       }
     }
     const apple = changelog.CHANGELOG.find((item) => changelog.changelogAnchor(item) === "apple-2.5.1")!;
