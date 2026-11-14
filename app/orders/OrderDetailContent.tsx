@@ -193,7 +193,6 @@ import { OrderShipmentsPanel } from "./OrderShipmentsPanel";
 import { RoyalMailShipmentPanel } from "./RoyalMailShipmentPanel";
 import { OrderDeliveryAddress } from "./OrderDeliveryAddress";
 import { deliveryAddressFrom, type DeliveryAddress } from "@/lib/studioflow/deliveryAddress";
-import { royalMailUkAddress } from "@/lib/studioflow/royalMail";
 import { EtsyBlockChannelContext, EtsySafe, EtsySourcePanel, EtsyProductPhoto, useEtsyListingPhotos, useEtsySourceState } from "./EtsySourcePanel";
 import { etsyListingLink, etsyPhotoIsShowable } from "@/lib/studioflow/etsyListingPhotos";
 import { EtsyNotePhotoLinks } from "./EtsyText";
@@ -204,7 +203,7 @@ import { OrderLiveTrackingPanel } from "./OrderLiveTrackingPanel";
 import { OrderTrackingEmailSection } from "./OrderTrackingEmailSection";
 import { applyWorkDayPatchLocally, canManageWorkDay, formatWorkDays, localDateKey, timerSecondsOnDay, totalWorkDays, workDayDate, type WorkDayDetail, type WorkDayHistoryDetail, type WorkDayKind, type WorkDayPatch } from "@/lib/studioflow/workDays";
 import { canCorrectWorkTimeForRole, canDeleteWorkSession, checkCorrection, dateTimeLocalValue, latestCorrection, originalValues, parseDateTimeLocal, type WorkSessionAuditDetail } from "@/lib/studioflow/workSessionCorrections";
-import { cleanTrackingNumber } from "@/lib/studioflow/liveTracking";
+import { cleanTrackingNumber, currentTrackingValues, isRegistered, trackingFieldsFromCustomFields } from "@/lib/studioflow/liveTracking";
 import { ETSY_COPY_LINK_NOTE, ETSY_NO_BUYER_UPDATES_NOTE, isEtsyOrder as orderComesFromEtsy } from "@/lib/studioflow/etsyOrder";
 import { etsyOrderProfitIsEstimate, etsyShippingCostUnknown, etsyShippingNoteText } from "@/lib/studioflow/etsyShippingCost";
 import {
@@ -4992,6 +4991,23 @@ export function OrderDetailContent({
    * "Refresh Live Status". The answer lands in the order and its trackingResults row, which the
    * panel is listening to, so nothing here copies the reply onto the screen.
    */
+  /**
+   * Royal Mail's tracking number is on this order (written by the server: when the label was printed,
+   * or by its own sweep while nobody had the order open). Live tracking starts for it exactly as it
+   * does for a number a person types — once: not when the order carries another number (one someone
+   * typed is never replaced), not when this number is already registered, and not twice in a session.
+   */
+  const royalMailTrackingAsked = useRef(new Set<string>());
+  function startRoyalMailLiveTracking(number: string) {
+    const arrived = cleanTrackingNumber(number);
+    if (!arrived || cleanTrackingNumber(order.trackingNumber) !== arrived) return;
+    if (isRegistered(currentTrackingValues(order.trackingNumber, trackingFieldsFromCustomFields(order.customFields), null))) return;
+    const key = `${order.id}:${arrived}`;
+    if (royalMailTrackingAsked.current.has(key)) return;
+    royalMailTrackingAsked.current.add(key);
+    return requestLiveTracking(arrived, order.courier || "Royal Mail", false);
+  }
+
   async function requestLiveTracking(trackingNumber: string, courier: string, isManual: boolean) {
     const cleaned = cleanTrackingNumber(trackingNumber);
     if (!cleaned) return;
@@ -8619,7 +8635,8 @@ export function OrderDetailContent({
                 etsyOrder={etsyBuyerMessagingBlocked} />
               {/* Royal Mail Click & Drop, only where the server has opened it for this workspace. */}
               <RoyalMailShipmentPanel workspace={workspace} orderId={order.id} language={detailLanguage} onOrderChanged={onReloadOrder} onSizeChange={() => window.requestAnimationFrame(measureVisibleCardMinimums)}
-                abroad={!royalMailUkAddress(order.shippingCountry)}
+                orderDescription={order.designName}
+                onTrackingNumber={number => startRoyalMailLiveTracking(number)}
                 addressRestricted={order.commerce?.provider === "ebay" && !String(order.shippingStreetAddress || "").trim() && !String(order.shippingPostalCode || "").trim()} />
             </div>
           </section>

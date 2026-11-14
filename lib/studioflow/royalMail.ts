@@ -83,6 +83,11 @@ export type RoyalMailShipment = {
   updatedAtMs: number;
   cost?: number | null;
   vatCost?: number | null;
+  /** Sent abroad with a customs declaration (absent from a server from before 14 Nov 2026). */
+  international?: boolean;
+  destinationCountry?: string;
+  customsCategory?: string;
+  customsLines?: number;
 };
 
 export type RoyalMailChoice = {
@@ -93,16 +98,14 @@ export type RoyalMailChoice = {
   signature: boolean;
   safePlace: string;
   notifyRecipient: boolean;
+  /** Abroad only; the server drops it for a UK address. */
+  customs?: RoyalMailCustoms;
+  /** The USA only: the sender's own phone or e-mail. */
+  senderContact?: { phone: string; email: string };
 };
 
-// The server's rule for phase 1 (functions/shipping/royalmail/contract.js ukCountry): an order goes to Royal Mail
-// from NivaDesk only to a UK address; an empty country counts as the UK. The screen uses it to say so before
-// anyone fills the form; the server decides.
-const UK_NAMES = new Set(["GB", "GBR", "UK", "U.K.", "UNITED KINGDOM", "GREAT BRITAIN", "BRITAIN", "ENGLAND", "SCOTLAND", "WALES", "NORTHERN IRELAND"]);
-export function royalMailUkAddress(country: string | null | undefined): boolean {
-  const value = String(country ?? "").trim().toLocaleUpperCase("en-GB");
-  return !value || UK_NAMES.has(value);
-}
+export * from "./royalMailRules";
+import { customsLineField, type RoyalMailCustoms, type RoyalMailDestination } from "./royalMailRules";
 
 /** Click & Drop's own orders screen, where a pay-as-you-go account pays for and prints the label. */
 export const CLICK_AND_DROP_URL = "https://business.parcel.royalmail.com/orders/";
@@ -139,8 +142,8 @@ export async function disconnectRoyalMailConnection(companyId: string): Promise<
   return (await call<Record<string, unknown>, { connected: boolean }>("disconnectRoyalMailConnection")({ companyId })).data;
 }
 
-export async function listRoyalMailServices(companyId: string, orderId: string, packageFormat: RoyalMailPackageFormat, weightGrams: number): Promise<{ accountType: RoyalMailAccountType; services: RoyalMailService[]; guidance: string }> {
-  return (await call<Record<string, unknown>, { accountType: RoyalMailAccountType; services: RoyalMailService[]; guidance: string }>("listRoyalMailServices")({ companyId, orderId, packageFormat, weightGrams })).data;
+export async function listRoyalMailServices(companyId: string, orderId: string, packageFormat: RoyalMailPackageFormat, weightGrams: number): Promise<{ accountType: RoyalMailAccountType; services: RoyalMailService[]; guidance: string; destination?: RoyalMailDestination }> {
+  return (await call<Record<string, unknown>, { accountType: RoyalMailAccountType; services: RoyalMailService[]; guidance: string; destination?: RoyalMailDestination }>("listRoyalMailServices")({ companyId, orderId, packageFormat, weightGrams })).data;
 }
 
 export async function listOrderRoyalMailShipments(companyId: string, orderId: string): Promise<RoyalMailShipment[]> {
@@ -186,6 +189,7 @@ const REASON_MESSAGES: Record<string, string> = {
   order_not_found: "This order could not be found.",
   shipment_not_found: "This shipment could not be found.",
   choice_invalid: "Choose the package, its weight and a service.",
+  customs_incomplete: "The customs details for this parcel are not complete.",
   recipient_incomplete: "This order's delivery address cannot go to Royal Mail from NivaDesk yet.",
   royal_mail_rejected: "Royal Mail did not accept this order.",
   label_exists: "This order already has a label. Cancel it in Click & Drop.",
@@ -206,9 +210,30 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   "required:recipient.name": "Add the recipient's name.",
   "required:recipient.addressLine1": "Add the recipient's street address.",
   "required:recipient.city": "Add the recipient's city.",
+  // From a server from before 14 Nov 2026 only.
   "uk_only:recipient.country": "Royal Mail from NivaDesk sends within the UK for now. Send this one from Click & Drop.",
+  "country_unknown:recipient.country": "NivaDesk does not recognise this order's country. Choose the country in the delivery address above.",
+  "required:customs.category": "Choose what the parcel contains.",
+  "customs_required:customs.items": "Add at least one customs line: what is in the parcel.",
+  "customs_weight_over:customs.items": "The items weigh more than the parcel. Check the parcel's weight and the weight of each item.",
+  "ioss_invalid:customs.iossNumber": "An IOSS number is IM followed by 10 digits.",
+  "required:senderContact": "Add your own phone number or e-mail: Royal Mail asks for one on parcels to the USA.",
+  "weight_invalid:weightGrams": "Type the parcel's weight in grams.",
   "postcode_invalid:recipient.postcode": "Add a valid UK postcode.",
   "ni_business:recipient.company": "A business in Northern Ireland needs customs details. Send this one from Click & Drop."
+};
+
+// What a customs line is missing, by the line's own field (customs.items[2].hsCode → "hsCode").
+const LINE_PROBLEM_MESSAGES: Record<string, string> = {
+  "required:description": "Say what the item is.",
+  "quantity_invalid:quantity": "The quantity must be 1 or more.",
+  "value_invalid:unitValue": "Add the value of one item.",
+  "weight_invalid:unitWeightGrams": "Add the weight of one item in grams.",
+  "required:hsCode": "Add the customs (HS) code.",
+  "hs_invalid:hsCode": "A customs (HS) code is 6 to 10 digits.",
+  "required:manufacturerCountry": "Choose the country the item was made in.",
+  "country_unknown:manufacturerCountry": "Choose the country the item was made in.",
+  "required:merchantProductId": "Add your product code (SKU): the EU asks for it on goods that were sold."
 };
 
 export function royalMailProblemMessages(error: unknown, t: (text: string) => string): string[] {
@@ -217,6 +242,9 @@ export function royalMailProblemMessages(error: unknown, t: (text: string) => st
   return problems.map(problem => {
     const known = PROBLEM_MESSAGES[`${problem.code}:${problem.field || ""}`];
     if (known) return t(known);
+    const line = customsLineField(problem.field || "");
+    const lineMessage = line ? LINE_PROBLEM_MESSAGES[`${problem.code}:${line.field}`] : undefined;
+    if (line && lineMessage) return `${t("Customs line {n}:").replace("{n}", String(line.line))} ${t(lineMessage)}`;
     // Royal Mail's own sentence (royal_mail_rejected) is passed on as Royal Mail wrote it.
     return problem.message || t("Check this field.");
   });

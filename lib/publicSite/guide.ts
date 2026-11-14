@@ -1495,14 +1495,15 @@ const TREE_EN: GuideNode[] = [
             "Choose the package (large letter, small or medium parcel), type the weight in grams and press Show services. Pay as you go accounts see Royal Mail's online price for each service; members without financial access see the services without prices.",
             "Pick a service, tick Signature on delivery or add a safe place if you want, and press Send to Click & Drop.",
             "Pay as you go: press Pay and print in Click & Drop and print the label there. A business account gets the label in NivaDesk: press Open label.",
-            "The tracking number comes back to the order by itself (or press Check now), the courier becomes Royal Mail, and the order is marked dispatched once Royal Mail has the parcel. A tracking number you typed yourself is never replaced."
+            "The tracking number comes back to the order by itself, within minutes of the label being printed: the open order asks Royal Mail on its own, and so does NivaDesk every ten minutes (Check now asks at once). The courier becomes Royal Mail, live tracking starts, and the order is marked dispatched once Royal Mail has the parcel. A tracking number you typed yourself is never replaced."
           ] },
           { kind: "sub", text: "Good to know" },
           { kind: "bullets", items: [
             "One press sends one order: pressing again shows the same one. If Click & Drop already has the order (for example from its own Etsy or eBay connection), NivaDesk links it instead of sending it twice.",
             "Remove from Click & Drop takes the order out while it has no label; after a label is printed, cancel it in Click & Drop.",
             "Etsy orders: the buyer's e-mail and phone are not given to Royal Mail, so Royal Mail does not notify them.",
-            "Orders abroad, and to a business in Northern Ireland, need customs details: send those from Click & Drop for now."
+            "Orders abroad: after Show services NivaDesk asks for the customs declaration: what is in the parcel, how many, the value and the weight of one item, its customs (HS) code and the country it was made in. Royal Mail prints the customs form (CN22 or CN23) with the label. Goods sold to the EU also need your product code (SKU), and a parcel to the USA needs your own phone number or e-mail.",
+            "Untracked services (International Standard, International Economy) have no tracking number: the order shows the label as printed and is still marked dispatched. An order to a business in Northern Ireland is still sent from Click & Drop."
           ] }
         ]
       },
@@ -3355,14 +3356,15 @@ const TREE_TR: GuideNode[] = [
             "Paketi seçin (büyük mektup, küçük ya da orta koli), ağırlığı gram olarak yazın ve Show services'e basın. Kullandıkça öde hesapları her servisin Royal Mail online fiyatını görür; finans erişimi olmayan üyeler servisleri fiyatsız görür.",
             "Bir servis seçin, isterseniz Signature on delivery'yi işaretleyin ya da güvenli bir yer ekleyin ve Send to Click & Drop'a basın.",
             "Kullandıkça öde: Pay and print in Click & Drop'a basın ve etiketi orada basın. İş hesabında etiket NivaDesk'e gelir: Open label'a basın.",
-            "Takip numarası siparişe kendiliğinden döner (ya da Check now'a basın), kurye Royal Mail olur ve Royal Mail koliyi teslim alınca sipariş gönderildi olarak işaretlenir. Sizin yazdığınız bir takip numarası asla değiştirilmez."
+            "Takip numarası, etiket basıldıktan sonra dakikalar içinde siparişe kendiliğinden döner: açık sipariş Royal Mail'e kendisi sorar, NivaDesk de on dakikada bir sorar (Check now hemen sorar). Kurye Royal Mail olur, canlı takip başlar ve Royal Mail koliyi teslim alınca sipariş gönderildi olarak işaretlenir. Sizin yazdığınız bir takip numarası asla değiştirilmez."
           ] },
           { kind: "sub", text: "Bilmeniz gerekenler" },
           { kind: "bullets", items: [
             "Bir basış bir sipariş gönderir: yeniden basmak aynı siparişi gösterir. Click & Drop siparişe zaten sahipse (örneğin kendi Etsy ya da eBay bağlantısından), NivaDesk iki kez göndermek yerine onu bağlar.",
             "Remove from Click & Drop, etiket yokken siparişi Click & Drop'tan kaldırır; etiket basıldıktan sonra iptali Click & Drop'ta yapın.",
             "Etsy siparişleri: alıcının e-postası ve telefonu Royal Mail'e verilmez, bu yüzden Royal Mail alıcıyı bilgilendirmez.",
-            "Yurt dışı siparişler ve Kuzey İrlanda'daki bir işletmeye gönderiler gümrük bilgisi ister: bunları şimdilik Click & Drop'tan gönderin."
+            "Yurt dışı siparişler: Show services'ten sonra NivaDesk gümrük beyanını sorar: kolide ne var, kaç adet, bir adedin değeri ve ağırlığı, gümrük (HS) kodu ve üretildiği ülke. Royal Mail gümrük formunu (CN22 ya da CN23) etiketle birlikte basar. AB'ye satılan mallarda ürün kodunuz (SKU), ABD'ye giden kolide kendi telefon numaranız ya da e-postanız da gerekir.",
+            "Takipsiz servislerde (International Standard, International Economy) takip numarası olmaz: sipariş etiketi basılmış gösterir ve yine gönderildi olarak işaretlenir. Kuzey İrlanda'daki bir işletmeye giden sipariş hâlâ Click & Drop'tan gönderilir."
           ] }
         ]
       },

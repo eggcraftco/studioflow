@@ -11,26 +11,52 @@
 // holds (its own Etsy/eBay import) is linked, not created again. A pay-as-you-go account pays for
 // and prints the label in Click & Drop; a business account gets the label here. Either way the
 // tracking number comes back to the order's own field, and Dispatched follows Royal Mail.
+//
+// Abroad (14 Nov 2026): the server reads the order's country and says, with the services, what the
+// form must ask — a customs declaration line by line, the seller's product code for goods sold to
+// the EU, the sender's own contact for the USA. Royal Mail prints the customs form from it.
+//
+// The tracking number comes back by itself: the panel asks Royal Mail on its own when it opens,
+// when the tab is looked at again (the label is paid for in Click & Drop, in another tab), and
+// every half minute for ten minutes after sending (lib/studioflow/royalMail.ts
+// ROYAL_MAIL_AUTO_CHECK). A number that has just arrived is handed to the order screen, which
+// starts live tracking for it exactly as it does for a number a person types.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { WorkspaceContext } from "@/lib/studioflow/firestore";
+import { DHL_COUNTRIES, dhlCountryName } from "@/lib/studioflow/dhlCountries";
 import { studioLocaleTag, studioT } from "@/lib/studioflow/language";
 import { openShipmentPdf } from "@/lib/studioflow/shipping";
 import {
   CLICK_AND_DROP_URL,
+  ROYAL_MAIL_AUTO_CHECK,
+  ROYAL_MAIL_CUSTOMS_CATEGORIES,
   ROYAL_MAIL_PACKAGE_FORMATS,
   cancelRoyalMailShipment,
+  customsItemsFromDrafts,
+  customsTotals,
+  emptyCustomsLine,
   getRoyalMailConnection,
   listOrderRoyalMailShipments,
   listRoyalMailServices,
   openRoyalMailLabel,
   refreshOrderRoyalMail,
+  royalMailArrivedNumbers,
+  royalMailAutoCheckDue,
+  royalMailAwaitingNumber,
   royalMailErrorMessage,
   royalMailErrorReason,
   royalMailPrice,
   royalMailProblemMessages,
+  royalMailSaleCategory,
+  royalMailShipmentWaiting,
+  royalMailShipmentsChanged,
   sendOrderToRoyalMail,
+  senderContactFrom,
   type RoyalMailConnectionView,
+  type RoyalMailCustomsCategory,
+  type RoyalMailCustomsLineDraft,
+  type RoyalMailDestination,
   type RoyalMailPackageFormat,
   type RoyalMailService,
   type RoyalMailShipment
@@ -56,7 +82,8 @@ export function RoyalMailShipmentPanel({
   onOrderChanged,
   onSizeChange,
   addressRestricted = false,
-  abroad = false
+  orderDescription = "",
+  onTrackingNumber
 }: {
   workspace: WorkspaceContext;
   orderId: string;
@@ -65,8 +92,10 @@ export function RoyalMailShipmentPanel({
   onOrderChanged?: () => Promise<void> | void;
   /** The panel grew or shrank on its own (shipments loaded, the form opened). */
   onSizeChange?: () => void;
-  /** The delivery address is outside the UK: phase 1 sends UK parcels only (royalMailUkAddress). */
-  abroad?: boolean;
+  /** What the order is, to start the first customs line from (the person checks it). */
+  orderDescription?: string;
+  /** Royal Mail's tracking number has just arrived for this order (after onOrderChanged has run). */
+  onTrackingNumber?: (trackingNumber: string) => Promise<void> | void;
   /** The delivery address is not on this order (an eBay buyer's protected address). */
   addressRestricted?: boolean;
 }) {
@@ -88,6 +117,21 @@ export function RoyalMailShipmentPanel({
   const [signature, setSignature] = useState(false);
   const [safePlace, setSafePlace] = useState("");
   const [notifyRecipient, setNotifyRecipient] = useState(true);
+  // Abroad: what the server said the form must ask, and what the person has typed.
+  const [destination, setDestination] = useState<RoyalMailDestination | null>(null);
+  const [customsCategory, setCustomsCategory] = useState<RoyalMailCustomsCategory | "">("");
+  const [customsLines, setCustomsLines] = useState<RoyalMailCustomsLineDraft[]>([]);
+  const [iossNumber, setIossNumber] = useState("");
+  const [senderContact, setSenderContact] = useState("");
+  // The quiet check (see the head of this file).
+  const shipmentsRef = useRef<RoyalMailShipment[]>([]);
+  const lastCheckRef = useRef(0);
+  const checkingRef = useRef(false);
+  const pollUntilRef = useRef(0);
+  const orderChangedRef = useRef(onOrderChanged);
+  orderChangedRef.current = onOrderChanged;
+  const trackingNumberRef = useRef(onTrackingNumber);
+  trackingNumberRef.current = onTrackingNumber;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const sizeChangeRef = useRef(onSizeChange);
   sizeChangeRef.current = onSizeChange;
@@ -103,16 +147,70 @@ export function RoyalMailShipmentPanel({
     return () => { active = false; };
   }, [companyId]);
 
+  /** New shipments on the screen; the order is reloaded, and a number that has just arrived is handed on. */
+  const adopt = useCallback(async (next: RoyalMailShipment[], { tellOrder, firstRead = false }: { tellOrder: boolean; firstRead?: boolean }) => {
+    const before = shipmentsRef.current;
+    shipmentsRef.current = next;
+    setShipments(next);
+    if (tellOrder) await orderChangedRef.current?.();
+    // On the first read every number counts as "arrived": the server's own sweep may have written it
+    // to the order while nobody had the order open, and then nothing has started live tracking yet.
+    if (tellOrder || firstRead) {
+      for (const number of royalMailArrivedNumbers(firstRead ? [] : before, next.filter(s => s.state !== "cancelled"))) await trackingNumberRef.current?.(number);
+    }
+  }, []);
+
   const reload = useCallback(async () => {
     if (!companyId || !orderId) return;
     try {
-      setShipments(await listOrderRoyalMailShipments(companyId, orderId));
+      await adopt(await listOrderRoyalMailShipments(companyId, orderId), { tellOrder: false, firstRead: true });
     } catch (failure) {
       setError(royalMailErrorMessage(failure, t));
     }
-  }, [companyId, orderId, t]);
+  }, [companyId, orderId, t, adopt]);
 
   useEffect(() => { if (connection?.enabled) void reload(); }, [connection, reload]);
+
+  // The quiet check: no notice, no error (the next one, or Check now, says what is wrong).
+  const quietCheck = useCallback(async () => {
+    if (!companyId || !orderId || checkingRef.current) return;
+    const visible = typeof document === "undefined" || document.visibilityState === "visible";
+    if (!royalMailAutoCheckDue(Date.now(), lastCheckRef.current, shipmentsRef.current.some(royalMailShipmentWaiting), visible)) return;
+    checkingRef.current = true;
+    lastCheckRef.current = Date.now();
+    try {
+      const before = shipmentsRef.current;
+      const result = await refreshOrderRoyalMail(companyId, orderId);
+      await adopt(result.shipments, { tellOrder: royalMailShipmentsChanged(before, result.shipments) });
+    } catch {
+      // Royal Mail unreachable, or the key refused: said when a person presses Check now.
+    } finally {
+      checkingRef.current = false;
+    }
+  }, [companyId, orderId, adopt]);
+
+  const connectedNow = Boolean(connection?.enabled && connection.connected);
+  const loaded = shipments !== null;
+  useEffect(() => {
+    if (!connectedNow || !loaded) return;
+    // Once when the card opens with something waiting, then whenever the tab is looked at again.
+    pollUntilRef.current = Math.max(pollUntilRef.current, Date.now() + ROYAL_MAIL_AUTO_CHECK.pollForMs);
+    void quietCheck();
+    const onLook = () => { if (document.visibilityState === "visible") void quietCheck(); };
+    window.addEventListener("focus", onLook);
+    document.addEventListener("visibilitychange", onLook);
+    // Every half minute, for ten minutes, while a tracking number is still to come.
+    const timer = window.setInterval(() => {
+      if (Date.now() > pollUntilRef.current) return;
+      if (shipmentsRef.current.some(royalMailAwaitingNumber)) void quietCheck();
+    }, ROYAL_MAIL_AUTO_CHECK.pollEveryMs);
+    return () => {
+      window.removeEventListener("focus", onLook);
+      document.removeEventListener("visibilitychange", onLook);
+      window.clearInterval(timer);
+    };
+  }, [connectedNow, loaded, quietCheck]);
+  const keepChecking = () => { pollUntilRef.current = Date.now() + ROYAL_MAIL_AUTO_CHECK.pollForMs; };
 
   const shown = Boolean(connection?.enabled);
   useEffect(() => {
@@ -133,7 +231,7 @@ export function RoyalMailShipmentPanel({
     } catch (failure) {
       setError(royalMailErrorMessage(failure, t));
       const reason = royalMailErrorReason(failure);
-      if (reason === "recipient_incomplete" || reason === "royal_mail_rejected" || reason === "choice_invalid") setProblems(royalMailProblemMessages(failure, t));
+      if (reason === "recipient_incomplete" || reason === "royal_mail_rejected" || reason === "choice_invalid" || reason === "customs_incomplete") setProblems(royalMailProblemMessages(failure, t));
     } finally {
       setBusy("");
     }
@@ -157,6 +255,14 @@ export function RoyalMailShipmentPanel({
       const result = await listRoyalMailServices(companyId, orderId, packageFormat, weightGrams);
       setServices(result.services);
       setServiceCode(result.services[0]?.serviceCode ?? "");
+      const next = result.destination ?? null;
+      setDestination(next);
+      if (next?.needsCustoms) {
+        // What the person already typed is kept; the first line starts from the order's own name.
+        setCustomsLines(lines => (lines.length ? lines : [emptyCustomsLine(orderDescription.trim().slice(0, 255))]));
+        setCustomsCategory(category => category || "eCommerceSaleOfGoods");
+        if (next.needsSenderContact) setSenderContact(typed => typed || next.senderContact.phone || next.senderContact.email);
+      }
       if (!result.services.length) setNotice(t("Royal Mail offers no service for this package and weight. Check the size and weight."));
     });
   }
@@ -165,9 +271,12 @@ export function RoyalMailShipmentPanel({
     if (!chosen) return;
     await guard("send", async () => {
       const result = await sendOrderToRoyalMail(companyId, orderId, {
-        packageFormat, weightGrams, serviceCode: chosen.serviceCode, serviceName: chosen.serviceName, signature, safePlace: safePlace.trim(), notifyRecipient
+        packageFormat, weightGrams, serviceCode: chosen.serviceCode, serviceName: chosen.serviceName, signature, safePlace: safePlace.trim(), notifyRecipient,
+        ...(destination?.needsCustoms ? { customs: { category: customsCategory, items: customsItemsFromDrafts(customsLines), ...(destination.eu && iossNumber.trim() ? { iossNumber: iossNumber.trim() } : {}) } } : {}),
+        ...(destination?.needsSenderContact ? { senderContact: senderContactFrom(senderContact) } : {})
       });
       setFormOpen(false);
+      keepChecking();
       setNotice(result.outcome === "linked"
         ? t("This order was already in Click & Drop. NivaDesk linked it instead of sending it again.")
         : result.outcome === "existing"
@@ -177,17 +286,17 @@ export function RoyalMailShipmentPanel({
             : result.shipment.hasLabel
               ? t("Sent to Royal Mail. The label is ready.")
               : t("Sent to Click & Drop. Pay for and print the label there; the tracking number comes back here."));
-      await reload();
-      await onOrderChanged?.();
+      // A business account's label, and its tracking number, are there already.
+      await adopt(await listOrderRoyalMailShipments(companyId, orderId), { tellOrder: true });
     });
   }
 
   async function checkNow() {
     await guard("check", async () => {
+      lastCheckRef.current = Date.now();
       const result = await refreshOrderRoyalMail(companyId, orderId);
-      setShipments(result.shipments);
+      await adopt(result.shipments, { tellOrder: true });
       setNotice(t("Checked with Royal Mail."));
-      await onOrderChanged?.();
     });
   }
 
@@ -220,6 +329,74 @@ export function RoyalMailShipmentPanel({
     </p>
   );
 
+  const needsCustoms = Boolean(destination?.needsCustoms);
+  const askProductCodes = Boolean(destination?.needsProductCodes) && royalMailSaleCategory(customsCategory);
+  const totals = customsTotals(customsLines);
+  const money = (n: number) => new Intl.NumberFormat(locale, { style: "currency", currency: "GBP" }).format(n);
+  const setLine = (index: number, patch: Partial<RoyalMailCustomsLineDraft>) => setCustomsLines(lines => lines.map((line, i) => (i === index ? { ...line, ...patch } : line)));
+  // ISO countries only: DHL's own codes (XB, XC, …, KV, IC) are not countries Royal Mail knows.
+  const originCountries = DHL_COUNTRIES.filter(([code]) => !/^X/.test(code) && code !== "KV" && code !== "IC")
+    .map(([code]) => ({ code, name: dhlCountryName(code, locale) }))
+    .sort((a, b) => a.name.localeCompare(b.name, locale));
+  const destinationName = destination?.countryCode ? dhlCountryName(destination.countryCode, locale) : "";
+
+  const customsForm = needsCustoms ? (
+    <fieldset className="shipment-services" data-testid="royal-mail-customs">
+      <legend className="shipment-subhead">{t("Customs declaration")}{destinationName ? ` · ${destinationName}` : ""}</legend>
+      <p className="shipment-muted">{t("This parcel leaves the UK. Royal Mail prints the customs form (CN22 or CN23) from what you declare here, so write what is really inside.")}</p>
+      <label className="inventory-field"><span>{t("What the parcel contains")}</span>
+        <select className="input" value={customsCategory} onChange={e => setCustomsCategory(e.target.value as RoyalMailCustomsCategory)} data-testid="royal-mail-customs-category">
+          {ROYAL_MAIL_CUSTOMS_CATEGORIES.map(c => <option key={c.id} value={c.id}>{t(c.label)}</option>)}
+        </select></label>
+      {customsLines.map((line, index) => (
+        <div key={index} className="inventory-form" data-testid="royal-mail-customs-line">
+          <label className="inventory-field"><span>{t("Customs line {n}:").replace("{n}", String(index + 1))} {t("Description")}</span>
+            <input className="input" value={line.description} maxLength={255} onChange={e => setLine(index, { description: e.target.value })} placeholder={t("e.g. Hand-painted watch dial")} /></label>
+          <label className="inventory-field"><span>{t("Quantity")}</span>
+            <input className="input" inputMode="numeric" value={line.quantity} onChange={e => setLine(index, { quantity: e.target.value.replace(/\D/g, "") })} /></label>
+          <label className="inventory-field"><span>{t("Value of one item (£)")}</span>
+            <input className="input" inputMode="decimal" value={line.unitValue} onChange={e => setLine(index, { unitValue: e.target.value.replace(/[^\d.,]/g, "") })} /></label>
+          <label className="inventory-field"><span>{t("Weight of one item (g)")}</span>
+            <input className="input" inputMode="numeric" value={line.unitWeightGrams} onChange={e => setLine(index, { unitWeightGrams: e.target.value.replace(/\D/g, "") })} /></label>
+          <label className="inventory-field"><span>{t("Customs (HS) code")}</span>
+            <input className="input" inputMode="numeric" value={line.hsCode} maxLength={13} onChange={e => setLine(index, { hsCode: e.target.value.replace(/[^\d. ]/g, "") })} placeholder="911430" /></label>
+          <label className="inventory-field"><span>{t("Made in")}</span>
+            <select className="input" value={line.manufacturerCountry} onChange={e => setLine(index, { manufacturerCountry: e.target.value })}>
+              <option value="">{t("Choose a country")}</option>
+              {originCountries.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+            </select></label>
+          {askProductCodes ? (
+            <label className="inventory-field"><span>{t("Your product code (SKU)")}</span>
+              <input className="input" value={line.merchantProductId} maxLength={50} onChange={e => setLine(index, { merchantProductId: e.target.value })} /></label>
+          ) : null}
+          {customsLines.length > 1 ? (
+            <div className="shipment-actions">
+              <button type="button" className="inventory-link inventory-link-danger" onClick={() => setCustomsLines(lines => lines.filter((_, i) => i !== index))}>{t("Remove this item")}</button>
+            </div>
+          ) : null}
+        </div>
+      ))}
+      <div className="shipment-actions">
+        <button type="button" className="button secondary" disabled={customsLines.length >= 20} onClick={() => setCustomsLines(lines => [...lines, emptyCustomsLine()])} data-testid="royal-mail-customs-add">{t("+ Add another item")}</button>
+        <a className="inventory-link" href="https://www.trade-tariff.service.gov.uk/find_commodity" target="_blank" rel="noopener noreferrer">{t("Find a commodity code on the UK Trade Tariff")} ↗</a>
+      </div>
+      <p className={weightGrams > 0 && totals.grams > weightGrams ? "shipment-error" : "shipment-muted"} data-testid="royal-mail-customs-totals">
+        {t("Declared value")} {money(totals.value)} · {t("Items weigh {items} g of the parcel's {parcel} g").replace("{items}", String(totals.grams)).replace("{parcel}", String(weightGrams > 0 ? weightGrams : 0))}
+      </p>
+      {askProductCodes ? <p className="shipment-muted">{t("The EU asks for the seller's product code on goods that were sold. Royal Mail also saves it as a product in your Click & Drop account.")}</p> : null}
+      {destination?.eu ? (
+        <label className="inventory-field"><span>{t("IOSS number (optional)")}</span>
+          <input className="input" value={iossNumber} maxLength={14} onChange={e => setIossNumber(e.target.value)} placeholder="IM1234567890" />
+          <small className="shipment-muted">{t("Only if you charged the customer EU VAT through IOSS. Leave it empty otherwise: the recipient pays any VAT and duty on delivery.")}</small></label>
+      ) : null}
+      {destination?.needsSenderContact ? (
+        <label className="inventory-field"><span>{t("Your phone number or e-mail")}</span>
+          <input className="input" value={senderContact} maxLength={254} onChange={e => setSenderContact(e.target.value)} />
+          <small className="shipment-muted">{t("Royal Mail asks for the sender's own contact on parcels to the USA. NivaDesk remembers it for the next one.")}</small></label>
+      ) : null}
+    </fieldset>
+  ) : null;
+
   const form = (
     <div className="shipment-settings-form" data-testid="royal-mail-form">
       <div className="inventory-form">
@@ -247,6 +424,7 @@ export function RoyalMailShipmentPanel({
           {connection.accountType === "olp" && services.some(s => s.cost != null) ? <p className="shipment-muted">{t("Royal Mail's online price, as Click & Drop will charge it.")}</p> : null}
         </fieldset>
       ) : null}
+      {services && services.length > 0 ? customsForm : null}
       {services && services.length > 0 ? (
         <>
           <label className="inventory-check"><input type="checkbox" checked={signature} onChange={e => setSignature(e.target.checked)} /> {t("Signature on delivery")}</label>
@@ -257,7 +435,7 @@ export function RoyalMailShipmentPanel({
             <button type="button" className="button" disabled={busy === "send" || !chosen} onClick={() => void send()} data-testid="royal-mail-send">
               {busy === "send" ? t("Sending to Royal Mail…") : t("Send to Click & Drop")}
             </button>
-            <button type="button" className="button secondary" onClick={() => { setFormOpen(false); setServices(null); }}>{t("Cancel")}</button>
+            <button type="button" className="button secondary" onClick={() => { setFormOpen(false); setServices(null); setDestination(null); }}>{t("Cancel")}</button>
           </div>
         </>
       ) : null}
@@ -291,12 +469,14 @@ export function RoyalMailShipmentPanel({
                   </div>
                 ) : null}
                 {s.cost != null && s.cost !== undefined ? <p className="shipment-muted">{royalMailPrice(s as { cost: number | null; vatCost: number | null }, locale, t)}</p> : null}
+                {s.state === "label" && !s.trackingNumber ? <p className="shipment-muted">{t("No tracking number from Royal Mail yet. NivaDesk keeps checking; an untracked service (International Standard or Economy) never gets one.")}</p> : null}
+                {s.international ? <p className="shipment-muted">{t("Sent abroad with its customs declaration. Royal Mail prints the customs form with the label.")}</p> : null}
                 {s.linked ? <p className="shipment-muted">{t("Linked to an order Click & Drop already had.")}</p> : null}
                 {s.contactWithheld ? <p className="shipment-muted">{t("An Etsy order: the buyer's e-mail and phone were not given to Royal Mail, so Royal Mail does not notify them.")}</p> : null}
                 {connected ? (
                   <div className="shipment-actions">
                     {s.state === "sent" && s.accountType === "olp" ? (
-                      <a className="button" href={CLICK_AND_DROP_URL} target="_blank" rel="noopener noreferrer">{t("Pay and print in Click & Drop")} ↗</a>
+                      <a className="button" href={CLICK_AND_DROP_URL} target="_blank" rel="noopener noreferrer" onClick={keepChecking}>{t("Pay and print in Click & Drop")} ↗</a>
                     ) : null}
                     {s.hasLabel ? <button type="button" className="button" disabled={busy === `label:${s.id}`} onClick={() => void openLabel(s)}>{t("Open label")}</button> : null}
                     {OPEN.has(s.state) && s.state !== "dispatched" ? (
@@ -316,8 +496,6 @@ export function RoyalMailShipmentPanel({
       {connected && !active ? (
         addressRestricted ? (
           <p className="shipment-note">{t("This order's delivery address is kept by eBay, so send it from Click & Drop's own eBay connection.")}</p>
-        ) : abroad ? (
-          <p className="shipment-note">{t("Royal Mail from NivaDesk sends within the UK for now. Send this one from Click & Drop.")}</p>
         ) : formOpen ? form : (
           <div className="shipment-actions">
             <button type="button" className="button secondary" onClick={() => setFormOpen(true)} data-testid="royal-mail-open-form">{t("+ Send with Royal Mail")}</button>
