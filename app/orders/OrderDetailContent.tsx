@@ -4998,15 +4998,24 @@ export function OrderDetailContent({
    * typed is never replaced), not when this number is already registered, and not twice in a session.
    */
   const royalMailTrackingAsked = useRef(new Set<string>());
+  // The panel can say "this number has arrived" before this screen has been drawn again with the order's new
+  // number (14 Nov 2026, the first live label abroad: the number came by itself, live tracking did not start until
+  // the order was opened again). So the number waits here, and the rule runs when the order itself carries it.
+  const [royalMailArrived, setRoyalMailArrived] = useState("");
   function startRoyalMailLiveTracking(number: string) {
-    const arrived = cleanTrackingNumber(number);
+    setRoyalMailArrived(cleanTrackingNumber(number));
+  }
+  useEffect(() => {
+    const arrived = royalMailArrived;
     if (!arrived || cleanTrackingNumber(order.trackingNumber) !== arrived) return;
     if (isRegistered(currentTrackingValues(order.trackingNumber, trackingFieldsFromCustomFields(order.customFields), null))) return;
     const key = `${order.id}:${arrived}`;
     if (royalMailTrackingAsked.current.has(key)) return;
     royalMailTrackingAsked.current.add(key);
-    return requestLiveTracking(arrived, order.courier || "Royal Mail", false);
-  }
+    void requestLiveTracking(arrived, order.courier || "Royal Mail", false);
+    // requestLiveTracking reads the order as this screen has it now; the rule above is what decides.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [royalMailArrived, order.id, order.trackingNumber, order.customFields, order.courier]);
 
   async function requestLiveTracking(trackingNumber: string, courier: string, isManual: boolean) {
     const cleaned = cleanTrackingNumber(trackingNumber);

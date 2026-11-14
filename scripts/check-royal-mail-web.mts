@@ -187,7 +187,10 @@ const asksOnItsOwn = (src: string) => /window\.addEventListener\("focus", onLook
   && /window\.removeEventListener\("focus", onLook\)/.test(src) && /window\.clearInterval\(timer\)/.test(src) && /onClick=\{keepChecking\}/.test(src);
 expect("the panel asks Royal Mail on its own: on opening, on coming back to the tab, on a timer it clears", asksOnItsOwn(panel));
 const handsOn = (panelSrc: string, screenSrc: string) => /trackingNumberRef\.current\?\.\(number\)/.test(panelSrc) && /onTrackingNumber=\{number => startRoyalMailLiveTracking\(number\)\}/.test(screenSrc)
-  && /function startRoyalMailLiveTracking[\s\S]{0,900}cleanTrackingNumber\(order\.trackingNumber\) !== arrived\) return;[\s\S]{0,400}isRegistered\([\s\S]{0,400}royalMailTrackingAsked\.current\.has\(key\)\) return;[\s\S]{0,200}requestLiveTracking\(arrived,/.test(screenSrc);
+  // The number waits until the order itself carries it: the panel's word can come before this screen is drawn again
+  // with the order's new number (found live, 14 Nov 2026), so the rule runs in an effect on the order, not in the call.
+  && /function startRoyalMailLiveTracking\(number: string\) \{\s*setRoyalMailArrived\(cleanTrackingNumber\(number\)\);\s*\}/.test(screenSrc)
+  && /useEffect\(\(\) => \{\s*const arrived = royalMailArrived;\s*if \(!arrived \|\| cleanTrackingNumber\(order\.trackingNumber\) !== arrived\) return;[\s\S]{0,400}isRegistered\([\s\S]{0,400}royalMailTrackingAsked\.current\.has\(key\)\) return;[\s\S]{0,200}requestLiveTracking\(arrived,[\s\S]{0,400}\}, \[royalMailArrived, order\.id, order\.trackingNumber,/.test(screenSrc);
 expect("a number that has just arrived starts live tracking once, and only when it is the order's own number", handsOn(panel, orderScreen));
 
 // ---- the rules catch what they are for ----------------------------------------------------------
@@ -204,6 +207,8 @@ expect("mutant: a server problem with no sentence is caught", unnamed(client.rep
 expect("mutant: a panel that only checks when asked is caught", !asksOnItsOwn(panel.replace('window.addEventListener("focus", onLook);', "")) && !asksOnItsOwn(panel.replace(/window\.setInterval\(/, "window.setTimeout(")));
 expect("mutant: a timer that is never cleared is caught", !asksOnItsOwn(panel.replace("window.clearInterval(timer);", "")));
 expect("mutant: an arrived number that starts nothing is caught", !handsOn(panel.replace("trackingNumberRef.current?.(number)", "void number"), orderScreen) && !handsOn(panel, orderScreen.replace("onTrackingNumber={number => startRoyalMailLiveTracking(number)}", "")));
+expect("mutant: an arrived number judged before the order carries it is caught", !handsOn(panel, orderScreen.replace("setRoyalMailArrived(cleanTrackingNumber(number));", "const arrived = cleanTrackingNumber(number); if (cleanTrackingNumber(order.trackingNumber) !== arrived) return; void requestLiveTracking(arrived, order.courier, false);"))
+  && !handsOn(panel, orderScreen.replace("}, [royalMailArrived, order.id, order.trackingNumber,", "}, [royalMailArrived, order.id,")));
 expect("mutant: live tracking for a number that is not the order's is caught", !handsOn(panel, orderScreen.replace("cleanTrackingNumber(order.trackingNumber) !== arrived) return;", "false) return;")));
 
 expect("mutant: a product code field with no way out is caught", !codeOptional(panel.replace("You can leave it empty", "Type it")));
@@ -217,4 +222,4 @@ if (failures.length) {
   console.error(`ROYAL MAIL WEB CHECK FAILED (${failures.length}/${checks}):\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
-console.log(`ROYAL MAIL WEB CHECK OK (${checks} checks, 20 mutants caught)`);
+console.log(`ROYAL MAIL WEB CHECK OK (${checks} checks, 21 mutants caught)`);
