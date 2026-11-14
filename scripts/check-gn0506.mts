@@ -55,12 +55,47 @@ const LANGUAGES = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Sp
   });
   await check("6.2 each platform's newest entry is its 'Latest', dated, with real changes", () => {
     const latest = changelog.CHANGELOG.filter((entry) => changelog.isLatestForPlatform(entry)).map((entry) => changelog.changelogAnchor(entry));
-    assert.deepEqual(latest, ["apple-2.5", "android-2.5", "all-0.1.3"]);
+    assert.deepEqual(latest, ["apple-2.5.1", "android-2.5.1", "all-0.1.3"]);
     for (const entry of changelog.CHANGELOG) {
       assert.match(entry.date, /\d{4}/, entry.version);
+      if (entry.version === "2.5.1") assert.match(entry.date, /^\d{1,2} [A-Z][a-z]+ \d{4}$/, "2.5.1: the date must be the release day, not a placeholder");
       assert.ok(entry.changes.length > 0, entry.version);
     }
     assert.equal(changelog.CHANGELOG_LAST_UPDATED, "11 November 2026"); // 2.5: the day the last store (iPhone & iPad) released it
+  });
+  await check("6.2b 2.5.1 reads in all 12 site languages; an entry without its own text reads in English", () => {
+    const languages = ["Türkçe", "Deutsch", "Français", "Italiano", "Español (Spanish)", "Português", "Русский (Russian)", "日本語 (Japanese)", "中文 (Chinese)", "العربية (Arabic)", "हिन्दी (Hindi)"];
+    for (const entry of changelog.CHANGELOG) {
+      for (const [language, local] of Object.entries(entry.i18n ?? {})) {
+        assert.equal((local as { changes: string[] }).changes.length, entry.changes.length, `${changelog.changelogAnchor(entry)} ${language}`);
+        for (const line of (local as { changes: string[] }).changes) assert.ok(line.trim().length > 8, `${changelog.changelogAnchor(entry)} ${language}`);
+      }
+    }
+    for (const anchor of ["apple-2.5.1", "android-2.5.1"]) {
+      const entry = changelog.CHANGELOG.find((item) => changelog.changelogAnchor(item) === anchor)!;
+      assert.ok(entry, anchor);
+      assert.deepEqual(Object.keys(entry.i18n ?? {}).sort(), [...languages].sort(), anchor);
+      const english = changelog.localizedChangelogEntry(entry, "English").changes.map((change) => change.text);
+      assert.deepEqual(english, entry.changes.map((change) => change.text));
+      for (const language of languages) {
+        const local = changelog.localizedChangelogEntry(entry, language);
+        assert.equal(local.changes.length, entry.changes.length);
+        local.changes.forEach((change, index) => {
+          assert.equal(change.tag, entry.changes[index].tag);
+          assert.notEqual(change.text, entry.changes[index].text, `${anchor} ${language} line ${index + 1} is still English`);
+        });
+      }
+    }
+    const apple = changelog.CHANGELOG.find((item) => changelog.changelogAnchor(item) === "apple-2.5.1")!;
+    assert.ok(changelog.localizedChangelogEntry(apple, "Türkçe").changes[0].text.includes("KDV"));
+    assert.ok(changelog.localizedChangelogEntry(apple, "Deutsch").changes[0].text.includes("Umsatzsteuer"));
+    const old = changelog.CHANGELOG.find((item) => changelog.changelogAnchor(item) === "apple-2.5")!;
+    assert.deepEqual(changelog.localizedChangelogEntry(old, "Türkçe").changes, old.changes);
+    assert.deepEqual(changelog.localizedChangelogEntry(old, "no such language").changes, old.changes);
+    const short = { ...apple, i18n: { "Türkçe": { changes: ["tek satır"] } } };
+    assert.deepEqual(changelog.localizedChangelogEntry(short, "Türkçe").changes, apple.changes);
+    const page = read("components/PublicMarketing.tsx");
+    assert.ok(page.includes("localizedChangelogEntry(entry, language)"));
   });
   await check("6.2a Apple 2.4.1 is on iPhone, iPad and Mac (both App Store pages, 5 Nov 2026); 2.4 stays iPhone & iPad", () => {
     const find = (anchor: string) => changelog.CHANGELOG.find((entry) => changelog.changelogAnchor(entry) === anchor);

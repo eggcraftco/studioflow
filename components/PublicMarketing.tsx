@@ -27,6 +27,7 @@ import {
 import type { PublicSiteTranslationKey } from "@/lib/publicSite/translations";
 import {
   CHANGELOG,
+  localizedChangelogEntry,
   CHANGELOG_LAST_UPDATED,
   changelogAnchor,
   getChangelogLabels,
@@ -960,8 +961,8 @@ function HeaderMenuIcon({ children }: { children: ReactNode }) {
 }
 
 // The newest release, in the Product menu and above the home page's picture.
-// Only the page's own localized labels and the version are shown: release
-// text is English by design (lib/publicSite/changelog.ts).
+// Only the page's own localized labels and the version are shown here; the
+// release text itself is on /changelog (lib/publicSite/changelog.ts).
 function LatestReleaseLink({ className, onNavigate }: { className: string; onNavigate?: () => void }) {
   const { language } = usePublicSiteLanguage();
   const labels = getChangelogLabels(language);
@@ -4577,7 +4578,9 @@ function PublicChangelogPageContent() {
 
       <section className="public-section">
         <div className="public-shell changelog-list">
-          {CHANGELOG.map((entry) => (
+          {CHANGELOG.map((entry) => {
+            const text = localizedChangelogEntry(entry, language);
+            return (
             // The anchor the apps' "NivaDesk updated — see what's new" opens
             // (#apple-2.1, #android-2.1). scroll-margin keeps it below the header.
             <article key={changelogAnchor(entry)} id={changelogAnchor(entry)} className="changelog-entry" style={{ scrollMarginTop: 96 }}>
@@ -4591,9 +4594,9 @@ function PublicChangelogPageContent() {
                 </div>
                 <time className="changelog-date">{entry.date}</time>
               </header>
-              {entry.highlight ? <p className="changelog-highlight">{entry.highlight}</p> : null}
+              {text.highlight ? <p className="changelog-highlight">{text.highlight}</p> : null}
               <ul className="changelog-changes">
-                {entry.changes.map((change, i) => (
+                {text.changes.map((change, i) => (
                   <li key={i} className="changelog-change">
                     <span className={tagClass[change.tag]}>{labels.tags[change.tag]}</span>
                     <span className="changelog-change-text">{change.text}</span>
@@ -4601,7 +4604,8 @@ function PublicChangelogPageContent() {
                 ))}
               </ul>
             </article>
-          ))}
+            );
+          })}
         </div>
       </section>
     </>
