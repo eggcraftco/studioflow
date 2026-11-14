@@ -83,6 +83,10 @@ export type RoyalMailShipment = {
   updatedAtMs: number;
   cost?: number | null;
   vatCost?: number | null;
+  /** Whether Royal Mail tells the customer about the delivery (absent from an older server). */
+  recipientNotified?: boolean;
+  /** Royal Mail refused the notification for this service and the order went without it. */
+  notificationsDropped?: boolean;
   /** Sent abroad with a customs declaration (absent from a server from before 14 Nov 2026). */
   international?: boolean;
   destinationCountry?: string;

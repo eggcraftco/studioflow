@@ -135,6 +135,14 @@ expect("Royal Mail's seven customs categories, goods sold online first", same(RO
   && royalMailSaleCategory("eCommerceSaleOfGoods") && royalMailSaleCategory("commercialSaleOfGoods") && !royalMailSaleCategory("gift"));
 expect("the USA field is read as a phone or an e-mail", same(senderContactFrom(" 020 7946 0000 "), { phone: "020 7946 0000", email: "" }) && same(senderContactFrom("post@example.invalid"), { phone: "", email: "post@example.invalid" }));
 
+// Second package (14 Nov 2026, the first real order to Italy): the product code is not demanded of the person, and
+// abroad the "Royal Mail tells the customer" choice is not offered (Royal Mail refuses an order that asks for it).
+const codeOptional = (src: string) => /t\("You can leave it empty: NivaDesk then sends the shop's own code for this order, or the order's number \(for example NVD-31-1\)\."\)/.test(src);
+expect("the product code field says it can be left empty", codeOptional(panel));
+const noNotifyAbroad = (src: string) => /\{destination\?\.international\s*\?\s*<p className="shipment-muted" data-testid="royal-mail-no-notification">[\s\S]{0,200}:\s*<label className="inventory-check"><input type="checkbox" checked=\{notifyRecipient\}/.test(src);
+expect("abroad the notification choice is replaced by a sentence", noNotifyAbroad(panel));
+expect("a shipment sent without Royal Mail's notification says so", /s\.notificationsDropped \? <p className="shipment-muted">/.test(panel));
+
 // ---- 6. the tracking number's own way back ----------------------------------------------------------
 const row = (id: string, state: string, trackingNumber = "", more: Record<string, unknown> = {}) => ({ id, state, trackingNumber, printedOn: "", shippedOn: "", hasLabel: false, ...more });
 expect("waiting: sent, unknown, sending and a printed label; not dispatched, cancelled or refused",
@@ -172,8 +180,11 @@ expect("mutant: a timer that is never cleared is caught", !asksOnItsOwn(panel.re
 expect("mutant: an arrived number that starts nothing is caught", !handsOn(panel.replace("trackingNumberRef.current?.(number)", "void number"), orderScreen) && !handsOn(panel, orderScreen.replace("onTrackingNumber={number => startRoyalMailLiveTracking(number)}", "")));
 expect("mutant: live tracking for a number that is not the order's is caught", !handsOn(panel, orderScreen.replace("cleanTrackingNumber(order.trackingNumber) !== arrived) return;", "false) return;")));
 
+expect("mutant: a product code field with no way out is caught", !codeOptional(panel.replace("You can leave it empty", "Type it")));
+expect("mutant: the notification choice offered abroad is caught", !noNotifyAbroad(panel.replace("{destination?.international\n            ? <p", "{false\n            ? <p")));
+
 if (failures.length) {
   console.error(`ROYAL MAIL WEB CHECK FAILED (${failures.length}/${checks}):\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
-console.log(`ROYAL MAIL WEB CHECK OK (${checks} checks, 14 mutants caught)`);
+console.log(`ROYAL MAIL WEB CHECK OK (${checks} checks, 16 mutants caught)`);

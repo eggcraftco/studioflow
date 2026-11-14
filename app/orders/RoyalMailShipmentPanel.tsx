@@ -386,7 +386,7 @@ export function RoyalMailShipmentPanel({
       <p className={weightGrams > 0 && totals.grams > weightGrams ? "shipment-error" : "shipment-muted"} data-testid="royal-mail-customs-totals">
         {t("Declared value")} {money(totals.value)} · {t("Items weigh {items} g of the parcel's {parcel} g").replace("{items}", String(totals.grams)).replace("{parcel}", String(weightGrams > 0 ? weightGrams : 0))}
       </p>
-      {askProductCodes ? <p className="shipment-muted">{t("The EU asks for the seller's product code on goods that were sold. Royal Mail also saves it as a product in your Click & Drop account.")}</p> : null}
+      {askProductCodes ? <p className="shipment-muted">{t("The EU asks for the seller's product code on goods that were sold. Royal Mail also saves it as a product in your Click & Drop account.")} {t("You can leave it empty: NivaDesk then sends the shop's own code for this order, or the order's number (for example NVD-31-1).")}</p> : null}
       {destination?.eu ? (
         <label className="inventory-field"><span>{t("IOSS number (optional)")}</span>
           <input className="input" value={iossNumber} maxLength={14} onChange={e => setIossNumber(e.target.value)} placeholder="IM1234567890" />
@@ -441,7 +441,11 @@ export function RoyalMailShipmentPanel({
       {services && services.length > 0 ? (
         <>
           <label className="inventory-check"><input type="checkbox" checked={signature} onChange={e => setSignature(e.target.checked)} /> {t("Signature on delivery")}</label>
-          <label className="inventory-check"><input type="checkbox" checked={notifyRecipient} onChange={e => setNotifyRecipient(e.target.checked)} /> {t("Royal Mail tells the customer about the delivery")}</label>
+          {/* Abroad Royal Mail's services have no e-mail or text notification (it refuses an order that asks for one),
+              so the choice is offered for UK parcels only; the server never asks for it abroad. */}
+          {destination?.international
+            ? <p className="shipment-muted" data-testid="royal-mail-no-notification">{t("Royal Mail has no delivery notification for parcels abroad, so it does not tell the customer.")}</p>
+            : <label className="inventory-check"><input type="checkbox" checked={notifyRecipient} onChange={e => setNotifyRecipient(e.target.checked)} /> {t("Royal Mail tells the customer about the delivery")}</label>}
           <label className="inventory-field"><span>{t("Safe place (optional)")}</span>
             <input className="input" value={safePlace} onChange={e => setSafePlace(e.target.value)} maxLength={90} placeholder={t("e.g. Porch")} /></label>
           <div className="shipment-actions">
@@ -483,6 +487,7 @@ export function RoyalMailShipmentPanel({
                 {s.cost != null && s.cost !== undefined ? <p className="shipment-muted">{royalMailPrice(s as { cost: number | null; vatCost: number | null }, locale, t)}</p> : null}
                 {s.state === "label" && !s.trackingNumber ? <p className="shipment-muted">{t("No tracking number from Royal Mail yet. NivaDesk keeps checking; an untracked service (International Standard or Economy) never gets one.")}</p> : null}
                 {s.international ? <p className="shipment-muted">{t("Sent abroad with its customs declaration. Royal Mail prints the customs form with the label.")}</p> : null}
+                {s.notificationsDropped ? <p className="shipment-muted">{t("Royal Mail has no delivery notification for this service, so it does not tell the customer.")}</p> : null}
                 {s.linked ? <p className="shipment-muted">{t("Linked to an order Click & Drop already had.")}</p> : null}
                 {s.contactWithheld ? <p className="shipment-muted">{t("An Etsy order: the buyer's e-mail and phone were not given to Royal Mail, so Royal Mail does not notify them.")}</p> : null}
                 {connected ? (
