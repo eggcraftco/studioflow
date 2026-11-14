@@ -65,7 +65,9 @@ for name in NEXT_PUBLIC_META_APP_ID NEXT_PUBLIC_WHATSAPP_SIGNUP_CONFIG_ID; do
     printf '%s' "$value" | grep -Eq '^[0-9]{5,25}$' || { echo "bad $name in $ENV_FILE (digits only)"; exit 1; }
     meta_set=$((meta_set + 1))
   fi
-  subs="$subs,_${name}=${value}"
+  # Never an empty Cloud Build substitution: an unset id travels as the word "off", which is not a Meta id
+  # (digits only), so lib/studioflow/metaSignup.ts offers no button — the same as leaving it out.
+  subs="$subs,_${name}=${value:-off}"
 done
 case "$meta_set" in
   0) echo "WhatsApp own-number sign-up: off in this build (no Meta ids in $ENV_FILE)" ;;
