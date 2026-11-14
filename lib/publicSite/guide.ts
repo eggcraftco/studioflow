@@ -1066,7 +1066,7 @@ const TREE_EN: GuideNode[] = [
       ] },
       { kind: "sub", text: "Customer messages: WhatsApp and Instagram inbox" },
       { kind: "bullets", items: [
-        "Messages ▸ Customers is the customer inbox. It runs for one business today: connecting your own WhatsApp Business number or Instagram professional account opens once Meta's approvals are in place, and until then those tiles in Settings ▸ Integrations say Coming soon.",
+        "Messages ▸ Customers is the customer inbox, on the Team plan. Instagram: the workspace owner connects the business's own Instagram professional account in Settings ▸ Integrations ▸ Instagram on the web app (nivadesk.app) with Connect Instagram, and customers' direct messages then arrive here. WhatsApp: connecting your own WhatsApp Business number is not open to every workspace yet, and until it is that tile says Coming soon.",
         "Where it runs, Link this conversation ties a conversation to its order, with Assign to, Labels, Mark as done and Delete conversation. Reply on WhatsApp sends your answer; Attach a photo or PDF adds a file (Instagram replies are text only).",
         "WhatsApp only allows replies within 24 hours of the customer's last message, and approved templates are not set up yet, so NivaDesk cannot start a conversation. Messages are deleted after 90 days and photos and PDFs after 30.",
         "On every plan a customer's page has 💬 WhatsApp and ◎ Instagram buttons that open the conversation in WhatsApp or Instagram itself.",
@@ -2927,7 +2927,7 @@ const TREE_TR: GuideNode[] = [
       ] },
       { kind: "sub", text: "Müşteri mesajları: WhatsApp ve Instagram gelen kutusu" },
       { kind: "bullets", items: [
-        "Mesajlar ▸ Müşteriler müşteri gelen kutusudur. Bugün tek bir işletme için çalışır: kendi WhatsApp Business numaranızı ya da Instagram profesyonel hesabınızı bağlamak, Meta'nın onayları tamamlanınca açılır; o zamana dek Ayarlar ▸ Entegrasyonlar'daki bu kutucuklarda Yakında yazar.",
+        "Mesajlar ▸ Müşteriler müşteri gelen kutusudur ve Team planına dahildir. Instagram: çalışma alanının sahibi, işletmenin kendi Instagram profesyonel hesabını web uygulamasında (nivadesk.app) Ayarlar ▸ Entegrasyonlar ▸ Instagram'da Instagram'ı bağla düğmesiyle bağlar; müşterilerin doğrudan mesajları bundan sonra buraya gelir. WhatsApp: kendi WhatsApp Business numaranızı bağlamak henüz her çalışma alanına açık değil; açılana kadar o kutucukta Yakında yazar.",
         "Çalıştığı yerde Bu sohbeti bağla bir sohbeti siparişine bağlar; Ata, Etiketler, Tamamlandı olarak işaretle ve Sohbeti sil de vardır. WhatsApp'tan yanıtla yanıtınızı gönderir; Fotoğraf veya PDF ekle bir dosya ekler (Instagram yanıtları yalnızca metindir).",
         "WhatsApp yalnızca müşterinin son mesajından sonraki 24 saat içinde yanıta izin verir ve onaylı şablonlar henüz kurulu değildir; bu yüzden NivaDesk bir sohbet başlatamaz. Mesajlar 90 gün, fotoğraflar ve PDF'ler 30 gün sonra silinir.",
         "Her planda müşteri sayfasında, sohbeti WhatsApp'ın ya da Instagram'ın kendisinde açan 💬 WhatsApp ve ◎ Instagram düğmeleri vardır.",

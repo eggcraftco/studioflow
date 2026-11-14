@@ -103,6 +103,10 @@ type Category = typeof categories[number];
  * connected end to end on EGGcraft's pilot, and appConfig/quickbooks.production opens it to every
  * workspace ("*": true). Each owner connects their own company, read only; Xero stays on request
  * (docs/integrations/quickbooks.md). Live 18, Limited access 5, Coming soon 1 — 24 cards.
+ *
+ * Instagram became live in November 2026 (Meta's App Review approved on 14 November 2026, then the
+ * workspace switch "*"). WhatsApp stays on request until a business has connected its own number.
+ * Counts: one card moved from Limited access to Live.
  */
 type AvailabilityState = "live" | "limited" | "comingSoon";
 
@@ -155,12 +159,15 @@ const integrations: Integration[] = [
   // Claude, 31 October 2026: live as a custom connector for anyone (the app's tile connects on
   // every plan); the listing in Claude's own directory is the part still in review.
   { name: "Claude", category: "Payments, files & automation", summary: { key: "integrations.summary.claude" }, detail: { key: "integrations.detail.claude" }, state: "live", note: "integrations.note.claude" },
-  { name: "WhatsApp", category: "Customer messaging", summary: "Customer conversations connected to the work they belong to.", detail: "A customer inbox for WhatsApp on the Team plan: messages from your customers arrive in NivaDesk, your team replies, and each conversation can be linked to the order it belongs to. It runs for one business today, on a Meta test number; connecting other businesses waits on Meta's approval. No automated messaging and no outbound campaigns.", state: "limited", note: "integrations.note.whatsapp" },
-  // Instagram Direct and DHL Express, added 28 September 2026 (second pass). Instagram
-  // is open to one workspace only (appConfig/instagram); DHL to every workspace
-  // since 28 October 2026 (appConfig/shipping). Shown as "Instagram", the app tile's
-  // name, since 31 October 2026.
-  { name: "Instagram", category: "Customer messaging", summary: { key: "integrations.summary.instagram" }, detail: { key: "integrations.detail.instagram" }, state: "limited", note: "integrations.note.instagram" },
+  { name: "WhatsApp", category: "Customer messaging", summary: "Customer conversations connected to the work they belong to.", detail: "A customer inbox for WhatsApp on the Team plan: messages from your customers arrive in NivaDesk, your team replies, and each conversation can be linked to the order it belongs to. It runs for one business today, on a Meta test number. Meta has approved the app, and connecting your own WhatsApp Business number is the step being switched on next. No automated messaging and no outbound campaigns.", state: "limited", note: "integrations.note.whatsapp" },
+  // Instagram Direct and DHL Express, added 28 September 2026 (second pass). DHL is open to
+  // every workspace since 28 October 2026 (appConfig/shipping). Shown as "Instagram", the app
+  // tile's name, since 31 October 2026. Instagram became live in November 2026: Meta approved
+  // the app's App Review on 14 November 2026 (instagram_business_basic and
+  // instagram_business_manage_messages), and appConfig/instagram.workspaces."*" opens it to
+  // every workspace; each owner connects the business's own professional account. This card
+  // is released only after that switch has been read back (docs/integrations/instagram.md).
+  { name: "Instagram", category: "Customer messaging", summary: { key: "integrations.summary.instagram" }, detail: { key: "integrations.detail.instagram" }, state: "live", note: "integrations.note.instagram" },
   // eBay, 1 October 2026: a production, read-only connection accepted by eBay on a
   // real seller account; open to every workspace once "ebay:*" is true in
   // appConfig/commerce.connectors.workspaces (the owner's switch, 29 October 2026 package).
