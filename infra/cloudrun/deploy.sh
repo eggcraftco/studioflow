@@ -11,6 +11,8 @@
 # NEXT_PUBLIC_* come from ENV_FILE (default ./.env.production.local, gitignored): copy the nine
 # NEXT_PUBLIC_* lines from hPanel → nivadesk.app → Ortam değişkenleri. The one server secret,
 # NIVADESK_EBAY_CALLBACK_KEY, is bound from Secret Manager (EBAY_CALLBACK_KEY) and never read here.
+# Two more lines are optional (Meta's public ids for "Connect WhatsApp"): NEXT_PUBLIC_META_APP_ID and
+# NEXT_PUBLIC_WHATSAPP_SIGNUP_CONFIG_ID — both or neither.
 set -euo pipefail
 export CLOUDSDK_CORE_DISABLE_PROMPTS=1
 PROJECT="${PROJECT:-eggcraft-studio}"
@@ -53,6 +55,23 @@ for name in NEXT_PUBLIC_FIREBASE_API_KEY NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN NEXT_P
     || { echo "missing $name in $ENV_FILE"; exit 1; }
   subs="$subs,_${name}=${value}"
 done
+# Meta's public app id and the WhatsApp Embedded Signup configuration id (14 Nov 2026): OPTIONAL, public ids,
+# digits only. Both empty builds exactly as before (no "Connect WhatsApp" button); both set turns the button on;
+# one without the other, or a value that is not digits, stops here rather than ship a half-configured page.
+meta_set=0
+for name in NEXT_PUBLIC_META_APP_ID NEXT_PUBLIC_WHATSAPP_SIGNUP_CONFIG_ID; do
+  value=$( (grep -E "^${name}=" "$ENV_FILE" || true) | head -1 | cut -d= -f2- | sed -e 's/^"//' -e 's/"$//')
+  if [ -n "$value" ]; then
+    printf '%s' "$value" | grep -Eq '^[0-9]{5,25}$' || { echo "bad $name in $ENV_FILE (digits only)"; exit 1; }
+    meta_set=$((meta_set + 1))
+  fi
+  subs="$subs,_${name}=${value}"
+done
+case "$meta_set" in
+  0) echo "WhatsApp own-number sign-up: off in this build (no Meta ids in $ENV_FILE)" ;;
+  2) echo "WhatsApp own-number sign-up: ON in this build" ;;
+  *) echo "refusing: only one of NEXT_PUBLIC_META_APP_ID / NEXT_PUBLIC_WHATSAPP_SIGNUP_CONFIG_ID is set in $ENV_FILE"; exit 1 ;;
+esac
 
 gcloud artifacts repositories describe web --location="$REGION" --project="$PROJECT" >/dev/null 2>&1 \
   || gcloud artifacts repositories create web --repository-format=docker --location="$REGION" --project="$PROJECT"

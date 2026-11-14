@@ -116,7 +116,7 @@ function stateSentence(card: CustomerChannelCard, canSignUp: boolean): string {
     case "pending": return "This line has not received a message yet.";
     case "not_connected": return canSignUp
       ? "Connect the WhatsApp Business number your customers already write to."
-      : "Connecting your own WhatsApp Business number is not open yet. NivaDesk needs Meta's approval before it can connect other businesses' numbers.";
+      : "Connecting your own WhatsApp Business number is not open yet.";
     default: return "This channel is not available yet.";
   }
 }
