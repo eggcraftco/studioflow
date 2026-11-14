@@ -279,8 +279,9 @@ export const PRIVACY_POLICY_SECTIONS: PrivacyPolicySection[] = [
         bullets: [
           "customer messages and your team's replies are deleted from NivaDesk automatically 90 days after they arrive, and a conversation is deleted with everything in it once its most recent message is 90 days old;",
           "a workspace owner can delete a customer's conversation at any time, which removes it from NivaDesk straight away;",
-          "deleted messages can remain in NivaDesk's database backups for up to 14 days, until these expire;",
-          "photos and other attachments sent on Instagram are not stored in NivaDesk: a message with words keeps only its words, and a message that is only an attachment is not kept;",
+          "deleted messages can remain in NivaDesk's database backups for up to 14 days, and deleted photo copies can remain recoverable in our cloud storage for up to 7 days, until each of these expires;",
+          "a photo a customer sends on Instagram is not copied into NivaDesk when it arrives: NivaDesk keeps only the photo's address at Instagram, in encrypted form, with the message. A copy is made only when a member of your team opens the photo, and that copy is deleted 30 days after the customer sent it;",
+          "videos, voice messages, files, shared posts and reels, and story mentions sent on Instagram are not copied into NivaDesk: the inbox shows a one-line note that the customer sent one, and you open it in Instagram;",
           "your customer's Instagram account ID is not stored in readable form with their messages: the inbox shows only a short label, and the ID is kept encrypted only while a reply can still be sent (about a day after their last message);",
           "NivaDesk's AI features do not read the customer inbox: nothing in it is sent to an AI model by NivaDesk."
         ]
