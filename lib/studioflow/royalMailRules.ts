@@ -64,7 +64,78 @@ export type RoyalMailCustomsItem = {
 export type RoyalMailCustoms = { category: RoyalMailCustomsCategory | ""; items: RoyalMailCustomsItem[]; iossNumber?: string };
 
 /** A customs line as the form holds it: what the person typed, untouched. */
-export type RoyalMailCustomsLineDraft = { description: string; quantity: string; unitValue: string; unitWeightGrams: string; hsCode: string; manufacturerCountry: string; merchantProductId: string };
+export type RoyalMailCustomsLineDraft = {
+  description: string; quantity: string; unitValue: string; unitWeightGrams: string; hsCode: string; manufacturerCountry: string; merchantProductId: string;
+  /** The value is still the one the form took from the order's total (an order made by hand): it follows the shipping field until the person types their own. */
+  valueFromOrderTotal?: boolean;
+};
+
+// ---- the order's own money (14 Nov 2026, third package) ------------------------------------------
+// The server reads the order (functions/shipping/royalmail/contract.js orderAmounts / prefillLines) and answers, with
+// the services, what the form starts from: the order's total, what the customer paid for shipping where the order says
+// it (a shop order; an order made by hand holds one figure only), and — abroad — the customs lines. Nothing here reads
+// the order. `amounts` is null for a member without financial access and absent from an older server.
+export type RoyalMailAmounts = { orderTotal: number | null; shippingCharged: number | null; goodsValue: number | null };
+export type RoyalMailPrefillLine = { description: string; quantity: number; unitValue: number | null; merchantProductId: string };
+
+const plain = (n: number): string => (Math.round(n * 100) / 100).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+
+/** The shipping field as it starts: the order's own figure where it has one, else empty. */
+export function shippingDraftFrom(amounts: RoyalMailAmounts | null | undefined): string {
+  return amounts && amounts.shippingCharged != null && amounts.shippingCharged >= 0 ? plain(amounts.shippingCharged) : "";
+}
+
+/** What was typed in the shipping field, as the server takes it: a number, or nothing (the server then uses the order's own figure). */
+export function shippingChargedFrom(typed: string): number | undefined {
+  const cleaned = typed.trim().replace(",", ".");
+  if (!cleaned) return undefined;
+  const n = Number(cleaned);
+  // Not a number: sent as typed-and-wrong so the server names the problem, never silently dropped.
+  return Number.isFinite(n) ? n : Number.NaN;
+}
+
+/**
+ * The customs lines the form starts from. The shop's lines carry their own prices; a single line made from an order's
+ * total (an order made by hand) is marked, so it can follow the shipping field. Weight, customs code and origin stay empty.
+ */
+export function customsLinesFromPrefill(prefill: RoyalMailPrefillLine[] | null | undefined, fallbackDescription: string, amounts: RoyalMailAmounts | null | undefined): RoyalMailCustomsLineDraft[] {
+  const rows = Array.isArray(prefill) ? prefill : [];
+  if (!rows.length) return [emptyCustomsLine(fallbackDescription)];
+  return rows.map(row => ({
+    ...emptyCustomsLine(String(row.description || "").slice(0, 255)),
+    quantity: String(row.quantity > 0 ? Math.round(row.quantity) : 1),
+    unitValue: row.unitValue != null && row.unitValue > 0 ? plain(row.unitValue) : "",
+    merchantProductId: String(row.merchantProductId || ""),
+    valueFromOrderTotal: rows.length === 1 && row.quantity === 1 && row.unitValue != null && amounts != null && amounts.goodsValue != null && row.unitValue === amounts.goodsValue && !row.merchantProductId
+  }));
+}
+
+/**
+ * The one line whose value came from the order's total follows the shipping field: the order's total less the shipping
+ * the person typed, so goods plus shipping stays the order's total. Any other line is left exactly as it is.
+ */
+export function linesAfterShippingChange(lines: RoyalMailCustomsLineDraft[], amounts: RoyalMailAmounts | null | undefined, typedShipping: string): RoyalMailCustomsLineDraft[] {
+  if (lines.length !== 1 || !lines[0].valueFromOrderTotal || !amounts || amounts.orderTotal == null) return lines;
+  const shipping = shippingChargedFrom(typedShipping);
+  const taken = shipping === undefined || !Number.isFinite(shipping) || shipping < 0 ? 0 : shipping;
+  const goods = Math.round((amounts.orderTotal - taken) * 100) / 100;
+  return goods > 0 ? [{ ...lines[0], unitValue: plain(goods) }] : lines;
+}
+
+/**
+ * What Royal Mail is told the order is worth: abroad the declared goods plus shipping; in the UK the order's own total,
+ * of which the shipping is a part. Null when it cannot be said (no figures, or a shipping field that is not a number).
+ */
+export function royalMailMoneySummary(input: { international: boolean; amounts: RoyalMailAmounts | null | undefined; declaredValue: number; typedShipping: string }): { goods: number; shipping: number; total: number } | null {
+  const typed = shippingChargedFrom(input.typedShipping);
+  if (typed !== undefined && (!Number.isFinite(typed) || typed < 0)) return null;
+  const shipping = typed !== undefined ? typed : input.amounts?.shippingCharged ?? 0;
+  const round = (n: number) => Math.round(n * 100) / 100;
+  if (input.international) return { goods: round(input.declaredValue), shipping: round(shipping), total: round(input.declaredValue + shipping) };
+  if (!input.amounts || input.amounts.orderTotal == null) return null;
+  const capped = Math.min(shipping, input.amounts.orderTotal);
+  return { goods: round(input.amounts.orderTotal - capped), shipping: round(capped), total: input.amounts.orderTotal };
+}
 
 export function emptyCustomsLine(description = ""): RoyalMailCustomsLineDraft {
   // Nothing is guessed: no weight, no value, no country. The quantity starts at one.

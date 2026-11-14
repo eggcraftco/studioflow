@@ -34,8 +34,10 @@ import {
   ROYAL_MAIL_PACKAGE_FORMATS,
   cancelRoyalMailShipment,
   customsItemsFromDrafts,
+  customsLinesFromPrefill,
   customsTotals,
   emptyCustomsLine,
+  linesAfterShippingChange,
   getRoyalMailConnection,
   listOrderRoyalMailShipments,
   listRoyalMailServices,
@@ -46,6 +48,7 @@ import {
   royalMailAwaitingNumber,
   royalMailErrorMessage,
   royalMailErrorReason,
+  royalMailMoneySummary,
   royalMailPrice,
   royalMailProblemMessages,
   royalMailSaleCategory,
@@ -53,6 +56,9 @@ import {
   royalMailShipmentsChanged,
   sendOrderToRoyalMail,
   senderContactFrom,
+  shippingChargedFrom,
+  shippingDraftFrom,
+  type RoyalMailAmounts,
   type RoyalMailConnectionView,
   type RoyalMailCustomsCategory,
   type RoyalMailCustomsLineDraft,
@@ -123,6 +129,11 @@ export function RoyalMailShipmentPanel({
   const [customsLines, setCustomsLines] = useState<RoyalMailCustomsLineDraft[]>([]);
   const [iossNumber, setIossNumber] = useState("");
   const [senderContact, setSenderContact] = useState("");
+  // The order's own money, as the server read it, and the shipping the customer paid (typed, or taken from the order).
+  const [amounts, setAmounts] = useState<RoyalMailAmounts | null>(null);
+  const [shippingCharged, setShippingCharged] = useState("");
+  const [shippingTouched, setShippingTouched] = useState(false);
+  const [linesFromOrder, setLinesFromOrder] = useState(false);
   // The quiet check (see the head of this file).
   const shipmentsRef = useRef<RoyalMailShipment[]>([]);
   const lastCheckRef = useRef(0);
@@ -260,9 +271,16 @@ export function RoyalMailShipmentPanel({
       setServiceCode(result.services[0]?.serviceCode ?? "");
       const next = result.destination ?? null;
       setDestination(next);
+      // The order's own money: the shipping field starts from it unless the person has typed their own.
+      const money = result.amounts ?? null;
+      setAmounts(money);
+      if (!shippingTouched) setShippingCharged(shippingDraftFrom(money));
       if (next?.needsCustoms) {
-        // What the person already typed is kept; the first line starts from the order's own name.
-        setCustomsLines(lines => (lines.length ? lines : [emptyCustomsLine(orderDescription.trim().slice(0, 255))]));
+        // What the person already typed is kept; otherwise the lines start from the order (the shop's lines with
+        // their prices, or one line named after the order and worth its goods value).
+        const fromOrder = (result.prefillLines ?? []).length > 0;
+        if (!customsLines.length) setLinesFromOrder(fromOrder);
+        setCustomsLines(lines => (lines.length ? lines : customsLinesFromPrefill(result.prefillLines, orderDescription.trim().slice(0, 255), money)));
         setCustomsCategory(category => category || "eCommerceSaleOfGoods");
         if (next.needsSenderContact) setSenderContact(typed => typed || next.senderContact.phone || next.senderContact.email);
       }
@@ -273,8 +291,11 @@ export function RoyalMailShipmentPanel({
   async function send() {
     if (!chosen) return;
     await guard("send", async () => {
+      // A shipping figure that is not a number goes as typed, so the server names the problem rather than it being dropped.
+      const typedShipping = shippingChargedFrom(shippingCharged);
       const result = await sendOrderToRoyalMail(companyId, orderId, {
         packageFormat, weightGrams, serviceCode: chosen.serviceCode, serviceName: chosen.serviceName, signature, safePlace: safePlace.trim(), notifyRecipient,
+        ...(typedShipping !== undefined ? { shippingCharged: Number.isFinite(typedShipping) ? typedShipping : shippingCharged.trim() } : {}),
         ...(destination?.needsCustoms ? { customs: { category: customsCategory, items: customsItemsFromDrafts(customsLines), ...(destination.eu && iossNumber.trim() ? { iossNumber: iossNumber.trim() } : {}) } } : {}),
         ...(destination?.needsSenderContact ? { senderContact: senderContactFrom(senderContact) } : {})
       });
@@ -336,7 +357,29 @@ export function RoyalMailShipmentPanel({
   const askProductCodes = Boolean(destination?.needsProductCodes) && royalMailSaleCategory(customsCategory);
   const totals = customsTotals(customsLines);
   const money = (n: number) => new Intl.NumberFormat(locale, { style: "currency", currency: "GBP" }).format(n);
-  const setLine = (index: number, patch: Partial<RoyalMailCustomsLineDraft>) => setCustomsLines(lines => lines.map((line, i) => (i === index ? { ...line, ...patch } : line)));
+  // A value the person types is theirs: it no longer follows the shipping field.
+  const setLine = (index: number, patch: Partial<RoyalMailCustomsLineDraft>) => setCustomsLines(lines => lines.map((line, i) => (i === index ? { ...line, ...patch, ...("unitValue" in patch ? { valueFromOrderTotal: false } : {}) } : line)));
+  const typeShipping = (typed: string) => {
+    const cleaned = typed.replace(/[^\d.,]/g, "");
+    setShippingCharged(cleaned);
+    setShippingTouched(true);
+    setCustomsLines(lines => linesAfterShippingChange(lines, amounts, cleaned));
+  };
+  const moneySummary = royalMailMoneySummary({ international: needsCustoms, amounts, declaredValue: totals.value, typedShipping: shippingCharged });
+  // The order's money, for a parcel abroad and a UK one alike: what the customer paid for shipping (from the order where
+  // it says so) and what Royal Mail is told the order is worth.
+  const moneyBlock = (
+    <div data-testid="royal-mail-money">
+      <label className="inventory-field"><span>{t("Shipping the customer paid (£)")}</span>
+        <input className="input" inputMode="decimal" value={shippingCharged} onChange={e => typeShipping(e.target.value)} data-testid="royal-mail-shipping-charged" />
+        <small className="shipment-muted">{t("Royal Mail records it on the order, apart from the value of the goods. Leave it empty and NivaDesk uses the order's own figure where it has one.")}</small></label>
+      {moneySummary ? (
+        <p className="shipment-muted" data-testid="royal-mail-money-summary">
+          {t("Royal Mail is told: goods {goods} + shipping {shipping} = {total}").replace("{goods}", money(moneySummary.goods)).replace("{shipping}", money(moneySummary.shipping)).replace("{total}", money(moneySummary.total))}
+        </p>
+      ) : null}
+    </div>
+  );
   // ISO countries only: DHL's own codes (XB, XC, …, KV, IC) are not countries Royal Mail knows.
   const originCountries = DHL_COUNTRIES.filter(([code]) => !/^X/.test(code) && code !== "KV" && code !== "IC")
     .map(([code]) => ({ code, name: dhlCountryName(code, locale) }))
@@ -383,6 +426,7 @@ export function RoyalMailShipmentPanel({
         <button type="button" className="button secondary" disabled={customsLines.length >= 20} onClick={() => setCustomsLines(lines => [...lines, emptyCustomsLine()])} data-testid="royal-mail-customs-add">{t("+ Add another item")}</button>
         <a className="inventory-link" href="https://www.trade-tariff.service.gov.uk/find_commodity" target="_blank" rel="noopener noreferrer">{t("Find a commodity code on the UK Trade Tariff")} ↗</a>
       </div>
+      {linesFromOrder ? <p className="shipment-muted" data-testid="royal-mail-from-order">{t("Filled in from the order. Check it before sending.")}</p> : null}
       <p className={weightGrams > 0 && totals.grams > weightGrams ? "shipment-error" : "shipment-muted"} data-testid="royal-mail-customs-totals">
         {t("Declared value")} {money(totals.value)} · {t("Items weigh {items} g of the parcel's {parcel} g").replace("{items}", String(totals.grams)).replace("{parcel}", String(weightGrams > 0 ? weightGrams : 0))}
       </p>
@@ -438,6 +482,7 @@ export function RoyalMailShipmentPanel({
         </fieldset>
       ) : null}
       {services && services.length > 0 ? customsForm : null}
+      {services && services.length > 0 ? moneyBlock : null}
       {services && services.length > 0 ? (
         <>
           <label className="inventory-check"><input type="checkbox" checked={signature} onChange={e => setSignature(e.target.checked)} /> {t("Signature on delivery")}</label>

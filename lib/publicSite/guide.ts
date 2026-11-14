@@ -1503,6 +1503,7 @@ const TREE_EN: GuideNode[] = [
             "Remove from Click & Drop takes the order out while it has no label; after a label is printed, cancel it in Click & Drop.",
             "Etsy orders: the buyer's e-mail and phone are not given to Royal Mail, so Royal Mail does not notify them.",
             "Orders abroad: after Show services NivaDesk asks for the customs declaration: what is in the parcel, how many, the value and the weight of one item, its customs (HS) code and the country it was made in. Royal Mail prints the customs form (CN22 or CN23) with the label. Goods sold to the EU carry a product code: type your own, or leave it empty and NivaDesk fills it in. A parcel to the USA needs your own phone number or e-mail. Royal Mail sends no delivery notification to the customer for parcels abroad.",
+            "The order's own money: NivaDesk fills in what the order already says, so you check it rather than type it: the items and their prices on an order abroad, and the shipping the customer paid on every order. Royal Mail records the shipping apart from the value of the goods. Where the order does not say what the shipping was (an order you made by hand), type it under Shipping the customer paid.",
             "Untracked services (International Standard, International Economy) have no tracking number: the order shows the label as printed and is still marked dispatched. An order to a business in Northern Ireland is still sent from Click & Drop."
           ] }
         ]

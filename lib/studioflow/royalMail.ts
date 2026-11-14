@@ -106,10 +106,18 @@ export type RoyalMailChoice = {
   customs?: RoyalMailCustoms;
   /** The USA only: the sender's own phone or e-mail. */
   senderContact?: { phone: string; email: string };
+  /** What the customer paid for shipping, when the person typed it; absent, the server uses the order's own figure. */
+  shippingCharged?: number | string;
 };
 
 export * from "./royalMailRules";
-import { customsLineField, type RoyalMailCustoms, type RoyalMailDestination } from "./royalMailRules";
+import { customsLineField, type RoyalMailAmounts, type RoyalMailCustoms, type RoyalMailDestination, type RoyalMailPrefillLine } from "./royalMailRules";
+
+/** listRoyalMailServices: the services, and what the form starts from (the last three absent from an older server). */
+export type RoyalMailServicesAnswer = {
+  accountType: RoyalMailAccountType; services: RoyalMailService[]; guidance: string;
+  destination?: RoyalMailDestination; amounts?: RoyalMailAmounts | null; prefillLines?: RoyalMailPrefillLine[];
+};
 
 /** Click & Drop's own orders screen, where a pay-as-you-go account pays for and prints the label. */
 export const CLICK_AND_DROP_URL = "https://business.parcel.royalmail.com/orders/";
@@ -146,8 +154,8 @@ export async function disconnectRoyalMailConnection(companyId: string): Promise<
   return (await call<Record<string, unknown>, { connected: boolean }>("disconnectRoyalMailConnection")({ companyId })).data;
 }
 
-export async function listRoyalMailServices(companyId: string, orderId: string, packageFormat: RoyalMailPackageFormat, weightGrams: number): Promise<{ accountType: RoyalMailAccountType; services: RoyalMailService[]; guidance: string; destination?: RoyalMailDestination }> {
-  return (await call<Record<string, unknown>, { accountType: RoyalMailAccountType; services: RoyalMailService[]; guidance: string; destination?: RoyalMailDestination }>("listRoyalMailServices")({ companyId, orderId, packageFormat, weightGrams })).data;
+export async function listRoyalMailServices(companyId: string, orderId: string, packageFormat: RoyalMailPackageFormat, weightGrams: number): Promise<RoyalMailServicesAnswer> {
+  return (await call<Record<string, unknown>, RoyalMailServicesAnswer>("listRoyalMailServices")({ companyId, orderId, packageFormat, weightGrams })).data;
 }
 
 export async function listOrderRoyalMailShipments(companyId: string, orderId: string): Promise<RoyalMailShipment[]> {
@@ -223,6 +231,7 @@ const PROBLEM_MESSAGES: Record<string, string> = {
   "ioss_invalid:customs.iossNumber": "An IOSS number is IM followed by 10 digits.",
   "required:senderContact": "Add your own phone number or e-mail: Royal Mail asks for one on parcels to the USA.",
   "weight_invalid:weightGrams": "Type the parcel's weight in grams.",
+  "shipping_invalid:shippingCharged": "Type the shipping the customer paid as a number, or leave it empty.",
   "postcode_invalid:recipient.postcode": "Add a valid UK postcode.",
   "ni_business:recipient.company": "A business in Northern Ireland needs customs details. Send this one from Click & Drop."
 };

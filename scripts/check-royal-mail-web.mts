@@ -23,7 +23,8 @@ import { studioT } from "../lib/studioflow/language";
 import {
   ROYAL_MAIL_AUTO_CHECK, ROYAL_MAIL_CUSTOMS_CATEGORIES, customsItemsFromDrafts, customsLineField, customsTotals, emptyCustomsLine,
   royalMailArrivedNumbers, royalMailAutoCheckDue, royalMailAwaitingNumber, royalMailSaleCategory, royalMailShipmentWaiting,
-  royalMailShipmentsChanged, senderContactFrom
+  royalMailShipmentsChanged, senderContactFrom,
+  customsLinesFromPrefill, linesAfterShippingChange, royalMailMoneySummary, shippingChargedFrom, shippingDraftFrom
 } from "../lib/studioflow/royalMailRules";
 
 const read = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf8");
@@ -106,7 +107,8 @@ expect("the customs form shows where the server says it is needed, and goes with
 const SERVER_PROBLEMS = [
   "required:recipient.name", "required:recipient.addressLine1", "required:recipient.city", "country_unknown:recipient.country",
   "postcode_invalid:recipient.postcode", "ni_business:recipient.company", "required:customs.category", "customs_required:customs.items",
-  "customs_weight_over:customs.items", "ioss_invalid:customs.iossNumber", "required:senderContact", "weight_invalid:weightGrams"
+  "customs_weight_over:customs.items", "ioss_invalid:customs.iossNumber", "required:senderContact", "weight_invalid:weightGrams",
+  "shipping_invalid:shippingCharged"
 ];
 const SERVER_LINE_PROBLEMS = [
   "required:description", "quantity_invalid:quantity", "value_invalid:unitValue", "weight_invalid:unitWeightGrams", "required:hsCode",
@@ -142,6 +144,30 @@ expect("the product code field says it can be left empty", codeOptional(panel));
 const noNotifyAbroad = (src: string) => /\{destination\?\.international\s*\?\s*<p className="shipment-muted" data-testid="royal-mail-no-notification">[\s\S]{0,200}:\s*<label className="inventory-check"><input type="checkbox" checked=\{notifyRecipient\}/.test(src);
 expect("abroad the notification choice is replaced by a sentence", noNotifyAbroad(panel));
 expect("a shipment sent without Royal Mail's notification says so", /s\.notificationsDropped \? <p className="shipment-muted">/.test(panel));
+
+// Third package (14 Nov 2026): the order's own money. The form starts from the order (lines, prices, the shipping the
+// customer paid) and the shipping goes to Royal Mail apart from the goods, for a UK parcel and one abroad alike.
+const shopMoney = { orderTotal: 54.5, shippingCharged: 9.5, goodsValue: 45 };
+const handMoney = { orderTotal: 120, shippingCharged: null, goodsValue: 120 };
+expect("the shipping field starts from the order's own figure, and empty where the order has none", shippingDraftFrom(shopMoney) === "9.5" && shippingDraftFrom({ ...shopMoney, shippingCharged: 0 }) === "0" && shippingDraftFrom(handMoney) === "" && shippingDraftFrom(null) === "" && shippingDraftFrom(undefined) === "");
+expect("a typed shipping reaches the server as a number; empty sends nothing; a wrong one is not read as zero", shippingChargedFrom(" 12,40 ") === 12.4 && shippingChargedFrom("") === undefined && Number.isNaN(shippingChargedFrom("1.2.3") as number));
+const shopLines = customsLinesFromPrefill([{ description: "Dial", quantity: 2, unitValue: 15, merchantProductId: "DIAL-1" }, { description: "Strap", quantity: 1, unitValue: 15, merchantProductId: "" }], "Order name", shopMoney);
+expect("the shop's lines fill the customs form: name, how many, the price of one, the shop's code — weight, customs code and origin never guessed", same(shopLines.map((l) => [l.description, l.quantity, l.unitValue, l.merchantProductId, l.unitWeightGrams, l.hsCode, l.manufacturerCountry, l.valueFromOrderTotal]), [["Dial", "2", "15", "DIAL-1", "", "", "", false], ["Strap", "1", "15", "", "", "", "", false]]));
+const handLines = customsLinesFromPrefill([{ description: "Bespoke ring", quantity: 1, unitValue: 120, merchantProductId: "" }], "Bespoke ring", handMoney);
+expect("an order made by hand gives one line worth the order's total, marked as taken from it", handLines.length === 1 && handLines[0].unitValue === "120" && handLines[0].valueFromOrderTotal === true);
+expect("with nothing from the server the form starts as before: one line named after the order, no value", same(customsLinesFromPrefill(undefined, "Bespoke ring", null), [emptyCustomsLine("Bespoke ring")]) && same(customsLinesFromPrefill([{ description: "Ring", quantity: 1, unitValue: null, merchantProductId: "" }], "Ring", null)[0].unitValue, ""));
+expect("the line taken from the order's total follows the shipping field: goods plus shipping stays the order's total", linesAfterShippingChange(handLines, handMoney, "8,50")[0].unitValue === "111.5" && linesAfterShippingChange(handLines, handMoney, "")[0].unitValue === "120");
+expect("a value the person typed, a shop's own prices and a shipping above the total are left alone", linesAfterShippingChange([{ ...handLines[0], valueFromOrderTotal: false }], handMoney, "8.5")[0].unitValue === "120" && linesAfterShippingChange(shopLines, shopMoney, "3") === shopLines && linesAfterShippingChange(handLines, handMoney, "500")[0].unitValue === "120");
+expect("what Royal Mail is told abroad: declared goods plus shipping", same(royalMailMoneySummary({ international: true, amounts: shopMoney, declaredValue: 45, typedShipping: "" }), { goods: 45, shipping: 9.5, total: 54.5 }) && same(royalMailMoneySummary({ international: true, amounts: null, declaredValue: 30, typedShipping: "4" }), { goods: 30, shipping: 4, total: 34 }));
+expect("what Royal Mail is told in the UK: the order's own total, the shipping a part of it and never more than it", same(royalMailMoneySummary({ international: false, amounts: shopMoney, declaredValue: 0, typedShipping: "" }), { goods: 45, shipping: 9.5, total: 54.5 }) && same(royalMailMoneySummary({ international: false, amounts: handMoney, declaredValue: 0, typedShipping: "500" }), { goods: 0, shipping: 120, total: 120 }));
+expect("no figures, or a shipping that is not a number: no summary rather than a wrong one", royalMailMoneySummary({ international: false, amounts: null, declaredValue: 0, typedShipping: "3" }) === null && royalMailMoneySummary({ international: true, amounts: shopMoney, declaredValue: 45, typedShipping: "1.2.3" }) === null);
+const moneyAsked = (src: string) => /data-testid="royal-mail-shipping-charged"/.test(src) && /\{services && services\.length > 0 \? moneyBlock : null\}/.test(src) && !/needsCustoms \? moneyBlock/.test(src);
+expect("the shipping field is in the form for a UK parcel and one abroad alike", moneyAsked(panel));
+const moneySent = (src: string) => /typedShipping !== undefined \? \{ shippingCharged: Number\.isFinite\(typedShipping\) \? typedShipping : shippingCharged\.trim\(\) \}/.test(src);
+expect("the typed shipping goes with the order; a wrong one goes as typed so the server names it", moneySent(panel));
+const startsFromOrder = (src: string) => /setAmounts\(money\)/.test(src) && /if \(!shippingTouched\) setShippingCharged\(shippingDraftFrom\(money\)\)/.test(src) && /lines\.length \? lines : customsLinesFromPrefill\(result\.prefillLines,/.test(src);
+expect("the form starts from the order, and never over what the person typed", startsFromOrder(panel));
+expect("a value the person types stops following the shipping field", /"unitValue" in patch \? \{ valueFromOrderTotal: false \}/.test(panel));
 
 // ---- 6. the tracking number's own way back ----------------------------------------------------------
 const row = (id: string, state: string, trackingNumber = "", more: Record<string, unknown> = {}) => ({ id, state, trackingNumber, printedOn: "", shippedOn: "", hasLabel: false, ...more });
@@ -182,9 +208,13 @@ expect("mutant: live tracking for a number that is not the order's is caught", !
 
 expect("mutant: a product code field with no way out is caught", !codeOptional(panel.replace("You can leave it empty", "Type it")));
 expect("mutant: the notification choice offered abroad is caught", !noNotifyAbroad(panel.replace("{destination?.international\n            ? <p", "{false\n            ? <p")));
+expect("mutant: a shipping field shown abroad only is caught", !moneyAsked(panel.replace("{services && services.length > 0 ? moneyBlock : null}", "{needsCustoms ? moneyBlock : null}")));
+expect("mutant: a typed shipping that never leaves the form is caught", !moneySent(panel.replace("...(typedShipping !== undefined ? { shippingCharged:", "...(false ? { shippingCharged:")));
+expect("mutant: a form that overwrites what the person typed is caught", !startsFromOrder(panel.replace("if (!shippingTouched) setShippingCharged(", "setShippingCharged(")) && !startsFromOrder(panel.replace("lines.length ? lines : customsLinesFromPrefill(", "customsLinesFromPrefill(")));
+expect("mutant: a server problem about shipping with no sentence is caught", unnamed(client.replace(/\n\s*"shipping_invalid:shippingCharged":[^\n]*/, "")).includes("shipping_invalid:shippingCharged"));
 
 if (failures.length) {
   console.error(`ROYAL MAIL WEB CHECK FAILED (${failures.length}/${checks}):\n- ${failures.join("\n- ")}`);
   process.exit(1);
 }
-console.log(`ROYAL MAIL WEB CHECK OK (${checks} checks, 16 mutants caught)`);
+console.log(`ROYAL MAIL WEB CHECK OK (${checks} checks, 20 mutants caught)`);
